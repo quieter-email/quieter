@@ -17,7 +17,12 @@ const ready = transitionNotesClient(
     keepDraft: false,
     kind: "restart",
   }),
-  { canWrite: true, cursor, epoch: 1, kind: "authorized" }
+  {
+    cursor,
+    epoch: 1,
+    kind: "authorized",
+    permissions: { moderateNotes: true, writeOwnNotes: true },
+  }
 );
 const draft: NoteDraft = {
   body: "Temporary team text",
@@ -36,19 +41,19 @@ describe("note draft authority and attempts", () => {
       kind: "restart",
     });
     const stale = transitionNotesClient(closed, {
-      canWrite: true,
       cursor,
       epoch: 1,
       kind: "authorized",
+      permissions: { moderateNotes: true, writeOwnNotes: true },
     });
-    expect(stale.authority).toBe("checking");
+    expect(stale.authority.kind).toBe("checking");
     const hidden = transitionNotesClient(closed, {
-      canWrite: true,
       cursor,
       epoch: closed.epoch,
       kind: "authorized",
+      permissions: { moderateNotes: true, writeOwnNotes: true },
     });
-    expect(hidden.authority).toBe("checking");
+    expect(hidden.authority.kind).toBe("checking");
     expect(hidden.available).toBeFalsy();
   });
 
@@ -59,10 +64,10 @@ describe("note draft authority and attempts", () => {
       kind: "begin",
     });
     const observed = transitionNotesClient(editing, {
-      canWrite: true,
       cursor: { ...cursor, revision: "2" },
       epoch: 1,
       kind: "authorized",
+      permissions: { moderateNotes: true, writeOwnNotes: true },
     });
     expect(observed.attempt).toMatchObject({
       body: draft.body,
@@ -78,21 +83,21 @@ describe("note draft authority and attempts", () => {
     });
     expect(
       transitionNotesClient(editing, {
-        canWrite: true,
         cursor: {
           ...cursor,
           contextId: "3161454d-650e-4db3-9146-82483a2e31e5",
         },
         epoch: 1,
         kind: "authorized",
+        permissions: { moderateNotes: true, writeOwnNotes: true },
       }).attempt
     ).toBeNull();
     expect(
       transitionNotesClient(editing, {
-        canWrite: false,
         cursor,
         epoch: 1,
         kind: "authorized",
+        permissions: { moderateNotes: false, writeOwnNotes: false },
       }).attempt
     ).toBeNull();
   });
@@ -122,10 +127,10 @@ describe("note draft authority and attempts", () => {
     });
     expect(oldSave.attempt).not.toBeNull();
     const reopened = transitionNotesClient(closed, {
-      canWrite: true,
       cursor,
       epoch: closed.epoch,
       kind: "authorized",
+      permissions: { moderateNotes: true, writeOwnNotes: true },
     });
     expect(reopened.attempt).toMatchObject({
       expected: cursor,
@@ -149,14 +154,14 @@ describe("note draft authority and attempts", () => {
       kind: "change",
     });
     expect(changed.attempt).toBeNull();
-    expect(changed.authority).toBe("lost");
+    expect(changed.authority.kind).toBe("lost");
     expect(
       transitionNotesClient(lost, {
-        canWrite: true,
         cursor,
         epoch: lost.epoch,
         kind: "authorized",
-      }).authority
+        permissions: { moderateNotes: true, writeOwnNotes: true },
+      }).authority.kind
     ).toBe("lost");
   });
 

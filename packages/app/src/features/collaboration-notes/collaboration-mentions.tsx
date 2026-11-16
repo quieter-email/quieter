@@ -139,10 +139,10 @@ const MentionsScope = ({
     if (heads.some((query) => query.isSuccess) || failures.length > 0) {
       store.setState((current) =>
         transitionNotesClient(current, {
-          canWrite: false,
           cursor: null,
           epoch,
           kind: "authorized",
+          permissions: { moderateNotes: false, writeOwnNotes: false },
         })
       );
     }
@@ -196,7 +196,7 @@ const MentionsScope = ({
     },
   });
 
-  const visible = client.available && client.authority === "ready";
+  const visible = client.available && client.authority.kind === "ready";
   const complete = mailboxes.every(
     (mailbox, index) =>
       blocked.has(mailbox.mailboxId) || heads[index]?.isSuccess

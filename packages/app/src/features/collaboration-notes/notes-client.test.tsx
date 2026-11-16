@@ -9,10 +9,14 @@ import type {
   CollaborationMentionsInput,
   CollaborationMentionsPage,
   CollaborationNote,
+  CollaborationNoteParticipants,
+  CollaborationNoteParticipantsInput,
   CollaborationNoteResult,
   CollaborationNotesPage,
 } from "@quieter/mail/collaboration-notes";
 import type { ButtonProps } from "@quieter/ui/button";
+import type { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import type { Input } from "@quieter/ui/input";
 import type {
   Popover,
   PopoverContent,
@@ -33,6 +37,7 @@ import {
 } from "vite-plus/test";
 
 import { CollaborationMentions } from "./collaboration-mentions";
+import { NoteParticipants } from "./note-participants";
 import { useThreadNotes } from "./notes-query";
 import { transitionNotesClient } from "./notes-session";
 
@@ -45,6 +50,12 @@ const server = vi.hoisted(() => ({
   mutate: vi.fn<() => Promise<CollaborationNoteResult>>(),
   note: vi.fn<() => Promise<CollaborationNoteResult>>(),
   notes: vi.fn<() => Promise<CollaborationNotesPage>>(),
+  participants:
+    vi.fn<
+      (
+        input: CollaborationNoteParticipantsInput
+      ) => Promise<CollaborationNoteParticipants>
+    >(),
   toast: vi.fn<() => void>(),
 }));
 
@@ -66,6 +77,7 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
           get: server.note,
           list: server.notes,
           mutate: server.mutate,
+          participants: server.participants,
         },
       },
     },
@@ -96,6 +108,28 @@ vi.mock(import("@quieter/ui/date-time-preferences"), () => ({
 }));
 vi.mock(import("@quieter/ui/pill"), () => ({
   Pill: ({ children }: ComponentProps<"span">) => <span>{children}</span>,
+}));
+vi.mock(import("@quieter/ui/input"), () => ({
+  Input: ({
+    "aria-label": label,
+    placeholder,
+    value,
+  }: ComponentProps<typeof Input>) => (
+    <input
+      aria-label={label}
+      placeholder={placeholder}
+      readOnly
+      value={value}
+    />
+  ),
+}));
+vi.mock(import("@quieter/ui/checkbox"), () => ({
+  Checkbox: ({ checked, disabled }: ComponentProps<typeof Checkbox>) => (
+    <input checked={checked} disabled={disabled} readOnly type="checkbox" />
+  ),
+  CheckboxIndicator: ({
+    children,
+  }: ComponentProps<typeof CheckboxIndicator>) => <span>{children}</span>,
 }));
 vi.mock(import("@quieter/ui/text"), () => ({
   Text: ({ children }: ComponentProps<"div">) => <div>{children}</div>,
@@ -191,6 +225,26 @@ const cursor = {
   contextId: "a8ce9de4-f393-44bb-9c8c-ef77e25c5d87",
   revision: "1",
 };
+const readerSnapshot: CollaborationState = {
+  ...snapshot,
+  permissions: {
+    assignOthers: false,
+    claimSelf: false,
+    moderateNotes: false,
+    read: true,
+    writeOwnNotes: false,
+  },
+  role: "reader",
+};
+const responderSnapshot: CollaborationState = {
+  ...snapshot,
+  permissions: {
+    ...snapshot.permissions,
+    assignOthers: false,
+    moderateNotes: false,
+  },
+  role: "responder",
+};
 const note: CollaborationNote = {
   actions: { edit: true, remove: true },
   author: { kind: "member", memberId: "member-a", name: "Teammate" },
@@ -207,19 +261,45 @@ type ControllerRef = { current: Controller | null };
 const NotesProbe = ({
   observe,
   input,
+  withParticipants = false,
 }: {
   observe: (notes: Controller) => void;
   input: CollaborationScope;
+  withParticipants?: boolean;
 }) => {
   const notes = useThreadNotes(input);
   useEffect(() => {
     observe(notes);
   }, [observe, notes]);
-  return null;
+  const { attempt } = notes.client;
+  return withParticipants &&
+    notes.draftVisible &&
+    attempt !== null &&
+    attempt.kind !== "remove" ? (
+    <NoteParticipants
+      disabled={notes.writing}
+      epoch={notes.epoch}
+      onAccessLost={() => {
+        notes.loseAccess(input);
+      }}
+      onChange={(mentions) => {
+        notes.store.setState((current) =>
+          transitionNotesClient(current, { kind: "change", mentions })
+        );
+      }}
+      onSnapshot={notes.handleSnapshot}
+      prefix={notes.prefix}
+      scope={input}
+      selected={attempt.mentions}
+    />
+  ) : null;
 };
 
 const fixtures: { dispose: () => void }[] = [];
-const mount = async (withMentions = false) => {
+const mount = async ({
+  withMentions = false,
+  withParticipants = false,
+}: { withMentions?: boolean; withParticipants?: boolean } = {}) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { gcTime: Infinity, retry: false } },
   });
@@ -251,6 +331,7 @@ const mount = async (withMentions = false) => {
             controller.current = notes;
           }}
           input={scope}
+          withParticipants={withParticipants}
         />
         {withMentions ? (
           <>
@@ -300,6 +381,11 @@ describe("internal notes client behavior", () => {
     server.note.mockResolvedValue({ note, snapshot });
     server.notes.mockResolvedValue({ next: null, notes: [note], snapshot });
     server.mentions.mockResolvedValue({ mentions: [], next: null });
+    server.participants.mockResolvedValue({
+      nextMemberId: null,
+      participants: [],
+      snapshot,
+    });
   });
   afterEach(() => {
     for (const fixture of fixtures.splice(0)) {
@@ -444,6 +530,66 @@ describe("internal notes client behavior", () => {
   });
 
   describe("current note actions", () => {
+    test("uncertain create validation closes a draft after write loss while other reads remain responder", async () => {
+      const responder: CollaborationState = {
+        ...snapshot,
+        permissions: { ...snapshot.permissions, moderateNotes: false },
+        role: "responder",
+      };
+      server.get.mockResolvedValue(responder);
+      server.notes.mockResolvedValue({
+        next: null,
+        notes: [note],
+        snapshot: responder,
+      });
+      const fixture = await mount();
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      const reader: CollaborationState = {
+        ...responder,
+        permissions: {
+          ...responder.permissions,
+          claimSelf: false,
+          writeOwnNotes: false,
+        },
+        role: "reader",
+      };
+      server.note.mockResolvedValue({ note: null, snapshot: reader });
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(
+            transitionNotesClient(current, {
+              body: "Uncertain create from previous role",
+              kind: "change",
+            }),
+            { epoch: current.epoch, kind: "uncertain" }
+          )
+        );
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.attempt).toBeNull();
+      });
+      expect(fixture.read().snapshot?.role).toBe("responder");
+      expect(fixture.read().draftVisible).toBeFalsy();
+      expect(fixture.read().canWrite).toBeFalsy();
+      expect(fixture.read().visible).toBeTruthy();
+      expect(fixture.read().page?.notes).toContainEqual(
+        expect.objectContaining({ body: note.body })
+      );
+      act(() => {
+        fixture.read().save();
+      });
+      expect(server.mutate).not.toHaveBeenCalled();
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      expect(fixture.read().client.attempt).toBeNull();
+    });
+
     test("a reader page closes an existing create draft while authority still reports responder", async () => {
       const responder: CollaborationState = {
         ...snapshot,
@@ -610,6 +756,472 @@ describe("internal notes client behavior", () => {
     });
   });
 
+  describe("scoped permission observations", () => {
+    test("participant reader evidence closes the draft and survives the picker disappearing", async () => {
+      server.participants.mockResolvedValue({
+        nextMemberId: null,
+        participants: [],
+        snapshot: readerSnapshot,
+      });
+      const fixture = await mount({ withParticipants: true });
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      const trigger = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.startsWith("Notify teammates")
+      );
+      expect(trigger).toBeDefined();
+      act(() => trigger?.click());
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.attempt).toBeNull();
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      expect(fixture.read().visible).toBeTruthy();
+      expect(fixture.read().page?.notes).toContainEqual(
+        expect.objectContaining({ body: note.body })
+      );
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      expect(fixture.read().client.attempt).toBeNull();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test("a canceled writer response and cached metadata cannot regrant writing but a fresh get can", async () => {
+      const fixture = await edit();
+      const pending = Promise.withResolvers<CollaborationState>();
+      server.get.mockReturnValueOnce(pending.promise);
+      act(() => {
+        void fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(() => {
+        expect(
+          fixture.queryClient.isFetching({
+            queryKey: [...fixture.read().prefix, "authority"],
+          })
+        ).toBeGreaterThan(0);
+      });
+      act(() => {
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: readerSnapshot,
+        });
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      expect(fixture.read().client.attempt).toBeNull();
+      await act(async () => {
+        pending.resolve(snapshot);
+        await pending.promise;
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      act(() => {
+        for (const query of fixture.queryClient
+          .getQueryCache()
+          .findAll({ queryKey: [...fixture.read().prefix, "authority"] })) {
+          fixture.queryClient.setQueryData(query.queryKey, snapshot);
+        }
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      server.get.mockResolvedValue(responderSnapshot);
+      server.notes.mockResolvedValue({
+        next: null,
+        notes: [note],
+        snapshot: responderSnapshot,
+      });
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().canWrite).toBeTruthy();
+      });
+      expect(fixture.read().client.attempt).toBeNull();
+      expect(fixture.read().visible).toBeTruthy();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test("a responder can regain writing while moderation stays unavailable", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: readerSnapshot,
+        });
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      const pending = Promise.withResolvers<CollaborationState>();
+      server.get.mockResolvedValue(responderSnapshot);
+      server.get.mockReturnValueOnce(pending.promise);
+      act(() => {
+        void fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(
+          fixture.queryClient.isFetching({
+            queryKey: [...fixture.read().prefix, "authority"],
+          })
+        ).toBeGreaterThan(0);
+      });
+      act(() => {
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: responderSnapshot,
+        });
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      await act(async () => {
+        pending.resolve(responderSnapshot);
+        await pending.promise;
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().canWrite).toBeTruthy();
+      });
+      expect(fixture.read().canModerate).toBeFalsy();
+      expect(fixture.read().client.attempt).toBeNull();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test("a page started before restored authority cannot discard a later draft", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: readerSnapshot,
+        });
+      });
+      const pending = Promise.withResolvers<CollaborationNotesPage>();
+      server.notes.mockReturnValueOnce(pending.promise);
+      act(() => {
+        void fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "notes"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(
+          fixture.queryClient.isFetching({
+            queryKey: [...fixture.read().prefix, "private", "notes"],
+          })
+        ).toBeGreaterThan(0);
+      });
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().canWrite).toBeTruthy();
+      });
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "New draft after role recovery",
+            kind: "change",
+          })
+        );
+      });
+      await act(async () => {
+        pending.resolve({
+          next: null,
+          notes: [{ ...note, actions: { edit: false, remove: false } }],
+          snapshot: readerSnapshot,
+        });
+        await pending.promise;
+      });
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "New draft after role recovery",
+        expected: cursor,
+      });
+      expect(fixture.read().draftVisible).toBeTruthy();
+      expect(fixture.read().canWrite).toBeTruthy();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test("restoring moderation preserves the current author's unsaved draft", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Keep my edit through a role upgrade",
+            kind: "change",
+          })
+        );
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: responderSnapshot,
+        });
+      });
+      expect(fixture.read().canModerate).toBeFalsy();
+      expect(fixture.read().draftVisible).toBeTruthy();
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().canModerate).toBeTruthy();
+        expect(fixture.read().draftVisible).toBeTruthy();
+      });
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "Keep my edit through a role upgrade",
+        expected: cursor,
+      });
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test("explicit reader evidence during retry cancels the draft and an older pending get", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Hidden during the transient failure",
+            kind: "change",
+          })
+        );
+      });
+      const pending = Promise.withResolvers<CollaborationState>();
+      server.get.mockReturnValueOnce(pending.promise);
+      act(() => {
+        void fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(() => {
+        expect(
+          fixture.queryClient.isFetching({
+            queryKey: [...fixture.read().prefix, "authority"],
+          })
+        ).toBeGreaterThan(0);
+      });
+      server.notes.mockRejectedValueOnce(new Error("Temporary read failure"));
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "notes"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.authority.kind).toBe("retry");
+      });
+      expect(fixture.read().draftVisible).toBeFalsy();
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "Hidden during the transient failure",
+        expected: cursor,
+      });
+      act(() => {
+        fixture.read().handleSnapshot({
+          epoch: fixture.read().epoch,
+          snapshot: readerSnapshot,
+        });
+      });
+      expect(fixture.read().client.attempt).toBeNull();
+      await act(async () => {
+        pending.resolve(snapshot);
+        await pending.promise;
+      });
+      expect(fixture.read().canWrite).toBeFalsy();
+      expect(fixture.read().client.authority.kind).toBe("retry");
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
+    test.each(["foreign-remove", "own-remove", "own-edit"] as const)(
+      "moderation loss applies to %s while authority and target validation are older",
+      async (operation) => {
+        const target = {
+          ...note,
+          actions: { edit: operation !== "foreign-remove", remove: true },
+        };
+        server.note.mockResolvedValue({ note: target, snapshot });
+        server.notes.mockResolvedValue({ next: null, notes: [], snapshot });
+        const fixture = await mount();
+        act(() => {
+          if (operation === "own-edit") {
+            fixture.read().startEdit(target, cursor);
+          } else {
+            fixture.read().startRemove(target, cursor);
+          }
+        });
+        await vi.waitFor(async () => {
+          await act(async () => {
+            await setTimeout(0);
+          });
+          expect(fixture.read().draftVisible).toBeTruthy();
+        });
+        server.notes.mockResolvedValue({
+          next: null,
+          notes: [],
+          snapshot: responderSnapshot,
+        });
+        await act(async () => {
+          await fixture.queryClient.invalidateQueries({
+            queryKey: [...fixture.read().prefix, "private", "notes"],
+          });
+        });
+        await vi.waitFor(async () => {
+          await act(async () => {
+            await setTimeout(0);
+          });
+          expect(fixture.read().canModerate).toBeFalsy();
+          expect(fixture.read().draftVisible).toBe(
+            operation !== "foreign-remove"
+          );
+          expect(fixture.read().client.attempt !== null).toBe(
+            operation !== "foreign-remove"
+          );
+        });
+        expect(fixture.read().canWrite).toBeTruthy();
+        expect(fixture.read().visible).toBeTruthy();
+        expect(server.mutate).not.toHaveBeenCalled();
+      }
+    );
+
+    test("an old participant completion cannot discard a new epoch's draft", async () => {
+      const pending = Promise.withResolvers<CollaborationNoteParticipants>();
+      server.participants.mockReturnValueOnce(pending.promise);
+      const fixture = await mount({ withParticipants: true });
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      const trigger = [...document.querySelectorAll("button")].find((button) =>
+        button.textContent?.startsWith("Notify teammates")
+      );
+      expect(trigger).toBeDefined();
+      act(() => trigger?.click());
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(server.participants.mock.calls.length).toBeGreaterThan(0);
+      });
+      const online = vi.spyOn(navigator, "onLine", "get");
+      online.mockReturnValue(false);
+      act(() => {
+        window.dispatchEvent(new Event("offline"));
+      });
+      online.mockReturnValue(true);
+      act(() => {
+        window.dispatchEvent(new Event("online"));
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().draftVisible).toBeTruthy();
+      });
+      act(() => {
+        fixture
+          .read()
+          .store.setState((current) =>
+            transitionNotesClient(current, { kind: "cancel" })
+          );
+      });
+      await act(async () => {
+        await fixture.read().startCreate();
+      });
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Draft after reconnect",
+            kind: "change",
+          })
+        );
+      });
+      await act(async () => {
+        pending.resolve({
+          nextMemberId: null,
+          participants: [],
+          snapshot: readerSnapshot,
+        });
+        await pending.promise;
+      });
+      expect(fixture.read().client.attempt).toMatchObject({
+        body: "Draft after reconnect",
+        expected: cursor,
+      });
+      expect(fixture.read().draftVisible).toBeTruthy();
+      expect(fixture.read().canWrite).toBeTruthy();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+  });
+
+  test("reconnect hides a captured draft until authorization succeeds without discarding it", async () => {
+    const fixture = await edit();
+    act(() => {
+      fixture.read().store.setState((current) =>
+        transitionNotesClient(current, {
+          body: "Keep this draft while checking access",
+          kind: "change",
+        })
+      );
+    });
+    const pending = Promise.withResolvers<CollaborationState>();
+    server.get.mockReturnValue(pending.promise);
+    const online = vi.spyOn(navigator, "onLine", "get");
+    online.mockReturnValue(false);
+    act(() => {
+      window.dispatchEvent(new Event("offline"));
+    });
+    expect(fixture.read().draftVisible).toBeFalsy();
+    expect(fixture.read().client.attempt).toMatchObject({
+      body: "Keep this draft while checking access",
+      expected: cursor,
+    });
+    online.mockReturnValue(true);
+    act(() => {
+      window.dispatchEvent(new Event("online"));
+    });
+    expect(fixture.read().draftVisible).toBeFalsy();
+    expect(fixture.read().client.attempt).toMatchObject({
+      body: "Keep this draft while checking access",
+      expected: cursor,
+    });
+    await act(async () => {
+      pending.resolve(snapshot);
+      await pending.promise;
+    });
+    await vi.waitFor(async () => {
+      await act(async () => {
+        await setTimeout(0);
+      });
+      expect(fixture.read().draftVisible).toBeTruthy();
+    });
+    expect(fixture.read().client.attempt).toMatchObject({
+      body: "Keep this draft while checking access",
+      expected: cursor,
+    });
+    expect(server.mutate).not.toHaveBeenCalled();
+  });
+
   test("polling closes an off-page edit when current membership loses authorship", async () => {
     vi.useFakeTimers({ toFake: ["clearInterval", "setInterval"] });
     server.notes.mockResolvedValue({ next: null, notes: [], snapshot });
@@ -648,7 +1260,7 @@ describe("internal notes client behavior", () => {
       ],
       next: { createdAt: note.createdAt, noteId: note.id },
     });
-    const fixture = await mount(true);
+    const fixture = await mount({ withMentions: true });
     act(() => {
       fixture.read().startEdit(note, cursor);
       fixture.read(fixture.unrelated).startEdit(note, cursor);
@@ -698,7 +1310,7 @@ describe("internal notes client behavior", () => {
       await act(async () => {
         await setTimeout(0);
       });
-      expect(fixture.read().client.authority).toBe("lost");
+      expect(fixture.read().client.authority.kind).toBe("lost");
     });
     expect(fixture.read().client.attempt).toBeNull();
     expect(fixture.read().page).toBeUndefined();

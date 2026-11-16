@@ -19,12 +19,14 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useId, useState } from "react";
 
 import { collaborationFailure } from "./notes-session";
+import type { NotesSnapshotReceipt } from "./notes-session";
 
 export const NoteParticipants = ({
   disabled,
   epoch,
   onAccessLost,
   onChange,
+  onSnapshot,
   prefix,
   scope,
   selected,
@@ -33,6 +35,7 @@ export const NoteParticipants = ({
   epoch: number;
   onAccessLost: () => void;
   onChange: (participants: CollaborationNoteParticipant[]) => void;
+  onSnapshot: (receipt: NotesSnapshotReceipt) => void;
   prefix: readonly unknown[];
   scope: CollaborationScope;
   selected: CollaborationNoteParticipant[];
@@ -43,15 +46,20 @@ export const NoteParticipants = ({
   const labelId = useId();
   const catalog = useQuery({
     enabled: open && !disabled,
-    queryFn: async ({ signal }) =>
-      await rpc.collaboration.notes.participants(
+    queryFn: async ({ signal }) => {
+      const result = await rpc.collaboration.notes.participants(
         {
           ...scope,
           search,
           ...(afterMemberId === undefined ? {} : { afterMemberId }),
         },
         { signal }
-      ),
+      );
+      if (!signal.aborted) {
+        onSnapshot({ epoch, snapshot: result.snapshot });
+      }
+      return result;
+    },
     queryKey: [
       ...prefix,
       "private",

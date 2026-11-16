@@ -246,6 +246,7 @@ const ThreadNotesScope = ({ mailboxId, threadId }: CollaborationScope) => {
                   onAccessLost={() => {
                     notes.loseAccess({ mailboxId, threadId });
                   }}
+                  onSnapshot={notes.handleSnapshot}
                   onChange={(mentions) => {
                     notes.store.setState((state) =>
                       transitionNotesClient(state, { kind: "change", mentions })
@@ -385,12 +386,12 @@ const ThreadNotesScope = ({ mailboxId, threadId }: CollaborationScope) => {
         ) : (
           <div className="space-y-2">
             <Text size="sm" tone="muted">
-              {notes.client.authority === "lost"
+              {notes.client.authority.kind === "lost"
                 ? "These notes are not available with your current access."
                 : "Checking access to notes..."}
             </Text>
-            {notes.client.authority === "lost" ||
-            notes.client.authority === "retry" ? (
+            {notes.client.authority.kind === "lost" ||
+            notes.client.authority.kind === "retry" ? (
               <Button
                 onClick={() => {
                   notes.restart(true);

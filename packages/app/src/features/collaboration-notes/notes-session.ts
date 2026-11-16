@@ -1,4 +1,7 @@
-import type { CollaborationCursor } from "@quieter/mail/collaboration";
+import type {
+  CollaborationCursor,
+  CollaborationState,
+} from "@quieter/mail/collaboration";
 import type {
   CollaborationNoteParticipant,
   CollaborationNotesPage,
@@ -20,11 +23,25 @@ export type NoteRemoval = {
   status: "confirming" | "saving";
 };
 
+export type NotesPermissions = Pick<
+  CollaborationState["permissions"],
+  "writeOwnNotes" | "moderateNotes"
+>;
+
+export type NotesSnapshotReceipt = {
+  epoch: number;
+  snapshot: CollaborationState;
+};
+
+type NotesAuthority =
+  | { kind: "checking" | "lost" | "retry" }
+  | { kind: "ready"; permissions: NotesPermissions };
+
 export type NotesClientState = {
   after: CollaborationNotesPage["next"];
   available: boolean;
   attempt: NoteDraft | NoteRemoval | null;
-  authority: "checking" | "ready" | "lost" | "retry";
+  authority: NotesAuthority;
   epoch: number;
 };
 
@@ -34,7 +51,13 @@ export type NotesClientEvent =
       kind: "authorized";
       epoch: number;
       cursor: CollaborationCursor | null;
-      canWrite: boolean;
+      permissions: NotesPermissions;
+    }
+  | {
+      kind: "permissions-observed";
+      epoch: number;
+      cursor: CollaborationCursor | null;
+      permissions: NotesPermissions;
     }
   | { kind: "failed"; epoch: number; failure: "lost" | "retry" }
   | { kind: "begin"; epoch: number; attempt: NoteDraft | NoteRemoval }
@@ -70,40 +93,89 @@ export const transitionNotesClient = (
           attempt?.status === "saving"
             ? { ...attempt, status: "uncertain" }
             : attempt,
-        authority: "checking",
+        authority: { kind: "checking" },
         available: event.available,
         epoch: current.epoch + 1,
       };
     }
     case "authorized": {
-      if (!current.available || current.authority === "lost") {
+      if (!current.available || current.authority.kind === "lost") {
         return current;
       }
       const attempt =
         current.attempt !== null &&
-        (!event.canWrite ||
+        (!event.permissions.writeOwnNotes ||
           current.attempt.expected.contextId !== event.cursor?.contextId)
           ? null
           : current.attempt;
-      if (current.authority === "ready" && attempt === current.attempt) {
+      if (
+        current.authority.kind === "ready" &&
+        current.authority.permissions.writeOwnNotes ===
+          event.permissions.writeOwnNotes &&
+        current.authority.permissions.moderateNotes ===
+          event.permissions.moderateNotes &&
+        attempt === current.attempt
+      ) {
         return current;
       }
-      return { ...current, attempt, authority: "ready" };
+      return {
+        ...current,
+        attempt,
+        authority: { kind: "ready", permissions: event.permissions },
+      };
+    }
+    case "permissions-observed": {
+      if (!current.available || current.authority.kind === "lost") {
+        return current;
+      }
+      const attempt =
+        current.attempt !== null &&
+        (!event.permissions.writeOwnNotes ||
+          current.attempt.expected.contextId !== event.cursor?.contextId)
+          ? null
+          : current.attempt;
+      if (current.authority.kind !== "ready") {
+        return attempt === current.attempt ? current : { ...current, attempt };
+      }
+      const permissions: NotesPermissions = {
+        moderateNotes:
+          current.authority.permissions.moderateNotes &&
+          event.permissions.moderateNotes,
+        writeOwnNotes:
+          current.authority.permissions.writeOwnNotes &&
+          event.permissions.writeOwnNotes,
+      };
+      if (
+        permissions.writeOwnNotes ===
+          current.authority.permissions.writeOwnNotes &&
+        permissions.moderateNotes ===
+          current.authority.permissions.moderateNotes &&
+        attempt === current.attempt
+      ) {
+        return current;
+      }
+      return {
+        ...current,
+        attempt,
+        authority: { kind: "ready", permissions },
+      };
     }
     case "failed": {
       return {
         ...current,
         attempt: event.failure === "lost" ? null : current.attempt,
-        authority: event.failure,
+        authority: { kind: event.failure },
       };
     }
     case "begin": {
-      return current.authority === "ready"
+      return current.authority.kind === "ready" &&
+        current.authority.permissions.writeOwnNotes
         ? { ...current, attempt: event.attempt }
         : current;
     }
     case "change": {
-      return current.authority === "ready" &&
+      return current.authority.kind === "ready" &&
+        current.authority.permissions.writeOwnNotes &&
         current.attempt !== null &&
         current.attempt.kind !== "remove" &&
         current.attempt.status !== "saving"
@@ -118,7 +190,9 @@ export const transitionNotesClient = (
         : current;
     }
     case "sending": {
-      return current.authority === "ready" && current.attempt !== null
+      return current.authority.kind === "ready" &&
+        current.authority.permissions.writeOwnNotes &&
+        current.attempt !== null
         ? { ...current, attempt: { ...current.attempt, status: "saving" } }
         : current;
     }
@@ -158,7 +232,7 @@ export const transitionNotesClient = (
 export const initialNotesClientState: NotesClientState = {
   after: null,
   attempt: null,
-  authority: "checking",
+  authority: { kind: "checking" },
   available: false,
   epoch: 0,
 };

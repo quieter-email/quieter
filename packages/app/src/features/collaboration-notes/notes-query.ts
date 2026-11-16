@@ -11,9 +11,10 @@ import type {
   CollaborationNoteCommand,
 } from "@quieter/mail/collaboration-notes";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useCallback, useEffect, useMemo } from "react";
 
 import { collaborationFailure, transitionNotesClient } from "./notes-session";
+import type { NotesSnapshotReceipt } from "./notes-session";
 import { useNotesSession } from "./use-notes-session";
 
 export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
@@ -27,6 +28,45 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     () => [...prefix, "authority", epoch],
     [epoch, prefix]
   );
+  const handleSnapshot = useCallback(
+    ({ epoch: observedEpoch, snapshot: observed }: NotesSnapshotReceipt) => {
+      const active = store.get();
+      if (
+        active.epoch !== observedEpoch ||
+        !active.available ||
+        active.authority.kind === "lost" ||
+        observed.mailboxId !== mailboxId ||
+        observed.threadId !== threadId
+      ) {
+        return;
+      }
+      const currentPermissions =
+        active.authority.kind === "ready"
+          ? active.authority.permissions
+          : undefined;
+      if (
+        (!observed.permissions.writeOwnNotes &&
+          currentPermissions?.writeOwnNotes !== false) ||
+        (!observed.permissions.moderateNotes &&
+          currentPermissions?.moderateNotes !== false)
+      ) {
+        void queryClient.cancelQueries({
+          exact: true,
+          queryKey: [...prefix, "authority", observedEpoch],
+        });
+      }
+      store.setState((current) =>
+        transitionNotesClient(current, {
+          cursor:
+            observed.state.kind === "prepared" ? observed.state.cursor : null,
+          epoch: observedEpoch,
+          kind: "permissions-observed",
+          permissions: observed.permissions,
+        })
+      );
+    },
+    [mailboxId, prefix, queryClient, store, threadId]
+  );
   const preparing = useMutation({
     mutationFn: async (_epoch: number) =>
       await rpc.collaboration.prepare({ mailboxId, threadId }),
@@ -36,6 +76,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
         queryKey: [...prefix, "authority", activeEpoch],
       });
       if (store.get().epoch === activeEpoch) {
+        handleSnapshot({ epoch: activeEpoch, snapshot: prepared });
         queryClient.setQueryData(
           [...prefix, "authority", activeEpoch],
           prepared
@@ -45,8 +86,35 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   });
   const authority = useQuery({
     enabled: client.available && !preparing.isPending,
-    queryFn: async ({ signal }) =>
-      await rpc.collaboration.get({ mailboxId, threadId }, { signal }),
+    queryFn: async ({ signal }) => {
+      const result = await rpc.collaboration.get(
+        { mailboxId, threadId },
+        { signal }
+      );
+      const active = store.get();
+      if (!signal.aborted && active.epoch === epoch) {
+        if (
+          active.authority.kind === "ready" &&
+          ((!active.authority.permissions.writeOwnNotes &&
+            result.permissions.writeOwnNotes) ||
+            (!active.authority.permissions.moderateNotes &&
+              result.permissions.moderateNotes))
+        ) {
+          restart(true);
+        } else {
+          store.setState((current) =>
+            transitionNotesClient(current, {
+              cursor:
+                result.state.kind === "prepared" ? result.state.cursor : null,
+              epoch,
+              kind: "authorized",
+              permissions: result.permissions,
+            })
+          );
+        }
+      }
+      return result;
+    },
     queryKey: authorityKey,
     refetchInterval: 6000,
     refetchOnReconnect: false,
@@ -56,22 +124,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   });
 
   useEffect(() => {
-    if (
-      authority.isSuccess &&
-      !authority.isFetching &&
-      authority.data !== undefined
-    ) {
-      const snapshot = authority.data;
-      store.setState((current) =>
-        transitionNotesClient(current, {
-          canWrite: snapshot.permissions.writeOwnNotes,
-          cursor:
-            snapshot.state.kind === "prepared" ? snapshot.state.cursor : null,
-          epoch,
-          kind: "authorized",
-        })
-      );
-    } else if (authority.isError) {
+    if (authority.isError) {
       const kind = collaborationFailure(authority.error);
       if (kind === "lost") {
         loseAccess({ mailboxId, threadId });
@@ -89,12 +142,8 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       );
     }
   }, [
-    authority.data,
-    authority.dataUpdatedAt,
     authority.error,
     authority.isError,
-    authority.isFetching,
-    authority.isSuccess,
     epoch,
     loseAccess,
     mailboxId,
@@ -116,9 +165,9 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       : undefined;
   const page = useQuery({
     enabled:
-      client.available && client.authority === "ready" && cursor !== null,
-    queryFn: async ({ signal }) =>
-      await rpc.collaboration.notes.list(
+      client.available && client.authority.kind === "ready" && cursor !== null,
+    queryFn: async ({ signal }) => {
+      const result = await rpc.collaboration.notes.list(
         {
           mailboxId,
           threadId,
@@ -126,7 +175,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
           ...(after === undefined ? {} : { after }),
         },
         { signal }
-      ),
+      );
+      if (!signal.aborted) {
+        handleSnapshot({ epoch, snapshot: result.snapshot });
+      }
+      return result;
+    },
     queryKey: [
       ...prefix,
       "private",
@@ -174,8 +228,11 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   ]);
 
   const canWrite =
-    snapshot?.permissions.writeOwnNotes === true &&
-    page.data?.snapshot.permissions.writeOwnNotes !== false;
+    client.authority.kind === "ready" &&
+    client.authority.permissions.writeOwnNotes;
+  const canModerate =
+    client.authority.kind === "ready" &&
+    client.authority.permissions.moderateNotes;
   const { attempt } = client;
   const validationKey = useMemo(
     () => [
@@ -200,7 +257,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   const validation = useQuery({
     enabled:
       client.available &&
-      client.authority === "ready" &&
+      client.authority.kind === "ready" &&
       attempt !== null &&
       (attempt.kind !== "create" ||
         (attempt.kind === "create" && attempt.status === "uncertain")),
@@ -208,7 +265,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       if (attempt === null) {
         throw new Error("No note is being reviewed.");
       }
-      return await rpc.collaboration.notes.get(
+      const result = await rpc.collaboration.notes.get(
         {
           contextId: attempt.expected.contextId,
           mailboxId,
@@ -217,6 +274,10 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
         },
         { signal }
       );
+      if (!signal.aborted) {
+        handleSnapshot({ epoch, snapshot: result.snapshot });
+      }
+      return result;
     },
     queryKey: validationKey,
     refetchInterval: 6000,
@@ -236,6 +297,8 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   const listedNote = page.data?.notes.find(
     (note) => note.id === attempt?.noteId
   );
+  const ownTarget =
+    listedNote?.actions.edit ?? validation.data?.note?.actions.edit;
   useEffect(() => {
     if (
       validation.isError &&
@@ -246,12 +309,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     }
     if (
       attempt !== null &&
-      (!canWrite ||
-        (attempt.kind !== "create" &&
-          (listedNote?.actions[attempt.kind] === false ||
-            (validation.isSuccess &&
-              (validation.data.note === null ||
-                !validation.data.note.actions[attempt.kind])))))
+      attempt.kind !== "create" &&
+      (listedNote?.actions[attempt.kind] === false ||
+        (attempt.kind === "remove" && !canModerate && ownTarget === false) ||
+        (validation.isSuccess &&
+          (validation.data.note === null ||
+            !validation.data.note.actions[attempt.kind])))
     ) {
       store.setState((current) =>
         current.attempt === attempt
@@ -307,11 +370,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   }, [
     attempt,
     authorityKey,
-    canWrite,
+    canModerate,
     epoch,
     listedNote,
     loseAccess,
     mailboxId,
+    ownTarget,
     prefix,
     queryClient,
     restart,
@@ -325,7 +389,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
 
   const visible =
     client.available &&
-    client.authority === "ready" &&
+    client.authority.kind === "ready" &&
     snapshot !== undefined &&
     !authority.isError &&
     !page.isError;
@@ -338,7 +402,8 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
     (attempt.kind === "create" ||
       (validation.isSuccess &&
         validation.data.note?.actions[attempt.kind] === true &&
-        listedNote?.actions[attempt.kind] !== false));
+        listedNote?.actions[attempt.kind] !== false &&
+        (attempt.kind !== "remove" || canModerate || ownTarget === true)));
 
   const writing = useMutation({
     mutationFn: async ({
@@ -369,6 +434,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       if (store.get().epoch !== active.epoch) {
         return;
       }
+      handleSnapshot({ epoch: active.epoch, snapshot: result.snapshot });
       store.setState((current) =>
         transitionNotesClient(current, {
           epoch: active.epoch,
@@ -388,7 +454,8 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
   const startCreate = async () => {
     const active = store.get();
     if (
-      active.authority !== "ready" ||
+      active.authority.kind !== "ready" ||
+      !active.authority.permissions.writeOwnNotes ||
       active.attempt !== null ||
       queryClient.isMutating({ mutationKey: [...prefix, "prepare"] }) > 0
     ) {
@@ -407,16 +474,9 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       ) {
         return;
       }
+      handleSnapshot({ epoch: activeEpoch, snapshot: prepared });
       const expected = prepared.state.cursor;
       queryClient.setQueryData(authorityKey, prepared);
-      store.setState((current) =>
-        transitionNotesClient(current, {
-          canWrite: prepared.permissions.writeOwnNotes,
-          cursor: expected,
-          epoch: activeEpoch,
-          kind: "authorized",
-        })
-      );
       store.setState((current) =>
         transitionNotesClient(current, {
           attempt: {
@@ -487,7 +547,11 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       pending === null ||
       pending !== attempt ||
       pending.status === "saving" ||
-      active.authority !== "ready" ||
+      active.authority.kind !== "ready" ||
+      !active.authority.permissions.writeOwnNotes ||
+      (pending.kind === "remove" &&
+        !active.authority.permissions.moderateNotes &&
+        ownTarget !== true) ||
       !draftVisible
     ) {
       return;
@@ -533,6 +597,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
       ) {
         return;
       }
+      handleSnapshot({ epoch: active.epoch, snapshot: result.snapshot });
       queryClient.setQueryData(authorityKey, result.snapshot);
       if (
         result.note === null ||
@@ -564,13 +629,12 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
 
   return {
     after,
-    canModerate:
-      snapshot?.permissions.moderateNotes === true &&
-      page.data?.snapshot.permissions.moderateNotes !== false,
+    canModerate,
     canWrite,
     client,
     draftVisible,
     epoch,
+    handleSnapshot,
     loseAccess,
     page: visible ? page.data : undefined,
     prefix,
