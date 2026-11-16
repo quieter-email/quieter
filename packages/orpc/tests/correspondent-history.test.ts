@@ -80,7 +80,7 @@ vi.mock(import("@quieter/auth/session"), async (original) => ({
         };
   },
 }));
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the correspondent overview overload is used by this service.
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- This double models only the correspondent overload exercised by this suite.
 vi.mock("../src/ai-memory-context", () => ({
   loadAiAgentContext: mocks.memory,
 }));

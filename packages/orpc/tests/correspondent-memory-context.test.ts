@@ -18,7 +18,7 @@ const fixtures = vi.hoisted(() => ({
   semantic: vi.fn<typeof prepareSemanticSearch>(),
 }));
 
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- Exercise Drizzle's actual parameterized PostgreSQL queries at the transport boundary.
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- pg-proxy preserves SQL serialization while replacing the production PostgresJs driver.
 vi.mock("@quieter/database/client", async () => {
   const { drizzle } = await import("drizzle-orm/pg-proxy");
   return { db: drizzle(fixtures.query) };

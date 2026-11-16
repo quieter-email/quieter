@@ -1,4 +1,3 @@
-/* oxlint-disable vitest/prefer-import-in-mock -- Transport and capture boundaries isolate the canonical query paths from external services. */
 import { ORPCError } from "@orpc/server";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import type { managedMailMessage } from "@quieter/database/schema";
@@ -7,15 +6,19 @@ import type {
   listDraftsWithDetails,
   listMessagesWithDetails,
 } from "@quieter/gmail";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { MessageListItem } from "@quieter/mail/messages";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
 import type { captureMailboxMessageMemory } from "../src/ai-memory-capture";
-import type { callGmail } from "../src/gmail-request";
-import type { processPendingMailImportance } from "../src/mail-importance";
+import type {
+  listCapturedImportantMessages,
+  processPendingMailImportance,
+} from "../src/mail-importance";
 import { mailInputSchemas } from "../src/mail/inputs";
 import { queriesMailOperations } from "../src/mail/queries";
 import type { getAuthorizedManagedMailbox } from "../src/mailbox/access";
+import type { assertAccessibleMailbox } from "../src/mailbox/service";
 import { listManagedMessages } from "../src/managed-mail/messages/service";
 import type { listOrganizationApiMailMessages } from "../src/organization-api-mail";
 
@@ -53,42 +56,26 @@ const managedRecord = (
 type ManagedRecord = ReturnType<typeof managedRecord>;
 
 const fixtures = vi.hoisted(() => ({
-  authorize:
-    vi.fn<
-      () => Promise<{ contentRevision: number; provider: "gmail" | "managed" }>
-    >(),
+  authorize: vi.fn<typeof assertAccessibleMailbox>(),
   authorizeManaged: vi.fn<typeof getAuthorizedManagedMailbox>(),
   candidates: [] as ManagedRecord[],
   capture: vi.fn<typeof captureMailboxMessageMemory>(),
   databaseScope: vi.fn<typeof DatabaseClientModule.withRequestDatabaseClient>(),
   drafts: vi.fn<typeof listDraftsWithDetails>(),
-  importance:
-    vi.fn<
-      (
-        mailboxId: string,
-        messages: MessageListItem[]
-      ) => Promise<MessageListItem[]>
-    >(),
-  importantList: vi.fn<() => Promise<{ messages: MessageListItem[] }>>(),
+  importantList: vi.fn<typeof listCapturedImportantMessages>(),
   list: vi.fn<typeof listMessagesWithDetails>(),
   organizationList: vi.fn<typeof listOrganizationApiMailMessages>(),
   processImportance: vi.fn<typeof processPendingMailImportance>(),
-  provider: vi.fn<typeof callGmail>(),
+  provider: vi.fn<() => void>(),
   query:
     vi.fn<
       (query: string, parameters: unknown[]) => Promise<{ rows: unknown[][] }>
     >(),
   states: [] as ManagedRecord[],
   thread: vi.fn<typeof getThreadWithDetails>(),
-  unsubscribe:
-    vi.fn<
-      (
-        mailboxId: string,
-        messages: MessageListItem[]
-      ) => Promise<MessageListItem[]>
-    >(),
 }));
 
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- pg-proxy preserves SQL serialization while replacing the production PostgresJs driver.
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
@@ -98,42 +85,56 @@ vi.mock("@quieter/database/client", async (importOriginal) => {
     withRequestDatabaseClient: fixtures.databaseScope,
   };
 });
-vi.mock("@quieter/gmail", () => ({
+vi.mock(import("@quieter/gmail"), () => ({
   getThreadWithDetails: fixtures.thread,
   listDraftsWithDetails: fixtures.drafts,
   listMessagesWithDetails: fixtures.list,
 }));
-vi.mock("@quieter/gmail/compose", () => ({}));
-vi.mock("@quieter/observability", () => ({}));
-vi.mock("../src/ai-memory-capture", () => ({
+vi.mock(import("@quieter/gmail/compose"), () => ({}));
+vi.mock(import("@quieter/observability"), () => ({}));
+vi.mock(import("../src/ai-memory-capture"), () => ({
   captureMailboxMessageMemory: fixtures.capture,
 }));
-vi.mock("../src/gmail-compose", () => ({
-  hydrateUnsubscribeStatus: fixtures.unsubscribe,
+vi.mock(import("../src/gmail-compose"), () => ({
+  hydrateUnsubscribeStatus: async (_mailboxId, messages) => {
+    await Promise.resolve();
+    return messages.map((item) => ({
+      ...item,
+      unsubscribeStatus: "requested",
+    }));
+  },
 }));
-vi.mock("../src/gmail-open-tracking", () => ({}));
-vi.mock("../src/gmail-request", () => ({ callGmail: fixtures.provider }));
-vi.mock("../src/mail-capture", () => ({}));
-vi.mock("../src/mail-domain/service", () => ({}));
-vi.mock("../src/mail-importance", () => ({
-  hydrateMailImportance: fixtures.importance,
+vi.mock(import("../src/gmail-open-tracking"), () => ({}));
+vi.mock(import("../src/gmail-request"), () => ({
+  callGmail: async (_context, _mailboxId, operation) => {
+    fixtures.provider();
+    return await operation("fixture-token");
+  },
+}));
+vi.mock(import("../src/mail-capture"), () => ({}));
+vi.mock(import("../src/mail-domain/service"), () => ({}));
+vi.mock(import("../src/mail-importance"), () => ({
+  hydrateMailImportance: async (_mailboxId, messages) => {
+    await Promise.resolve();
+    return messages.map((item) => ({ ...item, threadIsImportant: true }));
+  },
   listCapturedImportantMessages: fixtures.importantList,
-  parseCapturedImportanceSearch: () => {},
+  parseCapturedImportanceSearch: () => null,
   processPendingMailImportance: fixtures.processImportance,
 }));
-vi.mock("../src/mailbox/access", () => ({
+vi.mock(import("../src/mailbox/access"), () => ({
   getAuthorizedManagedMailbox: fixtures.authorizeManaged,
 }));
-vi.mock("../src/mailbox/service", () => ({
+vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: fixtures.authorize,
 }));
-vi.mock("../src/managed-mail/messages/attachments", () => ({}));
-vi.mock("../src/managed-mail/messages/get-draft", () => ({}));
-vi.mock("../src/organization-api-mail", () => ({
+vi.mock(import("../src/managed-mail/messages/attachments"), () => ({}));
+vi.mock(import("../src/managed-mail/messages/get-draft"), () => ({}));
+vi.mock(import("../src/organization-api-mail"), () => ({
   isOrganizationApiMailboxId: (id: string) => id.startsWith("api:"),
   listOrganizationApiMailMessages: fixtures.organizationList,
 }));
-vi.mock("../src/reminders/draft-state", () => ({}));
+vi.mock(import("../src/reminders/draft-state"), () => ({}));
 
 const context = { userId: "owner" };
 const mailboxId = "mailbox";
@@ -153,7 +154,10 @@ describe("canonical mail boundaries", () => {
     fixtures.candidates = [];
     fixtures.states = [];
     fixtures.authorize.mockResolvedValue({
+      capabilities: getMailboxCapabilities({ provider: "gmail" }),
       contentRevision: 12,
+      id: mailboxId,
+      organizationId: "organization",
       provider: "gmail",
     });
     fixtures.authorizeManaged.mockResolvedValue({
@@ -165,21 +169,6 @@ describe("canonical mail boundaries", () => {
       ownerUserId: "owner",
       provider: "managed",
       role: "reader",
-    });
-    fixtures.provider.mockImplementation(
-      async (_context, _mailboxId, operation) =>
-        await operation("fixture-token")
-    );
-    fixtures.importance.mockImplementation(async (_id, messages) => {
-      await Promise.resolve();
-      return messages.map((item) => ({ ...item, threadIsImportant: true }));
-    });
-    fixtures.unsubscribe.mockImplementation(async (_id, messages) => {
-      await Promise.resolve();
-      return messages.map((item) => ({
-        ...item,
-        unsubscribeStatus: "requested",
-      }));
     });
     fixtures.list.mockResolvedValue({
       historyId: "provider-revision",
