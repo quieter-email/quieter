@@ -61,6 +61,7 @@ import {
 import {
   composeDraftFormValuesSchema,
   composeSendFormValuesSchema,
+  getUnresolvedSnippetFields,
 } from "@quieter/mail/compose/schema";
 import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
@@ -115,6 +116,7 @@ export const useComposeDialogController = ({
   getTextFromHtml,
   onClose,
   onRecipientProblem,
+  onUnresolvedSnippetFields,
   persistDrafts = true,
   signature,
 }: {
@@ -131,6 +133,7 @@ export const useComposeDialogController = ({
   getTextFromHtml: (html: string) => string;
   onClose?: () => void;
   onRecipientProblem?: () => void;
+  onUnresolvedSnippetFields: (fields: string[]) => void;
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
@@ -426,6 +429,12 @@ export const useComposeDialogController = ({
       finishingRef.current ||
       activeDraftRef.current.saveStatus === "sending"
     ) {
+      return;
+    }
+
+    const unresolvedFields = getUnresolvedSnippetFields(values);
+    if (unresolvedFields.length > 0) {
+      onUnresolvedSnippetFields(unresolvedFields);
       return;
     }
 

@@ -64,8 +64,15 @@ import {
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-managed-mail";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
+import {
+  extractMailAddress,
+  findInvalidMailAddresses,
+  splitMailAddressList,
+} from "@quieter/mail/compose/schema";
+import type { SnippetContextValues } from "@quieter/mail/compose/schema";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
+import { parseSender } from "@quieter/mail/thread-list";
 import type { RouterInputs } from "@quieter/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -81,6 +88,7 @@ import {
   DialogBody,
   DialogCloseButton,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -348,6 +356,10 @@ const ReadyComposeSurface = ({
   const [switchingSender, setSwitchingSender] = useState(false);
   const [senderDetailsOpen, setSenderDetailsOpen] = useState(false);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [snippetReviewOpen, setSnippetReviewOpen] = useState(false);
+  const [unresolvedSnippetFields, setUnresolvedSnippetFields] = useState<
+    string[] | null
+  >(null);
   const attachmentInputRef = useRef<HTMLInputElement>(null);
   const dragDepthRef = useRef(0);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
@@ -375,7 +387,7 @@ const ReadyComposeSurface = ({
     snippetStatus = "Loading snippets…";
   }
   const compose = useComposeDialogController({
-    autosavePaused: slashMenuOpen || switchingSender,
+    autosavePaused: slashMenuOpen || snippetReviewOpen || switchingSender,
     beforeNavigate,
     defaultSenderName: editableSender?.name,
     demoMode,
@@ -392,6 +404,7 @@ const ReadyComposeSurface = ({
       composeEditorRef.current?.normalizeHtml(html) ?? html,
     onClose,
     onRecipientProblem: focusComposeRecipientField,
+    onUnresolvedSnippetFields: setUnresolvedSnippetFields,
     persistDrafts,
     signature,
   });
@@ -869,6 +882,47 @@ const ReadyComposeSurface = ({
                 <ComposeEditor
                   density={isInline ? "compact" : "comfortable"}
                   disabled={!canEditBody}
+                  getSnippetContext={() => {
+                    const values: SnippetContextValues = {};
+                    if (currentSender) {
+                      const sender = resolveMailSender(
+                        currentSender,
+                        currentSender.capabilities.canSetSenderName
+                          ? form.state.values.senderName
+                          : undefined
+                      );
+                      values["sender.email"] = sender.address;
+                      values["sender.name"] = sender.name;
+                    }
+                    const { to } = form.state.values;
+                    const recipients = splitMailAddressList(to);
+                    if (
+                      recipients.length === 1 &&
+                      findInvalidMailAddresses(to).length === 0
+                    ) {
+                      const recipient = parseSender(recipients[0]);
+                      values["recipient.email"] = recipient.email;
+                      if (
+                        recipient.name &&
+                        recipients[0] !== extractMailAddress(recipients[0])
+                      ) {
+                        values["recipient.name"] = recipient.name;
+                      }
+                    }
+                    return {
+                      mailboxId,
+                      scopeKey: JSON.stringify({
+                        bcc: form.state.values.bcc,
+                        cc: form.state.values.cc,
+                        localId: state.draft.localId,
+                        replyContext: state.draft.replyContext,
+                        senderName: form.state.values.senderName,
+                        subject: form.state.values.subject,
+                        to: form.state.values.to,
+                      }),
+                      values,
+                    };
+                  }}
                   html={field.state.value}
                   onBlur={() => {
                     field.handleBlur();
@@ -887,6 +941,7 @@ const ReadyComposeSurface = ({
                   onInlineImageFiles={addInlineImageFiles}
                   onReadyChange={setEditorReady}
                   onSlashMenuOpenChange={setSlashMenuOpen}
+                  onSnippetReviewOpenChange={setSnippetReviewOpen}
                   snippets={snippetsQuery.data?.snippets}
                   snippetStatus={snippetStatus}
                   onCreateSnippet={
@@ -1598,6 +1653,37 @@ const ReadyComposeSurface = ({
           }}
         />
       ) : null}
+      <Dialog
+        open={unresolvedSnippetFields !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setUnresolvedSnippetFields(null);
+          }
+        }}
+      >
+        <DialogContent
+          finalFocus={() => composeEditorRef.current?.getElement() ?? false}
+        >
+          <DialogHeader>
+            <DialogTitle>Complete snippet fields</DialogTitle>
+            <DialogDescription>
+              Replace the marked fields in your message before sending.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogBody>
+            <Text className="break-words">
+              {unresolvedSnippetFields
+                ?.map((name) => `{{?${name}}}`)
+                .join(", ")}
+            </Text>
+          </DialogBody>
+          <DialogFooter>
+            <DialogCloseButton variant="default">
+              Review fields
+            </DialogCloseButton>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </>
   );
 };

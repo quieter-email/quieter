@@ -45,6 +45,7 @@
     "html-to-text": "10.0.1",
     "htmlparser2": "10.1.0",
     "nodemailer": "^10.1.0",
+    "parse5": "8.1.1",
     "postal-mime": "^4.0.5",
     "structured-headers": "2.1.1",
     "zod": "catalog:"
