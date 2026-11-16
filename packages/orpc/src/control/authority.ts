@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
 
 import { controlOperations, controlTargetSchema } from "./registry";
@@ -36,10 +37,11 @@ const authorizationServices: ControlAuthorizationServices = {
   assertCalendarAccess: async (input) => {
     const { getCalendarAccountForUser } = await import("../calendar/service");
     const account = await getCalendarAccountForUser(input);
+    if (account.status === "needs-reconnect") {
+      throw new ORPCError("REAUTHENTICATION_REQUIRED", { status: 401 });
+    }
     if (account.status !== "connected") {
-      throw new ORPCError(
-        account.status === "needs-reconnect" ? "UNAUTHORIZED" : "FORBIDDEN"
-      );
+      throw new ORPCError("FORBIDDEN");
     }
   },
   assertOrganizationAccess: async ({ manage, ...input }) => {
@@ -54,6 +56,21 @@ const authorizationServices: ControlAuthorizationServices = {
     }
   },
   getMailboxAccess: async (input) => {
+    const { parseOrganizationApiMailboxId } =
+      await import("../organization-api-mail");
+    const organizationId = parseOrganizationApiMailboxId(input.mailboxId);
+    if (organizationId !== null) {
+      const { assertUserOrganizationMember } =
+        await import("../mail-domain/service");
+      await assertUserOrganizationMember({
+        organizationId,
+        userId: input.userId,
+      });
+      return {
+        capabilities: getMailboxCapabilities({ provider: "api" }),
+        organizationId,
+      };
+    }
     const { assertAccessibleMailbox } = await import("../mailbox/service");
     return await assertAccessibleMailbox(input);
   },
