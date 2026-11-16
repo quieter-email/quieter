@@ -2,18 +2,20 @@
 import { createMailboxActionHandlers } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-messages-panel";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
+import { useMailboxNavigationBlocker } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import { QueryClient } from "@tanstack/react-query";
 import {
+  createBrowserHistory,
   createMemoryHistory,
   createRootRoute,
   createRoute,
   createRouter,
   RouterProvider,
 } from "@tanstack/react-router";
-import { act } from "react";
+import { act, useState } from "react";
 import type { ComponentProps, PropsWithChildren } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
@@ -59,6 +61,25 @@ type DetailProps = ComponentProps<typeof MessageDetail>;
 type Controller = ReturnType<typeof useMailboxListController>;
 type Search = ReturnType<typeof mailboxSearchSchema.parse>;
 type Target = Parameters<NonNullable<DetailProps["onOpenConversation"]>>[0];
+type Guard = Parameters<typeof useMailboxNavigationBlocker>[0]["shouldBlockFn"];
+
+const NavigationGuard = ({
+  guard,
+  beforeUnload,
+}: {
+  guard: Guard;
+  beforeUnload?: () => boolean;
+}) => {
+  const [, update] = useState(0);
+  useMailboxNavigationBlocker({
+    enableBeforeUnload: beforeUnload,
+    shouldBlockFn: async (args) => {
+      update((value) => value + 1);
+      return await guard(args);
+    },
+  });
+  return null;
+};
 
 const initialSearch = {
   calendarConnectionId: "calendar-connection",
@@ -133,14 +154,25 @@ const readDetail = () => {
 const cleanups: (() => void)[] = [];
 const mount = async ({
   pendingMessageId,
-}: { pendingMessageId?: string } = {}) => {
+  guard,
+  beforeUnload,
+}: {
+  pendingMessageId?: string;
+  guard?: Guard;
+  beforeUnload?: () => boolean;
+} = {}) => {
   const entered = Promise.withResolvers<boolean>();
   const release = Promise.withResolvers<boolean>();
   const rootRoute = createRootRoute();
   const appRoute = createRoute({ getParentRoute: () => rootRoute, id: "_app" });
   // oxlint-disable eslint/sort-keys -- TanStack infers loader types from preceding route options.
   const inboxRoute = createRoute({
-    component: Panel,
+    component: () => (
+      <>
+        {guard && <NavigationGuard beforeUnload={beforeUnload} guard={guard} />}
+        <Panel />
+      </>
+    ),
     getParentRoute: () => appRoute,
     path: "/",
     validateSearch: (search) => mailboxSearchSchema.parse(search),
@@ -160,9 +192,15 @@ const mount = async ({
     },
   });
   // oxlint-enable eslint/sort-keys
-  const history = createMemoryHistory({
-    initialEntries: [`/?${new URLSearchParams(initialSearch)}`],
-  });
+  const initialHref = `/?${new URLSearchParams(initialSearch)}`;
+  if (guard) {
+    window.history.replaceState(null, "", initialHref);
+  }
+  const history = guard
+    ? createBrowserHistory()
+    : createMemoryHistory({
+        initialEntries: [initialHref],
+      });
   const router = createRouter({
     defaultPendingMinMs: 0,
     history,
@@ -241,6 +279,9 @@ const mount = async ({
       root.unmount();
     });
     history.destroy();
+    if (guard) {
+      window.history.replaceState(null, "", "/");
+    }
     client.clear();
     container.remove();
   });
@@ -249,7 +290,15 @@ const mount = async ({
     await router.load();
     root.render(<RouterProvider router={router} />);
   });
-  return { entered, release, router, selections };
+  return {
+    entered,
+    release,
+    router,
+    selections,
+    unmount: () => {
+      root.unmount();
+    },
+  };
 };
 
 describe("correspondent history destination navigation", () => {
@@ -277,7 +326,9 @@ describe("correspondent history destination navigation", () => {
       const detail = readDetail();
       expect(detail.focusOnOpen).toBeFalsy();
       await act(async () => {
-        const opening = detail.onOpenConversation(destination);
+        const opening = detail.onOpenConversation(destination, {
+          signal: new AbortController().signal,
+        });
         await entered.promise;
         expect(selections).toHaveLength(0);
         expect(readDetail().focusOnOpen).toBeFalsy();
@@ -329,7 +380,9 @@ describe("correspondent history destination navigation", () => {
     vi.spyOn(router, "navigate").mockResolvedValueOnce();
     await act(async () => {
       await expect(
-        readDetail().onOpenConversation(target)
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        })
       ).rejects.toMatchObject({
         code: "CONFLICT",
       });
@@ -344,9 +397,11 @@ describe("correspondent history destination navigation", () => {
     const failure = new Error("Navigation rejected");
     vi.spyOn(router, "navigate").mockRejectedValueOnce(failure);
     await act(async () => {
-      await expect(readDetail().onOpenConversation(target)).rejects.toBe(
-        failure
-      );
+      await expect(
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(failure);
     });
     expect(selections).toHaveLength(0);
     expect(readDetail().focusOnOpen).toBeFalsy();
@@ -358,7 +413,9 @@ describe("correspondent history destination navigation", () => {
     });
     await act(async () => {
       const outcome = Promise.allSettled([
-        readDetail().onOpenConversation(target),
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        }),
       ]);
       await entered.promise;
       expect(selections).toHaveLength(0);
@@ -384,5 +441,297 @@ describe("correspondent history destination navigation", () => {
     });
     expect(selections).toHaveLength(0);
     expect(readDetail().focusOnOpen).toBeFalsy();
+  });
+
+  test("settles an actual native block without another navigation", async () => {
+    const guard = vi.fn<Guard>().mockResolvedValueOnce(true);
+    const { router, selections } = await mount({ guard });
+    await act(async () => {
+      await expect(
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toMatchObject({ code: "CONFLICT" });
+    });
+    expect(guard).toHaveBeenCalledOnce();
+    expect(router.state.location.search).toMatchObject(initialSearch);
+    expect(selections).toHaveLength(0);
+    expect(readDetail().focusOnOpen).toBeFalsy();
+  });
+
+  test("waits for both the real guard and destination loader before focus", async () => {
+    const decision = Promise.withResolvers<boolean>();
+    const guardEntered = Promise.withResolvers<null>();
+    const guard = vi.fn<Guard>(async () => {
+      guardEntered.resolve(null);
+      return await decision.promise;
+    });
+    const { entered, release, router, selections } = await mount({
+      guard,
+      pendingMessageId: target.messageId,
+    });
+    await act(async () => {
+      const opening = readDetail().onOpenConversation(target, {
+        signal: new AbortController().signal,
+      });
+      await guardEntered.promise;
+      expect(selections).toHaveLength(0);
+      decision.resolve(false);
+      await entered.promise;
+      expect(selections).toHaveLength(0);
+      expect(readDetail().focusOnOpen).toBeFalsy();
+      release.resolve(true);
+      await opening;
+    });
+    expect(guard).toHaveBeenCalledOnce();
+    expect(guard.mock.calls[0]?.[0].next.search).toMatchObject({
+      mailbox: "done",
+      mailboxId: target.mailboxId,
+      view: "all-inboxes",
+    });
+    expect(router.state.location.search).toMatchObject(target);
+    expect(selections).toHaveLength(1);
+    expect(readDetail().focusOnOpen).toBeTruthy();
+  });
+
+  test("propagates an actual guard error without committing its destination", async () => {
+    const failure = new Error("Fixture save failed");
+    const guard = vi.fn<Guard>().mockRejectedValueOnce(failure);
+    const { router, selections } = await mount({ guard });
+    await act(async () => {
+      await expect(
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        })
+      ).rejects.toBe(failure);
+    });
+    expect(guard).toHaveBeenCalledOnce();
+    expect(router.state.location.search).toMatchObject(initialSearch);
+    expect(selections).toHaveLength(0);
+  });
+
+  test.each(["allow", "error"])(
+    "retires a held guard before its late %s result",
+    async (late) => {
+      const decision = Promise.withResolvers<boolean>();
+      const entered = Promise.withResolvers<null>();
+      const guard = vi.fn<Guard>(async () => {
+        entered.resolve(null);
+        return await decision.promise;
+      });
+      const { router, selections } = await mount({ guard });
+      const controller = new AbortController();
+      await act(async () => {
+        const opening = Promise.allSettled([
+          readDetail().onOpenConversation(target, {
+            signal: controller.signal,
+          }),
+        ]);
+        await entered.promise;
+        controller.abort();
+        await expect(opening).resolves.toMatchObject([
+          { reason: { name: "AbortError" }, status: "rejected" },
+        ]);
+        if (late === "allow") {
+          decision.resolve(false);
+        } else {
+          decision.reject(new Error("Late fixture save failed"));
+        }
+      });
+      expect(router.state.location.search).toMatchObject(initialSearch);
+      expect(selections).toHaveLength(0);
+      expect(readDetail().focusOnOpen).toBeFalsy();
+    }
+  );
+
+  test("isolates repeated same-target attempts and a late older allow", async () => {
+    const oldDecision = Promise.withResolvers<boolean>();
+    const oldEntered = Promise.withResolvers<null>();
+    const guard = vi
+      .fn<Guard>()
+      .mockImplementationOnce(async () => {
+        oldEntered.resolve(null);
+        return await oldDecision.promise;
+      })
+      .mockResolvedValueOnce(false);
+    const { router, selections } = await mount({ guard });
+    await act(async () => {
+      const oldOpening = Promise.allSettled([
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        }),
+      ]);
+      await oldEntered.promise;
+      const current = readDetail().onOpenConversation(target, {
+        signal: new AbortController().signal,
+      });
+      await expect(oldOpening).resolves.toMatchObject([
+        { reason: { code: "CONFLICT" }, status: "rejected" },
+      ]);
+      await current;
+      oldDecision.resolve(false);
+    });
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(router.state.location.search).toMatchObject(target);
+    expect(window.location.search).toContain(target.messageId);
+    expect(selections).toHaveLength(1);
+    expect(readDetail().focusOnOpen).toBeTruthy();
+  });
+
+  test("an ordinary native navigation retires an older held attempt", async () => {
+    const oldDecision = Promise.withResolvers<boolean>();
+    const oldEntered = Promise.withResolvers<null>();
+    const guard = vi
+      .fn<Guard>()
+      .mockImplementationOnce(async () => {
+        oldEntered.resolve(null);
+        return await oldDecision.promise;
+      })
+      .mockResolvedValueOnce(false);
+    const { router, selections } = await mount({ guard });
+    await act(async () => {
+      const oldOpening = Promise.allSettled([
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        }),
+      ]);
+      await oldEntered.promise;
+      await router.navigate({
+        search: {
+          ...initialSearch,
+          messageId: "later-message",
+          threadId: "later-thread",
+        },
+        to: "/",
+      });
+      await expect(oldOpening).resolves.toMatchObject([{ status: "rejected" }]);
+      oldDecision.resolve(false);
+    });
+    expect(router.state.location.search).toMatchObject({
+      messageId: "later-message",
+      threadId: "later-thread",
+    });
+    expect(selections).toHaveLength(0);
+  });
+
+  test("disposal retires a held attempt before its guard later allows", async () => {
+    const decision = Promise.withResolvers<boolean>();
+    const entered = Promise.withResolvers<null>();
+    const guard = vi.fn<Guard>(async () => {
+      entered.resolve(null);
+      return await decision.promise;
+    });
+    const { router, selections, unmount } = await mount({ guard });
+    await act(async () => {
+      const opening = Promise.allSettled([
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        }),
+      ]);
+      await entered.promise;
+      unmount();
+      await expect(opening).resolves.toMatchObject([{ status: "rejected" }]);
+      decision.resolve(false);
+    });
+    expect(router.state.location.search).toMatchObject(initialSearch);
+    expect(selections).toHaveLength(0);
+  });
+
+  test("preserves the existing before-unload predicate", async () => {
+    let dirty = true;
+    const beforeUnload = vi.fn<() => boolean>(() => dirty);
+    const guard = vi.fn<Guard>().mockResolvedValue(false);
+    await mount({ beforeUnload, guard });
+    const blocked = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(blocked);
+    expect(blocked.defaultPrevented).toBeTruthy();
+    dirty = false;
+    const allowed = new Event("beforeunload", { cancelable: true });
+    window.dispatchEvent(allowed);
+    expect(allowed.defaultPrevented).toBeFalsy();
+    expect(guard).not.toHaveBeenCalled();
+  });
+
+  test("uses a new native attempt when the settled target is opened again", async () => {
+    const guard = vi.fn<Guard>().mockResolvedValue(false);
+    const { selections } = await mount({ guard });
+    await act(async () => {
+      await readDetail().onOpenConversation(target, {
+        signal: new AbortController().signal,
+      });
+    });
+    act(() => {
+      readDetail().onAutoFocusComplete?.();
+    });
+    expect(readDetail().focusOnOpen).toBeFalsy();
+    await act(async () => {
+      await readDetail().onOpenConversation(target, {
+        signal: new AbortController().signal,
+      });
+    });
+    expect(guard).toHaveBeenCalledTimes(2);
+    expect(selections).toHaveLength(2);
+    expect(readDetail().focusOnOpen).toBeTruthy();
+  });
+
+  test("an already retired caller cannot cancel the current held attempt", async () => {
+    const decision = Promise.withResolvers<boolean>();
+    const entered = Promise.withResolvers<null>();
+    const guard = vi.fn<Guard>(async () => {
+      entered.resolve(null);
+      return await decision.promise;
+    });
+    const { selections } = await mount({ guard });
+    await act(async () => {
+      const current = Promise.allSettled([
+        readDetail().onOpenConversation(target, {
+          signal: new AbortController().signal,
+        }),
+      ]);
+      await entered.promise;
+      const retired = new AbortController();
+      retired.abort();
+      await expect(
+        readDetail().onOpenConversation(target, { signal: retired.signal })
+      ).rejects.toMatchObject({ name: "AbortError" });
+      decision.resolve(false);
+      await expect(current).resolves.toMatchObject([{ status: "fulfilled" }]);
+    });
+    expect(guard).toHaveBeenCalledOnce();
+    expect(selections).toHaveLength(1);
+  });
+
+  test("allows back traversal to a completed tagged entry through the ordinary guard", async () => {
+    const guard = vi.fn<Guard>().mockResolvedValue(false);
+    const { router, selections } = await mount({ guard });
+    await act(async () => {
+      await readDetail().onOpenConversation(target, {
+        signal: new AbortController().signal,
+      });
+      await router.navigate({
+        search: { ...initialSearch, messageId: "later-message" },
+        to: "/",
+      });
+    });
+    const returned = Promise.withResolvers<null>();
+    const unsubscribe = router.subscribe("onResolved", (event) => {
+      if (
+        mailboxSearchSchema.parse(event.toLocation.search).messageId ===
+        target.messageId
+      ) {
+        returned.resolve(null);
+      }
+    });
+    try {
+      await act(async () => {
+        router.history.back();
+        await returned.promise;
+      });
+    } finally {
+      unsubscribe();
+    }
+    expect(router.state.location.search).toMatchObject(target);
+    expect(guard).toHaveBeenCalledTimes(3);
+    expect(selections).toHaveLength(1);
   });
 });

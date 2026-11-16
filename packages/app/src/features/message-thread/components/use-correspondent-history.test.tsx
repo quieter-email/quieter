@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/client";
 import type { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { toastError } from "@quieter/app/lib/error-toast";
 // @vitest-environment jsdom
+import { bindMailCache } from "@quieter/app/lib/mail-cache-lifecycle";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -64,9 +65,11 @@ const correspondentEmails = ["person@example.com"];
 const HistoryProbe = ({
   expose,
   navigate,
+  threadId = "origin-thread",
 }: {
   expose: (history: ReturnType<typeof useCorrespondentHistory>) => void;
   navigate: Parameters<typeof useCorrespondentHistory>[0]["onOpenConversation"];
+  threadId?: string;
 }) => {
   const history = useCorrespondentHistory({
     actorId: "actor",
@@ -74,7 +77,7 @@ const HistoryProbe = ({
     mailboxId: "mailbox",
     onOpenConversation: navigate,
     sessionId: "session",
-    threadId: "origin-thread",
+    threadId,
   });
   useLayoutEffect(() => {
     expose(history);
@@ -145,13 +148,7 @@ const setup = () => {
     openSource: vi.fn<typeof rpc.correspondentHistory.openSource>(),
   };
   const navigate = vi
-    .fn<
-      (target: {
-        mailboxId: string;
-        messageId: string;
-        threadId: string;
-      }) => Promise<void>
-    >()
+    .fn<Parameters<typeof useCorrespondentHistory>[0]["onOpenConversation"]>()
     .mockResolvedValue();
   const reportError = vi.fn<(error: unknown) => void>();
   const history = createCorrespondentHistory({
@@ -341,6 +338,96 @@ describe("correspondent history", () => {
     }
   });
 
+  test("preserves navigation through a keyed destination mount until the session changes", async () => {
+    const client = new QueryClient();
+    const nextClient = new QueryClient();
+    const container = document.createElement("div");
+    const root = createRoot(container);
+    const exposed: ReturnType<typeof useCorrespondentHistory>[] = [];
+    const entered = Promise.withResolvers<AbortSignal>();
+    const navigation = Promise.withResolvers<null>();
+    const expose = (history: ReturnType<typeof useCorrespondentHistory>) => {
+      exposed.push(history);
+    };
+    const navigate =
+      vi.fn<
+        Parameters<typeof useCorrespondentHistory>[0]["onOpenConversation"]
+      >();
+    navigate.mockImplementationOnce(async ({ threadId }, { signal }) => {
+      root.render(
+        <QueryClientProvider client={client}>
+          <HistoryProbe
+            expose={expose}
+            key={threadId}
+            navigate={navigate}
+            threadId={threadId}
+          />
+        </QueryClientProvider>
+      );
+      entered.resolve(signal);
+      await navigation.promise;
+    });
+    vi.mocked(rpc.correspondentHistory.list)
+      .mockReset()
+      .mockResolvedValue(mailPage);
+    vi.mocked(rpc.correspondentHistory.openSource)
+      .mockReset()
+      .mockResolvedValueOnce(opened);
+    vi.mocked(toastError).mockClear();
+    setQueryPersistenceUser("actor", client, "session");
+    try {
+      act(() => {
+        root.render(
+          <QueryClientProvider client={client}>
+            <HistoryProbe
+              expose={expose}
+              key="origin-thread"
+              navigate={navigate}
+            />
+          </QueryClientProvider>
+        );
+      });
+      const mounted = exposed.at(-1);
+      if (!mounted) {
+        throw new Error("The history hook did not mount.");
+      }
+      act(() => {
+        mounted.open();
+        mounted.selectCorrespondent("person@example.com");
+      });
+      const selected = exposed.at(-1);
+      if (!selected || selected.view.kind !== "selected") {
+        throw new Error("The history selection did not open.");
+      }
+      let operation: Promise<void> | undefined;
+      await act(async () => {
+        operation = selected.openSource(source, "mail");
+        await entered.promise;
+      });
+      const signal = await entered.promise;
+      expect(exposed.at(-1)?.view.kind).toBe("closed");
+      expect(signal.aborted).toBeFalsy();
+
+      act(() => {
+        setQueryPersistenceUser("actor", nextClient, "next-session");
+      });
+      expect(signal.aborted).toBeTruthy();
+      await act(async () => {
+        navigation.reject(new DOMException("Navigation aborted", "AbortError"));
+        await operation;
+      });
+      expect(toastError).not.toHaveBeenCalled();
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      setQueryPersistenceUser(undefined);
+      client.clear();
+      nextClient.clear();
+      container.remove();
+    }
+  });
+
   describe("correspondent history private lifetime", () => {
     test.each([
       "close",
@@ -436,11 +523,13 @@ describe("correspondent history", () => {
       expect(
         client.getQueryData(getThreadQueryKey("mailbox", source.threadId))
       ).toBeUndefined();
-      expect(navigate).toHaveBeenCalledExactlyOnceWith({
+      expect(navigate).toHaveBeenCalledOnce();
+      expect(navigate.mock.calls[0]?.[0]).toMatchObject({
         mailboxId: "mailbox",
         messageId: source.messageId,
         threadId: source.threadId,
       });
+      expect(navigate.mock.calls[0]?.[1].signal).toBeInstanceOf(AbortSignal);
       expect(history.state.get().view.kind).toBe("closed");
       expect(history.consumeFocusHandoff()).toBeTruthy();
       expect(reportError).not.toHaveBeenCalled();
@@ -524,18 +613,19 @@ describe("correspondent history", () => {
     );
 
     test.each(["section", "correspondent", "close"])(
-      "discards pending navigation focus intent on %s change",
+      "aborts pending navigation and discards focus intent on %s change",
       async (change) => {
         const { api, history, navigate, reportError } = setup();
-        const entered = Promise.withResolvers<null>();
+        const entered = Promise.withResolvers<AbortSignal>();
         const navigation = Promise.withResolvers<null>();
         api.openSource.mockResolvedValueOnce(opened);
-        navigate.mockImplementationOnce(async () => {
-          entered.resolve(null);
+        navigate.mockImplementationOnce(async (_target, { signal }) => {
+          entered.resolve(signal);
           await navigation.promise;
         });
         const operation = history.openSource(source, "mail");
-        await entered.promise;
+        const signal = await entered.promise;
+        expect(signal.aborted).toBeFalsy();
 
         switch (change) {
           case "section": {
@@ -550,6 +640,7 @@ describe("correspondent history", () => {
             history.close();
           }
         }
+        expect(signal.aborted).toBeTruthy();
         navigation.reject(new Error("The superseded navigation failed"));
         await operation;
         history.close();
@@ -581,23 +672,210 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
-    test("keeps destination focus when navigation unmounts its owner", async () => {
+    test.each(["resolves", "rejects"])(
+      "keeps a newer pending intent cancellable after an old callback %s",
+      async (completion) => {
+        const { api, history, navigate, reportError } = setup();
+        const firstEntered = Promise.withResolvers<AbortSignal>();
+        const secondEntered = Promise.withResolvers<AbortSignal>();
+        const firstNavigation = Promise.withResolvers<null>();
+        const secondNavigation = Promise.withResolvers<null>();
+        api.openSource.mockResolvedValue(opened);
+        navigate
+          .mockImplementationOnce(async (_target, { signal }) => {
+            firstEntered.resolve(signal);
+            await firstNavigation.promise;
+          })
+          .mockImplementationOnce(async (_target, { signal }) => {
+            secondEntered.resolve(signal);
+            await secondNavigation.promise;
+          });
+
+        const first = history.openSource(source, "mail");
+        const firstSignal = await firstEntered.promise;
+        const second = history.openSource(source, "mail");
+        expect(firstSignal.aborted).toBeTruthy();
+        const secondSignal = await secondEntered.promise;
+        expect(secondSignal.aborted).toBeFalsy();
+        if (completion === "rejects") {
+          firstNavigation.reject(new Error("The old navigation failed"));
+        } else {
+          firstNavigation.resolve(null);
+        }
+        await first;
+        expect(secondSignal.aborted).toBeFalsy();
+
+        history.close();
+        expect(secondSignal.aborted).toBeTruthy();
+        secondNavigation.resolve(null);
+        await second;
+
+        expect(history.consumeFocusHandoff()).toBeFalsy();
+        expect(reportError).not.toHaveBeenCalled();
+      }
+    );
+
+    test("aborts pending mail navigation when a reminder takes over", async () => {
       const { api, history, navigate, reportError } = setup();
-      const detach = history.attach();
-      const entered = Promise.withResolvers<null>();
+      const entered = Promise.withResolvers<AbortSignal>();
       const navigation = Promise.withResolvers<null>();
+      const openReminders = vi
+        .fn<Parameters<typeof history.openReminder>[2]>()
+        .mockResolvedValue();
       api.openSource.mockResolvedValueOnce(opened);
-      navigate.mockImplementationOnce(async () => {
-        entered.resolve(null);
+      navigate.mockImplementationOnce(async (_target, { signal }) => {
+        entered.resolve(signal);
         await navigation.promise;
       });
       const operation = history.openSource(source, "mail");
-      await entered.promise;
+      const signal = await entered.promise;
+
+      await history.openReminder("reminder", undefined, openReminders);
+
+      expect(signal.aborted).toBeTruthy();
+      expect(openReminders).toHaveBeenCalledOnce();
+      navigation.reject(new Error("The superseded mail navigation failed"));
+      await operation;
+      expect(history.consumeFocusHandoff()).toBeTruthy();
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    test("keeps destination focus when navigation unmounts its owner", async () => {
+      const { api, history, navigate, reportError } = setup();
+      const detach = history.attach();
+      const entered = Promise.withResolvers<AbortSignal>();
+      const navigation = Promise.withResolvers<null>();
+      api.openSource.mockResolvedValueOnce(opened);
+      navigate.mockImplementationOnce(async (_target, { signal }) => {
+        entered.resolve(signal);
+        await navigation.promise;
+      });
+      const operation = history.openSource(source, "mail");
+      const signal = await entered.promise;
 
       detach();
+      expect(signal.aborted).toBeFalsy();
       navigation.resolve(null);
       await operation;
 
+      expect(history.consumeFocusHandoff()).toBeTruthy();
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    test.each(["session replacement", "sign out"])(
+      "aborts detached pending navigation on %s",
+      async (boundary) => {
+        const { api, client, history, navigate, reportError } = setup();
+        const nextClient = new QueryClient();
+        const detach = history.attach();
+        const entered = Promise.withResolvers<AbortSignal>();
+        const navigation = Promise.withResolvers<null>();
+        setQueryPersistenceUser("actor", client, "session");
+        cleanups.push(() => {
+          setQueryPersistenceUser(undefined);
+          nextClient.clear();
+        });
+        api.openSource.mockResolvedValueOnce(opened);
+        navigate.mockImplementationOnce(async (_target, { signal }) => {
+          entered.resolve(signal);
+          await navigation.promise;
+        });
+        const operation = history.openSource(source, "mail");
+        const signal = await entered.promise;
+        detach();
+        expect(signal.aborted).toBeFalsy();
+
+        if (boundary === "session replacement") {
+          setQueryPersistenceUser("actor", nextClient, "next-session");
+        } else {
+          setQueryPersistenceUser(undefined);
+        }
+
+        expect(signal.aborted).toBeTruthy();
+        navigation.reject(new DOMException("Navigation aborted", "AbortError"));
+        await operation;
+        expect(reportError).not.toHaveBeenCalled();
+      }
+    );
+
+    test.each(["mailbox", "origin thread", "destination thread"])(
+      "aborts detached pending navigation when the %s loses access",
+      async (boundary) => {
+        const { api, client, history, navigate, reportError } = setup();
+        const detach = history.attach();
+        const entered = Promise.withResolvers<AbortSignal>();
+        const navigation = Promise.withResolvers<null>();
+        cleanups.push(bindMailCache(client));
+        api.openSource.mockResolvedValueOnce(opened);
+        navigate.mockImplementationOnce(async (_target, { signal }) => {
+          entered.resolve(signal);
+          await navigation.promise;
+        });
+        const operation = history.openSource(source, "mail");
+        const signal = await entered.promise;
+        detach();
+        expect(signal.aborted).toBeFalsy();
+
+        const threadId =
+          boundary === "origin thread" ? "origin-thread" : source.threadId;
+        const failure = new ORPCError(
+          boundary === "mailbox" ? "FORBIDDEN" : "NOT_FOUND"
+        );
+        vi.mocked(rpc.mail.getThread).mockRejectedValueOnce(failure);
+        await expect(
+          client.query({
+            ...getThreadWithDetailsOptions("mailbox", threadId),
+            retry: false,
+          })
+        ).rejects.toBe(failure);
+
+        expect(signal.aborted).toBeTruthy();
+        navigation.reject(new DOMException("Navigation aborted", "AbortError"));
+        await operation;
+        expect(reportError).not.toHaveBeenCalled();
+      }
+    );
+
+    test("keeps detached navigation alive through unrelated access losses", async () => {
+      const { api, client, history, navigate, reportError } = setup();
+      const otherClient = new QueryClient();
+      const detach = history.attach();
+      const entered = Promise.withResolvers<AbortSignal>();
+      const navigation = Promise.withResolvers<null>();
+      cleanups.push(bindMailCache(client), bindMailCache(otherClient), () => {
+        otherClient.clear();
+      });
+      api.openSource.mockResolvedValueOnce(opened);
+      navigate.mockImplementationOnce(async (_target, { signal }) => {
+        entered.resolve(signal);
+        await navigation.promise;
+      });
+      const operation = history.openSource(source, "mail");
+      const signal = await entered.promise;
+      detach();
+
+      for (const loss of [
+        { client, mailboxId: "other-mailbox", threadId: source.threadId },
+        { client, mailboxId: "mailbox", threadId: "unrelated-thread" },
+        {
+          client: otherClient,
+          mailboxId: "mailbox",
+          threadId: source.threadId,
+        },
+      ]) {
+        const failure = new ORPCError("NOT_FOUND");
+        vi.mocked(rpc.mail.getThread).mockRejectedValueOnce(failure);
+        await expect(
+          loss.client.query({
+            ...getThreadWithDetailsOptions(loss.mailboxId, loss.threadId),
+            retry: false,
+          })
+        ).rejects.toBe(failure);
+        expect(signal.aborted).toBeFalsy();
+      }
+
+      navigation.resolve(null);
+      await operation;
       expect(history.consumeFocusHandoff()).toBeTruthy();
       expect(reportError).not.toHaveBeenCalled();
     });

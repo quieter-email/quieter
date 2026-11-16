@@ -76,7 +76,10 @@ type HistoryOptions = {
   mailboxId: string;
   threadId: string;
   correspondentEmails: readonly string[];
-  onOpenConversation: (target: ConversationTarget) => Promise<void>;
+  onOpenConversation: (
+    target: ConversationTarget,
+    options: { signal: AbortSignal }
+  ) => Promise<void>;
 };
 
 const privateHistoryKey = (scope: HistoryScope) =>
@@ -144,6 +147,13 @@ export const createCorrespondentHistory = ({
     threadId: options.threadId,
   };
   let { correspondentEmails, onOpenConversation } = options;
+  let pendingNavigation:
+    | {
+        controller: AbortController;
+        owner: HistoryOwner;
+        threadId: string;
+      }
+    | undefined;
   const focusHandoff = { current: false };
   const state = createStore<{ view: HistoryView; sessionEnded: boolean }>({
     sessionEnded: false,
@@ -166,6 +176,7 @@ export const createCorrespondentHistory = ({
     const { view } = state.get();
     if (focusIntent === "restore-trigger") {
       focusHandoff.current = false;
+      pendingNavigation?.controller.abort();
     }
     if (view.kind === "selected") {
       view.scope.controller.abort();
@@ -182,6 +193,7 @@ export const createCorrespondentHistory = ({
   };
   const stopSource = () => {
     focusHandoff.current = false;
+    pendingNavigation?.controller.abort();
     const { view } = state.get();
     if (view.kind === "selected" && view.source.kind === "opening") {
       view.source.controller.abort();
@@ -321,6 +333,7 @@ export const createCorrespondentHistory = ({
         return;
       }
       const requestOwner = owner;
+      stopSource();
       focusHandoff.current = true;
       retire({ kind: "closed" }, "preserve-handoff");
       try {
@@ -395,12 +408,47 @@ export const createCorrespondentHistory = ({
         }
         focusHandoff.current = true;
         failureDomain = "navigation";
-        const navigation = onOpenConversation({
-          mailboxId: owner.mailboxId,
-          messageId: opened.messageId,
+        const intent = {
+          controller: new AbortController(),
+          owner,
           threadId: opened.thread.threadId,
-        });
-        await navigation;
+        };
+        pendingNavigation = intent;
+        const unsubscribeSession = subscribeQuerySessionInvalidation(
+          queryClient,
+          () => {
+            intent.controller.abort();
+          }
+        );
+        const unsubscribeAccess = subscribeMailboxAccessLoss(
+          queryClient,
+          (loss) => {
+            if (
+              loss.mailboxId === intent.owner.mailboxId &&
+              (loss.threadId === undefined ||
+                loss.threadId === intent.owner.threadId ||
+                loss.threadId === intent.threadId)
+            ) {
+              intent.controller.abort();
+            }
+          }
+        );
+        try {
+          await onOpenConversation(
+            {
+              mailboxId: intent.owner.mailboxId,
+              messageId: opened.messageId,
+              threadId: intent.threadId,
+            },
+            { signal: intent.controller.signal }
+          );
+        } finally {
+          unsubscribeSession();
+          unsubscribeAccess();
+          if (pendingNavigation === intent) {
+            pendingNavigation = undefined;
+          }
+        }
         if (isCurrentRequest()) {
           retire({ kind: "closed" }, "preserve-handoff");
         }
