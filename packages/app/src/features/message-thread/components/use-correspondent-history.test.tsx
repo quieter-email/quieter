@@ -924,6 +924,56 @@ describe("correspondent history", () => {
       expect(navigate).toHaveBeenCalledOnce();
     });
 
+    test("keeps the memory row available while a saved correction refetches", async () => {
+      const { api, client, history, scope } = setup();
+      const corrected = {
+        ...memory,
+        content: "Prefers concise written agendas.",
+        version: memory.version + 1,
+      };
+      const response = Promise.withResolvers<HistoryPage>();
+      const entered = Promise.withResolvers<null>();
+      const updated = Promise.withResolvers<null>();
+      api.list
+        .mockResolvedValueOnce(memoryPage)
+        .mockImplementationOnce(async () => {
+          entered.resolve(null);
+          return await response.promise;
+        });
+      history.selectSection("memory");
+      const options = history.queryOptions("memory", scope);
+      await client.infiniteQuery(options);
+      const observer = new InfiniteQueryObserver(client, options);
+      const unsubscribe = observer.subscribe((result) => {
+        const page = result.data?.pages[0];
+        if (
+          page?.section === "memory" &&
+          page.items[0]?.content === corrected.content
+        ) {
+          updated.resolve(null);
+        }
+      });
+      try {
+        history.editMemory(memory);
+        history.memorySaved(scope, memory.id);
+        await entered.promise;
+        expect(
+          observer.getCurrentResult().data?.pages[0]?.items[0]
+        ).toMatchObject({ content: memory.content, id: memory.id });
+        expect(history.state.get().view).toMatchObject({
+          editingMemory: null,
+          kind: "selected",
+        });
+        response.resolve({ ...memoryPage, items: [corrected] });
+        await updated.promise;
+        expect(
+          observer.getCurrentResult().data?.pages[0]?.items[0]
+        ).toMatchObject({ content: corrected.content, id: memory.id });
+      } finally {
+        unsubscribe();
+      }
+    });
+
     test.each(["tab", "source access"])(
       "aborts navigation on %s change",
       async (boundary) => {
@@ -1091,7 +1141,7 @@ describe("correspondent history", () => {
       expect(observer.getCurrentResult().hasNextPage).toBeFalsy();
     });
 
-    test("resets only current memory pages and ignores callbacks from an older editor", async () => {
+    test("retains current rows and ignores callbacks from an older editor", async () => {
       const { api, client, history, navigate, scope } = setup();
       api.list
         .mockResolvedValueOnce(mailPage)
@@ -1099,11 +1149,11 @@ describe("correspondent history", () => {
       const mailOptions = history.queryOptions("mail", scope);
       const memoryOptions = history.queryOptions("memory", scope);
       const mailData = await client.infiniteQuery(mailOptions);
-      await client.infiniteQuery(memoryOptions);
+      const memoryData = await client.infiniteQuery(memoryOptions);
       history.editMemory(memory);
       history.memorySaved(scope, memory.id);
       expect(client.getQueryData(mailOptions.queryKey)).toBe(mailData);
-      expect(client.getQueryData(memoryOptions.queryKey)).toBeUndefined();
+      expect(client.getQueryData(memoryOptions.queryKey)).toBe(memoryData);
       history.selectCorrespondent("other@example.com");
       const next = history.state.get().view;
       expect(next.kind).toBe("selected");

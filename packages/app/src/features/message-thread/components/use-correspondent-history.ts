@@ -307,7 +307,10 @@ export const createCorrespondentHistory = ({
         ...current,
         view: { ...view, editingMemory: null },
       }));
-      refreshSection("memory");
+      void queryClient.invalidateQueries({
+        exact: true,
+        queryKey: [...privateHistoryKey(scope), "memory"],
+      });
     },
     open() {
       if (
