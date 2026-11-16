@@ -486,11 +486,47 @@ export const BookingLinksPanel = ({
   const session = authClient.useSession();
   if (session.isPending || session.error || session.data?.user.id !== userId) {
     return (
-      <DialogBody>
-        <Text aria-live="polite" as="p" size="sm" tone="muted">
-          Checking your current account…
-        </Text>
-      </DialogBody>
+      <>
+        <DialogHeader>
+          <DialogTitle>Booking links</DialogTitle>
+        </DialogHeader>
+        <DialogBody>
+          {session.error ? (
+            <Text as="p" role="alert" size="sm">
+              Your account could not be checked. Retry to continue.
+            </Text>
+          ) : null}
+          {session.isPending ? (
+            <Text aria-live="polite" as="p" size="sm" tone="muted">
+              Checking your current account…
+            </Text>
+          ) : null}
+          {!session.isPending && !session.error ? (
+            <Text as="p" size="sm" tone="muted">
+              Your active account changed. Close this panel and open it again.
+            </Text>
+          ) : null}
+        </DialogBody>
+        <DialogFooter>
+          <Button
+            onClick={onClose}
+            type="button"
+            variant={session.error ? "secondary" : "default"}
+          >
+            Close
+          </Button>
+          {session.error ? (
+            <Button
+              onClick={() => {
+                void session.refetch({ query: { disableCookieCache: true } });
+              }}
+              type="button"
+            >
+              Retry
+            </Button>
+          ) : null}
+        </DialogFooter>
+      </>
     );
   }
   return (
