@@ -34,7 +34,7 @@ Gmail connection, external connectors, checkout, legal pages, and passkey manage
 
 ## Native email links and windows
 
-Candidate installers advertise `mailto` support. Use **File > Use quieter for email links** to request the operating system's default email-link association. Windows and Linux users can press Alt to reveal the application menu. The operating system may require a final choice in its default-app settings. Startup does not silently replace the current mail handler.
+Candidate installers advertise `mailto` support. The Windows installer and uninstaller require quieter to be closed. They stop with an error instead of terminating app processes. Use **File > Use quieter for email links** to request the operating system's default email-link association. Windows and Linux users can press Alt to reveal the application menu. The operating system may require a final choice in its default-app settings. Startup does not silently replace the current mail handler.
 
 Email links use the existing mailbox-scoped composer, including recipients, subject, and body. They do not send a message automatically. Content links use `com.quieter.desktop:/mail?mailboxId=<id>&threadId=<id>&messageId=<id>`. Desktop checks current account access before passing that complete identity to the existing mail view. It reads the thread only through the normal view after consuming the session-bound link. An unavailable mailbox cannot fall back to another account or mailbox.
 
@@ -84,4 +84,10 @@ Linux needs Xvfb, DBus, Openbox, xprop and GNOME Keyring. On an isolated test ma
 xvfb-run -a dbus-run-session -- vp run @quieter/desktop#test:native --revision <full-SHA> --output <owned-evidence-directory> --executable /opt/quieter/quieter
 ```
 
-The check starts and stops its own window manager and Secret Service. It never selects the default mail handler. Windows and macOS checks use unpacked applications; Linux CI installs the DEB on its disposable runner. These checks do not establish OS link dispatch, normal Windows/macOS installation, real sign-in, notifications, signing, notarization, performance budgets or updates. Those release gates remain separate.
+The check starts and stops its own window manager and Secret Service. It never selects the default mail handler. Local invocations without an explicit executable use an unpacked application.
+
+The manual workflow adds `--install-candidate` on Windows and macOS. On a fresh disposable runner, this installs the actual Windows NSIS candidate for its current user or copies the app from the actual read-only macOS DMG to an owned temporary location. The same smoke process owns installation, its private profile, the app and final cleanup. Linux CI installs its DEB before the existing smoke invocation.
+
+The report includes the installer hash, installation method, actual OS version, owned native process IDs and installation cleanup. Windows also invokes the actual installer and its exact uninstaller while its own app is open. Each must refuse while the same primary process stays alive. After the smoke stops the app, cleanup invokes only the exact owned uninstaller. Missing process-stop proof retains the installation and fails the check. macOS detaches its DMG before the smoke and removes only its owned app copy afterward.
+
+Windows CI can run a Server edition. Its recorded OS caption and product type do not establish Windows client support. The macOS copy does not establish Gatekeeper or notarization acceptance. These checks do not establish OS link dispatch, default-app choice, real sign-in, notifications, signing, notarization, performance budgets or updates. Those release gates remain separate.

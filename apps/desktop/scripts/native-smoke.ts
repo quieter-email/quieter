@@ -21,8 +21,24 @@ import { parseArgs } from "node:util";
 import { _electron } from "playwright-core";
 import type { ElectronApplication } from "playwright-core";
 
+import { createNativeInstallation } from "./native-install.ts";
+import type {
+  NativeInstallCleanup,
+  NativeInstallMetadata,
+  NativeInstallOperation,
+  RunNativeInstallOperation,
+} from "./native-install.ts";
+
 type SmokeReport = {
   kind: "packaged-native-smoke";
+  installation?: NativeInstallMetadata;
+  installationCleanup?: NativeInstallCleanup;
+  installationProcesses: {
+    exitCode: number | null;
+    kind: string;
+    pid: number | null;
+    stopped: boolean;
+  }[];
   checkoutRevision: string;
   platform: NodeJS.Platform;
   architecture: string;
@@ -49,9 +65,10 @@ type SmokeReport = {
 };
 
 const waitUntil = async (
-  check: () => boolean | Promise<boolean>
+  check: () => boolean | Promise<boolean>,
+  timeout = 15_000
 ): Promise<void> => {
-  const deadline = Date.now() + 15_000;
+  const deadline = Date.now() + timeout;
   while (Date.now() < deadline) {
     if (await check()) {
       return;
@@ -130,13 +147,14 @@ const main = async (): Promise<void> => {
     options: {
       executable: { type: "string" },
       help: { type: "boolean" },
+      "install-candidate": { type: "boolean" },
       output: { type: "string" },
       revision: { type: "string" },
     },
   });
   if (values.help === true) {
     process.stdout.write(
-      "Usage: vp run @quieter/desktop#test:native --revision <full-SHA> --output <evidence-directory> [--executable <packaged-executable>]\n"
+      "Usage: vp run @quieter/desktop#test:native --revision <full-SHA> --output <evidence-directory> [--executable <packaged-executable> | --install-candidate]\n"
     );
     return;
   }
@@ -160,10 +178,20 @@ const main = async (): Promise<void> => {
     "",
     "Native evidence requires a clean checkout."
   );
-  const executable = path.resolve(
-    values.executable ?? (await findExecutable())
+  assert.ok(
+    !(values.executable !== undefined && values["install-candidate"] === true)
   );
-  await access(executable);
+  const selection:
+    | { kind: "install" }
+    | { executable: string; kind: "existing" } =
+    values["install-candidate"] === true
+      ? { kind: "install" }
+      : {
+          executable: path.resolve(
+            values.executable ?? (await findExecutable())
+          ),
+          kind: "existing",
+        };
   const output = path.resolve(values.output);
   await mkdir(output, { recursive: true });
   const profile = await mkdtemp(path.join(tmpdir(), "quieter-native-smoke-"));
@@ -180,6 +208,7 @@ const main = async (): Promise<void> => {
     },
     fixturePort: null,
     fixtureRequests: 0,
+    installationProcesses: [],
     keyringPid: null,
     kind: "packaged-native-smoke",
     osRelease: release(),
@@ -205,6 +234,13 @@ const main = async (): Promise<void> => {
       response.end();
     }
   });
+  let installed:
+    | {
+        owner: ReturnType<typeof createNativeInstallation>;
+        run: RunNativeInstallOperation;
+      }
+    | undefined;
+  let collisionProbes: NativeInstallOperation[] = [];
   let application: ElectronApplication | undefined;
   let keyring: ChildProcess | undefined;
   let windowManager: ChildProcess | undefined;
@@ -250,6 +286,55 @@ const main = async (): Promise<void> => {
       XDG_DATA_HOME: path.join(profile, "data"),
       XDG_RUNTIME_DIR: path.join(profile, "runtime"),
     });
+    let executable: string;
+    if (selection.kind === "install") {
+      const run: RunNativeInstallOperation = async (operation) => {
+        const previousStage = report.stage;
+        report.stage = `native-installation-${operation.kind}`;
+        const child = spawn(operation.command, operation.args, {
+          detached: process.platform !== "win32",
+          env: environment,
+          stdio: "ignore",
+          windowsVerbatimArguments: operation.verbatim === true,
+        });
+        let failure: Error | undefined;
+        child.on("error", (error) => {
+          failure = error;
+        });
+        try {
+          await waitUntil(() => {
+            if (failure !== undefined) {
+              throw failure;
+            }
+            return child.exitCode !== null || child.signalCode !== null;
+          }, 120_000);
+          assert.equal(child.exitCode, operation.expectedExitCode ?? 0);
+        } finally {
+          const stopped = await stopChild(child);
+          report.installationProcesses.push({
+            exitCode: child.exitCode,
+            kind: operation.kind,
+            pid: child.pid ?? null,
+            stopped,
+          });
+          if (!stopped) {
+            child.unref();
+          }
+          assert.ok(stopped, "Owned installation process did not stop.");
+        }
+        report.stage = previousStage;
+      };
+      const owner = createNativeInstallation({ environment });
+      installed = { owner, run };
+      ({
+        collisionProbes,
+        executable,
+        metadata: report.installation,
+      } = await owner.prepare(run));
+    } else {
+      ({ executable } = selection);
+    }
+    await access(executable);
     const args = [`--user-data-dir=${path.join(profile, "user-data")}`];
     if (process.platform === "linux") {
       report.stage = "window-manager";
@@ -321,6 +406,7 @@ const main = async (): Promise<void> => {
       args.push("--password-store=gnome-libsecret");
     }
     report.stage = "packaged-startup";
+    report.cleanup.applicationStopped = false;
     application = await _electron.launch({
       args,
       chromiumSandbox: true,
@@ -387,6 +473,15 @@ const main = async (): Promise<void> => {
       "renderer-native-boundary",
       "native-menu"
     );
+    if (installed) {
+      for (const operation of collisionProbes) {
+        await installed.run(operation);
+        assert.ok(current.process().exitCode === null);
+        assert.equal(current.process().pid, report.primaryPid);
+        await access(executable);
+        report.cases.push(operation.kind);
+      }
+    }
     const handoffs = await current.evaluateHandle(({ app }) => {
       const received: string[][] = [];
       app.on("second-instance", (_event, commandLine) => {
@@ -539,6 +634,13 @@ const main = async (): Promise<void> => {
     if (windowManager) {
       report.cleanup.windowManagerStopped = await stopChild(windowManager);
     }
+    if (installed) {
+      report.installationCleanup = await installed.owner.cleanup(
+        installed.run,
+        report.cleanup.applicationStopped &&
+          report.installationProcesses.every((entry) => entry.stopped)
+      );
+    }
     server.closeAllConnections();
     if (server.listening) {
       const closed = once(server, "close");
@@ -552,7 +654,8 @@ const main = async (): Promise<void> => {
         report.cleanup.keyringStopped &&
         report.cleanup.windowManagerStopped
       ) ||
-      report.cleanup.applicationExit === "forced"
+      report.cleanup.applicationExit === "forced" ||
+      report.installationCleanup?.result === "retained"
     ) {
       report.result = "failed";
       process.exitCode = 1;

@@ -27,6 +27,7 @@ win:
   target:
     - nsis
 nsis:
+  include: resources/installer-safety.nsh
   oneClick: false
   allowToChangeInstallationDirectory: true
   shortcutName: quieter

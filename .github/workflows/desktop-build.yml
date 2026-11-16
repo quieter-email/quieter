@@ -39,10 +39,10 @@ jobs:
         if: runner.os == 'Linux'
         shell: bash
         run: xvfb-run -a dbus-run-session -- vp run @quieter/desktop#test:native --revision "${{ github.sha }}" --output "$GITHUB_WORKSPACE/.scratch/desktop-native-evidence" --executable /opt/quieter/quieter
-      - name: Check Windows or macOS native candidate
+      - name: Install and check Windows or macOS native candidate
         if: runner.os != 'Linux'
         shell: bash
-        run: vp run @quieter/desktop#test:native --revision "${{ github.sha }}" --output "$GITHUB_WORKSPACE/.scratch/desktop-native-evidence"
+        run: vp run @quieter/desktop#test:native --revision "${{ github.sha }}" --output "$GITHUB_WORKSPACE/.scratch/desktop-native-evidence" --install-candidate
       - name: Upload native smoke evidence
         if: always()
         uses: actions/upload-artifact@v4
