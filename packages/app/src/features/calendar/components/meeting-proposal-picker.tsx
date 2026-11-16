@@ -1,21 +1,11 @@
 "use client";
 
 import { Calendar03Icon } from "@hugeicons/core-free-icons";
-import {
-  calendarAccountsQueryOptions,
-  calendarCalendarsQueryOptions,
-} from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { rpc } from "@quieter/app/lib/orpc";
-import { calendarAvailabilityInputSchema } from "@quieter/calendar/availability";
 import type { CalendarAvailabilityInput } from "@quieter/calendar/availability";
-import {
-  calendarWallTimeToInstant,
-  getZonedDateTimeFields,
-} from "@quieter/calendar/time";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
-import { DatePicker } from "@quieter/ui/date-picker";
 import {
   Dialog,
   DialogBody,
@@ -28,19 +18,19 @@ import {
 import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { Input } from "@quieter/ui/input";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
-import { TimePicker } from "@quieter/ui/time-picker";
 import { ToolbarButton } from "@quieter/ui/toolbar";
-import { useQueries, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createStore, useSelector } from "@tanstack/react-store";
 import { useEffect, useState } from "react";
 
 import {
-  addCalendarDays,
-  getCalendarRefKey,
-} from "../domain/calendar-event-form";
+  createCalendarAvailabilityForm,
+  parseCalendarAvailabilityForm,
+} from "../domain/calendar-availability-form";
+import type { CalendarAvailabilityForm } from "../domain/calendar-availability-form";
+import { getCalendarRefKey } from "../domain/calendar-event-form";
 import {
   activateMeetingProposals,
   formatMeetingProposal,
@@ -50,20 +40,9 @@ import type {
   MeetingProposalInsertion,
   MeetingReplyTarget,
 } from "../domain/meeting-proposals";
-import { CalendarTimeZonePicker } from "./calendar-time-zone-picker";
+import { CalendarAvailabilityFields } from "./calendar-availability-fields";
+import { useCalendarAvailabilityCalendars } from "./use-calendar-availability-calendars";
 
-type ProposalFilters = {
-  calendarKeys: string[];
-  duration: string;
-  endDate: string;
-  hoursEnd: string;
-  hoursStart: string;
-  bufferAfter: string;
-  bufferBefore: string;
-  startDate: string;
-  timeZone: string;
-  weekdays: number[];
-};
 type ProposalPickerProps = {
   disabled: boolean;
   onInsert: (input: MeetingProposalInsertion) => boolean;
@@ -73,7 +52,7 @@ type ProposalPickerProps = {
 };
 
 type ProposalEditorState = {
-  filters: ProposalFilters;
+  filters: CalendarAvailabilityForm;
   introduction: string;
   problem: string;
   request: CalendarAvailabilityInput | null;
@@ -88,42 +67,19 @@ const MeetingProposalEditor = ({
   userId,
 }: Omit<ProposalPickerProps, "disabled"> & { onClose: () => void }) => {
   // oxlint-disable-next-line react/hook-use-state -- The TanStack Store instance stays fixed for this editor lifetime.
-  const [store] = useState(() => {
-    const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
-    const today = getZonedDateTimeFields({
-      instant: new Date().toISOString(),
-      timeZone,
-    }).date;
-    return createStore<ProposalEditorState>({
-      filters: {
-        bufferAfter: "0",
-        bufferBefore: "0",
-        calendarKeys: [],
-        duration: "30",
-        endDate: addCalendarDays(today, 7),
-        hoursEnd: "17:00",
-        hoursStart: "09:00",
-        startDate: addCalendarDays(today, 1),
-        timeZone,
-        weekdays: [1, 2, 3, 4, 5],
-      },
+  const [store] = useState(() =>
+    createStore<ProposalEditorState>({
+      filters: createCalendarAvailabilityForm(),
       introduction: "Would any of these times work for you?",
       problem: "",
       request: null,
       selected: [],
-    });
-  });
+    })
+  );
   const state = useSelector(store, (current) => current);
   const { filters } = state;
-  const accounts = useQuery(calendarAccountsQueryOptions(userId));
-  const calendarQueries = useQueries({
-    queries: (accounts.data?.accounts ?? [])
-      .filter((account) => account.status === "connected")
-      .map((account) => calendarCalendarsQueryOptions(userId, account.id)),
-  });
-  const calendars = calendarQueries.flatMap(
-    (query) => query.data?.calendars ?? []
-  );
+  const source = useCalendarAvailabilityCalendars(userId);
+  const { calendars } = source;
   const availability = useQuery({
     enabled: state.request !== null,
     gcTime: 0,
@@ -158,7 +114,7 @@ const MeetingProposalEditor = ({
       toastError(availability.error, { boundary: "meeting-proposal" });
     }
   }, [availability.error]);
-  const updateFilters = (patch: Partial<ProposalFilters>) => {
+  const updateFilters = (patch: Partial<CalendarAvailabilityForm>) => {
     store.setState((current) => ({
       ...current,
       filters: { ...current.filters, ...patch },
@@ -177,70 +133,22 @@ const MeetingProposalEditor = ({
     timeZone: filters.timeZone,
   });
   const findTimes = () => {
-    try {
-      const startMinute =
-        Number(filters.hoursStart.slice(0, 2)) * 60 +
-        Number(filters.hoursStart.slice(3, 5));
-      const endMinute =
-        Number(filters.hoursEnd.slice(0, 2)) * 60 +
-        Number(filters.hoursEnd.slice(3, 5));
-      const request = calendarAvailabilityInputSchema.safeParse({
-        calendars: calendars
-          .filter((calendar) =>
-            filters.calendarKeys.includes(getCalendarRefKey(calendar))
-          )
-          .map(({ calendarId, connectionId }) => ({
-            calendarId,
-            connectionId,
-          })),
-        end: calendarWallTimeToInstant({
-          date: addCalendarDays(filters.endDate, 1),
-          time: "00:00",
-          timeZone: filters.timeZone,
-        }),
-        limit: 20,
-        preferences: {
-          bufferAfterMinutes: Number(filters.bufferAfter),
-          bufferBeforeMinutes: Number(filters.bufferBefore),
-          durationMinutes: Number(filters.duration),
-          stepMinutes: 15,
-          workingHours: filters.weekdays.map((weekday) => ({
-            endMinute,
-            startMinute,
-            weekday,
-          })),
-        },
-        start: calendarWallTimeToInstant({
-          date: filters.startDate,
-          time: "00:00",
-          timeZone: filters.timeZone,
-        }),
-        timeZone: filters.timeZone,
-      });
-      if (!request.success) {
-        store.setState((current) => ({
-          ...current,
-          problem:
-            request.error.issues[0]?.message ??
-            "Review the selected calendars and times.",
-        }));
-        return;
-      }
+    const request = parseCalendarAvailabilityForm({ calendars, form: filters });
+    if (request.kind === "invalid") {
       store.setState((current) => ({
         ...current,
-        problem: "",
-        request: request.data,
-        selected: [],
+        problem: request.message,
       }));
-      if (JSON.stringify(state.request) === JSON.stringify(request.data)) {
-        void availability.refetch();
-      }
-    } catch {
-      store.setState((current) => ({
-        ...current,
-        problem:
-          "A selected time is missing or occurs twice when the clocks change. Choose another time.",
-      }));
+      return;
+    }
+    store.setState((current) => ({
+      ...current,
+      problem: "",
+      request: request.value,
+      selected: [],
+    }));
+    if (JSON.stringify(state.request) === JSON.stringify(request.value)) {
+      void availability.refetch();
     }
   };
   return (
@@ -253,166 +161,11 @@ const MeetingProposalEditor = ({
           Reply from {target.senderEmail} to {target.recipients.to}. Only your
           selected calendars are checked.
         </Text>
-        <div className="space-y-2">
-          <Text as="p" size="sm">
-            Calendars to check
-          </Text>
-          {accounts.isPending ||
-          calendarQueries.some((query) => query.isPending) ? (
-            <Text size="caption" tone="muted">
-              Loading calendars…
-            </Text>
-          ) : null}
-          {calendars.map((calendar) => (
-            <label
-              className="flex min-w-0 items-center gap-2"
-              key={getCalendarRefKey(calendar)}
-            >
-              <Checkbox
-                aria-label={`Check ${calendar.name}`}
-                checked={filters.calendarKeys.includes(
-                  getCalendarRefKey(calendar)
-                )}
-                onCheckedChange={(checked) => {
-                  updateFilters({
-                    calendarKeys: checked
-                      ? [...filters.calendarKeys, getCalendarRefKey(calendar)]
-                      : filters.calendarKeys.filter(
-                          (key) => key !== getCalendarRefKey(calendar)
-                        ),
-                  });
-                }}
-              >
-                <CheckboxIndicator />
-              </Checkbox>
-              <Text size="sm" truncate>
-                {calendar.name}
-              </Text>
-            </label>
-          ))}
-          {(accounts.data?.accounts ?? []).some(
-            (account) => account.status !== "connected"
-          ) ? (
-            <Text as="p" size="caption" tone="muted">
-              Some accounts need attention in Settings. Their calendars are not
-              included.
-            </Text>
-          ) : null}
-          {accounts.isError ||
-          calendarQueries.some((query) => query.isError) ? (
-            <Button
-              onClick={() => {
-                void accounts.refetch();
-                for (const query of calendarQueries) {
-                  void query.refetch();
-                }
-              }}
-              size="sm"
-              type="button"
-              variant="secondary"
-            >
-              Retry calendar access
-            </Button>
-          ) : null}
-          {!accounts.isPending && calendars.length === 0 ? (
-            <Text as="p" size="caption" tone="muted">
-              Connect a calendar in Settings to find times.
-            </Text>
-          ) : null}
-        </div>
-        <div className="grid grid-cols-2 gap-3">
-          <Field>
-            <FieldLabel size="caption">From date</FieldLabel>
-            <DatePicker
-              aria-label="First proposal date"
-              onValueChange={(startDate) => {
-                updateFilters({ startDate });
-              }}
-              value={filters.startDate}
-            />
-          </Field>
-          <Field>
-            <FieldLabel size="caption">Through date</FieldLabel>
-            <DatePicker
-              aria-label="Last proposal date"
-              onValueChange={(endDate) => {
-                updateFilters({ endDate });
-              }}
-              value={filters.endDate}
-            />
-          </Field>
-          <Field>
-            <FieldLabel size="caption">Working day starts</FieldLabel>
-            <TimePicker
-              aria-label="Working day starts"
-              onValueChange={(hoursStart) => {
-                updateFilters({ hoursStart });
-              }}
-              value={filters.hoursStart}
-            />
-          </Field>
-          <Field>
-            <FieldLabel size="caption">Working day ends</FieldLabel>
-            <TimePicker
-              aria-label="Working day ends"
-              onValueChange={(hoursEnd) => {
-                updateFilters({ hoursEnd });
-              }}
-              value={filters.hoursEnd}
-            />
-          </Field>
-        </div>
-        <div className="flex flex-wrap gap-1" aria-label="Working weekdays">
-          {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(
-            (day, index) => (
-              <Button
-                aria-pressed={filters.weekdays.includes(index + 1)}
-                key={day}
-                onClick={() => {
-                  updateFilters({
-                    weekdays: filters.weekdays.includes(index + 1)
-                      ? filters.weekdays.filter((value) => value !== index + 1)
-                      : [...filters.weekdays, index + 1],
-                  });
-                }}
-                size="sm"
-                type="button"
-                variant="option"
-              >
-                {day}
-              </Button>
-            )
-          )}
-        </div>
-        <CalendarTimeZonePicker
-          aria-label="Proposal time zone"
-          onValueChange={(timeZone) => {
-            updateFilters({ timeZone });
-          }}
-          value={filters.timeZone}
+        <CalendarAvailabilityFields
+          onChange={updateFilters}
+          source={source}
+          value={filters}
         />
-        <div className="grid grid-cols-3 gap-3">
-          {(
-            [
-              { field: "duration", label: "Minutes" },
-              { field: "bufferBefore", label: "Gap before" },
-              { field: "bufferAfter", label: "Gap after" },
-            ] as const
-          ).map(({ field, label }) => (
-            <Field key={field}>
-              <FieldLabel size="caption">{label}</FieldLabel>
-              <Input
-                aria-label={label}
-                min={field === "duration" ? 5 : 0}
-                onChange={(event) => {
-                  updateFilters({ [field]: event.target.value });
-                }}
-                type="number"
-                value={filters[field]}
-              />
-            </Field>
-          ))}
-        </div>
         <Button
           disabled={availability.isFetching}
           onClick={findTimes}
@@ -506,6 +259,17 @@ const MeetingProposalEditor = ({
             availability.data?.status !== "complete"
           }
           onClick={() => {
+            const scope = parseCalendarAvailabilityForm({
+              calendars,
+              form: filters,
+            });
+            if (scope.kind === "invalid") {
+              store.setState((current) => ({
+                ...current,
+                problem: scope.message,
+              }));
+              return;
+            }
             if (!state.request || !onInsert({ target, text: wording })) {
               store.setState((current) => ({
                 ...current,
