@@ -255,10 +255,9 @@ describe("durable mail Snooze", () => {
       })
       .catch(() => null);
     expect(rejected?.ok ?? false).toBeFalsy();
-    await evictDurableObject(stub);
     await expect(
       runInDurableObject(
-        stub,
+        env.MailSnooze.get(stub.id),
         async (_instance, state) => await state.storage.get("scope")
       )
     ).resolves.toStrictEqual(scope);

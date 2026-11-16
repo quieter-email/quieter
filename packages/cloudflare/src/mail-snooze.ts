@@ -87,22 +87,36 @@ export class MailSnooze extends DurableObject<Env> {
         purpose: "mail-snooze-dispatch",
       })
     );
-    const response = await fetch(new URL("/api/internal/mail-snooze", origin), {
+    const signature = await signMailPayload(
       body,
-      headers: {
-        "content-type": "application/json",
-        "x-mail-signature": await signMailPayload(
+      readLinkedSecret(this.env.SST_RESOURCE_GmailLiveSyncTokenSecret)
+    );
+    const controller = new AbortController();
+    const deadline = setTimeout(() => {
+      controller.abort(
+        new DOMException("Snooze dispatch timed out.", "TimeoutError")
+      );
+    }, 90_000);
+    try {
+      const response = await fetch(
+        new URL("/api/internal/mail-snooze", origin),
+        {
           body,
-          readLinkedSecret(this.env.SST_RESOURCE_GmailLiveSyncTokenSecret)
-        ),
-      },
-      method: "POST",
-      redirect: "manual",
-      signal: AbortSignal.timeout(90_000),
-    });
-    if (!response.ok) {
-      throw new Error("Snooze dispatch failed.");
+          headers: {
+            "content-type": "application/json",
+            "x-mail-signature": signature,
+          },
+          method: "POST",
+          redirect: "manual",
+          signal: controller.signal,
+        }
+      );
+      if (!response.ok) {
+        throw new Error("Snooze dispatch failed.");
+      }
+      return mailSnoozeDispatchResultSchema.parse(await response.json());
+    } finally {
+      clearTimeout(deadline);
     }
-    return mailSnoozeDispatchResultSchema.parse(await response.json());
   }
 }
