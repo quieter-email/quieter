@@ -2,6 +2,7 @@
 
 import {
   CheckmarkCircle02Icon,
+  Clock01Icon,
   InboxIcon,
   Flag01Icon,
   Delete01Icon,
@@ -32,12 +33,18 @@ import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
 import { useState } from "react";
+
+import {
+  MailSnoozeDialog,
+  snoozeLiveStatuses,
+} from "../../mailbox/components/mail-snooze-dialog";
 
 const buildDraftListEntry = (
   message: MessageListItem,
@@ -292,12 +299,14 @@ const buildMessageListBulkActions = ({
   canSetPlacement,
   sharedPlacement,
   canMarkRead,
+  onSnooze,
 }: {
   actionThreads: ThreadListEntry[];
   canSetImportance: boolean;
   canSetPlacement: boolean;
   sharedPlacement: boolean;
   canMarkRead: boolean;
+  onSnooze: () => void;
   activeMailbox: MailboxCategory;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
@@ -329,11 +338,19 @@ const buildMessageListBulkActions = ({
   }
 
   const actions: MessageListBulkAction[] = [];
+  const allSnoozed =
+    actionThreads.length > 0 &&
+    actionThreads.every(
+      (thread) =>
+        thread.anchorMessage.snooze !== undefined &&
+        snoozeLiveStatuses.has(thread.anchorMessage.snooze.status)
+    );
   if (
     canSetPlacement &&
     !["drafts", "sent", "spam", "trash"].includes(activeMailbox)
   ) {
-    const returnToInbox = activeMailbox === "done";
+    const returnToInbox =
+      activeMailbox === "done" || activeMailbox === "later" || allSnoozed;
     actions.push({
       icon: returnToInbox ? InboxIcon : CheckmarkCircle02Icon,
       id: returnToInbox ? "return-threads-to-inbox" : "mark-threads-done",
@@ -341,13 +358,90 @@ const buildMessageListBulkActions = ({
       onSelect: async () => {
         await runActionThreads(
           returnToInbox
-            ? mailboxActions.returnThreadsToInbox
+            ? async (threads) => {
+                const scheduled = threads.filter(
+                  (thread) =>
+                    thread.anchorMessage.snooze !== undefined &&
+                    snoozeLiveStatuses.has(thread.anchorMessage.snooze.status)
+                );
+                const ordinary = threads.filter(
+                  (thread) => !scheduled.includes(thread)
+                );
+                if (scheduled.length > 0) {
+                  await mailboxActions.applyThreadsSnooze(scheduled, {
+                    kind: "return-now",
+                  });
+                }
+                if (ordinary.length > 0) {
+                  await mailboxActions.returnThreadsToInbox(ordinary);
+                }
+              }
             : mailboxActions.markThreadsDone,
           (threads) =>
             `${formatConversationCount(threads.length)} ${returnToInbox ? "returned to Inbox" : "marked Done"}.`
         );
       },
       promoted: true,
+    });
+  }
+  const allIncomingInbox =
+    actionThreads.length > 0 &&
+    actionThreads.every((thread) =>
+      thread.messages.some(
+        (message) =>
+          (message.threadInboxIncomingMessageIds?.length ?? 0) > 0 ||
+          (message.labelIds?.includes("INBOX") === true &&
+            !message.labelIds.some((id) =>
+              ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
+            ))
+      )
+    );
+  const allReschedulable =
+    actionThreads.length > 0 &&
+    actionThreads.every(
+      (thread) =>
+        thread.anchorMessage.snooze?.status === "active" ||
+        thread.anchorMessage.snooze?.status === "suspended"
+    );
+  if (
+    canSetPlacement &&
+    (allReschedulable || (!allSnoozed && allIncomingInbox))
+  ) {
+    actions.push({
+      icon: Clock01Icon,
+      id: "snooze-threads",
+      label: `${allSnoozed ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onSelect: onSnooze,
+      promoted: true,
+    });
+  }
+  if (canSetPlacement && allSnoozed) {
+    const keepInDone = actionThreads.every(
+      (thread) =>
+        thread.anchorMessage.snooze?.status === "active" &&
+        !thread.threadLabelIds.includes("INBOX") &&
+        thread.messages.every(
+          (message) =>
+            (message.threadInboxIncomingMessageIds?.length ?? 0) === 0
+        )
+    );
+    actions.push({
+      icon: CheckmarkCircle02Icon,
+      id: "cancel-thread-snoozes",
+      label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
+      onSelect: async () => {
+        await runActionThreads(
+          async (threads) => {
+            await mailboxActions.applyThreadsSnooze(threads, {
+              kind: "cancel",
+            });
+          },
+          (threads) =>
+            keepInDone
+              ? `${formatConversationCount(threads.length)} kept in Done. Return cancelled.`
+              : `Return cancelled for ${formatConversationCount(threads.length)}.`
+        );
+      },
     });
   }
   if (canSetImportance) {
@@ -469,7 +563,12 @@ const useMessageListInteractions = ({
   userLabels: { type: string }[];
 }) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
-  const isBulkActionPending = selection.selectedThreads.some((thread) => {
+  const [snoozeThreads, setSnoozeThreads] = useState<ThreadListEntry[]>([]);
+  const actionThreads = getActionThreads(
+    selection.selectedThreads,
+    selection.focusedThread
+  );
+  const isBulkActionPending = actionThreads.some((thread) => {
     const pendingActions =
       props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
       props.pendingActions;
@@ -662,6 +761,11 @@ const useMessageListInteractions = ({
         ) && props.mailboxActions.canSetPlacement,
       mailboxActions: props.mailboxActions,
       mailboxProvider: actionMailboxProvider,
+      onSnooze: () => {
+        if (!isBulkActionPending) {
+          setSnoozeThreads(actionThreads);
+        }
+      },
       runActionThreads,
       sharedPlacement: getActionThreads(
         selection.selectedThreads,
@@ -679,6 +783,46 @@ const useMessageListInteractions = ({
     handleScrollListToTop: selection.scrollListToTop,
     handleToggleAllLoadedThreads: selection.toggleAllLoadedThreads,
     isBulkActionPending,
+    snoozeDialog: (
+      <MailSnoozeDialog
+        initial={
+          snoozeThreads.length === 1
+            ? snoozeThreads[0]?.anchorMessage.snooze
+            : undefined
+        }
+        onApply={async (command) => {
+          await props.mailboxActions.applyThreadsSnooze(snoozeThreads, command);
+          selection.clearSelection();
+        }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSnoozeThreads([]);
+          }
+        }}
+        open={snoozeThreads.length > 0}
+        preview={snoozeThreads.some((thread) =>
+          isSandboxMailboxId(
+            props.mailboxContextsByThreadId?.get(thread.threadId)?.mailboxId ??
+              props.mailboxId
+          )
+        )}
+        reschedule={
+          snoozeThreads.length > 0 &&
+          snoozeThreads.every(
+            (thread) =>
+              thread.anchorMessage.snooze !== undefined &&
+              snoozeLiveStatuses.has(thread.anchorMessage.snooze.status)
+          )
+        }
+        shared={snoozeThreads.some(
+          (thread) =>
+            (
+              props.mailboxContextsByThreadId?.get(thread.threadId)
+                ?.mailboxActions ?? props.mailboxActions
+            ).placementScope === "shared"
+        )}
+      />
+    ),
   };
 };
 
@@ -781,6 +925,7 @@ export const MessageList = (props: MessageListProps) => {
     handleScrollListToTop,
     handleToggleAllLoadedThreads,
     isBulkActionPending,
+    snoozeDialog,
   } = useMessageListInteractions({
     actionMailboxProvider,
     labelMailboxActions,
@@ -799,6 +944,7 @@ export const MessageList = (props: MessageListProps) => {
 
   return (
     <div className="@container flex min-h-0 flex-1 flex-col">
+      {snoozeDialog}
       <MessageListHeader
         onOpenSidebar={props.onOpenSidebar}
         search={

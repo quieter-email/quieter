@@ -6,6 +6,7 @@ import {
   getDraftWithContent,
   getMessageInspector,
   getThreadWithDetails,
+  getGmailConversationListRows,
   isGmailServiceError,
   listDraftsWithDetails,
   listMessagesWithDetails,
@@ -13,7 +14,11 @@ import {
 } from "@quieter/gmail";
 import { parseDraftMessage } from "@quieter/gmail/compose";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
-import type { MailboxSyncDelta, MessageListItem } from "@quieter/mail/messages";
+import type {
+  ListMessagesPageResult,
+  MailboxSyncDelta,
+  MessageListItem,
+} from "@quieter/mail/messages";
 import type { MailSearchFilter } from "@quieter/mail/search";
 import type { MailSearchExpression } from "@quieter/mail/search-expression";
 import { reportError } from "@quieter/observability";
@@ -55,6 +60,11 @@ import {
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
 import { loadDraftReminderIntent } from "../reminders/draft-state";
+import {
+  attachMailSnoozeStates,
+  filterMailSnoozeVisibility,
+  listMailSnoozePage,
+} from "../snooze/queries";
 import type { MailInputs } from "./inputs";
 
 const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
@@ -77,6 +87,78 @@ const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
       ? message
       : { ...message, unsubscribeStatus };
   });
+};
+
+const listLaterMessages = async (input: {
+  context: MailRequestContext;
+  mailboxId: string;
+  provider: "gmail" | "managed";
+  contentRevision: number;
+  maxResults?: number;
+  pageToken?: string;
+}): Promise<ListMessagesPageResult> => {
+  let { pageToken } = input;
+  while (true) {
+    input.context.signal?.throwIfAborted();
+    const scheduled = await listMailSnoozePage({
+      mailboxId: input.mailboxId,
+      maxResults: input.maxResults,
+      pageToken,
+      userId: input.context.userId,
+    });
+    const threadIds = scheduled.snoozes.map((snooze) => snooze.threadId);
+    const page =
+      input.provider === "managed"
+        ? await listManagedMessages({
+            category: "later",
+            mailboxId: input.mailboxId,
+            maxResults: Math.max(1, threadIds.length),
+            threadIds,
+            userId: input.context.userId,
+          })
+        : await callGmail(
+            input.context,
+            input.mailboxId,
+            async (accessToken, signal) =>
+              await getGmailConversationListRows(accessToken, threadIds, signal)
+          );
+    const messages = await attachMailSnoozeStates({
+      mailboxId: input.mailboxId,
+      messages:
+        input.provider === "managed"
+          ? page.messages
+          : await hydrateGmailMessageMetadata(
+              input.mailboxId,
+              page.messages,
+              input.context.resHeaders
+            ),
+      userId: input.context.userId,
+    });
+    const visible = await filterMailSnoozeVisibility({
+      category: "later",
+      mailboxId: input.mailboxId,
+      threadIds,
+      userId: input.context.userId,
+    });
+    const rows = new Map(
+      messages.map((message) => [message.threadId, message])
+    );
+    const ordered = threadIds.flatMap((threadId) => {
+      const message = rows.get(threadId);
+      return message && visible.has(threadId) ? [message] : [];
+    });
+    if (ordered.length > 0 || scheduled.nextPageToken === undefined) {
+      return {
+        historyId:
+          input.provider === "gmail" && page.historyId
+            ? `gmail:${page.historyId}:${input.contentRevision}`
+            : page.historyId,
+        messages: ordered,
+        nextPageToken: scheduled.nextPageToken,
+      };
+    }
+    pageToken = scheduled.nextPageToken;
+  }
 };
 
 export const queriesMailOperations = {
@@ -397,7 +479,12 @@ export const queriesMailOperations = {
     } else {
       await capture;
     }
-    return result;
+    const messages = await attachMailSnoozeStates({
+      mailboxId: input.mailboxId,
+      messages: result.messages,
+      userId: context.userId,
+    });
+    return { ...result, messages, snooze: messages[0]?.snooze };
   },
   listMessageDeliveryStatuses: async ({
     context,
@@ -443,11 +530,42 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (selectedMailbox.provider === "managed") {
-      return await listManagedMessages({
+    if (input.category === "later" && !input.query?.trim()) {
+      return await listLaterMessages({
         ...input,
-        userId: context.userId,
+        contentRevision: selectedMailbox.contentRevision,
+        context,
+        provider: selectedMailbox.provider === "managed" ? "managed" : "gmail",
       });
+    }
+    if (selectedMailbox.provider === "managed") {
+      let { pageToken } = input;
+      while (true) {
+        context.signal?.throwIfAborted();
+        const page = await listManagedMessages({
+          ...input,
+          pageToken,
+          userId: context.userId,
+        });
+        const messages = await attachMailSnoozeStates({
+          mailboxId: input.mailboxId,
+          messages: page.messages,
+          userId: context.userId,
+        });
+        const visible = await filterMailSnoozeVisibility({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          threadIds: messages.map((message) => message.threadId),
+          userId: context.userId,
+        });
+        const filtered = messages.filter((message) =>
+          visible.has(message.threadId)
+        );
+        if (filtered.length > 0 || page.nextPageToken === undefined) {
+          return { ...page, messages: filtered };
+        }
+        pageToken = page.nextPageToken;
+      }
     }
 
     if (input.category === "important") {
@@ -491,42 +609,68 @@ export const queriesMailOperations = {
       });
       return {
         ...page,
-        messages: await hydrateUnsubscribeStatus(
-          input.mailboxId,
-          page.messages
-        ),
+        messages: await attachMailSnoozeStates({
+          mailboxId: input.mailboxId,
+          messages: await hydrateUnsubscribeStatus(
+            input.mailboxId,
+            page.messages
+          ),
+          userId: context.userId,
+        }),
       };
     }
-    const page = await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken, signal) =>
-        input.category === "drafts"
-          ? await listDraftsWithDetails(accessToken, {
-              maxResults: input.maxResults,
-              pageToken: input.pageToken,
-              query: input.query?.trim() || undefined,
-              signal,
-            })
-          : await listMessagesWithDetails(accessToken, {
-              mailbox: input.category,
-              maxResults: input.maxResults,
-              pageToken: input.pageToken,
-              query: input.query?.trim() || undefined,
-              signal,
-            })
-    );
-    return {
-      ...page,
-      historyId: page.historyId
-        ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
-        : undefined,
-      messages: await hydrateGmailMessageMetadata(
+    let { pageToken } = input;
+    while (true) {
+      context.signal?.throwIfAborted();
+      const currentPageToken = pageToken;
+      const page = await callGmail(
+        context,
         input.mailboxId,
-        page.messages,
-        context.resHeaders
-      ),
-    };
+        async (accessToken, signal) =>
+          input.category === "drafts"
+            ? await listDraftsWithDetails(accessToken, {
+                maxResults: input.maxResults,
+                pageToken: currentPageToken,
+                query: input.query?.trim() || undefined,
+                signal,
+              })
+            : await listMessagesWithDetails(accessToken, {
+                mailbox: input.category,
+                maxResults: input.maxResults,
+                pageToken: currentPageToken,
+                query: input.query?.trim() || undefined,
+                signal,
+              })
+      );
+      const messages = await attachMailSnoozeStates({
+        mailboxId: input.mailboxId,
+        messages: await hydrateGmailMessageMetadata(
+          input.mailboxId,
+          page.messages,
+          context.resHeaders
+        ),
+        userId: context.userId,
+      });
+      const visible = await filterMailSnoozeVisibility({
+        category: input.category,
+        mailboxId: input.mailboxId,
+        threadIds: messages.map((message) => message.threadId),
+        userId: context.userId,
+      });
+      const filtered = messages.filter((message) =>
+        visible.has(message.threadId)
+      );
+      if (filtered.length > 0 || page.nextPageToken === undefined) {
+        return {
+          ...page,
+          historyId: page.historyId
+            ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
+            : undefined,
+          messages: filtered,
+        };
+      }
+      pageToken = page.nextPageToken;
+    }
   },
   syncMailbox: async ({
     context,
@@ -616,11 +760,15 @@ export const queriesMailOperations = {
         : undefined,
       refreshFirstPage: delta.refreshFirstPage || appChanged,
       requiresFullRefresh: delta.requiresFullRefresh || appChanged,
-      updatedMessages: await hydrateGmailMessageMetadata(
-        input.mailboxId,
-        delta.updatedMessages,
-        context.resHeaders
-      ),
+      updatedMessages: await attachMailSnoozeStates({
+        mailboxId: input.mailboxId,
+        messages: await hydrateGmailMessageMetadata(
+          input.mailboxId,
+          delta.updatedMessages,
+          context.resHeaders
+        ),
+        userId: context.userId,
+      }),
     };
   },
 };

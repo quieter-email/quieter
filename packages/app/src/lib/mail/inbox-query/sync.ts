@@ -494,7 +494,11 @@ const syncOwnedMessages = async (
     );
   }
 
-  if (mailbox === "drafts" || normalizeSearchQuery(searchQuery)) {
+  if (
+    mailbox === "drafts" ||
+    mailbox === "later" ||
+    normalizeSearchQuery(searchQuery)
+  ) {
     return await refreshMessagesPages(
       queryClient,
       mailboxId,
@@ -655,7 +659,9 @@ export const messagesQueryOptions = (
         }
       : undefined;
   const persister =
-    mailbox === "drafts" || normalizeSearchQuery(searchQuery)
+    mailbox === "drafts" ||
+    mailbox === "later" ||
+    normalizeSearchQuery(searchQuery)
       ? undefined
       : messagesQueryPersister;
 
@@ -683,9 +689,12 @@ export const messagesQueryOptions = (
         signal
       ),
     queryKey: getMessagesQueryKey(mailboxId, mailbox, searchQuery),
-    refetchOnMount: mailbox === "drafts" ? "always" : false,
-    refetchOnReconnect: mailbox === "drafts" ? "always" : false,
-    refetchOnWindowFocus: mailbox === "drafts" ? "always" : false,
+    refetchOnMount:
+      mailbox === "drafts" || mailbox === "later" ? "always" : false,
+    refetchOnReconnect:
+      mailbox === "drafts" || mailbox === "later" ? "always" : false,
+    refetchOnWindowFocus:
+      mailbox === "drafts" || mailbox === "later" ? "always" : false,
     retry: shouldRetryOrpcError,
     staleTime: GMAIL_QUERY_STALE_TIME_MS,
   });

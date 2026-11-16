@@ -249,6 +249,7 @@ export {
 } from "@quieter/mail/message-content";
 
 type ThreadListSummary = {
+  inboxIncomingMessageIds: string[];
   labelIds: string[];
   messageCount: number;
   attachmentCount: number;
@@ -312,6 +313,11 @@ const isMessageInMailbox = (
   mailbox: MailboxCategory,
   labelIds: string[] | undefined
 ): boolean => {
+  if (mailbox === "later") {
+    return !(labelIds ?? []).some((label) =>
+      ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+    );
+  }
   if (mailbox === "done") {
     return !(labelIds ?? []).some((label) =>
       ["INBOX", "SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
@@ -399,6 +405,14 @@ const getListMessagesQuery = (
   mailbox: MailboxCategory | undefined,
   query: string | undefined
 ): string | undefined => {
+  if (mailbox === "later") {
+    return appendGmailQueryTerms(query, [
+      "-in:spam",
+      "-in:trash",
+      "-in:drafts",
+      "-in:sent",
+    ]);
+  }
   if (mailbox === "done") {
     return appendGmailQueryTerms(query, [
       "-in:inbox",
@@ -1033,6 +1047,8 @@ const toMessageListItem = async (
     threadAttachmentCount: options.threadSummary?.attachmentCount,
     threadAttachmentNames: options.threadSummary?.attachmentNames,
     threadId: message.threadId,
+    threadInboxIncomingMessageIds:
+      options.threadSummary?.inboxIncomingMessageIds,
     threadLabelIds: options.threadSummary?.labelIds,
     threadMessageCount: options.threadSummary?.messageCount,
     to: getHeader(message, "To"),
@@ -1084,7 +1100,8 @@ const listMessages = async (
         labelIds:
           options?.mailbox !== undefined &&
           options.mailbox !== "important" &&
-          options.mailbox !== "done"
+          options.mailbox !== "done" &&
+          options.mailbox !== "later"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 20,
@@ -1119,7 +1136,8 @@ const listThreads = async (
         labelIds:
           options?.mailbox !== undefined &&
           options.mailbox !== "important" &&
-          options.mailbox !== "done"
+          options.mailbox !== "done" &&
+          options.mailbox !== "later"
             ? [MAILBOX_LABELS[options.mailbox]]
             : undefined,
         maxResults: options?.maxResults ?? 15,
@@ -1704,6 +1722,15 @@ const getThreadListSummaries = async (
     summariesByThreadId.set(thread.id, {
       attachmentCount: attachments.length,
       attachmentNames: attachments.map((attachment) => attachment.fileName),
+      inboxIncomingMessageIds: threadMessages
+        .filter(
+          (message) =>
+            message.labelIds?.includes("INBOX") === true &&
+            !message.labelIds.some((label) =>
+              ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+            )
+        )
+        .map((message) => message.id),
       labelIds: [
         ...new Set(
           threadMessages.flatMap(
@@ -1718,23 +1745,12 @@ const getThreadListSummaries = async (
   return summariesByThreadId;
 };
 
-export const listMessagesWithDetails = async (
+const projectGmailConversationRows = async (
   accessToken: string,
-  options?: {
-    pageToken?: string;
-    maxResults?: number;
-    mailbox?: MailboxCategory;
-    query?: string;
-    signal?: AbortSignal;
-  }
-): Promise<ListMessagesPageResult> => {
-  const list = await listThreads(accessToken, options);
-  const threads = await getGmailThreadsListMetadata(
-    accessToken,
-    list.threads.map((thread) => thread.id),
-    options?.signal
-  );
-  const mailbox = options?.mailbox;
+  threads: Awaited<ReturnType<typeof getGmailThreadsListMetadata>>,
+  mailbox: MailboxCategory | undefined,
+  signal?: AbortSignal
+): Promise<MessageListItem[]> => {
   const rows = threads.flatMap((thread) => {
     if (!thread) {
       return [];
@@ -1764,6 +1780,15 @@ export const listMessagesWithDetails = async (
         summary: {
           attachmentCount: attachments.length,
           attachmentNames: attachments.map((attachment) => attachment.fileName),
+          inboxIncomingMessageIds: messages
+            .filter(
+              (message) =>
+                message.labelIds?.includes("INBOX") === true &&
+                !message.labelIds.some((label) =>
+                  ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+                )
+            )
+            .map((message) => message.id),
           labelIds: [
             ...new Set(
               (thread.messages ?? []).flatMap(
@@ -1776,7 +1801,72 @@ export const listMessagesWithDetails = async (
       },
     ];
   });
-  if (mailbox === "done" && rows.length === 0 && list.nextPageToken) {
+  return await Promise.all(
+    rows.map(
+      async ({ anchor, summary }) =>
+        await toMessageListItem(
+          accessToken,
+          anchor,
+          { threadSummary: summary },
+          signal
+        )
+    )
+  );
+};
+
+export const getGmailConversationListRows = async (
+  accessToken: string,
+  threadIds: readonly string[],
+  signal?: AbortSignal
+): Promise<ListMessagesPageResult> => {
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    threadIds,
+    signal
+  );
+  const messages = await projectGmailConversationRows(
+    accessToken,
+    threads,
+    "later",
+    signal
+  );
+  let historyId = threads.find((thread) =>
+    isNonEmptyString(thread?.historyId)
+  )?.historyId;
+  if (historyId === undefined) {
+    const profile = await getGmailProfile(accessToken, signal);
+    ({ historyId } = profile);
+  }
+  return { historyId, messages };
+};
+
+export const listMessagesWithDetails = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  }
+): Promise<ListMessagesPageResult> => {
+  const list = await listThreads(accessToken, options);
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    list.threads.map((thread) => thread.id),
+    options?.signal
+  );
+  const messages = await projectGmailConversationRows(
+    accessToken,
+    threads,
+    options?.mailbox,
+    options?.signal
+  );
+  if (
+    options?.mailbox === "done" &&
+    messages.length === 0 &&
+    list.nextPageToken
+  ) {
     return await listMessagesWithDetails(accessToken, {
       ...options,
       pageToken: list.nextPageToken,
@@ -1789,17 +1879,9 @@ export const listMessagesWithDetails = async (
     const profile = await getGmailProfile(accessToken, options?.signal);
     ({ historyId } = profile);
   }
-
   return {
     historyId,
-    messages: await Promise.all(
-      rows.map(
-        async ({ anchor, summary }) =>
-          await toMessageListItem(accessToken, anchor, {
-            threadSummary: summary,
-          })
-      )
-    ),
+    messages,
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
   };
@@ -1822,28 +1904,53 @@ export const listMessagesForAgent = async (
     list.messages.map((message) => message.id),
     options?.signal
   );
-  const doneThreads =
-    options?.mailbox === "done"
+  const threadMailbox = options?.mailbox;
+  const scopedThreads =
+    threadMailbox === "done" || threadMailbox === "later"
       ? await getGmailThreadsListMetadata(
           accessToken,
           list.messages.map((message) => message.threadId),
-          options.signal
+          options?.signal
         )
       : null;
-  const doneMessageIds = doneThreads
+  const scopedMessageIds = scopedThreads
     ? new Set(
-        doneThreads.flatMap((thread) =>
+        scopedThreads.flatMap((thread) =>
           thread
             ? getThreadMailboxMessages({
-                mailbox: "done",
+                mailbox: threadMailbox,
                 messages: thread.messages ?? [],
               }).map((message) => message.id)
             : []
         )
       )
     : null;
+  const threadStates = new Map<
+    string,
+    { inboxIncomingMessageIds: string[]; labelIds: string[] }
+  >();
+  for (const thread of scopedThreads ?? []) {
+    if (thread) {
+      threadStates.set(thread.id, {
+        inboxIncomingMessageIds: (thread.messages ?? [])
+          .filter(
+            (message) =>
+              message.labelIds?.includes("INBOX") === true &&
+              !message.labelIds.some((label) =>
+                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+              )
+          )
+          .map((message) => message.id),
+        labelIds: [
+          ...new Set(
+            (thread.messages ?? []).flatMap((message) => message.labelIds ?? [])
+          ),
+        ],
+      });
+    }
+  }
   const messages = details.flatMap((message) => {
-    if (!message || (doneMessageIds && !doneMessageIds.has(message.id))) {
+    if (!message || (scopedMessageIds && !scopedMessageIds.has(message.id))) {
       return [];
     }
 
@@ -1864,6 +1971,9 @@ export const listMessagesForAgent = async (
         snippet: snippet === undefined ? undefined : decodeHTML(snippet),
         subject: getHeader(message, "Subject"),
         threadId: message.threadId,
+        threadInboxIncomingMessageIds: threadStates.get(message.threadId)
+          ?.inboxIncomingMessageIds,
+        threadLabelIds: threadStates.get(message.threadId)?.labelIds,
         to: getHeader(message, "To"),
       },
     ];
@@ -2134,11 +2244,21 @@ export const getThreadWithDetails = async (
   const threadLabelIds = [
     ...new Set(resolvedMessages.flatMap((message) => message.labelIds ?? [])),
   ];
+  const threadInboxIncomingMessageIds = resolvedMessages
+    .filter(
+      (message) =>
+        message.labelIds?.includes("INBOX") === true &&
+        !message.labelIds.some((label) =>
+          ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+        )
+    )
+    .map((message) => message.id);
   const snippet = decodeMimeHeaderValue(thread.snippet);
 
   return {
     messages: resolvedMessages.map((message) => ({
       ...message,
+      threadInboxIncomingMessageIds,
       threadLabelIds,
     })),
     snippet: snippet === undefined ? undefined : decodeHTML(snippet),
@@ -2490,6 +2610,8 @@ const buildMailboxSyncUpdatedMessages = async (
         ...updatedMessage,
         threadAttachmentCount: threadSummary.attachmentCount,
         threadAttachmentNames: threadSummary.attachmentNames,
+        threadInboxIncomingMessageIds: threadSummary.inboxIncomingMessageIds,
+        threadLabelIds: threadSummary.labelIds,
         threadMessageCount: threadSummary.messageCount,
       };
     }),
@@ -2507,7 +2629,9 @@ export const getMailboxSyncDelta = async (
   }
 ): Promise<MailboxSyncDelta> => {
   const mailboxLabel =
-    options.mailbox === "important" || options.mailbox === "done"
+    options.mailbox === "important" ||
+    options.mailbox === "done" ||
+    options.mailbox === "later"
       ? undefined
       : MAILBOX_LABELS[options.mailbox];
   const state: MailboxSyncDeltaState = {
@@ -2545,7 +2669,7 @@ export const getMailboxSyncDelta = async (
     throw error;
   }
 
-  if (options.mailbox === "done") {
+  if (options.mailbox === "done" || options.mailbox === "later") {
     const hasChanges = nextHistoryId !== options.startHistoryId;
     return {
       hasChanges,

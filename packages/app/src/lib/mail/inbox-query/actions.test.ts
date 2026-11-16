@@ -206,6 +206,75 @@ describe("mail metadata cache updates", () => {
     queryClient.clear();
   });
 
+  test.each([
+    { source: "later", status: "active" },
+    { source: "done", status: "failed" },
+  ] as const)(
+    "reading a $status Snooze preserves its source-owned $source membership",
+    async ({ source, status }) => {
+      const queryClient = new QueryClient();
+      const message: MessageListItem = {
+        bodyHtml: "<p>Retained snoozed history</p>",
+        id: "snoozed",
+        isUnread: true,
+        labelIds: ["UNREAD"],
+        snooze: {
+          id: crypto.randomUUID(),
+          mailboxId: "mailbox",
+          returnAt: new Date(Date.now() + 86_400_000).toISOString(),
+          status,
+          threadId: "conversation",
+          timeZone: "UTC",
+          version: 1,
+        },
+        threadId: "conversation",
+      };
+      for (const mailbox of ["done", "later"] as const) {
+        queryClient.setQueryData<MessagesQueryData>(
+          getMessagesQueryKey("mailbox", mailbox),
+          {
+            pageParams: [undefined],
+            pages: [{ messages: mailbox === source ? [message] : [] }],
+          }
+        );
+      }
+      vi.mocked(rpc.mail.markMessageAsRead).mockResolvedValue({
+        id: message.id,
+        isUnread: false,
+        labelIds: [],
+      });
+      await updateMessageInMailbox(
+        {
+          mailbox: source,
+          mailboxId: "mailbox",
+          messageId: message.id,
+          queryClient,
+          searchQuery: undefined,
+        },
+        "read"
+      );
+      const updated = queryClient.getQueryData<MessagesQueryData>(
+        getMessagesQueryKey("mailbox", source)
+      );
+      const updatedMessage = updated?.pages[0].messages.find(
+        (item) => item.id === message.id
+      );
+      expect(updatedMessage).toMatchObject({
+        bodyHtml: "<p>Retained snoozed history</p>",
+        id: message.id,
+        isUnread: false,
+        snooze: { status },
+      });
+      const otherMailbox = source === "later" ? "done" : "later";
+      expect(
+        queryClient.getQueryData<MessagesQueryData>(
+          getMessagesQueryKey("mailbox", otherMailbox)
+        )?.pages[0].messages
+      ).toHaveLength(0);
+      queryClient.clear();
+    }
+  );
+
   test("reading one message updates unread views, retains loaded bodies and leaves its sibling and other mailbox alone", async () => {
     const {
       queryClient,

@@ -1,8 +1,12 @@
 import {
   createDemoActions,
   createDemoComposeActions,
+  reconcileDemoSnoozes,
 } from "@quieter/app/lib/demo-mail/actions";
-import type { DemoMessageStore } from "@quieter/app/lib/demo-mail/actions";
+import type {
+  DemoSnoozeSchedule,
+  DemoSnoozeStore,
+} from "@quieter/app/lib/demo-mail/actions";
 import { createDemoMessage as createMessage } from "@quieter/app/lib/demo-mail/fixtures";
 import {
   getDemoMailThread,
@@ -41,6 +45,7 @@ const DEMO_MANAGED_LABEL_ID_SET = new Set<string>(
 );
 
 type ManagedDemoMailState = {
+  snoozes?: Partial<Record<string, DemoSnoozeSchedule>>;
   labels: ManagedDemoLabel[];
   messages: MessageListItem[];
   version: number;
@@ -427,11 +432,21 @@ export const getManagedDemoMessageInspector = (
   };
 };
 
-const store: DemoMessageStore = {
+const store: DemoSnoozeStore = {
+  mailboxId: DEMO_MANAGED_MAILBOX_ID,
   updateMessages: (update) => {
     updateDemoState((state) => ({
       ...state,
-      messages: update(state.messages),
+      ...reconcileDemoSnoozes({
+        messages: update(state.messages),
+        snoozes: state.snoozes ?? {},
+      }),
+    }));
+  },
+  updateSnoozes: (update) => {
+    updateDemoState((state) => ({
+      ...state,
+      ...update({ messages: state.messages, snoozes: state.snoozes ?? {} }),
     }));
   },
 };
