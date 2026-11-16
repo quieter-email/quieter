@@ -409,6 +409,7 @@ export const createCorrespondentHistory = ({
         if (!isCurrentRequest()) {
           return;
         }
+        focusHandoff.current = false;
         const failure = classifyFailure(error);
         if (failure === "denied") {
           retire({ kind: "closed" });

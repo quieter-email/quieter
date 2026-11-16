@@ -438,6 +438,23 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
+    test("restores ordinary dismissal focus intent when source navigation fails", async () => {
+      const { api, history, navigate, reportError } = setup();
+      const error = new Error("Navigation failed");
+      api.openSource.mockResolvedValueOnce(opened);
+      navigate.mockRejectedValueOnce(error);
+
+      await history.openSource(source, "mail");
+
+      expect(history.state.get().view).toMatchObject({
+        kind: "selected",
+        source: { kind: "failed" },
+      });
+      expect(reportError).toHaveBeenCalledExactlyOnceWith(error);
+      history.close();
+      expect(history.consumeFocusHandoff()).toBeFalsy();
+    });
+
     test("does not seed or navigate when retired during canonical query cancellation", async () => {
       const { api, client, history, navigate, reportError } = setup();
       const cancellation = Promise.withResolvers<null>();
