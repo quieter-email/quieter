@@ -85,7 +85,9 @@ describe("scheduled send execution", () => {
     vi.clearAllMocks();
     row = {
       ...scope,
+      cancellationOrigin: null,
       createdAt: new Date(),
+      deliveryKind: "scheduled",
       draftRemovedAt: new Date(),
       errorMessage: null,
       leaseToken: null,
