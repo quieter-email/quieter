@@ -21,6 +21,7 @@ import type { ScheduledSendStatus } from "@quieter/mail/scheduled-send";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   doublePrecision,
@@ -124,7 +125,12 @@ export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type MailAutomationAgent = "auto_label" | "useful_detail";
 export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
-export type ManagedMailMailboxState = "active" | "draft" | "spam" | "trash";
+export type ManagedMailMailboxState =
+  | "active"
+  | "done"
+  | "draft"
+  | "spam"
+  | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource =
   | "ai_auto_label"
@@ -193,6 +199,7 @@ export type MailSendSnapshot = {
   headers: ManagedMailHeader[];
   kind: "api" | "mailbox";
   mailboxId?: string;
+  origin?: unknown;
   replyTo: string[];
   sender: string;
   sentAt: string;
@@ -1408,6 +1415,7 @@ export const mailMessageImportance = pgTable(
   {
     aiImportant: boolean("aiImportant"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     classifierVersion: text("classifierVersion").notNull(),
     contentHash: text("contentHash").notNull(),
     createdAt: timestamp("createdAt").notNull(),
@@ -1441,6 +1449,10 @@ export const mailMessageImportance = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "mail_message_importance_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
     index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
   ]
@@ -1496,6 +1508,7 @@ export const gmailAutoLabelEvent = pgTable(
   {
     appliedAt: timestamp("appliedAt"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1510,11 +1523,16 @@ export const gmailAutoLabelEvent = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     model: text("model"),
     nextAttemptAt: timestamp("nextAttemptAt"),
+    privateContextUserId: text("privateContextUserId"),
     promptTokens: integer("promptTokens"),
     updatedAt: timestamp("updatedAt").notNull(),
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "gmail_auto_label_event_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("gmail_auto_label_event_mailbox_created_at_idx").on(
       table.mailboxId,
       table.createdAt
@@ -1544,6 +1562,7 @@ export const mailboxVerificationCode = pgTable(
   "mailboxVerificationCode",
   {
     attemptCount: integer("attemptCount"),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1569,6 +1588,10 @@ export const mailboxVerificationCode = pgTable(
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "mailbox_verification_code_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     check(
       "mailbox_verification_code_payload_check",
       sql`${table.encryptedCode} is null or (${table.expiresAt} is not null and ${table.threadId} is not null)`
@@ -1728,6 +1751,213 @@ export const gmailUsefulDetailFeedback = pgTable(
       table.mailboxId,
       table.detailId
     ),
+  ]
+);
+
+export const mailPlacementOperation = pgTable(
+  "mailPlacementOperation",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    messageIds: jsonb("messageIds").$type<string[]>().notNull(),
+    placement: text("placement").$type<"done" | "inbox">().notNull(),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    requestedMessageIds: jsonb("requestedMessageIds")
+      .$type<string[]>()
+      .notNull(),
+    sequence: bigserial("sequence", { mode: "number" }).notNull().unique(),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "submitting"
+        | "applied"
+        | "failed"
+        | "uncertain"
+        | "superseded"
+      >()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("mail_placement_operation_request_unique").on(
+      table.actorUserId,
+      table.mailboxId,
+      table.requestId,
+      table.threadId
+    ),
+    index("mail_placement_operation_thread_sequence_idx").on(
+      table.mailboxId,
+      table.threadId,
+      table.sequence
+    ),
+    check(
+      "mail_placement_operation_placement_check",
+      sql`${table.placement} in ('done', 'inbox')`
+    ),
+    check(
+      "mail_placement_operation_status_check",
+      sql`${table.status} in ('pending', 'submitting', 'applied', 'failed', 'uncertain', 'superseded')`
+    ),
+  ]
+);
+
+export const mailSnooze = pgTable(
+  "mailSnooze",
+  {
+    actorUserId: text("actorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    attempts: integer("attempts").notNull().default(0),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    hiddenMessageIds: jsonb("hiddenMessageIds").$type<string[]>().notNull(),
+    hideOperationId: text("hideOperationId").references(
+      () => mailPlacementOperation.id,
+      { onDelete: "set null" }
+    ),
+    hideRequestId: text("hideRequestId").notNull(),
+    id: text("id").primaryKey(),
+    knownIncomingMessageIds: jsonb("knownIncomingMessageIds")
+      .$type<string[]>()
+      .notNull(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    nextWakeAt: timestamp("nextWakeAt", { withTimezone: true }),
+    returnAt: timestamp("returnAt", { withTimezone: true }).notNull(),
+    returnOperationId: text("returnOperationId").references(
+      () => mailPlacementOperation.id,
+      { onDelete: "set null" }
+    ),
+    returnRequestId: text("returnRequestId"),
+    status: text("status")
+      .$type<
+        | "preparing"
+        | "active"
+        | "returning"
+        | "returned"
+        | "cancelled"
+        | "superseded"
+        | "suspended"
+        | "failed"
+        | "uncertain"
+      >()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    timeZone: text("timeZone").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    version: integer("version").notNull(),
+  },
+  (table) => [
+    unique("mail_snooze_mailbox_thread_unique").on(
+      table.mailboxId,
+      table.threadId
+    ),
+    index("mail_snooze_next_wake_idx").on(table.nextWakeAt),
+    index("mail_snooze_mailbox_status_return_idx").on(
+      table.mailboxId,
+      table.status,
+      table.returnAt,
+      table.id
+    ),
+    check("mail_snooze_version_check", sql`${table.version} >= 0`),
+    check("mail_snooze_attempts_check", sql`${table.attempts} >= 0`),
+    check(
+      "mail_snooze_lease_pair_check",
+      sql`(${table.leaseToken} is null) = (${table.leaseUntil} is null)`
+    ),
+    check(
+      "mail_snooze_status_check",
+      sql`${table.status} in ('preparing', 'active', 'returning', 'returned', 'cancelled', 'superseded', 'suspended', 'failed', 'uncertain')`
+    ),
+  ]
+);
+
+export const mailSnoozeOperation = pgTable(
+  "mailSnoozeOperation",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    expectedVersion: integer("expectedVersion"),
+    id: text("id").primaryKey(),
+    kind: text("kind")
+      .$type<"snooze" | "reschedule" | "cancel" | "return-now">()
+      .notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    resultingVersion: integer("resultingVersion"),
+    snoozeId: text("snoozeId").references(() => mailSnooze.id, {
+      onDelete: "set null",
+    }),
+    status: text("status")
+      .$type<"pending" | "applied" | "failed" | "uncertain" | "superseded">()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("mail_snooze_operation_request_unique").on(
+      table.actorUserId,
+      table.mailboxId,
+      table.requestId,
+      table.threadId
+    ),
+    check(
+      "mail_snooze_operation_expected_version_check",
+      sql`${table.expectedVersion} is null or ${table.expectedVersion} >= 0`
+    ),
+    check(
+      "mail_snooze_operation_resulting_version_check",
+      sql`${table.resultingVersion} is null or ${table.resultingVersion} >= 0`
+    ),
+    check(
+      "mail_snooze_operation_kind_check",
+      sql`${table.kind} in ('snooze', 'reschedule', 'cancel', 'return-now')`
+    ),
+    check(
+      "mail_snooze_operation_status_check",
+      sql`${table.status} in ('pending', 'applied', 'failed', 'uncertain', 'superseded')`
+    ),
+  ]
+);
+
+export const mailboxAiAuthority = pgTable(
+  "mailboxAiAuthority",
+  {
+    automationPaused: boolean("automationPaused").notNull().default(false),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    readOnly: boolean("readOnly").notNull().default(false),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    version: integer("version").notNull().default(0),
+  },
+  (table) => [
+    check("mailbox_ai_authority_version_check", sql`${table.version} >= 0`),
   ]
 );
 
@@ -2397,7 +2627,7 @@ export const managedMailMessage = pgTable(
     ),
     check(
       "managed_mail_message_mailbox_state_check",
-      sql`${table.mailboxState} in ('active', 'draft', 'spam', 'trash')`
+      sql`${table.mailboxState} in ('active', 'done', 'draft', 'spam', 'trash')`
     ),
     check(
       "managed_mail_message_raw_object_provider_check",
@@ -3392,6 +3622,7 @@ export const mailReminderJob = pgTable(
   "mailReminderJob",
   {
     attempts: integer("attempts").notNull(),
+    authorityVersion: integer("authorityVersion"),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     completedAt: timestamp("completedAt", { withTimezone: true }),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3422,6 +3653,10 @@ export const mailReminderJob = pgTable(
     usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
   },
   (table) => [
+    check(
+      "mail_reminder_job_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_reminder_job_ready_idx").on(
       table.kind,
       table.completedAt,
@@ -3452,6 +3687,7 @@ export const mailReminderSuggestion = pgTable(
   "mailReminderSuggestion",
   {
     attempts: integer("attempts").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     automatic: boolean("automatic").notNull(),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3491,6 +3727,10 @@ export const mailReminderSuggestion = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
+    check(
+      "mail_reminder_suggestion_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     unique("mail_reminder_suggestion_source_unique").on(
       table.userId,
       table.mailboxId,
@@ -3516,6 +3756,7 @@ export const gmailComposeOperation = pgTable(
     followUpReminder: jsonb("followUpReminder").$type<{
       userId: string;
       intent: FollowUpReminderIntent;
+      origin?: unknown;
     }>(),
     id: text("id").primaryKey(),
     kind: text("kind").$type<"save" | "send">().notNull(),
@@ -3990,7 +4231,12 @@ export const semanticIndexRequest = pgTable(
 export const scheduledMailSend = pgTable(
   "scheduledMailSend",
   {
+    cancellationOrigin: jsonb("cancellationOrigin").$type<unknown>(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    deliveryKind: text("deliveryKind")
+      .$type<"scheduled" | "undo">()
+      .default("scheduled")
+      .notNull(),
     draftRemovedAt: timestamp("draftRemovedAt", { withTimezone: true }),
     errorMessage: text("errorMessage"),
     id: text("id").primaryKey(),
@@ -4044,6 +4290,10 @@ export const scheduledMailSend = pgTable(
         sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
       ),
     check(
+      "scheduled_mail_send_delivery_kind_check",
+      sql`${table.deliveryKind} in ('scheduled', 'undo')`
+    ),
+    check(
       "scheduled_mail_send_status_check",
       sql`${table.status} in ('preparing', 'scheduled', 'sending', 'sent', 'failed', 'uncertain', 'cancelled')`
     ),
@@ -4069,6 +4319,147 @@ export const scheduledMailSendAbandonment = pgTable(
   ]
 );
 
+export type CalendarBookingReservationStatus =
+  | "reserved"
+  | "creating"
+  | "confirmed"
+  | "failed"
+  | "uncertain"
+  | "cancelled";
+
+export const calendarBookingLink = pgTable(
+  "calendarBookingLink",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    revokedAt: timestamp("revokedAt", { withTimezone: true }),
+    scope: jsonb("scope").$type<unknown>().notNull(),
+    title: text("title").notNull(),
+    tokenHash: text("tokenHash").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("calendar_booking_link_token_unique").on(table.tokenHash),
+    unique("calendar_booking_link_owner_unique").on(table.id, table.userId),
+    index("calendar_booking_link_owner_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+    index("calendar_booking_link_expiry_idx").on(table.expiresAt),
+    check(
+      "calendar_booking_link_token_hash_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`
+    ),
+    check(
+      "calendar_booking_link_scope_check",
+      sql`jsonb_typeof(${table.scope}) = 'object'`
+    ),
+    check(
+      "calendar_booking_link_title_check",
+      sql`length(btrim(${table.title})) > 0 and length(${table.title}) <= 120`
+    ),
+    check(
+      "calendar_booking_link_time_check",
+      sql`${table.expiresAt} > ${table.createdAt}
+        and ${table.updatedAt} >= ${table.createdAt}
+        and (${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt})`
+    ),
+  ]
+);
+
+export const calendarBookingReservation = pgTable(
+  "calendarBookingReservation",
+  {
+    busyEnd: timestamp("busyEnd", { withTimezone: true }).notNull(),
+    busyStart: timestamp("busyStart", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    effectStartedAt: timestamp("effectStartedAt", { withTimezone: true }),
+    end: timestamp("end", { withTimezone: true }).notNull(),
+    eventId: text("eventId"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    linkId: text("linkId").notNull(),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    start: timestamp("start", { withTimezone: true }).notNull(),
+    status: text("status").$type<CalendarBookingReservationStatus>().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.linkId, table.userId],
+      foreignColumns: [calendarBookingLink.id, calendarBookingLink.userId],
+      name: "calendar_booking_reservation_link_owner_fk",
+    }).onDelete("no action"),
+    unique("calendar_booking_reservation_request_unique").on(
+      table.linkId,
+      table.requestId
+    ),
+    index("calendar_booking_reservation_owner_busy_idx").on(
+      table.userId,
+      table.status,
+      table.busyStart,
+      table.busyEnd
+    ),
+    index("calendar_booking_reservation_link_created_idx").on(
+      table.linkId,
+      table.createdAt
+    ),
+    check(
+      "calendar_booking_reservation_request_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'
+        and length(btrim(${table.requestId})) > 0
+        and length(${table.requestId}) <= 255`
+    ),
+    check(
+      "calendar_booking_reservation_bounds_check",
+      sql`${table.start} < ${table.end}
+        and ${table.busyStart} <= ${table.start}
+        and ${table.busyEnd} >= ${table.end}`
+    ),
+    check(
+      "calendar_booking_reservation_time_check",
+      sql`${table.updatedAt} >= ${table.createdAt}
+        and (${table.leaseUntil} is null or ${table.leaseUntil} > ${table.createdAt})
+        and (${table.effectStartedAt} is null or ${table.effectStartedAt} >= ${table.createdAt})
+        and (${table.confirmedAt} is null or ${table.confirmedAt} >= ${table.effectStartedAt})`
+    ),
+    check(
+      "calendar_booking_reservation_state_check",
+      sql`(
+        ${table.status} = 'reserved'
+        and ${table.leaseToken} is not null and length(btrim(${table.leaseToken})) > 0
+        and ${table.leaseUntil} is not null
+        and ${table.effectStartedAt} is null and ${table.confirmedAt} is null
+        and ${table.eventId} is null
+      ) or (
+        ${table.status} in ('creating', 'uncertain')
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is not null and ${table.confirmedAt} is null
+      ) or (
+        ${table.status} = 'confirmed'
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is not null and ${table.confirmedAt} is not null
+        and ${table.eventId} is not null and length(btrim(${table.eventId})) > 0
+      ) or (
+        ${table.status} in ('failed', 'cancelled')
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is null and ${table.confirmedAt} is null
+        and ${table.eventId} is null
+      )`
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4082,6 +4473,8 @@ export const tables = {
   billingCreditUsageEvent,
   billingEntitlementOverride,
   billingSubscription,
+  calendarBookingLink,
+  calendarBookingReservation,
   chat,
   chatMessage,
   connectorCredential,
@@ -4109,7 +4502,10 @@ export const tables = {
   mailDomainConnectAttempt,
   mailImportanceAttempt,
   mailMessageImportance,
+  mailPlacementOperation,
   mailSnippet,
+  mailSnooze,
+  mailSnoozeOperation,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,
@@ -4121,6 +4517,7 @@ export const tables = {
   mailboxAgentRevision,
   mailboxAgentRun,
   mailboxAgentSetting,
+  mailboxAiAuthority,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
@@ -4438,6 +4835,11 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.mailboxAction.mailboxId,
     }),
+    aiAuthority: r.one.mailboxAiAuthority({
+      from: r.mailbox.id,
+      optional: true,
+      to: r.mailboxAiAuthority.mailboxId,
+    }),
     aiMemories: r.many.aiMemory({
       from: r.mailbox.id,
       to: r.aiMemory.mailboxId,
@@ -4683,6 +5085,18 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailboxActionStepRun.runId,
       optional: false,
       to: r.mailboxActionRun.id,
+    }),
+  },
+  mailboxAiAuthority: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxAiAuthority.mailboxId,
+      optional: false,
+      to: r.mailbox.id,
+    }),
+    updatedBy: r.one.user({
+      from: r.mailboxAiAuthority.updatedByUserId,
+      optional: true,
+      to: r.user.id,
     }),
   },
   mailboxAutomationSettings: {
