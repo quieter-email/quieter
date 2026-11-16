@@ -1271,15 +1271,21 @@ const main = async (): Promise<void> => {
       report.result = "native-failure";
     }
   } finally {
-    report.outcomeBeforeCleanup = report.result;
     monitoring.active = false;
     if (monitor) {
       try {
         await monitor;
       } catch (error) {
-        report.error ??= String(error);
+        failure.message ??= String(error);
       }
     }
+    if (failure.message) {
+      report.error ??= failure.message;
+      if (report.result === "observed-pipeline-pass") {
+        report.result = "setup-failure";
+      }
+    }
+    report.outcomeBeforeCleanup = report.result;
     const finishedStage = report.stage;
     report.stage = "cleanup";
     for (const name of [
