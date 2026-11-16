@@ -33,6 +33,7 @@ import { createOutlookProjection } from "../src/outlook/projection";
 import {
   getOutlookMessageInspector,
   getOutlookThread,
+  listOutlookThreads,
 } from "../src/outlook/queries";
 import { disconnectOutlookMailbox } from "../src/outlook/service";
 import {
@@ -331,6 +332,53 @@ afterAll(async () => {
 });
 
 describe("native Outlook storage and current authorization", () => {
+  it("does not acknowledge a concurrent unseen arrival in a completed page token", async () => {
+    const scope = await createMailbox();
+    await hydrateMailbox(scope);
+    const revision = await readOutlookCacheRevision(scope);
+    const entered = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const transport = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (resource, options) => {
+        const request = new Request(resource, options);
+        await request.arrayBuffer();
+        const url = new URL(request.url);
+        if (
+          url.origin !== "https://graph.microsoft.com" ||
+          url.pathname !== "/v1.0/me/messages" ||
+          !url.searchParams.has("$search")
+        ) {
+          throw new Error("Unexpected native search request.");
+        }
+        entered.resolve(true);
+        await release.promise;
+        return Response.json({ value: [] });
+      });
+    const pending = listOutlookThreads({
+      ...scope,
+      category: "inbox",
+      query: "arrival",
+    });
+    try {
+      await entered.promise;
+      await cacheOutlookMessage({
+        expectedChangeKey: null,
+        expectedContentRevision: revision,
+        projection: projection({ subject: "Concurrent arrival" }),
+        scope,
+      });
+      release.resolve(true);
+      const page = await pending;
+      expect(page.messages).toHaveLength(0);
+      expect(Number(page.historyId?.split(":").at(-1))).toBe(revision);
+      expect(await readOutlookCacheRevision(scope)).toBeGreaterThan(revision);
+    } finally {
+      release.resolve(true);
+      await Promise.allSettled([pending]);
+      transport.mockRestore();
+    }
+  });
   it("prunes an absent member of a nonempty authoritative thread from reads and capture", async () => {
     const scope = await createMailbox();
     await hydrateMailbox(scope);

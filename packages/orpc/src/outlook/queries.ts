@@ -3,7 +3,6 @@ import { createHash } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
-  mailbox,
   mailMessageImportance,
   outlookMessage,
   outlookMessageFolder,
@@ -50,7 +49,6 @@ import {
   cacheOutlookMessage,
   createOutlookReadCursor,
   getOutlookCachedMessage,
-  readOutlookFolders,
   readOutlookCacheRevision,
   readOutlookReadCursor,
   readOutlookSyncState,
@@ -590,16 +588,8 @@ export const listOutlookThreads = async (
             },
           });
         }
-        const folders = await readOutlookFolders(scope);
         coverage = {
-          complete:
-            state.state === "ready" &&
-            folders.every(
-              (folder) =>
-                folder.lastCompletedAt !== null &&
-                folder.state === "ready" &&
-                !folder.hasPendingPage
-            ),
+          complete: state.coverageComplete,
           scope: "mailbox",
         };
       } else {
@@ -664,22 +654,9 @@ export const listOutlookThreads = async (
           scope: "search",
         };
       }
-      const [current] = await db
-        .select({ contentRevision: mailbox.contentRevision })
-        .from(mailbox)
-        .where(
-          and(
-            eq(mailbox.id, scope.mailboxId),
-            eq(mailbox.ownerUserId, scope.userId),
-            eq(mailbox.provider, "outlook")
-          )
-        );
-      if (current === undefined) {
-        throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
-      }
       return {
         coverage,
-        historyId: `outlook:${createHash("sha256").update(scope.mailboxId).digest("hex")}:${scope.generation}:${current.contentRevision}`,
+        historyId: `outlook:${createHash("sha256").update(scope.mailboxId).digest("hex")}:${scope.generation}:${state.contentRevision}`,
         messages,
         nextPageToken,
       };

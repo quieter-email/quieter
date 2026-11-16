@@ -335,7 +335,7 @@ export const getOutlookCachedThread = async (
 
 export const readOutlookSyncState = async (scope: OutlookCacheScope) =>
   await db.transaction(async (tx) => {
-    await lockScope(tx, scope, "read");
+    const owned = await lockScope(tx, scope, "read");
     const [state] = await tx
       .select()
       .from(outlookSyncState)
@@ -357,7 +357,26 @@ export const readOutlookSyncState = async (scope: OutlookCacheScope) =>
         message: "The mailbox sync state could not be read.",
       });
     }
+    const [pending] = await tx
+      .select({ folderId: outlookFolder.folderId })
+      .from(outlookFolder)
+      .where(
+        and(
+          eq(outlookFolder.mailboxId, scope.mailboxId),
+          or(
+            ne(outlookFolder.state, "ready"),
+            isNull(outlookFolder.lastCompletedAt),
+            sql`${outlookFolder.encryptedNextLink} is not null`
+          )
+        )
+      )
+      .limit(1);
     return {
+      contentRevision: owned.contentRevision,
+      coverageComplete:
+        state.state === "ready" &&
+        state.folderDiscoveryCompletedAt !== null &&
+        pending === undefined,
       discoveryCompletedAt: state.folderDiscoveryCompletedAt,
       state: state.state,
       systemFolders: systemFolders.data,
@@ -1026,7 +1045,7 @@ export const releaseOutlookDiscovery = async (input: {
     const { lease } = input;
     await lockScope(tx, lease.scope, "write");
     const now = new Date();
-    await tx
+    const changed = await tx
       .update(outlookSyncState)
       .set({
         ...(input.resetCursor === true
@@ -1050,7 +1069,11 @@ export const releaseOutlookDiscovery = async (input: {
           eq(outlookSyncState.checkpointVersion, lease.checkpointVersion),
           eq(outlookSyncState.leaseId, lease.leaseId)
         )
-      );
+      )
+      .returning({ mailboxId: outlookSyncState.mailboxId });
+    if (input.resetCursor === true && changed.length > 0) {
+      await advanceOutlookContentRevision(tx, lease.scope, now);
+    }
   });
 };
 
@@ -1061,7 +1084,7 @@ export const releaseOutlookMessageSlice = async (input: {
   await db.transaction(async (tx) => {
     const { lease } = input;
     await lockScope(tx, lease.scope, "write");
-    await tx
+    const changed = await tx
       .update(outlookFolder)
       .set({
         ...(input.resetCursor === true
@@ -1086,7 +1109,11 @@ export const releaseOutlookMessageSlice = async (input: {
           eq(outlookFolder.leaseId, lease.leaseId),
           eq(outlookFolder.syncEpoch, lease.epoch)
         )
-      );
+      )
+      .returning({ folderId: outlookFolder.folderId });
+    if (input.resetCursor === true && changed.length > 0) {
+      await advanceOutlookContentRevision(tx, lease.scope, new Date());
+    }
   });
 };
 
