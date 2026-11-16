@@ -13,7 +13,7 @@ const eventIdSchema = z
 // A guest-data fingerprint remains private data and must not enter telemetry.
 const requestHashSchema = z
   .string()
-  .regex(/^[\da-f]{64}$/iu)
+  .regex(/^[\da-f]{64}$/u)
   .brand<"BookingRequestHash">();
 const reservationShape = {
   busyEnd: z.date(),

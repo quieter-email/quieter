@@ -101,6 +101,7 @@ describe("private reservation row boundary", () => {
     { ...reserved, createdAt: new Date(Number.NaN) },
     { ...reserved, requestId: "e0ea95e7-2fa7-1ba2-9a42-6fb9a3c2cb51" },
     { ...reserved, requestHash: "not-a-sha256-fingerprint" },
+    { ...reserved, requestHash: reserved.requestHash.toUpperCase() },
     { ...reserved, id: "" },
     { ...reserved, linkId: "" },
     { ...reserved, userId: "" },
