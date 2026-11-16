@@ -2,7 +2,10 @@
 import "fake-indexeddb/auto";
 import type { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
-import { createEmptyComposeDraft } from "@quieter/app/features/compose/domain/draft";
+import {
+  createComposeInlineImagesFromFiles,
+  createEmptyComposeDraft,
+} from "@quieter/app/features/compose/domain/draft";
 import { restoreComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import type { toastError } from "@quieter/app/lib/error-toast";
@@ -48,6 +51,12 @@ const boundary = vi.hoisted(
     autosave: (() => Promise<boolean>) | null;
     navigate: (() => Promise<boolean>) | null;
     mailboxId: string;
+    workspacePresent: boolean;
+    unresolvedFields: ReturnType<typeof vi.fn<(fields: string[]) => void>>;
+    readiness: ReturnType<
+      typeof vi.fn<typeof rpc.mail.getComposeSendReadiness>
+    >;
+    schedule: ReturnType<typeof vi.fn<typeof rpc.scheduledSends.create>>;
     sessionId: string;
     getDraft: ReturnType<typeof vi.fn<typeof rpc.mail.getDraft>>;
     getAttachment: ReturnType<typeof vi.fn<typeof rpc.mail.getAttachment>>;
@@ -66,11 +75,15 @@ const boundary = vi.hoisted(
     getHeldSend: vi.fn<typeof rpc.mail.getHeldSend>(),
     mailboxId: "mailbox",
     navigate: null,
+    readiness: vi.fn<typeof rpc.mail.getComposeSendReadiness>(),
     saveDraft: vi.fn<typeof rpc.mail.saveDraft>(),
+    schedule: vi.fn<typeof rpc.scheduledSends.create>(),
     sendMessage: vi.fn<typeof rpc.mail.sendMessage>(),
     sessionId: "session",
     toastError: vi.fn<typeof toastError>(),
     undoSend: vi.fn<typeof rpc.mail.undoSend>(),
+    unresolvedFields: vi.fn<(fields: string[]) => void>(),
+    workspacePresent: true,
   })
 );
 
@@ -83,12 +96,14 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
       ...actual.rpc.mail,
       deleteDraft: boundary.deleteDraft,
       getAttachment: boundary.getAttachment,
+      getComposeSendReadiness: boundary.readiness,
       getDraft: boundary.getDraft,
       getHeldSend: boundary.getHeldSend,
       saveDraft: boundary.saveDraft,
       sendMessage: boundary.sendMessage,
       undoSend: boundary.undoSend,
     },
+    scheduledSends: { ...actual.rpc.scheduledSends, create: boundary.schedule },
   };
   return { ...actual, orpc: createTanstackQueryUtils(rpc), rpc };
 });
@@ -191,7 +206,9 @@ vi.mock("@quieter/app/features/chat/domain/workspace-context", () => {
       };
     },
   };
-  return { useAgentWorkspace: () => workspace };
+  return {
+    useAgentWorkspace: () => (boundary.workspacePresent ? workspace : null),
+  };
 });
 
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
@@ -251,6 +268,19 @@ const initial = (): ComposeDraftState => ({
   subject: "Proposal",
 });
 
+const quoted = (): ComposeDraftState => ({
+  ...initial(),
+  assistantUnsaved: true,
+  bodyHtml:
+    '<p>My reply.</p><p data-compose-quote="lead">Source wrote:</p><blockquote data-compose-quote="body"><p>{{?inherited}}</p></blockquote>',
+  bodyText: "My reply.\nSource wrote:\n{{?inherited}}",
+  draftAnchor: {
+    seededBy: "reply",
+    sourceMessageId: "source-message",
+    sourceThreadId: "source-thread",
+  },
+});
+
 const canonicalDraft = (): RouterOutputs["mail"]["getDraft"] => ({
   attachments: [],
   baseRevision: "canonical-revision",
@@ -278,7 +308,7 @@ const mount = async (draft = initial(), initialDraftNeedsSave = false) => {
       initialDraftNeedsSave,
       mailboxId,
       normalizeHtml: (html) => html,
-      onUnresolvedSnippetFields: vi.fn<(fields: string[]) => void>(),
+      onUnresolvedSnippetFields: boundary.unresolvedFields,
     });
     useLayoutEffect(() => {
       controller = value;
@@ -305,6 +335,26 @@ describe("compose controller", () => {
     vi.clearAllMocks();
     boundary.compose = null;
     boundary.mailboxId = "mailbox";
+    boundary.workspacePresent = true;
+    boundary.readiness.mockResolvedValue({ unresolvedSnippetFields: [] });
+    boundary.schedule.mockImplementation(
+      async (input) =>
+        await Promise.resolve({
+          canUndo: false,
+          deliveryKind: "scheduled",
+          errorMessage: null,
+          id: "scheduled",
+          mailboxId: input.mailboxId,
+          restoredDraftId: null,
+          sendAt: input.sendAt,
+          sendOperationId:
+            input.message.sendOperationId ?? "scheduled-operation",
+          status: "scheduled",
+          subject: input.message.subject,
+          timeZone: input.timeZone,
+          to: input.message.recipients.to,
+        })
+    );
     await draftRecoveryJournal.captureCleanup()?.();
     boundary.sessionId = crypto.randomUUID();
     await draftRecoveryJournal.setUser("user", boundary.sessionId);
@@ -379,6 +429,254 @@ describe("compose controller", () => {
     container.remove();
     vi.restoreAllMocks();
     await draftRecoveryJournal.captureCleanup()?.();
+  });
+
+  describe("contextual snippet readiness", () => {
+    it.each(["send", "schedule"] as const)(
+      "admits unchanged inherited content for explicit %s after current readiness",
+      async (kind) => {
+        const draft = quoted();
+        await mount(draft);
+        const operation = controller.state.draft.sendOperationId;
+        await act(async () => {
+          if (kind === "send") {
+            await controller.form.handleSubmit();
+          } else {
+            await controller.handleScheduleMessage({
+              sendAt: new Date(Date.now() + 120_000).toISOString(),
+              timeZone: "UTC",
+            });
+          }
+        });
+        expect(boundary.readiness).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            bodyHtml: draft.bodyHtml,
+            bodyText: draft.bodyText,
+            draftAnchor: draft.draftAnchor,
+            inlineImages: [],
+            mailboxId: "mailbox",
+          })
+        );
+        const sent =
+          kind === "send"
+            ? boundary.sendMessage.mock.calls[0]?.[0]
+            : boundary.schedule.mock.calls[0]?.[0];
+        expect(sent?.message).toMatchObject({
+          bodyHtml: draft.bodyHtml,
+          bodyText: draft.bodyText,
+          sendOperationId: operation,
+        });
+        expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+        expect(boundary.saveDraft).not.toHaveBeenCalled();
+      }
+    );
+
+    it("keeps authored new-message warnings local and strict", async () => {
+      await mount({ ...quoted(), draftAnchor: null });
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(boundary.readiness).not.toHaveBeenCalled();
+      expect(boundary.unresolvedFields).toHaveBeenCalledWith(["inherited"]);
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(controller.state.draft.assistantUnsaved).toBeTruthy();
+    });
+
+    it("keeps denied proposals local and sends metadata without runtime files", async () => {
+      const images = createComposeInlineImagesFromFiles([
+        new File(["image"], "diagram.png", { type: "image/png" }),
+      ]);
+      await mount({
+        ...quoted(),
+        bodyHtml: `${quoted().bodyHtml}${images.map((image) => `<img data-compose-inline-id="${image.id}" src="cid:${image.contentId}">`).join("")}`,
+        inlineImages: images,
+      });
+      boundary.readiness.mockResolvedValueOnce({
+        unresolvedSnippetFields: ["authored"],
+      });
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(boundary.readiness).toHaveBeenCalledOnce();
+      const request = boundary.readiness.mock.calls[0]?.[0];
+      expect(request?.inlineImages).toHaveLength(1);
+      for (const image of request?.inlineImages ?? []) {
+        expect(image).not.toHaveProperty("file");
+      }
+      expect(boundary.unresolvedFields).toHaveBeenCalledWith(["authored"]);
+      await act(async () => {
+        await boundary.autosave?.();
+      });
+      expect(boundary.saveDraft).not.toHaveBeenCalled();
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(boundary.schedule).not.toHaveBeenCalled();
+      expect(controller.state.draft).toMatchObject({
+        assistantUnsaved: true,
+        saveStatus: "idle",
+      });
+    });
+
+    it("reports readiness errors without authorizing proposal persistence", async () => {
+      await mount(quoted());
+      const failure = new Error("Source unavailable");
+      boundary.readiness.mockRejectedValueOnce(failure);
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(boundary.toastError).toHaveBeenCalledWith(
+        failure,
+        expect.anything()
+      );
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(boundary.saveDraft).not.toHaveBeenCalled();
+      expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+      expect(controller.state.draft.assistantUnsaved).toBeTruthy();
+    });
+
+    it.each([
+      "edit",
+      "without-workspace",
+      "mailbox",
+      "close",
+      "unmount",
+      "held",
+      "sender",
+    ] as const)("ignores late readiness after %s changes", async (change) => {
+      if (change === "without-workspace") {
+        boundary.workspacePresent = false;
+      }
+      const rerender = await mount(quoted());
+      const pending =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness.mockReturnValueOnce(pending.promise);
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      expect(boundary.readiness).toHaveBeenCalledOnce();
+      if (change === "edit" || change === "without-workspace") {
+        await flush(() => {
+          controller.form.setFieldValue("subject", "Newer subject");
+        });
+      } else if (change === "mailbox") {
+        await rerender("other-mailbox");
+      } else if (change === "close") {
+        await act(async () => {
+          await controller.closeComposeDialog();
+        });
+      } else if (change === "unmount") {
+        await flush(() => {
+          root.render(null);
+        });
+      } else if (change === "held") {
+        await act(async () => {
+          await readCompose().applyHeldReceipt(receiptFor());
+        });
+      } else {
+        const transfer = await act(
+          async () => await controller.prepareSenderSwitch()
+        );
+        if (transfer === null) {
+          throw new Error("Sender switch was not prepared.");
+        }
+        await flush(() => {
+          transfer?.release();
+        });
+      }
+      await act(async () => {
+        pending.resolve({
+          unresolvedSnippetFields: change === "edit" ? ["late-field"] : [],
+        });
+        await sending;
+      });
+      expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(boundary.schedule).not.toHaveBeenCalled();
+      expect(boundary.saveDraft).not.toHaveBeenCalled();
+      expect(controller.state.draft.assistantUnsaved).toBeTruthy();
+    });
+
+    it("ignores a late readiness error after an edit", async () => {
+      await mount(quoted());
+      const pending =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness.mockReturnValueOnce(pending.promise);
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      await flush(() => {
+        controller.form.setFieldValue("bodyText", "My newer reply.");
+      });
+      await act(async () => {
+        pending.reject(new Error("Old read failed"));
+        await sending;
+      });
+      expect(boundary.toastError).not.toHaveBeenCalled();
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(controller.state.draft.assistantUnsaved).toBeTruthy();
+    });
+
+    it("does not create two sends when submit is repeated while readiness waits", async () => {
+      await mount(quoted());
+      const first =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      const second =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      let firstSend: Promise<void> | undefined;
+      let secondSend: Promise<void> | undefined;
+      await flush(() => {
+        firstSend = controller.form.handleSubmit();
+      });
+      await flush(() => {
+        secondSend = controller.form.handleSubmit();
+      });
+      await act(async () => {
+        first.resolve({ unresolvedSnippetFields: [] });
+        await firstSend;
+      });
+      await act(async () => {
+        second.resolve({ unresolvedSnippetFields: [] });
+        await secondSend;
+      });
+      expect(boundary.sendMessage).toHaveBeenCalledOnce();
+      expect(boundary.saveDraft).not.toHaveBeenCalled();
+      expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+    });
+
+    it("retains valid readiness while an ordinary autosave completes", async () => {
+      await mount({ ...quoted(), assistantUnsaved: false }, true);
+      const pending =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness.mockReturnValueOnce(pending.promise);
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      await act(async () => {
+        await boundary.autosave?.();
+      });
+      expect(boundary.saveDraft).toHaveBeenCalledOnce();
+      await act(async () => {
+        pending.resolve({ unresolvedSnippetFields: [] });
+        await sending;
+      });
+      expect(boundary.sendMessage).toHaveBeenCalledOnce();
+      expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+    });
   });
 
   describe("held composer receipts", () => {
