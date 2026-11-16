@@ -1434,6 +1434,20 @@ const ReadyComposeSurface = ({
                               shortcutId="compose-send"
                             />
                           </ToolbarButton>
+                          {state.draft.assistantUnsaved === true &&
+                          state.draft.sendUncertain !== true ? (
+                            <ToolbarButton
+                              disabled={
+                                !canEditBody || senderUnavailable || audioBusy
+                              }
+                              onClick={() => {
+                                void compose.saveDraft();
+                              }}
+                              type="button"
+                            >
+                              Save draft
+                            </ToolbarButton>
+                          ) : null}
                           <ComposeScheduleSend
                             disabled={
                               !canEditBody ||
@@ -1613,7 +1627,6 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     !!initialDraft &&
     demoMode !== true &&
     managedDemoMode !== true &&
-    props.initialDraftNeedsSave !== true &&
     (!!initialDraft.draftId ||
       [...initialDraft.attachments, ...initialDraft.inlineImages].some(
         (asset) => !!asset.gmailAttachmentId
@@ -1688,7 +1701,11 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       if (draft.sendUncertain === true) {
         return draft;
       }
-      if (seed.draftId) {
+      if (
+        seed.draftId &&
+        draft.assistantUnsaved !== true &&
+        props.initialDraftNeedsSave !== true
+      ) {
         const saved = await rpc.mail.getDraft(
           { draftId: seed.draftId, mailboxId },
           { signal }
@@ -1878,6 +1895,7 @@ export const ComposeWorkspace = ({
       ([sourceMailboxId, draft]) =>
         sourceMailboxId !== senderSession.mailboxId &&
         sourceMailboxId !== "" &&
+        draft.assistantUnsaved !== true &&
         (draft.draftId?.trim() ?? "") !== ""
     );
     cleanupPromiseRef.current = (async () => {
@@ -1972,6 +1990,7 @@ export const ComposeWorkspace = ({
             draft: savedDraft
               ? {
                   ...savedDraft,
+                  assistantUnsaved: transferDraft.assistantUnsaved,
                   attachments: transferDraft.attachments,
                   bodyHtml: transferDraft.bodyHtml,
                   bodyText: transferDraft.bodyText,

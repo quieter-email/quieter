@@ -59,6 +59,7 @@ export type ComposeDraftState = {
   sendUncertain?: boolean;
   scheduleAttempt?: ScheduledSendTime;
   holdAttempt?: boolean;
+  heldDraftHasNewerEdits?: boolean;
   senderName?: string;
   errorMessage: string | null;
   lastSavedAt?: number;

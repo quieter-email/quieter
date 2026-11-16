@@ -13,6 +13,7 @@ import {
   composeFormValuesToDraft,
   draftToComposeFormValues,
   shouldPersistComposeDraft,
+  writeComposeFormValues,
 } from "@quieter/app/features/compose/domain/compose-form";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
@@ -25,6 +26,7 @@ import {
   cloneComposeDraftRuntimeFiles,
   createComposeInlineImagesFromFiles,
   createEmptyComposeDraft,
+  createRecoveredComposeCopy,
   deleteComposeDraft,
   removeComposeRuntimeFile,
   hasComposeDraftContent,
@@ -64,17 +66,55 @@ import {
 } from "@quieter/mail/compose/schema";
 import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
 import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
+import type { RouterOutputs } from "@quieter/orpc";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useBlocker } from "@tanstack/react-router";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import {
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 
 import { recoverComposeSchedule } from "../domain/scheduled-recovery";
 
 type ComposeDraftUpdate =
   | ComposeDraftState
   | ((current: ComposeDraftState) => ComposeDraftState);
+
+type ComposeBridge = NonNullable<
+  ReturnType<NonNullable<ReturnType<typeof useAgentWorkspace>>["getCompose"]>
+>;
+
+export type ComposeHeldReceipt = Pick<
+  NonNullable<RouterOutputs["mail"]["getHeldSend"]>,
+  "sendOperationId" | "status" | "canUndo" | "undoUntil"
+> & {
+  mailboxId: string;
+  draftId: string;
+  draftRevision: number;
+  restoredDraftId: string | null;
+};
+
+type HeldTask = {
+  mailboxId: string;
+  localId: string;
+  sendOperationId: string;
+  promise: Promise<HeldCompletionResult>;
+};
+
+type HeldCompletionResult =
+  | { kind: "complete" }
+  | { kind: "failed"; error: unknown };
+
+type HeldCompletion =
+  | { kind: "undo" }
+  | { kind: "abandoned" }
+  | { kind: "accepted" }
+  | { kind: "canceled"; draftId: string | null };
 
 const SUPPRESSED_RECIPIENT_MESSAGE =
   "This message includes a recipient that can no longer receive mail from this team.";
@@ -94,6 +134,9 @@ export const getDraftStatusMessage = (
   }
   if (draft.saveStatus === "saving") {
     return "Saving draft…";
+  }
+  if (draft.assistantUnsaved === true) {
+    return "Unsaved changes";
   }
   if (draft.saveStatus === "saved") {
     return "Draft saved";
@@ -172,7 +215,6 @@ export const useComposeDialogController = ({
   });
   // oxlint-disable-next-line react/hook-use-state -- Later draft and action changes write the form explicitly.
   const [defaultValues] = useState(() => draftToComposeFormValues(state.draft));
-  const assistantUnsavedRef = useRef(state.draft.assistantUnsaved === true);
   const needsSaveRef = useRef(initialDraftNeedsSave && persistDrafts);
   const activeDraftRef = useRef(state.draft);
   const runtimeDraftRef = useRef(state.draft);
@@ -188,10 +230,20 @@ export const useComposeDialogController = ({
   const navigationCleanupRef = useRef(false);
   const senderSourceUnavailableRef = useRef(false);
   const draftRevisionRef = useRef(0);
+  const restoredDraftRevisionRef = useRef(0);
   const retryableSaveErrorRef = useRef(false);
   const saveErrorReportedRef = useRef(false);
   const saveConflictRef = useRef(false);
   const scheduleRequestRef = useRef<ScheduledSendTime | null>(null);
+  const heldTaskRef = useRef<HeldTask | null>(null);
+  const currentMailboxIdRef = useRef(mailboxId);
+  useLayoutEffect(() => {
+    currentMailboxIdRef.current = mailboxId;
+  }, [mailboxId]);
+  const heldTerminalRef = useRef<{
+    sendOperationId: string;
+    completion: Exclude<HeldCompletion, { kind: "undo" }>;
+  } | null>(null);
   const [canSaveDraftCopy, setCanSaveDraftCopy] = useState(false);
   const previousActionRef = useRef({
     attachments: state.draft.draftId
@@ -241,12 +293,14 @@ export const useComposeDialogController = ({
     const draft = activeDraftRef.current;
 
     return composeFormValuesToDraft(values, {
+      assistantUnsaved: draft.assistantUnsaved,
       attachments: draft.attachments,
       baseRevision: draft.baseRevision,
       draftAnchor: draft.draftAnchor,
       draftId: draft.draftId,
       errorMessage: null,
       followUpReminder: draft.followUpReminder,
+      heldDraftHasNewerEdits: draft.heldDraftHasNewerEdits,
       holdAttempt: draft.holdAttempt,
       inlineImages: draft.inlineImages,
       lastSavedAt: draft.lastSavedAt,
@@ -431,6 +485,7 @@ export const useComposeDialogController = ({
 
     setDraft((current) => ({
       ...current,
+      assistantUnsaved: false,
       errorMessage: null,
       holdAttempt:
         !schedule && !demoMode && !managedDemoMode ? true : undefined,
@@ -548,13 +603,15 @@ export const useComposeDialogController = ({
     enabled: persistDrafts && !demoMode && !managedDemoMode && state.open,
     getDraft: () => ({
       ...buildDraftFromForm(form.state.values),
-      assistantUnsaved: assistantUnsavedRef.current,
       errorMessage: activeDraftRef.current.errorMessage,
       saveStatus: activeDraftRef.current.saveStatus,
     }),
     mailboxId,
     queryClient,
     subscribe: (onChange) => form.store.subscribe(onChange),
+  });
+  const checkpointRecovery = useEffectEvent(() => {
+    recovery.checkpoint();
   });
 
   const mountedRef = useRef(false);
@@ -565,6 +622,7 @@ export const useComposeDialogController = ({
       !draftClosedRef.current &&
       !needsSaveRef.current &&
       !senderSourceUnavailableRef.current &&
+      activeDraftRef.current.assistantUnsaved !== true &&
       activeDraftRef.current.sendUncertain !== true &&
       activeDraftRef.current.saveStatus !== "sending" &&
       composeDraftFormValuesSchema.safeParse(form.state.values).success &&
@@ -607,14 +665,13 @@ export const useComposeDialogController = ({
 
   const applyAssistantReceipt = useEffectEvent(
     (
-      receipt: Parameters<
-        NonNullable<
-          ReturnType<NonNullable<typeof agentWorkspace>["getCompose"]>
-        >["applyReceipt"]
-      >[0],
+      receipt: Parameters<ComposeBridge["applyReceipt"]>[0],
       matchesRevision: boolean
     ) => {
-      if (receipt.draftId !== activeDraftRef.current.localId) {
+      if (
+        receipt.draftId !== activeDraftRef.current.localId ||
+        receipt.draftRevision < restoredDraftRevisionRef.current
+      ) {
         return;
       }
       if (receipt.status === "sent") {
@@ -624,11 +681,11 @@ export const useComposeDialogController = ({
         setState((currentState) => ({ ...currentState, open: false }));
         onClose?.();
       } else {
-        if (matchesRevision) {
-          assistantUnsavedRef.current = false;
-        }
         const draft = {
           ...activeDraftRef.current,
+          assistantUnsaved: matchesRevision
+            ? false
+            : activeDraftRef.current.assistantUnsaved,
           attachments: activeDraftRef.current.attachments.map((asset) => {
             const saved = receipt.attachments?.find(
               (candidate) => candidate.id === asset.id
@@ -659,131 +716,20 @@ export const useComposeDialogController = ({
     }
   );
 
-  useEffect((): (() => void) | undefined => {
-    if (
-      !editorReady ||
-      !agentWorkspace ||
-      agentWorkspace.mailboxId !== mailboxId
-    ) {
-      return undefined;
-    }
-    let previousValues = form.state.values;
-    const subscription = form.store.subscribe(() => {
-      if (
-        [
-          "to",
-          "cc",
-          "bcc",
-          "senderName",
-          "subject",
-          "bodyText",
-          "bodyHtml",
-        ].some(
-          (field) =>
-            Reflect.get(previousValues, field) !==
-            Reflect.get(form.state.values, field)
-        )
-      ) {
-        previousValues = form.state.values;
-        draftRevisionRef.current += 1;
-      }
-    });
-    const unregister = agentWorkspace.registerCompose({
-      applyReceipt: (receipt) => {
-        const matchesRevision =
-          receipt.draftRevision === draftRevisionRef.current;
-        if (receipt.status === "draft_saved" || matchesRevision) {
-          applyAssistantReceipt(receipt, matchesRevision);
-        }
-      },
-      edit: (values, expectedRevision) => {
-        if (
-          expectedRevision !== draftRevisionRef.current ||
-          finishingRef.current ||
-          activeDraftRef.current.sendUncertain === true ||
-          activeDraftRef.current.saveStatus === "sending" ||
-          activeDraftRef.current.saveStatus === "saving"
-        ) {
-          throw new Error("The draft changed. Read it again before editing.");
-        }
-        let bodyHtml: string | undefined;
-        if (values.bodyText !== undefined) {
-          const currentBody = new DOMParser().parseFromString(
-            form.state.values.bodyHtml,
-            "text/html"
-          );
-          const retainedParts = [
-            ...currentBody.body.querySelectorAll<HTMLElement>(
-              ':scope > [data-compose-quote], :scope > [data-quieter-signature="true"]'
-            ),
-          ];
-          const retainedHtml = retainedParts
-            .map((element) => element.outerHTML)
-            .join("");
-          const retainedImages = getReferencedComposeActionImages(
-            retainedHtml,
-            activeDraftRef.current.inlineImages
-          );
-          if (
-            activeDraftRef.current.inlineImages.some(
-              (asset) => !retainedImages.some((image) => image.id === asset.id)
-            ) ||
-            (activeDraftRef.current.draftAnchor &&
-              !currentBody.body.querySelector(":scope > [data-compose-quote]"))
-          ) {
-            throw new Error(
-              "Edit this message in the composer to keep its images and conversation quote intact."
-            );
-          }
-          bodyHtml = `${textToComposeBodyHtml(values.bodyText)}${retainedHtml}`;
-        }
-        assistantUnsavedRef.current = true;
-        for (const field of ["to", "cc", "bcc", "subject"] as const) {
-          const value = values[field];
-          if (value !== undefined) {
-            form.setFieldValue(field, value);
-          }
-        }
-        if (bodyHtml !== undefined) {
-          form.setFieldValue("bodyHtml", bodyHtml);
-          form.setFieldValue("bodyText", getTextFromHtml(bodyHtml));
-        }
-        setState((currentState) => ({
-          ...currentState,
-          showBcc: form.state.values.bcc.length > 0,
-          showCc: form.state.values.cc.length > 0,
-        }));
-        setDraft((current) => ({
-          ...current,
-          errorMessage: null,
-          saveStatus: "idle",
-        }));
-      },
-      read: () => ({
-        attachments: activeDraftRef.current.attachments,
-        baseRevision: activeDraftRef.current.baseRevision,
-        draftAnchor: activeDraftRef.current.draftAnchor,
-        draftId: activeDraftRef.current.localId,
-        draftRevision: draftRevisionRef.current,
-        followUpReminder: activeDraftRef.current.followUpReminder,
-        inlineImages: activeDraftRef.current.inlineImages,
-        messageId: activeDraftRef.current.messageId,
-        providerDraftId: activeDraftRef.current.draftId,
-        replyContext: activeDraftRef.current.replyContext,
-        sendOperationId: activeDraftRef.current.sendOperationId,
-        sendUncertain: activeDraftRef.current.sendUncertain,
-        values: { ...form.state.values },
-      }),
-    });
-    return () => {
-      subscription.unsubscribe();
-      unregister();
-    };
-  }, [agentWorkspace, editorReady, form, getTextFromHtml, mailboxId]);
-
-  const persistDraftSnapshot = async (hydrateAttachments = false) => {
+  const persistDraftSnapshot = async (
+    hydrateAttachments = false,
+    authorizeProposal = false
+  ) => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
+    const savedRevision = draftRevisionRef.current;
+    if (
+      draft.sendUncertain === true ||
+      (draft.assistantUnsaved === true && !authorizeProposal)
+    ) {
+      recovery.checkpoint();
+      return true;
+    }
     if (
       persistDrafts &&
       hasComposeDraftContent(draft) &&
@@ -797,23 +743,31 @@ export const useComposeDialogController = ({
       });
       return false;
     }
+    if (mailboxId === null || mailboxId === "" || !persistDrafts) {
+      return true;
+    }
     if (
-      mailboxId === null ||
-      mailboxId === "" ||
-      !persistDrafts ||
-      (!needsSaveRef.current &&
-        !hydrateAttachments &&
-        !shouldPersistComposeDraft({
-          currentDraft: {
-            ...lastSavedDraftRef.current,
-            saveStatus: recoveredChangesRef.current
-              ? "error"
-              : activeDraftRef.current.saveStatus,
-          },
-          nextDraft: draft,
-          values,
-        }))
+      !needsSaveRef.current &&
+      !hydrateAttachments &&
+      !shouldPersistComposeDraft({
+        currentDraft: {
+          ...lastSavedDraftRef.current,
+          saveStatus: recoveredChangesRef.current
+            ? "error"
+            : activeDraftRef.current.saveStatus,
+        },
+        nextDraft: draft,
+        values,
+      })
     ) {
+      if (
+        authorizeProposal &&
+        draft.assistantUnsaved === true &&
+        draft.draftId
+      ) {
+        setDraft({ ...draft, assistantUnsaved: false, saveStatus: "saved" });
+        recovery.checkpoint();
+      }
       return true;
     }
     setDraft({
@@ -832,6 +786,15 @@ export const useComposeDialogController = ({
         saved = await saveComposeDraft(mailboxId, draft);
       }
     } catch (error) {
+      if (
+        !mountedRef.current ||
+        currentMailboxIdRef.current !== mailboxId ||
+        activeDraftRef.current.localId !== draft.localId ||
+        activeDraftRef.current.sendOperationId !== draft.sendOperationId ||
+        draftClosedRef.current
+      ) {
+        return true;
+      }
       retryableSaveErrorRef.current = shouldRetryOrpcError(0, error);
       const data =
         typeof error === "object" && error !== null && "data" in error
@@ -867,6 +830,16 @@ export const useComposeDialogController = ({
       }
       return false;
     }
+    const current = buildDraftFromForm(form.state.values);
+    if (
+      !mountedRef.current ||
+      currentMailboxIdRef.current !== mailboxId ||
+      current.localId !== draft.localId ||
+      current.sendOperationId !== draft.sendOperationId ||
+      draftClosedRef.current
+    ) {
+      return true;
+    }
     lastSavedDraftRef.current = saved;
     needsSaveRef.current = false;
     recoveredChangesRef.current = false;
@@ -874,7 +847,6 @@ export const useComposeDialogController = ({
     saveErrorReportedRef.current = false;
     saveConflictRef.current = false;
     setCanSaveDraftCopy(false);
-    const current = buildDraftFromForm(form.state.values);
     const attachments = activeDraftRef.current.attachments.map((attachment) => {
       const savedAttachment = saved.attachments.find(
         (asset) => asset.id === attachment.id
@@ -895,6 +867,10 @@ export const useComposeDialogController = ({
     }
     setDraft({
       ...current,
+      assistantUnsaved:
+        authorizeProposal && savedRevision === draftRevisionRef.current
+          ? false
+          : current.assistantUnsaved,
       attachments,
       baseRevision: saved.baseRevision,
       draftId: saved.draftId,
@@ -922,7 +898,8 @@ export const useComposeDialogController = ({
 
   const persistCurrentDraft = async (
     background = false,
-    hydrateAttachments = false
+    hydrateAttachments = false,
+    authorizeProposal = false
   ): Promise<boolean> => {
     while (savingRef.current !== null) {
       await savingRef.current;
@@ -931,7 +908,7 @@ export const useComposeDialogController = ({
       background &&
       (finishingRef.current ||
         draftClosedRef.current ||
-        assistantUnsavedRef.current ||
+        activeDraftRef.current.assistantUnsaved === true ||
         activeDraftRef.current.sendUncertain === true ||
         activeDraftRef.current.saveStatus === "sending" ||
         (activeDraftRef.current.saveStatus === "error" &&
@@ -939,7 +916,7 @@ export const useComposeDialogController = ({
     ) {
       return true;
     }
-    const saving = persistDraftSnapshot(hydrateAttachments);
+    const saving = persistDraftSnapshot(hydrateAttachments, authorizeProposal);
     savingRef.current = saving;
     try {
       return await saving;
@@ -966,16 +943,44 @@ export const useComposeDialogController = ({
       ...activeDraftRef.current.attachments,
       ...activeDraftRef.current.inlineImages,
     ].some((asset) => asset.gmailAttachmentId !== undefined);
+    const sourceDraft = activeDraftRef.current;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
       if (
         !sourceUnavailable &&
+        activeDraftRef.current.assistantUnsaved !== true &&
         !(await persistCurrentDraft(false, hasProviderAttachments))
       ) {
         return null;
       }
-      const current = buildDraftFromForm(form.state.values);
+      let current = buildDraftFromForm(form.state.values);
+      if (
+        !mountedRef.current ||
+        draftClosedRef.current ||
+        currentMailboxIdRef.current !== mailboxId ||
+        activeDraftRef.current.localId !== sourceDraft.localId ||
+        current.sendUncertain === true
+      ) {
+        return null;
+      }
+      if (
+        current.assistantUnsaved === true &&
+        hasProviderAttachments &&
+        mailboxId &&
+        !sourceUnavailable
+      ) {
+        current = await prepareLoadedComposeDraft(mailboxId, current);
+        if (
+          !mountedRef.current ||
+          draftClosedRef.current ||
+          currentMailboxIdRef.current !== mailboxId ||
+          activeDraftRef.current.localId !== sourceDraft.localId ||
+          buildDraftFromForm(form.state.values).sendUncertain === true
+        ) {
+          return null;
+        }
+      }
       const copied = cloneComposeDraftRuntimeFiles(current);
       const fresh = createEmptyComposeDraft();
       senderSourceUnavailableRef.current = sourceUnavailable;
@@ -984,6 +989,7 @@ export const useComposeDialogController = ({
         currentDraft: current,
         transferDraft: {
           ...fresh,
+          assistantUnsaved: current.assistantUnsaved,
           attachments: copied.attachments,
           bodyHtml: copied.bodyHtml,
           bodyText: current.bodyText,
@@ -1020,7 +1026,7 @@ export const useComposeDialogController = ({
     mailboxId,
     save: async () => {
       if (
-        !assistantUnsavedRef.current &&
+        activeDraftRef.current.assistantUnsaved !== true &&
         !draftClosedRef.current &&
         !finishingRef.current &&
         activeDraftRef.current.sendUncertain !== true &&
@@ -1104,7 +1110,10 @@ export const useComposeDialogController = ({
       finishingRef.current = true;
       setState((current) => ({ ...current, isFinishing: true }));
       try {
-        if (activeDraftRef.current.sendUncertain === true) {
+        if (
+          activeDraftRef.current.sendUncertain === true ||
+          activeDraftRef.current.assistantUnsaved === true
+        ) {
           navigationCleanupRef.current = false;
           recovery.checkpoint();
           return false;
@@ -1122,7 +1131,6 @@ export const useComposeDialogController = ({
   });
 
   const handleUserDraftChange = () => {
-    assistantUnsavedRef.current = false;
     saveErrorReportedRef.current = false;
     setDraft((current) => ({
       ...current,
@@ -1152,7 +1160,10 @@ export const useComposeDialogController = ({
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
-      if (activeDraftRef.current.sendUncertain === true) {
+      if (
+        activeDraftRef.current.sendUncertain === true ||
+        activeDraftRef.current.assistantUnsaved === true
+      ) {
         closeDialog(afterClose, true);
         return;
       }
@@ -1206,7 +1217,7 @@ export const useComposeDialogController = ({
         sendOperationId: crypto.randomUUID(),
       });
       lastSavedDraftRef.current = activeDraftRef.current;
-      if (await persistCurrentDraft()) {
+      if (await persistCurrentDraft(false, false, true)) {
         await recovery.complete(original);
         closeDialog();
       }
@@ -1216,43 +1227,302 @@ export const useComposeDialogController = ({
     }
   };
 
-  const restoreHeldMessage = async () => {
-    const draft = activeDraftRef.current;
-    if (!mailboxId || !draft.sendOperationId || draft.holdAttempt !== true) {
-      return;
+  const isCurrentHeldTask = (task: HeldTask) =>
+    mountedRef.current &&
+    !draftClosedRef.current &&
+    currentMailboxIdRef.current === task.mailboxId &&
+    heldTaskRef.current === task &&
+    activeDraftRef.current.localId === task.localId &&
+    activeDraftRef.current.sendOperationId === task.sendOperationId;
+
+  const finishHeldOperation = async (
+    completion: HeldCompletion
+  ): Promise<HeldCompletionResult> => {
+    const draft = cloneComposeDraft(buildDraftFromForm(form.state.values));
+    if (
+      !mountedRef.current ||
+      draftClosedRef.current ||
+      !mailboxId ||
+      !draft.sendOperationId ||
+      draft.holdAttempt !== true
+    ) {
+      return { kind: "complete" };
     }
+    const existing = heldTaskRef.current;
+    if (
+      existing?.mailboxId === mailboxId &&
+      existing.localId === draft.localId &&
+      existing.sendOperationId === draft.sendOperationId
+    ) {
+      return await existing.promise;
+    }
+    finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
-    try {
-      const canceled = await rpc.mail.undoSend({
-        mailboxId,
-        sendOperationId: draft.sendOperationId,
+    const task: HeldTask = {
+      localId: draft.localId,
+      mailboxId,
+      promise: Promise.resolve({ kind: "complete" }),
+      sendOperationId: draft.sendOperationId,
+    };
+    heldTaskRef.current = task;
+    task.promise = (async (): Promise<HeldCompletionResult> => {
+      let prepared: ComposeDraftState | undefined;
+      let restoringDraft: ComposeDraftState | undefined;
+      try {
+        const previousTerminal =
+          heldTerminalRef.current?.sendOperationId === task.sendOperationId
+            ? heldTerminalRef.current.completion
+            : undefined;
+        let terminal =
+          previousTerminal?.kind === "canceled" &&
+          previousTerminal.draftId === null &&
+          (completion.kind === "undo" || completion.kind === "canceled")
+            ? completion
+            : (previousTerminal ?? completion);
+        if (terminal.kind === "undo") {
+          const canceled = await rpc.mail.undoSend({
+            mailboxId: task.mailboxId,
+            sendOperationId: task.sendOperationId,
+          });
+          if (!isCurrentHeldTask(task)) {
+            return { kind: "complete" };
+          }
+          terminal =
+            canceled.status === "abandoned"
+              ? { kind: "abandoned" }
+              : { draftId: canceled.draftId, kind: "canceled" };
+        }
+        heldTerminalRef.current = {
+          completion: terminal,
+          sendOperationId: task.sendOperationId,
+        };
+        if (
+          terminal.kind !== "abandoned" &&
+          draft.heldDraftHasNewerEdits === true
+        ) {
+          const copy = createRecoveredComposeCopy({
+            ...draft,
+            errorMessage: null,
+            heldDraftHasNewerEdits: undefined,
+            holdAttempt: undefined,
+            scheduleAttempt: undefined,
+            sendUncertain: false,
+          });
+          const localId = `held-edits-${task.sendOperationId}`;
+          await recovery.preserveCopy(
+            {
+              ...copy,
+              assistantUnsaved: true,
+              recoveryEditorId: undefined,
+              recoveryLocalId: localId,
+              recoveryRevision: undefined,
+              recoveryUpdatedAt: undefined,
+            },
+            { editorId: localId, localId }
+          );
+          if (!isCurrentHeldTask(task)) {
+            return { kind: "complete" };
+          }
+        }
+        if (terminal.kind === "accepted") {
+          await recovery.complete(draft, () => isCurrentHeldTask(task));
+          if (!isCurrentHeldTask(task)) {
+            return { kind: "complete" };
+          }
+          closeDialog();
+          toast.success(
+            draft.heldDraftHasNewerEdits === true
+              ? "Message sent. Your newer edits are recoverable after closing the composer."
+              : "Message sent."
+          );
+          await Promise.all([
+            refreshCachedMailboxQueries(queryClient, task.mailboxId, "drafts"),
+            refreshCachedMailboxQueries(queryClient, task.mailboxId, "sent"),
+            refreshThread(draft),
+          ]).catch((error: unknown) => {
+            toastError(error, { boundary: "compose-confirmed-send-refresh" });
+          });
+          return { kind: "complete" };
+        }
+        let restored: ComposeDraftState;
+        if (terminal.kind === "abandoned") {
+          restored = {
+            ...draft,
+            heldDraftHasNewerEdits: undefined,
+            holdAttempt: undefined,
+            saveStatus: "idle",
+            scheduleAttempt: undefined,
+          };
+        } else {
+          if (!terminal.draftId) {
+            throw new Error(
+              "Your restored draft is not available yet. Check delivery again."
+            );
+          }
+          const canonical = await rpc.mail.getDraft({
+            draftId: terminal.draftId,
+            mailboxId: task.mailboxId,
+          });
+          if (!isCurrentHeldTask(task)) {
+            return { kind: "complete" };
+          }
+          restored = {
+            ...createEmptyComposeDraft(),
+            ...canonical,
+            draftAnchor: canonical.draftAnchor ?? null,
+            messageId: canonical.messageId ?? undefined,
+            saveStatus: "saved",
+          };
+        }
+        restoringDraft = {
+          ...restored,
+          errorMessage: null,
+          localId: task.localId,
+          sendOperationId: crypto.randomUUID(),
+          sendUncertain: false,
+        };
+        prepared = await prepareLoadedComposeDraft(
+          task.mailboxId,
+          restoringDraft
+        );
+        if (!isCurrentHeldTask(task)) {
+          return { kind: "complete" };
+        }
+        setDraft(prepared);
+        const editable = prepared;
+        if (terminal.kind !== "abandoned") {
+          lastSavedDraftRef.current = prepared;
+          needsSaveRef.current = false;
+          recoveredChangesRef.current = false;
+        }
+        draftRevisionRef.current += 1;
+        restoredDraftRevisionRef.current = draftRevisionRef.current;
+        writeComposeFormValues(form, draftToComposeFormValues(prepared));
+        setState((current) => ({
+          ...current,
+          showBcc: editable.recipients.bcc.trim() !== "",
+          showCc: editable.recipients.cc.trim() !== "",
+        }));
+        recovery.checkpoint();
+        if (
+          terminal.kind !== "abandoned" &&
+          draft.heldDraftHasNewerEdits === true
+        ) {
+          toast("Your newer edits are recoverable after closing the composer.");
+        }
+        await refreshCachedMailboxQueries(
+          queryClient,
+          task.mailboxId,
+          "drafts"
+        ).catch((error: unknown) => {
+          toastError(error, { boundary: "compose-restored-draft-refresh" });
+        });
+        return { kind: "complete" };
+      } catch (error) {
+        if (isCurrentHeldTask(task)) {
+          setDraft((current) => ({
+            ...current,
+            errorMessage:
+              "Could not finish updating this draft. Check delivery to try again.",
+            saveStatus: "error",
+          }));
+          recovery.checkpoint();
+          toastError(error, { boundary: "compose-held-send" });
+        }
+        return { error, kind: "failed" };
+      } finally {
+        const loaded = prepared ?? restoringDraft;
+        if (loaded) {
+          const ownedIds = new Set(
+            [
+              ...runtimeDraftRef.current.attachments,
+              ...runtimeDraftRef.current.inlineImages,
+            ].map((asset) => asset.id)
+          );
+          clearComposeDraftRuntimeFiles({
+            ...loaded,
+            attachments: loaded.attachments.filter(
+              (asset) => !ownedIds.has(asset.id)
+            ),
+            inlineImages: loaded.inlineImages.filter(
+              (asset) => !ownedIds.has(asset.id)
+            ),
+          });
+        }
+        if (heldTaskRef.current === task) {
+          heldTaskRef.current = null;
+          finishingRef.current = false;
+          if (mountedRef.current) {
+            setState((current) => ({ ...current, isFinishing: false }));
+          }
+        }
+      }
+    })();
+    return await task.promise;
+  };
+
+  const applyHeldReceipt = useEffectEvent(
+    async (receipt: ComposeHeldReceipt) => {
+      const { current } = activeDraftRef;
+      if (
+        !mountedRef.current ||
+        draftClosedRef.current ||
+        mailboxId !== receipt.mailboxId ||
+        current.localId !== receipt.draftId ||
+        current.sendOperationId !== receipt.sendOperationId
+      ) {
+        return;
+      }
+      if (heldTaskRef.current !== null) {
+        if (receipt.status === "accepted" || receipt.status === "canceled") {
+          const result = await heldTaskRef.current.promise;
+          if (result.kind === "failed") {
+            throw result.error;
+          }
+        }
+        return;
+      }
+      if (
+        heldTerminalRef.current?.sendOperationId === receipt.sendOperationId &&
+        receipt.status !== "accepted" &&
+        receipt.status !== "canceled"
+      ) {
+        return;
+      }
+      const snapshot = cloneComposeDraft(buildDraftFromForm(form.state.values));
+      setDraft({
+        ...snapshot,
+        heldDraftHasNewerEdits:
+          current.heldDraftHasNewerEdits === true ||
+          draftRevisionRef.current !== receipt.draftRevision,
+        holdAttempt: true,
+        saveStatus: "idle",
+        sendUncertain: true,
       });
-      const restored = canceled.draftId
-        ? await rpc.mail.getDraft({ draftId: canceled.draftId, mailboxId })
-        : null;
-      const editable = await prepareLoadedComposeDraft(mailboxId, {
-        ...draft,
-        ...restored,
-        draftId: restored?.draftId ?? draft.draftId,
-        errorMessage: null,
-        holdAttempt: undefined,
-        lastSavedAt: restored?.lastSavedAt ?? draft.lastSavedAt,
-        messageId: restored?.messageId ?? draft.messageId,
-        recoveryMissingFiles: restored ? undefined : draft.recoveryMissingFiles,
-        saveStatus: restored ? "saved" : "idle",
-        sendOperationId: crypto.randomUUID(),
-        sendUncertain: false,
-      });
-      setDraft(editable);
-      lastSavedDraftRef.current = editable;
-      form.reset(draftToComposeFormValues(editable));
       recovery.checkpoint();
-      await refreshCachedMailboxQueries(queryClient, mailboxId, "drafts");
-    } catch (error) {
-      toastError(error, { boundary: "compose-undo-send" });
-    } finally {
-      setState((current) => ({ ...current, isFinishing: false }));
+      void queryClient.invalidateQueries({
+        queryKey: orpc.mail.getHeldSend.queryOptions({
+          input: {
+            mailboxId: receipt.mailboxId,
+            sendOperationId: receipt.sendOperationId,
+          },
+        }).queryKey,
+      });
+      if (receipt.status === "accepted" || receipt.status === "canceled") {
+        const result = await finishHeldOperation(
+          receipt.status === "accepted"
+            ? { kind: "accepted" }
+            : { draftId: receipt.restoredDraftId, kind: "canceled" }
+        );
+        if (result.kind === "failed") {
+          throw result.error;
+        }
+      }
     }
+  );
+
+  const restoreHeldMessage = async () => {
+    await finishHeldOperation({ kind: "undo" });
   };
 
   const checkSendDelivery = async () => {
@@ -1283,16 +1553,31 @@ export const useComposeDialogController = ({
           mailboxId,
           sendOperationId: draft.sendOperationId,
         });
-        if (held === null || held.status === "canceled") {
+        if (
+          !mountedRef.current ||
+          draftClosedRef.current ||
+          currentMailboxIdRef.current !== mailboxId ||
+          activeDraftRef.current.localId !== draft.localId ||
+          activeDraftRef.current.sendOperationId !== draft.sendOperationId
+        ) {
+          return;
+        }
+        if (held !== null) {
+          queryClient.setQueryData(
+            orpc.mail.getHeldSend.queryOptions({
+              input: { mailboxId, sendOperationId: draft.sendOperationId },
+            }).queryKey,
+            held
+          );
+        }
+        if (held?.status === "canceled" || held?.status === "accepted") {
+          await finishHeldOperation(
+            held.status === "accepted"
+              ? { kind: "accepted" }
+              : { draftId: held.draftId, kind: "canceled" }
+          );
+        } else if (held === null) {
           await restoreHeldMessage();
-        } else if (held.status === "accepted") {
-          closeDialog();
-          await Promise.all([
-            refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
-            refreshCachedMailboxQueries(queryClient, mailboxId, "sent"),
-            refreshThread(draft),
-          ]);
-          toast.success("Message sent.");
         }
         return;
       }
@@ -1398,14 +1683,160 @@ export const useComposeDialogController = ({
     retry: false,
   });
 
-  const finishHeldSend = useEffectEvent(() => {
-    void checkSendDelivery();
+  const finishHeldSend = useEffectEvent(async () => {
+    const held = heldSendQuery.data;
+    if (
+      held?.sendOperationId !== activeDraftRef.current.sendOperationId ||
+      (held?.status !== "accepted" && held?.status !== "canceled")
+    ) {
+      return;
+    }
+    await finishHeldOperation(
+      held.status === "accepted"
+        ? { kind: "accepted" }
+        : { draftId: held.draftId, kind: "canceled" }
+    );
   });
   useEffect(() => {
-    if (heldSendQuery.data?.status === "accepted") {
-      finishHeldSend();
+    if (
+      heldSendQuery.data?.status === "accepted" ||
+      heldSendQuery.data?.status === "canceled"
+    ) {
+      void finishHeldSend();
     }
-  }, [heldSendQuery.data?.status]);
+  }, [
+    heldSendQuery.data?.status,
+    heldSendQuery.data?.draftId,
+    heldSendQuery.data?.sendOperationId,
+  ]);
+
+  useEffect((): (() => void) | undefined => {
+    if (
+      !editorReady ||
+      !agentWorkspace ||
+      agentWorkspace.mailboxId !== mailboxId
+    ) {
+      return undefined;
+    }
+    let previousValues = form.state.values;
+    const subscription = form.store.subscribe(() => {
+      if (
+        [
+          "to",
+          "cc",
+          "bcc",
+          "senderName",
+          "subject",
+          "bodyText",
+          "bodyHtml",
+        ].some(
+          (field) =>
+            Reflect.get(previousValues, field) !==
+            Reflect.get(form.state.values, field)
+        )
+      ) {
+        previousValues = form.state.values;
+        draftRevisionRef.current += 1;
+      }
+    });
+    const bridge = {
+      applyHeldReceipt: async (receipt: ComposeHeldReceipt) => {
+        await applyHeldReceipt(receipt);
+      },
+      applyReceipt: (receipt: Parameters<ComposeBridge["applyReceipt"]>[0]) => {
+        const matchesRevision =
+          receipt.draftRevision === draftRevisionRef.current;
+        if (receipt.status === "draft_saved" || matchesRevision) {
+          applyAssistantReceipt(receipt, matchesRevision);
+        }
+      },
+      edit: (values: Partial<ComposeFormValues>, expectedRevision: number) => {
+        if (
+          expectedRevision !== draftRevisionRef.current ||
+          finishingRef.current ||
+          activeDraftRef.current.sendUncertain === true ||
+          activeDraftRef.current.saveStatus === "sending" ||
+          activeDraftRef.current.saveStatus === "saving"
+        ) {
+          throw new Error("The draft changed. Read it again before editing.");
+        }
+        let bodyHtml: string | undefined;
+        if (values.bodyText !== undefined) {
+          const currentBody = new DOMParser().parseFromString(
+            form.state.values.bodyHtml,
+            "text/html"
+          );
+          const retainedParts = [
+            ...currentBody.body.querySelectorAll<HTMLElement>(
+              ':scope > [data-compose-quote], :scope > [data-quieter-signature="true"]'
+            ),
+          ];
+          const retainedHtml = retainedParts
+            .map((element) => element.outerHTML)
+            .join("");
+          const retainedImages = getReferencedComposeActionImages(
+            retainedHtml,
+            activeDraftRef.current.inlineImages
+          );
+          if (
+            activeDraftRef.current.inlineImages.some(
+              (asset) => !retainedImages.some((image) => image.id === asset.id)
+            ) ||
+            (activeDraftRef.current.draftAnchor &&
+              !currentBody.body.querySelector(":scope > [data-compose-quote]"))
+          ) {
+            throw new Error(
+              "Edit this message in the composer to keep its images and conversation quote intact."
+            );
+          }
+          bodyHtml = `${textToComposeBodyHtml(values.bodyText)}${retainedHtml}`;
+        }
+        draftRevisionRef.current += 1;
+        setDraft((current) => ({ ...current, assistantUnsaved: true }));
+        for (const field of ["to", "cc", "bcc", "subject"] as const) {
+          const value = values[field];
+          if (value !== undefined) {
+            form.setFieldValue(field, value);
+          }
+        }
+        if (bodyHtml !== undefined) {
+          form.setFieldValue("bodyHtml", bodyHtml);
+          form.setFieldValue("bodyText", getTextFromHtml(bodyHtml));
+        }
+        setState((currentState) => ({
+          ...currentState,
+          showBcc: form.state.values.bcc.length > 0,
+          showCc: form.state.values.cc.length > 0,
+        }));
+        setDraft((current) => ({
+          ...current,
+          errorMessage: null,
+          saveStatus: "idle",
+        }));
+        checkpointRecovery();
+      },
+      read: () => ({
+        attachments: activeDraftRef.current.attachments,
+        baseRevision: activeDraftRef.current.baseRevision,
+        draftAnchor: activeDraftRef.current.draftAnchor,
+        draftId: activeDraftRef.current.localId,
+        draftRevision: draftRevisionRef.current,
+        followUpReminder: activeDraftRef.current.followUpReminder,
+        inlineImages: activeDraftRef.current.inlineImages,
+        messageId: activeDraftRef.current.messageId,
+        providerDraftId: activeDraftRef.current.draftId,
+        replyContext: activeDraftRef.current.replyContext,
+        sendOperationId: activeDraftRef.current.sendOperationId,
+        sendUncertain: activeDraftRef.current.sendUncertain,
+        values: { ...form.state.values },
+      }),
+    };
+    const unregister = agentWorkspace.registerCompose(bridge);
+    return () => {
+      subscription.unsubscribe();
+      unregister();
+    };
+  }, [agentWorkspace, editorReady, form, getTextFromHtml, mailboxId]);
 
   const handleDialogOpenChange = (open: boolean) => {
     if (open) {
@@ -1589,6 +2020,8 @@ export const useComposeDialogController = ({
       }
       setDraft({
         ...current,
+        assistantUnsaved:
+          current.assistantUnsaved === true || next.assistantUnsaved === true,
         attachments,
         bodyHtml,
         bodyText: prepared
@@ -1833,7 +2266,10 @@ export const useComposeDialogController = ({
     },
     closeComposeDialog,
     completeSenderSwitch: async () => {
-      if (senderSourceUnavailableRef.current) {
+      if (
+        senderSourceUnavailableRef.current ||
+        activeDraftRef.current.assistantUnsaved === true
+      ) {
         recovery.checkpoint();
       } else {
         await recovery.complete(activeDraftRef.current);
@@ -1851,6 +2287,16 @@ export const useComposeDialogController = ({
     removeAttachment,
     renameAttachment,
     restoreHeldMessage,
+    saveDraft: async () => {
+      if (
+        finishingRef.current ||
+        activeDraftRef.current.sendUncertain === true ||
+        activeDraftRef.current.saveStatus === "sending"
+      ) {
+        return;
+      }
+      await persistCurrentDraft(false, false, true);
+    },
     saveDraftCopy,
     setActiveDraftError,
     state,

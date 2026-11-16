@@ -30,6 +30,7 @@ export const recoverableDraftSchema = z.object({
   draftId: z.string().optional(),
   errorMessage: z.string().nullable(),
   followUpReminder: followUpReminderIntentSchema.nullable().optional(),
+  heldDraftHasNewerEdits: z.boolean().optional(),
   holdAttempt: z.boolean().optional(),
   inlineImages: z.array(
     assetSchema.extend({ contentId: z.string(), isInline: z.literal(true) })
