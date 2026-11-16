@@ -9,9 +9,18 @@ vp run @quieter/management-sdk#build
 vp run @quieter/management-cli#build
 ```
 
+To install the private local artifacts in a separate client project, first create tarballs from this checkout:
+
+```bash
+vp pm pack --filter @quieter/management-sdk --out /tmp/quieter-management-sdk.tgz
+vp pm pack --filter @quieter/management-cli --out /tmp/quieter-management-cli.tgz
+```
+
+In the client project's directory, run `vp add /tmp/quieter-management-sdk.tgz /tmp/quieter-management-cli.tgz`. This installs the built artifacts without publishing them. Run its installed CLI with `vp exec quieter-management`.
+
 ## Use the SDK
 
-Create a client with an explicit application origin and authentication mode. Browser session mode uses the existing signed-in application session:
+In the installed client project, create a client with an explicit application origin and authentication mode. Browser session mode uses the existing signed-in application session:
 
 ```ts
 import { createManagementClient } from "@quieter/management-sdk";
@@ -49,6 +58,8 @@ Operation types include the agreed contract catalogue. Runtime capability discov
 
 ## Use the CLI
 
+The source-checkout examples below run the built binary directly through Vite+. Building a workspace package does not install its binary on the shell path. In an installed client project, replace `vp exec node packages/management-cli/dist/bin.js` with `vp exec quieter-management`.
+
 Sign in to the existing development application using its normal login. Store its session in a private file outside Git, bound to the application's origin:
 
 ```json
@@ -63,7 +74,7 @@ Make the file readable only by its owner on systems that support file permission
 Save `{"kind":"user"}` in a target JSON file and run:
 
 ```bash
-quieter-management capabilities \
+vp exec node packages/management-cli/dist/bin.js capabilities \
   --origin http://127.0.0.1:3000 \
   --session-file /private/development-session.json \
   --input /private/user-target.json
@@ -80,7 +91,7 @@ Save the explicit mailbox, organization, and thread parameters in a separate inp
 ```
 
 ```bash
-quieter-management execute mail.read_thread \
+vp exec node packages/management-cli/dist/bin.js execute mail.read_thread \
   --origin http://127.0.0.1:3000 \
   --session-file /private/development-session.json \
   --input /private/thread-input.json
