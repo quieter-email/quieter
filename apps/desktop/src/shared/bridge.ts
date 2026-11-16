@@ -1,5 +1,8 @@
 import type {
+  NewMailNotificationContext,
   NewMailNotificationPreferences,
+  NewMailNotificationResult,
+  NewMailNotifications,
   ReminderNotifications,
 } from "@quieter/app/runtime";
 import { z } from "zod";
@@ -59,6 +62,35 @@ export const newMailNotificationPreferenceStatus = z.discriminatedUnion(
   ]
 );
 
+export const newMailNotificationCapture = newMailNotificationScope;
+
+export const newMailNotificationDelivery = z.strictObject({
+  contextId: z.uuid(),
+  mailboxId: z.string().min(1).max(500),
+  messageId: z.string().min(1).max(500),
+  receivedAt: z.iso.datetime({ precision: 3 }).refine((value) => {
+    const date = new Date(value);
+    return !Number.isNaN(date.getTime()) && date.toISOString() === value;
+  }),
+  threadId: z.string().min(1).max(500),
+});
+
+export const newMailNotificationContext = z.discriminatedUnion("kind", [
+  z.strictObject({ contextId: z.uuid(), kind: z.literal("enabled") }),
+  z.strictObject({
+    kind: z.enum(["inactive", "disabled", "unsupported", "blocked"]),
+  }),
+]) satisfies z.ZodType<NewMailNotificationContext>;
+
+export const newMailNotificationResult = z.enum([
+  "shown",
+  "duplicate",
+  "quiet",
+  "inactive",
+  "stale",
+  "blocked",
+]) satisfies z.ZodType<NewMailNotificationResult>;
+
 export type NewMailNotificationPreferenceRequest = z.infer<
   typeof newMailNotificationPreferenceRequest
 >;
@@ -91,6 +123,7 @@ export type DesktopBridge = Readonly<{
   platform: string;
   reminderNotifications: ReminderNotifications;
   newMailNotificationPreferences: NewMailNotificationPreferences;
+  newMailNotifications?: NewMailNotifications;
   setReminderNotificationUser: (userId: string | null) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   setTitleBarColors: (colors: {

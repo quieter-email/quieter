@@ -16,6 +16,35 @@ export type NewMailNotificationPreferences = Readonly<{
   ) => Promise<NewMailNotificationPreferenceStatus>;
 }>;
 
+export type NewMailNotificationContext =
+  | Readonly<{ kind: "enabled"; contextId: string }>
+  | Readonly<{ kind: "inactive" | "disabled" | "unsupported" | "blocked" }>;
+
+export type NewMailNotificationDelivery = Readonly<{
+  contextId: string;
+  mailboxId: string;
+  messageId: string;
+  receivedAt: string;
+  threadId: string;
+}>;
+
+export type NewMailNotificationResult =
+  | "shown"
+  | "duplicate"
+  | "quiet"
+  | "inactive"
+  | "stale"
+  | "blocked";
+
+export type NewMailNotifications = Readonly<{
+  capture: (
+    scope: NewMailNotificationScope
+  ) => Promise<NewMailNotificationContext>;
+  show: (
+    input: NewMailNotificationDelivery
+  ) => Promise<NewMailNotificationResult>;
+}>;
+
 export type ReminderNotificationEvent = Readonly<{
   id: string;
   mailboxId: string;
@@ -51,6 +80,7 @@ type AppRuntime = {
   platform?: "desktop" | "web";
   reminderNotifications?: ReminderNotifications;
   newMailNotificationPreferences?: NewMailNotificationPreferences;
+  newMailNotifications?: NewMailNotifications;
 };
 
 export const appRuntime: AppRuntime = {};
@@ -60,6 +90,7 @@ export const configureAppRuntime = (options: AppRuntime) => {
     apiBaseURL: options.apiBaseURL,
     fetch: options.fetch,
     newMailNotificationPreferences: options.newMailNotificationPreferences,
+    newMailNotifications: options.newMailNotifications,
     openExternal: options.openExternal,
     platform: options.platform,
     reminderNotifications: options.reminderNotifications,
