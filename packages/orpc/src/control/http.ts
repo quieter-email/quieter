@@ -1,16 +1,26 @@
 import { ORPCError } from "@orpc/server";
 
+import type { ControlApplicationRuntime } from "./application-runtime";
 import { controlDiscoveryInputSchema, controlErrorSchema } from "./contracts";
+import {
+  CONTROL_REVIEW_HEADER,
+  CONTROL_REVIEW_INTENT,
+  controlMutationActionSchema,
+  controlMutationPrepareSchema,
+} from "./mutation-contracts";
 import {
   CONTROL_API_PATH,
   CONTROL_API_VERSION,
   CONTROL_API_VERSION_HEADER,
 } from "./openapi";
-import { createControlReadRuntime } from "./runtime";
 import type { ControlReadRuntime, ControlRequestContext } from "./runtime";
 
-const runtime = createControlReadRuntime();
 const maxControlBodyBytes = 64 * 1024;
+const mutationActions = new Map<string, "review" | "cancel" | "approve">([
+  ["mutations/review", "review"],
+  ["mutations/cancel", "cancel"],
+  ["reviews/approve", "approve"],
+]);
 const publicFailures = {
   BAD_REQUEST: { message: "Invalid management request.", status: 400 },
   CANCELLED: { message: "The request was cancelled.", status: 499 },
@@ -103,7 +113,7 @@ export const handleControlHttpRequest = async (
   request: Request,
   options: {
     reportError?: (error: Error) => void;
-    runtime?: ControlReadRuntime;
+    runtime?: ControlReadRuntime | ControlApplicationRuntime;
     scheduleBackgroundTask?: (task: Promise<unknown>) => void;
   } = {}
 ): Promise<Response> => {
@@ -117,7 +127,6 @@ export const handleControlHttpRequest = async (
     scheduleBackgroundTask: options.scheduleBackgroundTask,
     signal: request.signal,
   };
-  const executor = options.runtime ?? runtime;
   try {
     request.signal.throwIfAborted();
     if (
@@ -126,18 +135,22 @@ export const handleControlHttpRequest = async (
     ) {
       throw new ORPCError("BAD_REQUEST");
     }
-    const { pathname } = new URL(request.url);
-    if (
-      pathname === `${CONTROL_API_PATH}/openapi` &&
-      request.method === "GET"
-    ) {
-      return Response.json(await executor.openApi(context), { headers });
+    const url = new URL(request.url);
+    const { pathname } = url;
+    let executor = options.runtime;
+    if (executor === undefined) {
+      const { createControlApplicationRuntime } =
+        await import("./application-runtime");
+      executor = createControlApplicationRuntime();
     }
-    if (request.method !== "POST") {
-      headers.set(
-        "allow",
-        pathname === `${CONTROL_API_PATH}/openapi` ? "GET" : "POST"
-      );
+    const relativePath = pathname.startsWith(`${CONTROL_API_PATH}/`)
+      ? pathname.slice(CONTROL_API_PATH.length + 1)
+      : "";
+    const mutationAction = mutationActions.get(relativePath);
+    const expectedMethod =
+      pathname === `${CONTROL_API_PATH}/openapi` ? "GET" : "POST";
+    if (request.method !== expectedMethod) {
+      headers.set("allow", expectedMethod);
       return Response.json(
         controlErrorSchema.parse({
           error: {
@@ -148,7 +161,54 @@ export const handleControlHttpRequest = async (
         { headers, status: 405 }
       );
     }
+    if (pathname === `${CONTROL_API_PATH}/openapi`) {
+      return Response.json(await executor.openApi(context), { headers });
+    }
+    if (
+      relativePath === "mutations/prepare" ||
+      relativePath === "organization.settings.update" ||
+      mutationAction !== undefined
+    ) {
+      const origin = request.headers.get("origin");
+      if (origin !== null && origin !== url.origin) {
+        throw new ORPCError("FORBIDDEN");
+      }
+      if (
+        mutationAction === "approve" &&
+        (origin !== url.origin ||
+          request.headers.get("sec-fetch-site") !== "same-origin" ||
+          request.headers.get(CONTROL_REVIEW_HEADER) !== CONTROL_REVIEW_INTENT)
+      ) {
+        throw new ORPCError("FORBIDDEN");
+      }
+    }
     const body = await readControlJson(request);
+    if (relativePath === "mutations/prepare") {
+      if (!("prepare" in executor)) {
+        throw new ORPCError("UNSUPPORTED_OPERATION");
+      }
+      const parameters = controlMutationPrepareSchema.safeParse(body);
+      if (!parameters.success) {
+        throw new ORPCError("BAD_REQUEST");
+      }
+      return Response.json(
+        await executor.prepare({ context, parameters: parameters.data }),
+        { headers }
+      );
+    }
+    if (mutationAction !== undefined) {
+      if (!("review" in executor)) {
+        throw new ORPCError("UNSUPPORTED_OPERATION");
+      }
+      const parameters = controlMutationActionSchema.safeParse(body);
+      if (!parameters.success) {
+        throw new ORPCError("BAD_REQUEST");
+      }
+      return Response.json(
+        await executor[mutationAction]({ context, id: parameters.data.id }),
+        { headers }
+      );
+    }
     if (pathname === `${CONTROL_API_PATH}/capabilities`) {
       const target = controlDiscoveryInputSchema.safeParse(body);
       if (!target.success) {
@@ -159,11 +219,12 @@ export const handleControlHttpRequest = async (
         { headers }
       );
     }
-    const operation = pathname.startsWith(`${CONTROL_API_PATH}/`)
-      ? pathname.slice(CONTROL_API_PATH.length + 1)
-      : "";
     return Response.json(
-      await executor.execute({ context, operation, parameters: body }),
+      await executor.execute({
+        context,
+        operation: relativePath,
+        parameters: body,
+      }),
       { headers }
     );
   } catch (error) {

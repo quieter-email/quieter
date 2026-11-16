@@ -10,7 +10,7 @@ import type {
   ControlTarget,
 } from "./registry";
 
-type ControlSession = {
+export type ControlSession = {
   expiresAt: Date;
   sessionId: string;
   userId: string;
@@ -100,9 +100,12 @@ export type ControlAccess = {
   userId: string;
 };
 
-const authenticateControlRequest = async (
+export const authenticateControlRequest = async (
   headers: Headers,
-  services: ControlAuthorizationServices
+  services: Pick<
+    ControlAuthorizationServices,
+    "getSession"
+  > = authorizationServices
 ): Promise<ControlSession> => {
   if (
     headers.has("authorization") ||
