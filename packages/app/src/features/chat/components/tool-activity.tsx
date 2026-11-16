@@ -292,7 +292,7 @@ export const ToolActivity = ({
                   size="caption"
                   title={[step.title, ...step.context].join("\n")}
                   tone="muted"
-                  truncate
+                  truncate={step.context.length === 0}
                 >
                   {step.title}
                   {step.context.length > 0 ? (

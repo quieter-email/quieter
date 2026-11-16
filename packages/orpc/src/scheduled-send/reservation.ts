@@ -3,8 +3,50 @@ import { db } from "@quieter/database/client";
 import {
   gmailComposeOperation,
   scheduledMailSend,
+  scheduledMailSendAbandonment,
 } from "@quieter/database/schema";
 import { and, eq, inArray, or } from "drizzle-orm";
+
+export const assertComposeSendAttemptActive = async (input: {
+  mailboxId: string;
+  userId: string;
+  sendOperationId: string;
+  scheduledSendId?: string;
+}) => {
+  const [delivery] = await db
+    .select({ id: scheduledMailSend.id })
+    .from(scheduledMailSend)
+    .where(
+      and(
+        eq(scheduledMailSend.mailboxId, input.mailboxId),
+        eq(scheduledMailSend.sendOperationId, input.sendOperationId)
+      )
+    )
+    .limit(1);
+  if (delivery !== undefined && delivery.id !== input.scheduledSendId) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This send attempt is already recorded. Check its delivery status before sending again.",
+    });
+  }
+  const [abandoned] = await db
+    .select({ sendOperationId: scheduledMailSendAbandonment.sendOperationId })
+    .from(scheduledMailSendAbandonment)
+    .where(
+      and(
+        eq(scheduledMailSendAbandonment.mailboxId, input.mailboxId),
+        eq(scheduledMailSendAbandonment.userId, input.userId),
+        eq(scheduledMailSendAbandonment.sendOperationId, input.sendOperationId)
+      )
+    )
+    .limit(1);
+  if (abandoned !== undefined) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This send attempt was canceled. Return to your draft before sending again.",
+    });
+  }
+};
 
 export const resolveComposeSourceDraftId = async (input: {
   provider: "gmail" | "managed";

@@ -1,18 +1,15 @@
 import type { ComposeActionDraft } from "@quieter/app/features/compose/domain/compose-action-quote";
 import {
   createEmptyComposeDraft,
-  escapeComposeHtml,
   normalizeComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type {
   ComposeDraftState,
   ComposeReplyContext,
 } from "@quieter/app/features/compose/domain/draft";
-import {
-  formatMessageDate,
-  parseSender,
-} from "@quieter/app/lib/gmail/message-utils";
+import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import type { MessageListItem } from "@quieter/app/lib/mail";
+import { buildComposeMessageQuotes } from "@quieter/mail/compose/message-quote";
 import {
   getMailAddressKey,
   splitMailAddressList,
@@ -61,93 +58,6 @@ const filterOutOwnedAddresses = (
   values: readonly string[],
   ownedAddressKeys: ReadonlySet<string>
 ) => values.filter((value) => !ownedAddressKeys.has(getMailAddressKey(value)));
-
-const textToHtml = (value: string) =>
-  value
-    .split(/\r?\n/gu)
-    .map((line) => (line ? escapeComposeHtml(line) : "<br>"))
-    .join("<br>");
-
-const getMessageBodyHtml = (message: MessageListItem) => {
-  const html = message.bodyHtml?.trim() ?? "";
-  if (html !== "") {
-    return html;
-  }
-
-  const text = message.bodyText?.trim() ?? message.snippet?.trim() ?? "";
-  if (text !== "") {
-    return `<p>${textToHtml(text)}</p>`;
-  }
-  return "<p>(No message content)</p>";
-};
-
-const getMessageBodyText = (message: MessageListItem) => {
-  const text = message.bodyText?.trim() ?? message.snippet?.trim() ?? "";
-  if (text !== "") {
-    return text;
-  }
-  return "(No message content)";
-};
-
-const quotePlainText = (value: string) =>
-  value
-    .split(/\r?\n/gu)
-    .map((line) => (line ? `> ${line}` : ">"))
-    .join("\n");
-
-const buildReplyLead = (message: MessageListItem) => {
-  const sender = parseSender(message.from);
-  const senderDisplay = sender.display?.trim() ?? "";
-  const senderEmail = sender.email?.trim() ?? "";
-  let senderLabel = "Unknown sender";
-  if (senderDisplay !== "") {
-    senderLabel = senderDisplay;
-  } else if (senderEmail !== "") {
-    senderLabel = senderEmail;
-  }
-  const formattedDate = formatMessageDate(message, "full");
-  const rawDate = message.date?.trim() ?? "";
-  let sentAt = "an earlier message";
-  if ((formattedDate?.trim() ?? "") !== "") {
-    sentAt = formattedDate ?? sentAt;
-  } else if (rawDate !== "") {
-    sentAt = rawDate;
-  }
-
-  return `On ${sentAt}, ${senderLabel} wrote:`;
-};
-
-const buildForwardHeaderLines = (message: MessageListItem) => {
-  const lines: string[] = [];
-
-  const from = message.from?.trim() ?? "";
-  if (from !== "") {
-    lines.push(`From: ${from}`);
-  }
-
-  const sentAt =
-    formatMessageDate(message, "full") ?? message.date?.trim() ?? "";
-  if (sentAt !== "") {
-    lines.push(`Date: ${sentAt}`);
-  }
-
-  const subject = message.subject?.trim() ?? "";
-  if (subject !== "") {
-    lines.push(`Subject: ${subject}`);
-  }
-
-  const to = message.to?.trim() ?? "";
-  if (to !== "") {
-    lines.push(`To: ${to}`);
-  }
-
-  const cc = message.cc?.trim() ?? "";
-  if (cc !== "") {
-    lines.push(`Cc: ${cc}`);
-  }
-
-  return lines;
-};
 
 const withSubjectPrefix = (
   subject: string | undefined,
@@ -390,25 +300,8 @@ export const buildComposeDraftFromMessageAction = ({
       sourceMessageId: message.id,
     })
   );
-  const lead = buildReplyLead(message);
-  const forwardedHeaderLines = buildForwardHeaderLines(message);
-  const forwardedHeaderHtml =
-    forwardedHeaderLines.length > 0
-      ? `<p data-compose-quote="headers">${forwardedHeaderLines
-          .map((line) => {
-            const separatorIndex = line.indexOf(":");
-            if (separatorIndex === -1) {
-              return escapeComposeHtml(line);
-            }
-            const label = line.slice(0, separatorIndex + 1);
-            const value = line.slice(separatorIndex + 1).trim();
-            return `<strong>${escapeComposeHtml(label)}</strong> ${escapeComposeHtml(value)}`;
-          })
-          .join("<br>")}</p>`
-      : "";
-  const quotedBody = `<blockquote data-compose-quote="body">${getMessageBodyHtml(message)}</blockquote>`;
-  const replyHtml = `<p data-compose-quote="lead">${escapeComposeHtml(lead)}</p>${quotedBody}`;
-  const forwardHtml = `<p data-compose-quote="forward">---------- Forwarded message ---------</p>${forwardedHeaderHtml}${quotedBody}`;
+  const { replyHtml, replyText, forwardHtml, forwardText } =
+    buildComposeMessageQuotes(message);
   const actionQuote = {
     attachments: action === "forward" ? forwardedAttachments : [],
     forwardHtml,
@@ -467,14 +360,7 @@ export const buildComposeDraftFromMessageAction = ({
       actionQuote,
       attachments: forwardedAttachments,
       bodyHtml: `<p><br></p>${forwardHtml}`,
-      bodyText: [
-        "",
-        "",
-        "---------- Forwarded message ---------",
-        ...forwardedHeaderLines,
-        "",
-        getMessageBodyText(message),
-      ].join("\n"),
+      bodyText: forwardText,
       draftAnchor,
       inlineImages: quotedImages,
       replyContext: null,
@@ -492,9 +378,7 @@ export const buildComposeDraftFromMessageAction = ({
     ...draft,
     actionQuote,
     bodyHtml: `<p><br></p>${replyHtml}`,
-    bodyText: ["", "", lead, quotePlainText(getMessageBodyText(message))].join(
-      "\n"
-    ),
+    bodyText: replyText,
     draftAnchor,
     inlineImages: quotedImages,
     recipients,
