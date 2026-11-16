@@ -162,7 +162,8 @@ const areDraftAnchorsEqual = (
 
 const areComposeAssetsEqual = (
   left: readonly (ComposeAttachment | ComposeInlineImage)[],
-  right: readonly (ComposeAttachment | ComposeInlineImage)[]
+  right: readonly (ComposeAttachment | ComposeInlineImage)[],
+  ignoreProviderAssetIds = false
 ) => {
   if (left.length !== right.length) {
     return false;
@@ -179,7 +180,8 @@ const areComposeAssetsEqual = (
       attachment.name === other.name &&
       attachment.mimeType === other.mimeType &&
       attachment.size === other.size &&
-      attachment.gmailAttachmentId === other.gmailAttachmentId &&
+      (ignoreProviderAssetIds ||
+        attachment.gmailAttachmentId === other.gmailAttachmentId) &&
       attachment.isInline === other.isInline &&
       ("contentId" in attachment
         ? "contentId" in other && attachment.contentId === other.contentId
@@ -196,7 +198,8 @@ const areComposeAssetsEqual = (
 
 export const haveComposeDraftPersistedFieldsChanged = (
   current: ComposeDraftState,
-  next: ComposeDraftState
+  next: ComposeDraftState,
+  { ignoreProviderAssetIds = false }: { ignoreProviderAssetIds?: boolean } = {}
 ) =>
   !(
     areDraftAnchorsEqual(current.draftAnchor, next.draftAnchor) &&
@@ -210,8 +213,16 @@ export const haveComposeDraftPersistedFieldsChanged = (
     (current.senderName?.trim() ?? "") === (next.senderName?.trim() ?? "") &&
     current.bodyHtml === next.bodyHtml &&
     current.bodyText === next.bodyText &&
-    areComposeAssetsEqual(current.attachments, next.attachments) &&
-    areComposeAssetsEqual(current.inlineImages, next.inlineImages)
+    areComposeAssetsEqual(
+      current.attachments,
+      next.attachments,
+      ignoreProviderAssetIds
+    ) &&
+    areComposeAssetsEqual(
+      current.inlineImages,
+      next.inlineImages,
+      ignoreProviderAssetIds
+    )
   );
 
 const revokeRuntimeBinary = (id: string) => {
