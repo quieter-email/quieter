@@ -20,6 +20,7 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
+import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type {
@@ -33,7 +34,6 @@ const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAILBOX_NAME = "Managed demo";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
 const DEMO_MANAGED_MAIL_STATE_VERSION = 4;
-const MANAGED_DEMO_THREAD_QUERY_VERSION = 4;
 
 const DEMO_MANAGED_LABEL_IDS = {
   billing: "demo-managed-label-billing",
@@ -284,11 +284,7 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
       refetchType: "all",
     }),
     queryClient.invalidateQueries({
-      queryKey: [
-        "message-thread",
-        MANAGED_DEMO_THREAD_QUERY_VERSION,
-        DEMO_MANAGED_MAILBOX_ID,
-      ],
+      queryKey: getMailboxThreadQueriesKey(DEMO_MANAGED_MAILBOX_ID),
       refetchType: "all",
     }),
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
