@@ -1,7 +1,9 @@
 import { ORPCError } from "@orpc/server";
 import { createReminderSchema } from "@quieter/mail/reminders";
 import type { FollowUpReminderIntent } from "@quieter/mail/reminders";
+import { reportError } from "@quieter/observability";
 
+import { aiOperationOriginSchema } from "../ai-authority";
 import { publishMailUpdate } from "../mail-updates";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { createReminderRecord } from "./persistence";
@@ -13,7 +15,18 @@ export const materializeSentReminder = async (input: {
   messageId: string;
   threadId: string;
   intent: FollowUpReminderIntent;
+  origin?: unknown;
 }) => {
+  const parsedOrigin = aiOperationOriginSchema.safeParse(input.origin);
+  if (!parsedOrigin.success) {
+    if (input.origin !== undefined) {
+      reportError(new Error("Saved follow-up reminder authority is invalid."), {
+        operation: "sent-reminder-authority",
+      });
+    }
+    return null;
+  }
+  const origin = parsedOrigin.data;
   let suspended = false;
   try {
     await assertAccessibleMailbox(input);
@@ -25,6 +38,9 @@ export const materializeSentReminder = async (input: {
       throw error;
     }
     suspended = true;
+  }
+  if (suspended && origin.kind === "ai") {
+    return null;
   }
   const value = createReminderSchema.parse({
     dueAt: input.intent.dueAt,
@@ -39,11 +55,26 @@ export const materializeSentReminder = async (input: {
     timeZone: input.intent.timeZone,
     title: input.intent.title,
   });
-  const row = await createReminderRecord({
-    ...value,
-    suspended,
-    userId: input.userId,
-  });
+  let row: Awaited<ReturnType<typeof createReminderRecord>>;
+  try {
+    row = await createReminderRecord({
+      ...value,
+      origin,
+      suspended,
+      userId: input.userId,
+    });
+  } catch (error) {
+    if (
+      origin.kind === "ai" &&
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" ||
+        error.code === "NOT_FOUND" ||
+        error.code === "UNAUTHORIZED")
+    ) {
+      return null;
+    }
+    throw error;
+  }
   if (!suspended) {
     await requestReminderWake(input);
     await publishMailUpdate(

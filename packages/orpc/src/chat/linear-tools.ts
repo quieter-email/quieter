@@ -14,6 +14,7 @@ import {
   getConnectorConnectionForUser,
   getLinearConnectionForUser,
 } from "../connectors/runtime";
+import type { MailEffectAssertion } from "../gmail-request";
 import { connectorMentionPattern } from "../mail-agent/contracts";
 
 const LINEAR_REQUEST_REQUIRED_ERROR =
@@ -78,6 +79,7 @@ const getLinearToolError = (operation: string, error: unknown) => {
 };
 
 export const createLinearChatTools = (input: {
+  beforeEffect?: MailEffectAssertion;
   latestUserRequest: string;
   userId: string;
 }): ToolSet => {
@@ -158,6 +160,8 @@ export const createLinearChatTools = (input: {
     try {
       const connection = await getConnection(inputCall.connectionId);
       const [result] = await runLinearMcpToolCallsForUser({
+        beforeEffect:
+          inputCall.mode === "write" ? input.beforeEffect : undefined,
         calls: [
           {
             arguments: inputCall.arguments,

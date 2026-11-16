@@ -130,7 +130,11 @@ const colorsSchema = z.object({
 });
 export type GoogleColors = z.infer<typeof colorsSchema>;
 let cachedColors: { expiresAt: number; value: GoogleColors } | undefined;
-type GoogleAuth = { accessToken: string; signal?: AbortSignal };
+type GoogleAuth = {
+  accessToken: string;
+  beforeEffect?: () => Promise<void>;
+  signal?: AbortSignal;
+};
 type GoogleTarget = GoogleAuth & { calendarId: string };
 const accessRoles = {
   freeBusyReader: "busy",
@@ -146,29 +150,47 @@ const errorResponseSchema = z.object({
   }),
 });
 
-const requestGoogle = async (
-  input: GoogleAuth & {
-    body?: unknown;
-    method?: "POST" | "PATCH" | "DELETE";
-    path: string;
-    version?: string;
-  }
-) => {
-  const response = await fetch(`${API_URL}${input.path}`, {
-    ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
-    headers: {
-      authorization: `Bearer ${input.accessToken}`,
-      ...(input.body === undefined
-        ? {}
-        : { "content-type": "application/json" }),
-      ...(input.version === undefined ? {} : { "If-Match": input.version }),
-    },
-    method: input.method,
-    signal:
-      input.signal === undefined
-        ? AbortSignal.timeout(20_000)
-        : AbortSignal.any([input.signal, AbortSignal.timeout(20_000)]),
+type GoogleRequestInput = GoogleAuth & {
+  body?: unknown;
+  method?: "POST" | "PATCH" | "DELETE";
+  path: string;
+  version?: string;
+};
+type PreparedGoogleRequest = {
+  init: RequestInit & { signal: AbortSignal };
+  url: string;
+};
+
+const prepareGoogleRequest = async (
+  input: GoogleRequestInput
+): Promise<PreparedGoogleRequest> => {
+  const body =
+    input.body === undefined ? undefined : JSON.stringify(input.body);
+  const headers = new Headers({
+    authorization: `Bearer ${input.accessToken}`,
+    ...(input.body === undefined ? {} : { "content-type": "application/json" }),
+    ...(input.version === undefined ? {} : { "If-Match": input.version }),
   });
+  const url = new URL(`${API_URL}${input.path}`).href;
+  if (input.method !== undefined) {
+    await input.beforeEffect?.();
+  }
+  return {
+    init: {
+      ...(body === undefined ? {} : { body }),
+      headers,
+      method: input.method,
+      signal:
+        input.signal === undefined
+          ? AbortSignal.timeout(20_000)
+          : AbortSignal.any([input.signal, AbortSignal.timeout(20_000)]),
+    },
+    url,
+  };
+};
+
+const dispatchGoogleRequest = async ({ init, url }: PreparedGoogleRequest) => {
+  const response = await fetch(url, init);
   if (!response.ok) {
     let { status } = response;
     if (status === 403) {
@@ -195,6 +217,12 @@ const requestGoogle = async (
     );
   }
   return response;
+};
+
+const requestGoogle = async (input: GoogleRequestInput) => {
+  const request = await prepareGoogleRequest(input);
+  request.init.signal.throwIfAborted();
+  return await dispatchGoogleRequest(request);
 };
 
 export const listGoogleCalendars = async (
@@ -654,17 +682,19 @@ export const createGoogleEvent = async (
   const digest = createHash("sha256")
     .update(JSON.stringify(draft))
     .digest("hex");
+  const request = await prepareGoogleRequest({
+    ...input,
+    body: {
+      ...draft,
+      extendedProperties: { private: { quieterDraft: digest } },
+      id,
+    },
+    method: "POST",
+    path: `/calendars/${encodeURIComponent(input.calendarId)}/events?conferenceDataVersion=1&sendUpdates=none`,
+  });
+  request.init.signal.throwIfAborted();
   try {
-    const response = await requestGoogle({
-      ...input,
-      body: {
-        ...draft,
-        extendedProperties: { private: { quieterDraft: digest } },
-        id,
-      },
-      method: "POST",
-      path: `/calendars/${encodeURIComponent(input.calendarId)}/events?conferenceDataVersion=1&sendUpdates=none`,
-    });
+    const response = await dispatchGoogleRequest(request);
     return eventSchema.parse(await response.json());
   } catch (error) {
     if (
@@ -730,13 +760,15 @@ export const importGoogleEvent = async (
   if (existing) {
     return existing;
   }
+  const request = await prepareGoogleRequest({
+    ...input,
+    body: input.event,
+    method: "POST",
+    path: `/calendars/${encodeURIComponent(input.calendarId)}/events/import`,
+  });
+  request.init.signal.throwIfAborted();
   try {
-    const response = await requestGoogle({
-      ...input,
-      body: input.event,
-      method: "POST",
-      path: `/calendars/${encodeURIComponent(input.calendarId)}/events/import`,
-    });
+    const response = await dispatchGoogleRequest(request);
     return eventSchema.parse(await response.json());
   } catch (error) {
     if (

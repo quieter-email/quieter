@@ -280,7 +280,7 @@ export const processNextGmailMessageWork = async (input: {
         try {
           const outcome = await runAuthorizedGmailMailbox(
             { mailboxId: work.mailboxId, userId },
-            async (accessToken) => {
+            async (accessToken, identity) => {
               attempt.authorizationMs =
                 (attempt.authorizationMs ?? 0) +
                 performance.now() -
@@ -300,6 +300,7 @@ export const processNextGmailMessageWork = async (input: {
                   }),
                   extractCodes: !criticalComplete,
                   gmailMessageId: work.gmailMessageId,
+                  identity,
                   mailboxId: work.mailboxId,
                   onAttemptComplete: (messageAttempt) => {
                     attempt.messageAttempts.push(messageAttempt);

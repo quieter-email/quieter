@@ -8,6 +8,9 @@ export type LabelChanges = {
 };
 
 export type ThreadActionHandlers = {
+  placementScope?: MailboxActions["placementScope"];
+  onMarkDone?: (threadId: string) => void | Promise<void>;
+  onReturnToInbox?: (threadId: string) => void | Promise<void>;
   onSetImportance?: (
     threadId: string,
     important: boolean
@@ -44,6 +47,27 @@ export const createMailboxThreadMessageActionHandlers = ({
   supportsReadState?: boolean;
   supportsUnsubscribe?: boolean;
 }): ThreadActionHandlers => ({
+  placementScope: mailboxActions.placementScope,
+  ...(mailboxActions.canSetPlacement
+    ? {
+        onMarkDone: async (threadId: string) => {
+          try {
+            await mailboxActions.markThreadDone(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "mail-placement" });
+          }
+        },
+        onReturnToInbox: async (threadId: string) => {
+          try {
+            await mailboxActions.returnThreadToInbox(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "mail-placement" });
+          }
+        },
+      }
+    : {}),
   ...(mailboxActions.canSetImportance
     ? {
         onSetImportance: async (threadId: string, important: boolean) => {

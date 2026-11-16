@@ -335,7 +335,9 @@ const refreshRetainedMessage = async (input: {
   messageId: string;
   providerRevision?: string;
   leaseId?: string;
+  signal?: AbortSignal;
 }) => {
+  input.signal?.throwIfAborted();
   const [retained] = await db
     .select({ revision: gmailCapturedMessage.providerRevision })
     .from(gmailCapturedMessage)
@@ -352,7 +354,8 @@ const refreshRetainedMessage = async (input: {
   try {
     const metadata = await getGmailCaptureMetadata(
       input.accessToken,
-      input.messageId
+      input.messageId,
+      input.signal
     );
     if (metadata.labelIds.includes(MAILBOX_LABELS.drafts)) {
       await deleteGmailCapturedMessage({
@@ -383,7 +386,9 @@ export const refreshGmailCapturedMessageMetadata = async (input: {
   accessToken: string;
   mailboxId: string;
   messageIds: string[];
+  signal?: AbortSignal;
 }) => {
+  input.signal?.throwIfAborted();
   if (input.messageIds.length === 0) {
     return;
   }
@@ -398,6 +403,7 @@ export const refreshGmailCapturedMessageMetadata = async (input: {
       )
     );
   for (let offset = 0; offset < retained.length; offset += 10) {
+    input.signal?.throwIfAborted();
     await Promise.all(
       retained.slice(offset, offset + 10).map(async ({ messageId }) => {
         await refreshRetainedMessage({ ...input, messageId });

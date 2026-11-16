@@ -63,7 +63,6 @@ import type {
 export {
   GMAIL_SCOPES,
   getAuthorizedGmailMailbox,
-  markGmailMailboxNeedsReconnect,
   refreshAuthorizedGmailAccessToken,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
@@ -255,7 +254,7 @@ const listManagedUnreadNonSpamCounts = async (mailboxIds: string[]) => {
         inArray(managedMailMessage.mailboxId, mailboxIds),
         eq(managedMailMessage.direction, "inbound"),
         eq(managedMailMessage.isRead, false),
-        eq(managedMailMessage.mailboxState, "active")
+        inArray(managedMailMessage.mailboxState, ["active", "done"])
       )
     )
     .groupBy(managedMailMessage.mailboxId);
@@ -1285,7 +1284,11 @@ export const disconnectGmailMailbox = async (input: {
       sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
     );
     await pausePersonalAgentConnections(
-      { connectionIds: [input.mailboxId], userId: input.userId },
+      {
+        additionalMailboxLockIds: [input.mailboxId],
+        connectionIds: [input.mailboxId],
+        userId: input.userId,
+      },
       tx
     );
     const [deletedMailbox] = await tx

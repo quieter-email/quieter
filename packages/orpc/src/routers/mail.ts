@@ -1,10 +1,16 @@
 import { getMailCaptureStatus } from "../mail-capture";
 import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
+import { getComposeSendReadiness } from "../mail/compose-readiness";
 import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
+import {
+  createHeldSend,
+  getHeldSend,
+  undoHeldSend,
+} from "../scheduled-send/service";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
@@ -32,6 +38,9 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getAttachment)
     .handler(queriesMailOperations.getAttachment),
+  getComposeSendReadiness: protectedProcedure
+    .input(mailInputSchemas.getComposeSendReadiness)
+    .handler(getComposeSendReadiness),
   getComposeSendStatus: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getComposeSendStatus)
@@ -40,6 +49,12 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getDraft)
     .handler(queriesMailOperations.getDraft),
+  getHeldSend: protectedProcedure
+    .input(mailInputSchemas.getComposeSendStatus)
+    .handler(
+      async ({ context, input }) =>
+        await getHeldSend({ ...input, userId: context.userId })
+    ),
   getMailCaptureStatus: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getMailCaptureStatus)
@@ -92,16 +107,30 @@ export const mailRouter = {
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
     .handler(withMailUpdate(composeMailOperations.saveDraft)),
-  sendDraft: protectedProcedure
-    .input(mailInputSchemas.sendDraft)
-    .handler(withMailUpdate(composeMailOperations.sendDraft)),
+  sendDraft: protectedProcedure.input(mailInputSchemas.sendDraft).handler(
+    async ({ context, input }) =>
+      await createHeldSend({
+        mailboxId: input.mailboxId,
+        message: input.draft,
+        userId: context.userId,
+      })
+  ),
   sendMessage: protectedProcedure
     .input(mailInputSchemas.sendMessage)
-    .handler(withMailUpdate(composeMailOperations.sendMessage)),
+    .handler(
+      async ({ context, input }) =>
+        await createHeldSend({ ...input, userId: context.userId })
+    ),
   syncMailbox: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.syncMailbox)
     .handler(queriesMailOperations.syncMailbox),
+  undoSend: protectedProcedure
+    .input(mailInputSchemas.getComposeSendStatus)
+    .handler(
+      async ({ context, input }) =>
+        await undoHeldSend({ ...input, userId: context.userId })
+    ),
   unsubscribeFromMessage: protectedProcedure
     .input(mailInputSchemas.unsubscribeFromMessage)
     .handler(withMailUpdate(composeMailOperations.unsubscribeFromMessage)),

@@ -1,3 +1,8 @@
+import {
+  aiAuthorityInputs,
+  getMailboxAiAuthority,
+  updateMailboxAiAuthority,
+} from "../ai-authority";
 import { mailAgentInputs } from "../mail-agent/contracts";
 import {
   activateMailAgent,
@@ -15,6 +20,13 @@ export const mailAgentRouter = {
     .handler(
       async ({ context, input }) =>
         await activateMailAgent({ ...input, userId: context.userId })
+    ),
+  authority: protectedProcedure
+    .route({ method: "GET" })
+    .input(aiAuthorityInputs.get)
+    .handler(
+      async ({ context, input }) =>
+        await getMailboxAiAuthority({ ...input, userId: context.userId })
     ),
   get: protectedProcedure
     .route({ method: "GET" })
@@ -49,5 +61,11 @@ export const mailAgentRouter = {
     .handler(
       async ({ context, input }) =>
         await getMailAgentThreadResults({ ...input, userId: context.userId })
+    ),
+  updateAuthority: protectedProcedure
+    .input(aiAuthorityInputs.update)
+    .handler(
+      async ({ context, input }) =>
+        await updateMailboxAiAuthority({ ...input, userId: context.userId })
     ),
 };

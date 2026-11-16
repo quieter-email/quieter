@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { MailEffectAssertion } from "../gmail-request";
 import { runAuthorizedConnector } from "./runtime";
 import { boundTaskToolOutput, requestTaskProvider } from "./task-tools";
 import type { TaskToolDescriptor } from "./task-tools";
@@ -152,7 +153,9 @@ const taskOutput = (task: z.infer<typeof taskSchema>) => ({
 
 export const callClickUpTool = async (input: {
   arguments: Record<string, unknown>;
+  beforeEffect?: MailEffectAssertion;
   connectionId: string;
+  prepareEffect?: () => Promise<void>;
   signal?: AbortSignal;
   toolName: string;
   userId: string;
@@ -166,14 +169,21 @@ export const callClickUpTool = async (input: {
   }
   return await runAuthorizedConnector(
     {
+      beforeEffect: input.beforeEffect,
       connectionId: input.connectionId,
       mutates: tool.effect === "write",
+      prepareEffect: input.prepareEffect,
       provider: "clickup",
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) => {
-      const authorization = { accessToken, baseUrl: CLICKUP_API_URL, signal };
+    async (accessToken, signal, beforeEffect) => {
+      const authorization = {
+        accessToken,
+        baseUrl: CLICKUP_API_URL,
+        beforeEffect,
+        signal,
+      };
       switch (input.toolName) {
         case "list_workspaces": {
           listWorkspacesInput.parse(input.arguments);

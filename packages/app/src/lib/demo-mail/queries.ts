@@ -47,13 +47,21 @@ export const listDemoMail = (
       )
       .map((message) => message.threadId)
   );
+  const inboxThreads = new Set(
+    messages
+      .filter((message) => isMessageInMailbox(message, "inbox"))
+      .map((message) => message.threadId)
+  );
   const matching = messages
     .map((message) => ({
       ...message,
       threadIsImportant: importantThreads.has(message.threadId),
     }))
     .filter((message) => {
-      if (!isMessageInMailbox(message, input.category)) {
+      if (
+        !isMessageInMailbox(message, input.category) ||
+        (input.category === "done" && inboxThreads.has(message.threadId))
+      ) {
         return false;
       }
       const text = [
@@ -109,6 +117,9 @@ export const listDemoMail = (
           }
           case "is": {
             const flags: Record<string, boolean> = {
+              done:
+                isMessageInMailbox(message, "done") &&
+                !inboxThreads.has(message.threadId),
               read: !isMessageUnread(message),
               spam: message.labelIds?.includes(MAILBOX_LABELS.spam) ?? false,
               trash: message.labelIds?.includes(MAILBOX_LABELS.trash) ?? false,

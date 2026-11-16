@@ -4,6 +4,7 @@ import { ConnectorHttpError } from "./runtime";
 
 export type MicrosoftGraphAuth = {
   accessToken: string;
+  beforeEffect?: () => Promise<void>;
   signal?: AbortSignal;
 };
 
@@ -28,6 +29,9 @@ export const requestMicrosoftGraph = async (
     throw new ORPCError("BAD_REQUEST", {
       message: "Invalid account resource.",
     });
+  }
+  if (input.method !== undefined) {
+    await input.beforeEffect?.();
   }
   const response = await fetch(url, {
     body: input.body === undefined ? undefined : JSON.stringify(input.body),

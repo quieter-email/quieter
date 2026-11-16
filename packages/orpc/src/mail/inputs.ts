@@ -8,6 +8,8 @@ import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
+import { composeSendReadinessInputSchema } from "./snippet-quote-provenance";
+
 const updateLabelsInputSchema = z
   .object({
     addLabelIds: z.array(z.string()).optional(),
@@ -37,6 +39,10 @@ export const mailInputSchemas = {
         z.object({ kind: z.literal("set-read"), read: z.boolean() }),
         z.object({ important: z.boolean(), kind: z.literal("set-importance") }),
         z.object({
+          kind: z.literal("set-placement"),
+          placement: z.enum(["done", "inbox"]),
+        }),
+        z.object({
           destination: z.enum(["inbox", "spam", "trash"]),
           kind: z.literal("move"),
         }),
@@ -64,6 +70,7 @@ export const mailInputSchemas = {
           ),
       ]),
       mailboxId: z.string().trim().min(1),
+      requestId: z.uuid().optional(),
       targets: z
         .array(
           z.object({
@@ -88,6 +95,39 @@ export const mailInputSchemas = {
         }),
     })
     .superRefine((input, context) => {
+      if (
+        input.command.kind === "set-placement" &&
+        (input.mailboxId.length > 255 ||
+          input.targets.some(
+            (target) =>
+              target.threadId.length > 255 ||
+              target.messageIds.some((id) => id.length > 255)
+          ))
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "This conversation reference is invalid.",
+          path: ["targets"],
+        });
+      }
+      if (input.command.kind === "set-placement" && !input.requestId) {
+        context.addIssue({
+          code: "custom",
+          message:
+            "This action needs a request identity. Refresh and try again.",
+          path: ["requestId"],
+        });
+      }
+      if (
+        new Set(input.targets.map((target) => target.threadId)).size !==
+        input.targets.length
+      ) {
+        context.addIssue({
+          code: "custom",
+          message: "A conversation can appear only once in an action.",
+          path: ["targets"],
+        });
+      }
       if (
         input.command.kind !== "set-importance" &&
         input.targets.some((target) => target.messageIds.length === 0)
@@ -121,6 +161,7 @@ export const mailInputSchemas = {
     messageId: z.string(),
     mimeType: z.string().min(1),
   }),
+  getComposeSendReadiness: composeSendReadinessInputSchema,
   getComposeSendStatus: z.object({
     mailboxId: z.string().trim().min(1),
     sendOperationId: z.string().trim().min(1),
@@ -149,13 +190,24 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageIds: z.array(z.string().trim().min(1)).max(100),
   }),
-  listThreads: z.object({
-    category: mailCategorySchema,
-    mailboxId: z.string().trim().min(1),
-    maxResults: z.number().int().positive().max(100).optional(),
-    pageToken: z.string().optional(),
-    query: z.string().optional(),
-  }),
+  listThreads: z
+    .object({
+      category: mailCategorySchema,
+      correspondentEmail: z.email().trim().toLowerCase().optional(),
+      mailboxId: z.string().trim().min(1),
+      maxResults: z.number().int().positive().max(100).optional(),
+      pageToken: z.string().optional(),
+      query: z.string().optional(),
+      scope: z.literal("all_mail").optional(),
+    })
+    .refine(
+      (input) =>
+        input.correspondentEmail === undefined || input.scope === "all_mail",
+      {
+        message: "Correspondent history requires all mail.",
+        path: ["scope"],
+      }
+    ),
   markMessageAsRead: z.object({
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
@@ -193,7 +245,15 @@ export const mailInputSchemas = {
     message: composeMessageInputSchema,
   }),
   syncMailbox: z.object({
-    category: z.enum(["inbox", "important", "unread", "spam", "sent", "trash"]),
+    category: z.enum([
+      "inbox",
+      "done",
+      "important",
+      "unread",
+      "spam",
+      "sent",
+      "trash",
+    ]),
     mailboxId: z.string().trim().min(1),
     startHistoryId: z.string().min(1),
   }),
