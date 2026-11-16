@@ -3,11 +3,14 @@ import { describe, expect, test } from "vite-plus/test";
 
 import {
   admitMailUndo,
+  bindMailUndoRehide,
   createMailUndoCutoff,
   getMailUndoReceipt,
   mailUndoAdmissionSchema,
   mailUndoAttemptSchema,
   mailUndoOriginalSchema,
+  mailUndoPlanSchema,
+  mailUndoRehideBindingSchema,
   mailUndoPlanningSchema,
   planMailUndo,
 } from "../src/mail/undo-model";
@@ -613,7 +616,59 @@ describe("exact compensation ownership", () => {
   });
 });
 
+const rehideBinding = () => {
+  const result = planMailUndo(
+    planning(snoozeOriginal("return-now", "suspended"))
+  );
+  return mailUndoRehideBindingSchema.parse({
+    outcome: {
+      acknowledgedMessageIds: ["message"],
+      actorUserId: "actor",
+      mailboxId: "mailbox",
+      operationId: "00000000-0000-4000-8000-000000000007",
+      placement: "done",
+      requestId: "00000000-0000-4000-8000-000000000008",
+      requestedMessageIds: ["message"],
+      status: "acknowledged",
+      threadId: "thread",
+    },
+    phase: { attemptId, requestId: "00000000-0000-4000-8000-000000000008" },
+    plan: result.plan,
+  });
+};
+
 describe("Snooze semantic restoration", () => {
+  test("rejects a directly installable legacy rehide plan before its new hide is acknowledged", () => {
+    const original = snoozeOriginal("return-now");
+    const { plan } = planMailUndo(planning(original));
+    if (
+      plan?.kind !== "snooze" ||
+      original.kind !== "snooze" ||
+      !original.proof ||
+      original.proof.command !== "return-now"
+    ) {
+      throw new Error("Expected a Return now inverse.");
+    }
+    const { previous } = original.proof;
+    const unsafe = {
+      effects: plan.effects,
+      expectedVersion: plan.expectedVersion,
+      kind: "snooze",
+      nextVersion: plan.nextVersion,
+      schedule: {
+        hiddenMessageIds: previous.hiddenMessageIds,
+        hideOperationId: previous.hideOperationId,
+        id: previous.id,
+        knownIncomingMessageIds: previous.knownIncomingMessageIds,
+        returnAt: previous.returnAt,
+        status: previous.status,
+        timeZone: previous.timeZone,
+      },
+      scheduleId: plan.scheduleId,
+    };
+    expect(mailUndoPlanSchema.safeParse(unsafe).success).toBeFalsy();
+  });
+
   test.each(["snooze", "reschedule", "cancel", "return-now"] as const)(
     "rejects malformed stored %s lifecycle evidence before semantic conversion",
     (command) => {
@@ -676,7 +731,7 @@ describe("Snooze semantic restoration", () => {
       expect(result.plan).toMatchObject({
         effects: [],
         kind: "snooze",
-        schedule: { status: "suspended" },
+        restoration: { kind: "restore", schedule: { status: "suspended" } },
       });
       if (!result.plan || result.plan.kind !== "snooze") {
         throw new Error("Expected a Snooze compensation plan.");
@@ -883,10 +938,13 @@ describe("Snooze semantic restoration", () => {
     const result = planMailUndo(planning(original));
     expect(result.plan).toMatchObject({
       kind: "snooze",
-      schedule: { status: "suspended" },
+      restoration: { kind: "restore", schedule: { status: "suspended" } },
     });
     expect(
-      result.plan && "schedule" in result.plan ? result.plan.schedule : null
+      result.plan?.kind === "snooze" &&
+        result.plan.restoration.kind === "restore"
+        ? result.plan.restoration.schedule
+        : null
     ).not.toHaveProperty("version");
     expect(
       mailUndoOriginalSchema.safeParse({
@@ -916,5 +974,161 @@ describe("Snooze semantic restoration", () => {
         },
       }).success
     ).toBeFalsy();
+  });
+});
+
+describe("Return now Undo hide ownership", () => {
+  test("materializes only the actual new acknowledged receipt while leaving its persisted plan ownerless", () => {
+    const input = rehideBinding();
+    if (
+      input.plan.restoration.kind !== "rehide" ||
+      input.outcome.status !== "acknowledged"
+    ) {
+      throw new Error("Expected rehide evidence.");
+    }
+    Object.freeze(input.plan.restoration.template);
+    Object.freeze(input.plan.restoration);
+    Object.freeze(input.plan);
+    const result = bindMailUndoRehide(input);
+    expect(result.kind).toBe("bound");
+    if (result.kind !== "bound") {
+      throw new Error("Expected a newly bound schedule.");
+    }
+    expect(result.schedule.hideOperationId).toBe(input.outcome.operationId);
+    expect(result.schedule.hideOperationId).not.toBe(input.phase.requestId);
+    expect(result.schedule.status).toBe("suspended");
+    expect(result.schedule.hiddenMessageIds).toContain("message");
+    expect(input.plan.restoration.template).not.toHaveProperty(
+      "hideOperationId"
+    );
+    expect(bindMailUndoRehide(input)).toMatchObject({
+      kind: "bound",
+      schedule: { hideOperationId: input.outcome.operationId },
+    });
+    expect(
+      mailUndoPlanSchema.safeParse({
+        ...input.plan,
+        restoration: {
+          ...input.plan.restoration,
+          template: {
+            ...input.plan.restoration.template,
+            hideOperationId: phaseId,
+          },
+        },
+      }).success
+    ).toBeFalsy();
+  });
+
+  test.each([
+    { actorUserId: "another" },
+    { mailboxId: "another" },
+    { threadId: "another" },
+    { requestId: "another" },
+    { operationId: phaseId },
+    { placement: "inbox" },
+    { requestedMessageIds: ["another"] },
+    { requestedMessageIds: ["message", "extra"] },
+    { acknowledgedMessageIds: ["another"] },
+    { acknowledgedMessageIds: ["message", "extra"] },
+  ])("refuses mismatched native acknowledgement %j", (change) => {
+    const input = rehideBinding();
+    const changed = mailUndoRehideBindingSchema.parse({
+      ...input,
+      outcome: { ...input.outcome, ...change },
+    });
+    expect(bindMailUndoRehide(changed)).toMatchObject({ kind: "blocked" });
+  });
+
+  test("refuses another retained attempt and duplicate or empty native sets", () => {
+    const input = rehideBinding();
+    expect(
+      bindMailUndoRehide({
+        ...input,
+        phase: { ...input.phase, attemptId: operationId },
+      })
+    ).toMatchObject({ kind: "blocked" });
+    for (const field of ["requestedMessageIds", "acknowledgedMessageIds"]) {
+      for (const ids of [[], ["message", "message"]]) {
+        expect(
+          mailUndoRehideBindingSchema.safeParse({
+            ...input,
+            outcome: { ...input.outcome, [field]: ids },
+          }).success
+        ).toBeFalsy();
+      }
+    }
+  });
+
+  test.each([
+    "prepared",
+    "submitting",
+    "uncertain",
+    "failed",
+    "observed-applied",
+  ])(
+    "withholds restoration from %s even when the destination matches",
+    (status) => {
+      const input = mailUndoRehideBindingSchema.parse({
+        ...rehideBinding(),
+        outcome: { status },
+      });
+      expect(bindMailUndoRehide(input)).toMatchObject({
+        kind: "blocked",
+        reason: "unacknowledged",
+      });
+    }
+  );
+
+  test("rejects bare applied evidence and malformed retained identities without throwing", () => {
+    const input = rehideBinding();
+    expect(
+      mailUndoRehideBindingSchema.safeParse({
+        ...input,
+        outcome: { ...input.outcome, status: "applied" },
+      }).success
+    ).toBeFalsy();
+    expect(
+      mailUndoRehideBindingSchema.safeParse({
+        ...input,
+        phase: { ...input.phase, attemptId: "broken" },
+      }).success
+    ).toBeFalsy();
+    expect(
+      mailUndoRehideBindingSchema.safeParse({
+        ...input,
+        plan: { ...input.plan, expectedVersion: "broken" },
+      }).success
+    ).toBeFalsy();
+  });
+
+  test.each(["reschedule", "cancel"] as const)(
+    "%s retains its unchanged owner without accepting a rehide binding",
+    (command) => {
+      const { plan } = planMailUndo(
+        planning(snoozeOriginal(command, "suspended"))
+      );
+      expect(plan).toMatchObject({
+        effects: [],
+        restoration: {
+          kind: "restore",
+          schedule: { hideOperationId: phaseId, status: "suspended" },
+        },
+      });
+      const input = mailUndoRehideBindingSchema.parse({
+        ...rehideBinding(),
+        plan,
+      });
+      expect(bindMailUndoRehide(input)).toMatchObject({ kind: "blocked" });
+    }
+  );
+
+  test("initial retirement never constructs a replacement schedule", () => {
+    const { plan } = planMailUndo(planning(snoozeOriginal("snooze")));
+    expect(plan).toMatchObject({ restoration: { kind: "retire" } });
+    const input = mailUndoRehideBindingSchema.parse({
+      ...rehideBinding(),
+      plan,
+    });
+    expect(bindMailUndoRehide(input)).toMatchObject({ kind: "blocked" });
   });
 });

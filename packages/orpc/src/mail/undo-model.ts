@@ -606,6 +606,73 @@ const inverseSchema = z.discriminatedUnion("facet", [
   }),
 ]);
 type Inverse = z.infer<typeof inverseSchema>;
+const snoozeRestorationSchema = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("retire") }),
+  z.strictObject({
+    kind: z.literal("restore"),
+    schedule: restoredScheduleSchema,
+  }),
+  z.strictObject({
+    kind: z.literal("rehide"),
+    predecessorHideOperationId: z.uuid(),
+    template: restoredScheduleSchema.omit({ hideOperationId: true }),
+  }),
+]);
+const snoozeUndoPlanSchema = z
+  .strictObject({
+    effects: z.array(inverseSchema).max(1000),
+    expectedVersion: revisionSchema,
+    kind: z.literal("snooze"),
+    nextVersion: revisionSchema,
+    restoration: snoozeRestorationSchema,
+    scheduleId: z.uuid(),
+    scope: z.strictObject({
+      actorUserId: sourceIdSchema,
+      attemptId: z.uuid(),
+      mailboxId: sourceIdSchema,
+      threadId: sourceIdSchema,
+    }),
+  })
+  .transform((plan, context) => {
+    const ids = plan.effects.map((effect) => effect.messageId);
+    const { restoration } = plan;
+    if (
+      BigInt(plan.nextVersion) !== BigInt(plan.expectedVersion) + 1n ||
+      new Set(ids).size !== ids.length ||
+      plan.effects.some((effect) => effect.facet !== "destination") ||
+      (restoration.kind === "restore" &&
+        (plan.effects.length !== 0 ||
+          restoration.schedule.id !== plan.scheduleId ||
+          restoration.schedule.hiddenMessageIds.some(
+            (id) => !restoration.schedule.knownIncomingMessageIds.includes(id)
+          ))) ||
+      (restoration.kind === "retire" &&
+        (plan.effects.length === 0 ||
+          plan.effects.some(
+            (effect) =>
+              effect.facet === "destination" &&
+              placementValue(effect.destination) !== "inbox"
+          ))) ||
+      (restoration.kind === "rehide" &&
+        (ids.length === 0 ||
+          restoration.template.id !== plan.scheduleId ||
+          !sameIds(ids, restoration.template.hiddenMessageIds) ||
+          restoration.template.hiddenMessageIds.some(
+            (id) => !restoration.template.knownIncomingMessageIds.includes(id)
+          ) ||
+          plan.effects.some(
+            (effect) =>
+              effect.facet === "destination" &&
+              placementValue(effect.destination) !== "done"
+          )))
+    ) {
+      context.addIssue({
+        code: "custom",
+        message: "Invalid Snooze compensation plan.",
+      });
+    }
+    return plan;
+  });
 export const mailUndoPlanSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     effects: z.array(inverseSchema).max(1000),
@@ -616,16 +683,75 @@ export const mailUndoPlanSchema = z.discriminatedUnion("kind", [
     expectedSequence: revisionSchema,
     kind: z.literal("placement"),
   }),
-  z.strictObject({
-    effects: z.array(inverseSchema).max(1000),
-    expectedVersion: revisionSchema,
-    kind: z.literal("snooze"),
-    nextVersion: revisionSchema,
-    schedule: restoredScheduleSchema.nullable(),
-    scheduleId: z.uuid(),
-  }),
+  snoozeUndoPlanSchema,
 ]);
 export type MailUndoPlan = z.infer<typeof mailUndoPlanSchema>;
+
+export const mailUndoRehideBindingSchema = z.strictObject({
+  outcome: z.discriminatedUnion("status", [
+    z.strictObject({
+      acknowledgedMessageIds: messageIdsSchema.min(1),
+      actorUserId: sourceIdSchema,
+      mailboxId: sourceIdSchema,
+      operationId: z.uuid(),
+      placement: z.enum(["done", "inbox"]),
+      requestId: sourceIdSchema,
+      requestedMessageIds: messageIdsSchema.min(1),
+      status: z.literal("acknowledged"),
+      threadId: sourceIdSchema,
+    }),
+    z.strictObject({
+      status: z.enum([
+        "prepared",
+        "submitting",
+        "uncertain",
+        "failed",
+        "observed-applied",
+      ]),
+    }),
+  ]),
+  phase: z.strictObject({ attemptId: z.uuid(), requestId: sourceIdSchema }),
+  plan: snoozeUndoPlanSchema,
+});
+type RehideBinding = z.infer<typeof mailUndoRehideBindingSchema>;
+
+export const bindMailUndoRehide = (
+  input: RehideBinding
+):
+  | { kind: "bound"; schedule: z.infer<typeof restoredScheduleSchema> }
+  | { kind: "blocked"; reason: "unacknowledged" | "mismatched" } => {
+  const { plan, phase, outcome } = input;
+  if (outcome.status !== "acknowledged") {
+    return { kind: "blocked", reason: "unacknowledged" };
+  }
+  const { restoration, scope } = plan;
+  const ids = plan.effects.map((effect) => effect.messageId);
+  if (
+    restoration.kind !== "rehide" ||
+    phase.attemptId !== scope.attemptId ||
+    outcome.requestId !== phase.requestId ||
+    outcome.actorUserId !== scope.actorUserId ||
+    outcome.mailboxId !== scope.mailboxId ||
+    outcome.threadId !== scope.threadId ||
+    outcome.placement !== "done" ||
+    outcome.operationId === restoration.predecessorHideOperationId ||
+    !sameIds(ids, outcome.requestedMessageIds) ||
+    !sameIds(ids, outcome.acknowledgedMessageIds)
+  ) {
+    return { kind: "blocked", reason: "mismatched" };
+  }
+  return {
+    kind: "bound",
+    schedule: {
+      ...restoration.template,
+      hiddenMessageIds: [...restoration.template.hiddenMessageIds],
+      hideOperationId: outcome.operationId,
+      knownIncomingMessageIds: [
+        ...restoration.template.knownIncomingMessageIds,
+      ],
+    },
+  };
+};
 
 export const mailUndoPlanningSchema = z.strictObject({
   actorUserId: sourceIdSchema,
@@ -889,6 +1015,33 @@ export const planMailUndo = (
       plan: null,
     };
   }
+  let restoration: z.infer<typeof snoozeRestorationSchema>;
+  if (proof.command === "snooze") {
+    restoration = { kind: "retire" };
+  } else {
+    const template = {
+      hiddenMessageIds: proof.previous.hiddenMessageIds,
+      id: proof.previous.id,
+      knownIncomingMessageIds: proof.previous.knownIncomingMessageIds,
+      returnAt: proof.previous.returnAt,
+      status: proof.previous.status,
+      timeZone: proof.previous.timeZone,
+    };
+    restoration =
+      proof.command === "return-now"
+        ? {
+            kind: "rehide",
+            predecessorHideOperationId: proof.previous.hideOperationId,
+            template,
+          }
+        : {
+            kind: "restore",
+            schedule: {
+              ...template,
+              hideOperationId: proof.previous.hideOperationId,
+            },
+          };
+  }
   return {
     items: items.length ? items : [item("pending", [])],
     plan: {
@@ -896,19 +1049,14 @@ export const planMailUndo = (
       expectedVersion: proof.after.version,
       kind: "snooze",
       nextVersion: (BigInt(proof.after.version) + 1n).toString(),
-      schedule:
-        "previous" in proof
-          ? {
-              hiddenMessageIds: proof.previous.hiddenMessageIds,
-              hideOperationId: proof.previous.hideOperationId,
-              id: proof.previous.id,
-              knownIncomingMessageIds: proof.previous.knownIncomingMessageIds,
-              returnAt: proof.previous.returnAt,
-              status: proof.previous.status,
-              timeZone: proof.previous.timeZone,
-            }
-          : null,
+      restoration,
       scheduleId: proof.after.id,
+      scope: {
+        actorUserId: original.actorUserId,
+        attemptId: attempt.id,
+        mailboxId: original.mailboxId,
+        threadId: original.threadId,
+      },
     },
   };
 };

@@ -21,6 +21,10 @@ import {
   supersedePendingMailPlacement,
 } from "../src/mail/placement";
 import type { MailSnoozePlacement } from "../src/mail/placement";
+import {
+  bindMailUndoRehide,
+  mailUndoRehideBindingSchema,
+} from "../src/mail/undo-model";
 import { reconcileMailSnoozes } from "../src/snooze/repair";
 import {
   applyMailSnooze,
@@ -903,6 +907,145 @@ describe.skipIf(!fixture.enabled)("durable mailbox Snooze", () => {
     >`select "mailboxState" as state from "managedMailMessage" where id='anchor'`;
     expect(message?.state).toBe("active");
   });
+
+  test.each(["new", "historical"])(
+    "a restored Return now schedule requires its %s hide owner at the actual due worker",
+    async (ownership) => {
+      await seed({ id: "outside", state: "done" });
+      await seed({ id: "anchor" });
+      const first = await snooze();
+      const id = first.snooze?.id ?? "";
+      const [previous] = await fixture.client<
+        {
+          hideOperationId: string;
+          hiddenMessageIds: string[];
+          knownIncomingMessageIds: string[];
+          returnAt: string;
+          timeZone: string;
+        }[]
+      >`select "hideOperationId", "hiddenMessageIds", "knownIncomingMessageIds", "returnAt"::text as "returnAt", "timeZone" from "mailSnooze" where id=${id}`;
+      if (previous === undefined) {
+        throw new Error("Expected the prior active schedule.");
+      }
+      await change({
+        command: { kind: "return-now" },
+        version: first.snooze?.version ?? 0,
+      });
+      const [returned] = await fixture.client<
+        { version: number }[]
+      >`select version from "mailSnooze" where id=${id}`;
+      if (returned === undefined) {
+        throw new Error("Expected a returned schedule.");
+      }
+      const requestId = randomUUID();
+      const result = await applyMailPlacement({
+        context: { userId: "actor" },
+        input: {
+          command: { kind: "set-placement", placement: "done" },
+          mailboxId: "mailbox",
+          requestId,
+          targets: [{ messageIds: ["anchor"], threadId: "conversation" }],
+        },
+      });
+      const [target] = result.targets;
+      if (target?.status !== "applied" || !target.operationId) {
+        throw new Error("Expected the acknowledged new native hide.");
+      }
+      const [receipt] = await fixture.client<
+        {
+          id: string;
+          messageIds: string[];
+          requestedMessageIds: string[];
+          requestId: string;
+        }[]
+      >`select id, "messageIds", "requestedMessageIds", "requestId" from "mailPlacementOperation" where id=${target.operationId}`;
+      if (receipt === undefined) {
+        throw new Error("Expected the actual native receipt.");
+      }
+      const attemptId = randomUUID();
+      const input = mailUndoRehideBindingSchema.parse({
+        outcome: {
+          acknowledgedMessageIds: receipt.messageIds,
+          actorUserId: "actor",
+          mailboxId: "mailbox",
+          operationId: receipt.id,
+          placement: "done",
+          requestId: receipt.requestId,
+          requestedMessageIds: receipt.requestedMessageIds,
+          status: "acknowledged",
+          threadId: "conversation",
+        },
+        phase: { attemptId, requestId },
+        plan: {
+          effects: [
+            {
+              destination: { kind: "managed", value: "done" },
+              expectedIntentToken: randomUUID(),
+              facet: "destination",
+              messageId: "anchor",
+              sourceProof: { kind: "managed-revision", revision: "0" },
+            },
+          ],
+          expectedVersion: returned.version.toString(),
+          kind: "snooze",
+          nextVersion: (returned.version + 1).toString(),
+          restoration: {
+            kind: "rehide",
+            predecessorHideOperationId: previous.hideOperationId,
+            template: {
+              hiddenMessageIds: previous.hiddenMessageIds,
+              id,
+              knownIncomingMessageIds: previous.knownIncomingMessageIds,
+              returnAt: new Date(previous.returnAt).toISOString(),
+              status: "active",
+              timeZone: previous.timeZone,
+            },
+          },
+          scheduleId: id,
+          scope: {
+            actorUserId: "actor",
+            attemptId,
+            mailboxId: "mailbox",
+            threadId: "conversation",
+          },
+        },
+      });
+      const bound = bindMailUndoRehide(input);
+      if (bound.kind !== "bound") {
+        throw new Error("Expected a matching acknowledged hide binding.");
+      }
+      const hideOperationId =
+        ownership === "new"
+          ? bound.schedule.hideOperationId
+          : previous.hideOperationId;
+      await fixture.client`update "mailSnooze" set status='active', version=${returned.version + 1}, "hideOperationId"=${hideOperationId}, "hideRequestId"=${receipt.requestId}, "returnOperationId"=null, "returnRequestId"=null, "leaseToken"=null, "leaseUntil"=null where id=${id}`;
+      await makeDue(id);
+      await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+      const [finished] = await fixture.client<
+        { status: string }[]
+      >`select status from "mailSnooze" where id=${id}`;
+      const messages = await fixture.client<
+        { id: string; state: string }[]
+      >`select id, "mailboxState" as state from "managedMailMessage" order by id`;
+      expect(finished?.status).toBe(
+        ownership === "new" ? "returned" : "suspended"
+      );
+      expect(messages.find((message) => message.id === "anchor")?.state).toBe(
+        ownership === "new" ? "active" : "done"
+      );
+      expect(messages.find((message) => message.id === "outside")?.state).toBe(
+        "done"
+      );
+      const [count] = await fixture.client<
+        { count: number }[]
+      >`select count(*)::integer as count from "mailPlacementOperation"`;
+      await dispatchMailSnooze({ id, mailboxId: "mailbox" });
+      const [afterDuplicate] = await fixture.client<
+        { count: number }[]
+      >`select count(*)::integer as count from "mailPlacementOperation"`;
+      expect(afterDuplicate?.count).toBe(count?.count);
+    }
+  );
 
   test("a later Done no-op and legacy move retire the schedule before any old wake", async () => {
     await seed({ id: "anchor" });
