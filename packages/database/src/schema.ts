@@ -199,6 +199,7 @@ export type MailSendSnapshot = {
   headers: ManagedMailHeader[];
   kind: "api" | "mailbox";
   mailboxId?: string;
+  origin?: unknown;
   replyTo: string[];
   sender: string;
   sentAt: string;
@@ -1414,6 +1415,7 @@ export const mailMessageImportance = pgTable(
   {
     aiImportant: boolean("aiImportant"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     classifierVersion: text("classifierVersion").notNull(),
     contentHash: text("contentHash").notNull(),
     createdAt: timestamp("createdAt").notNull(),
@@ -1447,6 +1449,10 @@ export const mailMessageImportance = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "mail_message_importance_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
     index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
   ]
@@ -1502,6 +1508,7 @@ export const gmailAutoLabelEvent = pgTable(
   {
     appliedAt: timestamp("appliedAt"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1521,6 +1528,10 @@ export const gmailAutoLabelEvent = pgTable(
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "gmail_auto_label_event_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("gmail_auto_label_event_mailbox_created_at_idx").on(
       table.mailboxId,
       table.createdAt
@@ -1550,6 +1561,7 @@ export const mailboxVerificationCode = pgTable(
   "mailboxVerificationCode",
   {
     attemptCount: integer("attemptCount"),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1575,6 +1587,10 @@ export const mailboxVerificationCode = pgTable(
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "mailbox_verification_code_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     check(
       "mailbox_verification_code_payload_check",
       sql`${table.encryptedCode} is null or (${table.expiresAt} is not null and ${table.threadId} is not null)`
@@ -3605,6 +3621,7 @@ export const mailReminderJob = pgTable(
   "mailReminderJob",
   {
     attempts: integer("attempts").notNull(),
+    authorityVersion: integer("authorityVersion"),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     completedAt: timestamp("completedAt", { withTimezone: true }),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3635,6 +3652,10 @@ export const mailReminderJob = pgTable(
     usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
   },
   (table) => [
+    check(
+      "mail_reminder_job_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_reminder_job_ready_idx").on(
       table.kind,
       table.completedAt,
@@ -3665,6 +3686,7 @@ export const mailReminderSuggestion = pgTable(
   "mailReminderSuggestion",
   {
     attempts: integer("attempts").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     automatic: boolean("automatic").notNull(),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3704,6 +3726,10 @@ export const mailReminderSuggestion = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
+    check(
+      "mail_reminder_suggestion_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     unique("mail_reminder_suggestion_source_unique").on(
       table.userId,
       table.mailboxId,
@@ -3729,6 +3755,7 @@ export const gmailComposeOperation = pgTable(
     followUpReminder: jsonb("followUpReminder").$type<{
       userId: string;
       intent: FollowUpReminderIntent;
+      origin?: unknown;
     }>(),
     id: text("id").primaryKey(),
     kind: text("kind").$type<"save" | "send">().notNull(),
