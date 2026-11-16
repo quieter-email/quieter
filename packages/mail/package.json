@@ -37,7 +37,8 @@
     "./scheduled-send": "./src/scheduled-send.ts",
     "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts",
     "./snooze": "./src/snooze.ts",
-    "./snooze-ticket": "./src/snooze-ticket.ts"
+    "./snooze-ticket": "./src/snooze-ticket.ts",
+    "./undo": "./src/undo.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",
