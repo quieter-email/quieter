@@ -15,3 +15,7 @@ Tag the current main commit and publish before main advances. If main advances b
 Restrict the `npm-publish` environment to the `main` branch, with no tag rules. The default-branch relay allows this restriction while retaining automatic tagged releases. Keep main protected and require reviewed changes to its workflows. The npm trusted publisher must require this repository, `sdk-publish.yml`, and `npm-publish` environment. A publisher that accepts workflows without that environment can bypass the environment's branch restriction.
 
 Keep the Production environment restricted to protected branches for the managed mail backfill, or narrow it to main. Retain the AWS trust restriction to the intended production deployment identity. Source guards cannot prevent a writer from editing a workflow on another branch; these external controls are part of the security boundary.
+
+## Management packages
+
+`@quieter/management-sdk` and `@quieter/management-cli` are separate private foundation packages. This transactional release process does not publish them. Their compatibility date follows the shared management contract; their package versions and release ownership remain separate. See [Management SDK and CLI](management-sdk.md) for local setup, distribution boundaries, and the live read/approved-mutation acceptance required before a management release path can be enabled.

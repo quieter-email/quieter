@@ -1,0 +1,16 @@
+{
+  "extends": "./packages/management-sdk/tsconfig.json",
+  "include": [
+    "packages/management-sdk/src/**/*.ts",
+    "packages/calendar/src/contracts.ts",
+    "packages/mail/src/auto-label.ts",
+    "packages/mail/src/compose/schema.ts",
+    "packages/mail/src/data-plane.ts",
+    "packages/mail/src/mailbox-organization.ts",
+    "packages/mail/src/messages.ts",
+    "packages/orpc/src/control/contracts.ts",
+    "packages/orpc/src/control/mutation-contracts.ts",
+    "packages/orpc/src/control/openapi.ts",
+    "packages/orpc/src/control/registry.ts"
+  ]
+}

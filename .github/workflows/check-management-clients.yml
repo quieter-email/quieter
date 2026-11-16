@@ -1,0 +1,103 @@
+name: Management client artifacts
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - .github/workflows/check-management-clients.yml
+      - .github/actions/setup/**
+      - .node-version
+      - package.json
+      - pnpm-workspace.yaml
+      - vite.config.ts
+      - packages/config/**
+      - packages/calendar/**
+      - packages/mail/**
+      - packages/orpc/package.json
+      - packages/orpc/src/mail/inputs.ts
+      - packages/management-sdk/**
+      - packages/management-cli/**
+      - packages/orpc/src/control/contracts.ts
+      - packages/orpc/src/control/mutation-contracts.ts
+      - packages/orpc/src/control/openapi.ts
+      - packages/orpc/src/control/registry.ts
+      - tsconfig.management-sdk.json
+      - tsconfig.management-cli.json
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: management-clients-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  installed-clients:
+    name: Build and verify installed management clients
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup repository
+        uses: ./.github/actions/setup
+
+      - name: Build and pack clients
+        run: |
+          vp run @quieter/management-sdk#build
+          vp run @quieter/management-cli#build
+          vp pm pack --filter @quieter/management-sdk --out "$RUNNER_TEMP/management-sdk.tgz"
+          vp pm pack --filter @quieter/management-cli --out "$RUNNER_TEMP/management-cli.tgz"
+
+      - name: Verify standalone runtime and declarations
+        shell: bash
+        run: |
+          set -euo pipefail
+          management_repository="$PWD"
+          management_consumer="$(mktemp -d "$RUNNER_TEMP/management-consumer-XXXXXX")"
+          trap 'rm -rf "$management_consumer"' EXIT
+          printf '{"private":true,"type":"module"}\n' > "$management_consumer/package.json"
+          cd "$management_consumer"
+          vp add --ignore-scripts "$RUNNER_TEMP/management-sdk.tgz" "$RUNNER_TEMP/management-cli.tgz"
+          cat > runtime.mjs <<'JS'
+          import assert from 'node:assert/strict';
+          import {writeFile} from 'node:fs/promises';
+          import {createManagementClient} from '@quieter/management-sdk';
+          import {runManagementCli} from '@quieter/management-cli';
+          const id='72b92a77-d43a-483d-99a2-e28b6e8c8423';
+          const parameters={organizationId:'artifact-team',idempotencyKey:'retained-artifact-key',openTrackingEnabled:false};
+          const now=new Date().toISOString();
+          const review={id,operation:'organization.settings.update',organizationId:parameters.organizationId,organizationName:'Artifact team',patch:{openTrackingEnabled:false},createdAt:now,expiresAt:now,status:'prepared',reviewPath:`/control/review?approvalId=${id}`};
+          const transport=async(_url,init)=>Response.json(review,{headers:{'Quieter-Control-Version':new Headers(init.headers).get('Quieter-Control-Version')}});
+          const client=createManagementClient({origin:'https://artifact.example.test',auth:{kind:'browser-session'},fetch:transport});
+          assert.equal((await client.prepareSettingsUpdate({parameters})).id,id);
+          assert.equal((await client.reviewMutation({id})).id,id);
+          assert.equal((await client.cancelMutation({id})).id,id);
+          await writeFile('session.json',JSON.stringify({origin:'https://artifact.example.test',cookie:'session=synthetic'}),{mode:0o600});
+          let output='';
+          const code=await runManagementCli({args:['prepare-settings-update','--origin','https://artifact.example.test','--session-file','session.json','--input','-'],readStdin:async()=>JSON.stringify(parameters),stdout:text=>{output+=text;},stderr:text=>{throw new Error(text);},fetch:transport});
+          assert.equal(code,0);
+          assert.equal(JSON.parse(output).id,id);
+          JS
+          vp exec node runtime.mjs
+          vp exec quieter-management --help
+          cat > types.ts <<'TS'
+          import {createManagementClient} from '@quieter/management-sdk';
+          import {runManagementCli} from '@quieter/management-cli';
+          import type {ManagementSettingsUpdatePreparation,ManagementMutationReview} from '@quieter/management-sdk';
+          const client=createManagementClient({origin:'https://artifact.example.test',auth:{kind:'browser-session'}});
+          const parameters={organizationId:'artifact-team',idempotencyKey:'retained-key',openTrackingEnabled:false} satisfies ManagementSettingsUpdatePreparation;
+          const review:ManagementMutationReview=await client.prepareSettingsUpdate({parameters});
+          await client.reviewMutation({id:review.id});
+          await client.cancelMutation({id:review.id});
+          if(review.status==='succeeded'){const enabled:boolean=review.result.openTrackingEnabled;void enabled;}
+          const commandResult:Promise<number>=runManagementCli({args:['--help'],readStdin:async()=>'',stdout:console.log,stderr:console.error});
+          void commandResult;
+          TS
+          printf '{"compilerOptions":{"module":"NodeNext","moduleResolution":"NodeNext","target":"ES2022","lib":["ESNext","DOM"],"types":[],"strict":true,"noEmit":true},"files":["types.ts"]}\n' > tsconfig.json
+          cd "$management_repository"
+          vp exec tsc --project "$management_consumer/tsconfig.json"
