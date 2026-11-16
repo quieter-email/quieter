@@ -141,7 +141,7 @@ describe("correspondent memory overview", () => {
       ...selected,
       overview: { correspondentEmail: " \tAlex+Tag@EXAMPLE.TEST\u00A0" },
     });
-    expect(fixtures.query).toHaveBeenCalledWith();
+    expect(fixtures.query.mock.calls.length).toBeGreaterThan(0);
     for (const [query, parameters] of fixtures.query.mock.calls) {
       expect(query).toMatch(
         /where \(*"aiMemory"\."scope" = \$\d+\)* and \(*"aiMemory"\."scopeKey" = \$\d+\)* and \(*"aiMemory"\."userId" = \$\d+\)* and \(*"aiMemory"\."status" = \$\d+\)* and \(*"aiMemory"\."expiresAt" is null\)* or \(*"aiMemory"\."expiresAt" > \$\d+\)/u

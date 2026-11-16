@@ -5,6 +5,7 @@ import {
 } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { parseDraftAnchorFromHeaderReader } from "@quieter/mail/compose/draft-anchor";
+import { matchesHistoryCorrespondent } from "@quieter/mail/correspondent-history";
 import type { MailCategory as MailboxCategory } from "@quieter/mail/data-plane";
 import {
   decodePartBody,
@@ -1029,6 +1030,7 @@ const toMessageListItem = async (
       headers: message.payload?.headers ?? [],
     }),
     snippet: snippet === undefined ? undefined : decodeHTML(snippet),
+    sourceRevision: message.historyId,
     subject: getHeader(message, "Subject"),
     threadAttachmentCount: options.threadSummary?.attachmentCount,
     threadAttachmentNames: options.threadSummary?.attachmentNames,
@@ -1721,6 +1723,8 @@ const getThreadListSummaries = async (
 export const listMessagesWithDetails = async (
   accessToken: string,
   options?: {
+    correspondentEmail?: string;
+    excludeProtected?: boolean;
     pageToken?: string;
     maxResults?: number;
     mailbox?: MailboxCategory;
@@ -1728,7 +1732,30 @@ export const listMessagesWithDetails = async (
     signal?: AbortSignal;
   }
 ): Promise<ListMessagesPageResult> => {
-  const list = await listThreads(accessToken, options);
+  const correspondentEmail = options?.correspondentEmail?.trim().toLowerCase();
+  const quotedCorrespondentEmail =
+    correspondentEmail === undefined
+      ? undefined
+      : JSON.stringify(correspondentEmail);
+  const list = await listThreads(
+    accessToken,
+    options?.excludeProtected === true || correspondentEmail !== undefined
+      ? {
+          ...options,
+          query: [
+            options?.query?.trim() ? `(${options.query.trim()})` : undefined,
+            quotedCorrespondentEmail === undefined
+              ? undefined
+              : `{from:${quotedCorrespondentEmail} to:${quotedCorrespondentEmail} cc:${quotedCorrespondentEmail} bcc:${quotedCorrespondentEmail}}`,
+            ...(options?.excludeProtected === true
+              ? ["-in:spam", "-in:trash", "-in:drafts"]
+              : []),
+          ]
+            .filter((term) => term !== undefined)
+            .join(" "),
+        }
+      : options
+  );
   const threads = await getGmailThreadsListMetadata(
     accessToken,
     list.threads.map((thread) => thread.id),
@@ -1745,6 +1772,25 @@ export const listMessagesWithDetails = async (
     const matchingMessages = getThreadMailboxMessages({ mailbox, messages });
     let anchor: GmailMessage | undefined;
     for (const message of matchingMessages) {
+      if (
+        (options?.excludeProtected === true &&
+          message.labelIds?.some((label) =>
+            ["DRAFT", "SPAM", "TRASH"].includes(label)
+          ) === true) ||
+        (correspondentEmail !== undefined &&
+          !matchesHistoryCorrespondent(
+            {
+              bcc: getHeader(message, "Bcc"),
+              cc: getHeader(message, "Cc"),
+              from: getHeader(message, "From"),
+              labelIds: message.labelIds,
+              to: getHeader(message, "To"),
+            },
+            correspondentEmail
+          ))
+      ) {
+        continue;
+      }
       if (
         anchor === undefined ||
         Number(message.internalDate ?? 0) > Number(anchor.internalDate ?? 0)
