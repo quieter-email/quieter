@@ -9,18 +9,7 @@ import {
 import { env } from "cloudflare:workers";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type { MailSnooze } from "../src/mail-snooze";
 import { handleMailUpdates } from "../src/mail-updates";
-
-declare global {
-  // oxlint-disable-next-line typescript/no-namespace -- Workerd exposes native bindings through Cloudflare.Env.
-  namespace Cloudflare {
-    // oxlint-disable-next-line typescript/consistent-type-definitions -- Cloudflare.Env requires interface merging.
-    interface Env {
-      MailSnooze: DurableObjectNamespace<MailSnooze>;
-    }
-  }
-}
 
 describe("durable mail Snooze", () => {
   afterEach(() => {
@@ -232,9 +221,9 @@ describe("durable mail Snooze", () => {
     });
     vi.stubGlobal(
       "fetch",
-      vi.fn<typeof fetch>(async () =>
-        Promise.resolve(new Response(null, { status: 503 }))
-      )
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(new Response(null, { status: 503 }))
     );
     await expect(runDurableObjectAlarm(stub)).rejects.toThrow(Error);
     await evictDurableObject(stub);
