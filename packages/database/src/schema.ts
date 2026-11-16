@@ -35,6 +35,7 @@ import {
   timestamp,
   unique,
   uniqueIndex,
+  uuid,
   vector,
 } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
@@ -4956,6 +4957,103 @@ export type ManagementMutationErrorCode =
   | "CANCELLED"
   | "UNSUPPORTED_OPERATION"
   | "INTERNAL_ERROR";
+
+export const managementReadAuditEvent = pgTable(
+  "managementReadAuditEvent",
+  {
+    actorUserId: text("actorUserId").notNull(),
+    connectionId: text("connectionId"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    credentialId: text("credentialId").notNull(),
+    credentialKind: text("credentialKind").$type<"session">().notNull(),
+    eventKind: text("eventKind")
+      .$type<"denied" | "discovered" | "executed" | "failed">()
+      .notNull(),
+    id: uuid("id").primaryKey(),
+    mailboxId: text("mailboxId"),
+    operationId: text("operationId").$type<
+      | "calendar.accounts"
+      | "calendar.event"
+      | "calendar.events"
+      | "calendar.list"
+      | "control.discover"
+      | "mail.read_thread"
+      | "mail.search"
+      | "mailboxes.list"
+    >(),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    outcomeCode: text("outcomeCode")
+      .$type<
+        | "BAD_REQUEST"
+        | "CANCELLED"
+        | "CONFLICT"
+        | "FORBIDDEN"
+        | "INTERNAL_ERROR"
+        | "NOT_FOUND"
+        | "RATE_LIMITED"
+        | "REAUTHENTICATION_REQUIRED"
+        | "SUCCEEDED"
+        | "UNAUTHORIZED"
+        | "UNSUPPORTED_OPERATION"
+      >()
+      .notNull(),
+    targetKind: text("targetKind").$type<"calendar" | "mailbox" | "user">(),
+  },
+  (table) => [
+    check(
+      "management_read_audit_credential_check",
+      sql`${table.credentialKind} = 'session' and length(btrim(${table.actorUserId})) > 0 and length(btrim(${table.credentialId})) > 0 and length(${table.credentialId}) <= 255`
+    ),
+    check(
+      "management_read_audit_operation_check",
+      sql`${table.operationId} is null or ${table.operationId} in ('control.discover', 'mailboxes.list', 'mail.search', 'mail.read_thread', 'calendar.accounts', 'calendar.list', 'calendar.events', 'calendar.event')`
+    ),
+    check(
+      "management_read_audit_target_check",
+      sql`case
+        when ${table.targetKind} is null then ${table.organizationId} is null and ${table.mailboxId} is null and ${table.connectionId} is null
+        when ${table.targetKind} = 'user' then ${table.organizationId} is null and ${table.mailboxId} is null and ${table.connectionId} is null
+        when ${table.targetKind} = 'mailbox' then ${table.organizationId} is not null and ${table.mailboxId} is not null and length(btrim(${table.organizationId})) > 0 and length(btrim(${table.mailboxId})) > 0 and ${table.connectionId} is null
+        when ${table.targetKind} = 'calendar' then ${table.connectionId} is not null and length(btrim(${table.connectionId})) > 0 and ${table.organizationId} is null and ${table.mailboxId} is null
+        else false
+      end`
+    ),
+    check(
+      "management_read_audit_event_check",
+      sql`case ${table.eventKind}
+        when 'discovered' then ${table.operationId} is not null and ${table.operationId} = 'control.discover' and ${table.outcomeCode} = 'SUCCEEDED'
+        when 'executed' then ${table.operationId} is not null and ${table.operationId} <> 'control.discover' and ${table.outcomeCode} = 'SUCCEEDED'
+        when 'denied' then ${table.targetKind} is null and ${table.outcomeCode} in ('BAD_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND', 'REAUTHENTICATION_REQUIRED', 'UNSUPPORTED_OPERATION')
+        when 'failed' then ${table.outcomeCode} in ('BAD_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT', 'RATE_LIMITED', 'REAUTHENTICATION_REQUIRED', 'CANCELLED', 'UNSUPPORTED_OPERATION', 'INTERNAL_ERROR')
+        else false
+      end`
+    ),
+    check(
+      "management_read_audit_operation_target_check",
+      sql`case
+        when ${table.targetKind} is null then ${table.eventKind} <> 'executed'
+        when ${table.operationId} is null then false
+        when ${table.operationId} = 'control.discover' then true
+        when ${table.operationId} in ('mailboxes.list', 'calendar.accounts') then ${table.targetKind} = 'user'
+        when ${table.operationId} in ('mail.search', 'mail.read_thread') then ${table.targetKind} = 'mailbox'
+        when ${table.operationId} in ('calendar.list', 'calendar.events', 'calendar.event') then ${table.targetKind} = 'calendar'
+        else false
+      end`
+    ),
+    index("management_read_audit_actor_created_idx").on(
+      table.actorUserId,
+      table.createdAt,
+      table.id
+    ),
+    index("management_read_audit_organization_created_idx").on(
+      table.organizationId,
+      table.createdAt,
+      table.id
+    ),
+  ]
+);
 
 export const managementMutation = pgTable(
   "managementMutation",
