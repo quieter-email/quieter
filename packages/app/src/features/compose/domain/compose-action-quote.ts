@@ -1,4 +1,23 @@
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import {
+  createNodeFromContent,
+  getText,
+  getTextSerializersFromSchema,
+} from "@tiptap/core";
+import type { Schema } from "@tiptap/pm/model";
+
+export const getComposeTextFromHtml = (
+  html: string,
+  schema: Schema
+): string => {
+  const content = createNodeFromContent(html, schema, { slice: false });
+  const document =
+    "type" in content ? content : schema.topNodeType.create(null, content);
+  return getText(document, {
+    blockSeparator: "\n\n",
+    textSerializers: getTextSerializersFromSchema(schema),
+  });
+};
 
 export type ComposeActionQuote = {
   attachments: ComposeDraftState["attachments"];

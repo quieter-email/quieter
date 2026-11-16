@@ -13,6 +13,7 @@ import {
   TextStrikethroughIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
+import { getComposeTextFromHtml } from "@quieter/app/features/compose/domain/compose-action-quote";
 import {
   buildComposeCommands,
   insertComposeSnippet,
@@ -344,11 +345,7 @@ export const ComposeEditor = ({
             .textContent ?? ""
         );
       }
-      const content = createNodeFromContent(value, editor.schema, {
-        slice: false,
-      });
-      const size = "type" in content ? content.content.size : content.size;
-      return content.textBetween(0, size, "\n\n");
+      return getComposeTextFromHtml(value, editor.schema);
     },
     insertHtml: (nextHtml) => {
       editor?.chain().focus().insertContent(nextHtml).run();

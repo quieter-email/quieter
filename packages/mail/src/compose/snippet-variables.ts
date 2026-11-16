@@ -206,6 +206,38 @@ const hiddenTags = new Set([
   "template",
 ]);
 
+export const getVisibleHtmlText = (
+  nodes: readonly DefaultTreeAdapterMap["childNode"][]
+): string => {
+  const text: string[] = [];
+  const stack: HtmlScanFrame[] = nodes.map((node) => ({
+    kind: "node",
+    node,
+  }));
+  stack.reverse();
+  for (let frame = stack.pop(); frame !== undefined; frame = stack.pop()) {
+    if (frame.kind === "boundary") {
+      text.push("\n");
+      continue;
+    }
+
+    const { node } = frame;
+    if ("value" in node) {
+      text.push(node.value);
+    } else if ("tagName" in node && !hiddenTags.has(node.tagName)) {
+      if (blockTags.has(node.tagName)) {
+        text.push("\n");
+        stack.push({ kind: "boundary" });
+      }
+      for (const child of node.childNodes.toReversed()) {
+        stack.push({ kind: "node", node: child });
+      }
+    }
+  }
+
+  return text.join("");
+};
+
 export const getUnresolvedSnippetFields = (input: {
   bodyHtml?: string;
   bodyText?: string;
@@ -216,37 +248,12 @@ export const getUnresolvedSnippetFields = (input: {
   });
   scanner.write(input.bodyText ?? "");
   scanner.boundary();
-
-  const source = input.bodyHtml;
-  if (source === undefined) {
-    return [...fields];
-  }
-
-  const stack: HtmlScanFrame[] = parseFragment(source, {
-    scriptingEnabled: false,
-  }).childNodes.map((node) => ({
-    kind: "node",
-    node,
-  }));
-  stack.reverse();
-  for (let frame = stack.pop(); frame !== undefined; frame = stack.pop()) {
-    if (frame.kind === "boundary") {
-      scanner.boundary();
-      continue;
-    }
-
-    const { node } = frame;
-    if ("value" in node) {
-      scanner.write(node.value);
-    } else if ("tagName" in node && !hiddenTags.has(node.tagName)) {
-      if (blockTags.has(node.tagName)) {
-        scanner.boundary();
-        stack.push({ kind: "boundary" });
-      }
-      for (const child of node.childNodes.toReversed()) {
-        stack.push({ kind: "node", node: child });
-      }
-    }
+  if (input.bodyHtml !== undefined) {
+    scanner.write(
+      getVisibleHtmlText(
+        parseFragment(input.bodyHtml, { scriptingEnabled: false }).childNodes
+      )
+    );
   }
 
   return [...fields];
