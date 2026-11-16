@@ -3,6 +3,7 @@ import "fake-indexeddb/auto";
 import type { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import {
+  addComposeAttachmentFiles,
   createComposeInlineImagesFromFiles,
   createEmptyComposeDraft,
 } from "@quieter/app/features/compose/domain/draft";
@@ -653,6 +654,170 @@ describe("compose controller", () => {
       expect(boundary.sendMessage).toHaveBeenCalledOnce();
       expect(boundary.saveDraft).not.toHaveBeenCalled();
       expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+    });
+
+    it.each(["send", "schedule"] as const)(
+      "retains %s readiness when autosave refreshes attachment references",
+      async (kind) => {
+        const inlineImages = createComposeInlineImagesFromFiles([
+          new File(["image"], "diagram.png", { type: "image/png" }),
+        ]);
+        const draft = addComposeAttachmentFiles(
+          {
+            ...quoted(),
+            assistantUnsaved: false,
+            bodyHtml: `${quoted().bodyHtml}${inlineImages.map((image) => `<img data-compose-inline-id="${image.id}" src="cid:${image.contentId}">`).join("")}`,
+            inlineImages,
+          },
+          [new File(["notes"], "notes.txt", { type: "text/plain" })]
+        );
+        await mount(draft, true);
+        boundary.saveDraft.mockImplementationOnce(
+          async ({ draft: saved }) =>
+            await Promise.resolve({
+              attachments: saved.attachments.map(
+                (
+                  asset
+                ): RouterOutputs["mail"]["saveDraft"]["attachments"][number] => ({
+                  gmailAttachmentId: "saved-attachment-reference",
+                  id: asset.id,
+                  isInline: false,
+                  mimeType: asset.mimeType,
+                  name: asset.name,
+                  size: asset.size,
+                  sourceMessageId: "saved-message",
+                })
+              ),
+              baseRevision: "saved-revision",
+              bodyHtml: saved.bodyHtml,
+              bodyText: saved.bodyText,
+              draftAnchor: saved.draftAnchor ?? null,
+              draftId: "saved",
+              inlineImages: saved.inlineImages.map(
+                (
+                  asset
+                ): RouterOutputs["mail"]["saveDraft"]["inlineImages"][number] => ({
+                  contentId: asset.contentId,
+                  gmailAttachmentId: "saved-inline-reference",
+                  id: asset.id,
+                  isInline: true,
+                  mimeType: asset.mimeType,
+                  name: asset.name,
+                  size: asset.size,
+                  sourceMessageId: "saved-message",
+                })
+              ),
+              messageId: "saved-message",
+              recipients: saved.recipients,
+              replyContext: saved.replyContext
+                ? {
+                    ...saved.replyContext,
+                    references: saved.replyContext.references ?? [],
+                  }
+                : null,
+              subject: saved.subject,
+            } satisfies RouterOutputs["mail"]["saveDraft"])
+        );
+        const pending =
+          Promise.withResolvers<
+            Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+          >();
+        boundary.readiness.mockReturnValueOnce(pending.promise);
+        let submission: Promise<void> | undefined;
+        await flush(() => {
+          submission =
+            kind === "send"
+              ? controller.form.handleSubmit()
+              : controller.handleScheduleMessage({
+                  sendAt: new Date(Date.now() + 120_000).toISOString(),
+                  timeZone: "UTC",
+                });
+        });
+        await act(async () => {
+          await boundary.autosave?.();
+        });
+        expect(
+          controller.state.draft.attachments[0]?.gmailAttachmentId
+        ).toContain("saved-attachment");
+        expect(
+          controller.state.draft.inlineImages[0]?.gmailAttachmentId
+        ).toContain("saved-inline");
+        await act(async () => {
+          pending.resolve({ unresolvedSnippetFields: [] });
+          await submission;
+        });
+        expect(
+          kind === "send" ? boundary.sendMessage : boundary.schedule
+        ).toHaveBeenCalledOnce();
+        expect(boundary.unresolvedFields).not.toHaveBeenCalled();
+      }
+    );
+
+    it("retains authored asset edits while readiness waits", async () => {
+      const draft = addComposeAttachmentFiles(quoted(), [
+        new File(["notes"], "notes.txt", { type: "text/plain" }),
+      ]);
+      await mount(draft);
+      const pending =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness.mockReturnValueOnce(pending.promise);
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      const [attachment] = draft.attachments;
+      if (attachment === undefined) {
+        throw new Error("Missing fixture attachment");
+      }
+      await flush(() => {
+        controller.renameAttachment(attachment.id, "new-name.txt");
+      });
+      await act(async () => {
+        pending.resolve({ unresolvedSnippetFields: [] });
+        await sending;
+      });
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(controller.state.draft.assistantUnsaved).toBeTruthy();
+    });
+
+    it("does not reuse an earlier schedule for a newer ordinary Send", async () => {
+      await mount(quoted());
+      const first =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      const second =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getComposeSendReadiness>>
+        >();
+      boundary.readiness
+        .mockReturnValueOnce(first.promise)
+        .mockReturnValueOnce(second.promise);
+      let scheduled: Promise<void> | undefined;
+      let immediate: Promise<void> | undefined;
+      await flush(() => {
+        scheduled = controller.handleScheduleMessage({
+          sendAt: new Date(Date.now() + 120_000).toISOString(),
+          timeZone: "UTC",
+        });
+      });
+      await flush(() => {
+        immediate = controller.form.handleSubmit();
+      });
+      await act(async () => {
+        first.resolve({ unresolvedSnippetFields: [] });
+        await scheduled;
+      });
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(boundary.schedule).not.toHaveBeenCalled();
+      await act(async () => {
+        second.resolve({ unresolvedSnippetFields: [] });
+        await immediate;
+      });
+      expect(boundary.sendMessage).toHaveBeenCalledOnce();
+      expect(boundary.schedule).not.toHaveBeenCalled();
     });
 
     it("retains valid readiness while an ordinary autosave completes", async () => {
