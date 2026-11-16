@@ -68,6 +68,7 @@ type SmokeReport = {
   result: "passed" | "failed";
   stage: string;
   failureName?: string;
+  failureCode?: "ETIMEDOUT" | "ENOENT" | "EACCES" | "EPERM";
   electronVersion?: string;
   storageBackend?: string;
   associatedProcesses?: number;
@@ -343,6 +344,7 @@ const main = async (): Promise<void> => {
         }
         report.stage = previousStage;
       };
+      report.stage = "installation-preparation";
       const owner = createNativeInstallation({ environment });
       installed = { owner, run };
       ({
@@ -780,6 +782,16 @@ const main = async (): Promise<void> => {
     report.stage = "complete";
   } catch (error) {
     report.failureName = error instanceof Error ? error.name : "UnknownError";
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      (error.code === "ETIMEDOUT" ||
+        error.code === "ENOENT" ||
+        error.code === "EACCES" ||
+        error.code === "EPERM")
+    ) {
+      report.failureCode = error.code;
+    }
     process.exitCode = 1;
   } finally {
     if (application) {
