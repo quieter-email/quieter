@@ -4,9 +4,9 @@ import { GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { db } from "@quieter/database/client";
 import type { DatabaseTransaction } from "@quieter/database/client";
 import { mailbox, member, organization } from "@quieter/database/schema";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, inArray, sql } from "drizzle-orm";
 
-export const getGmailMailboxCapacity = async (organizationId: string) => {
+export const getExternalMailboxCapacity = async (organizationId: string) => {
   const entitlement = await getOrganizationBillingEntitlement({
     feature: "organizationMail",
     organizationId,
@@ -18,18 +18,25 @@ export const getGmailMailboxCapacity = async (organizationId: string) => {
     .where(
       and(
         eq(mailbox.organizationId, organizationId),
-        eq(mailbox.provider, "gmail")
+        inArray(mailbox.provider, ["gmail", "outlook"])
       )
     );
   return { limit: GMAIL_MAILBOX_LIMITS[plan], used: usage?.count ?? 0 };
 };
 
-export const withGmailMailboxCapacity = async <Result>(
-  input: { organizationId: string; userId: string; mailboxId: string | null },
+export const withExternalMailboxCapacity = async <Result>(
+  input: {
+    beforeAdmission?: (database: DatabaseTransaction) => Promise<void>;
+    organizationId: string;
+    userId: string;
+    mailboxId: string | null;
+    provider: "gmail" | "outlook";
+  },
   run: (database: DatabaseTransaction) => Promise<Result>
 ) => {
-  const { limit } = await getGmailMailboxCapacity(input.organizationId);
+  const { limit } = await getExternalMailboxCapacity(input.organizationId);
   return await db.transaction(async (database) => {
+    await input.beforeAdmission?.(database);
     await database.execute(
       sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
     );
@@ -68,9 +75,9 @@ export const withGmailMailboxCapacity = async <Result>(
       input.mailboxId !== null &&
       (existing === undefined ||
         existing.ownerUserId !== input.userId ||
-        existing.provider !== "gmail")
+        existing.provider !== input.provider)
     ) {
-      throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+      throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
     }
     if (existing?.organizationId !== input.organizationId) {
       const [usage] = await database
@@ -79,12 +86,12 @@ export const withGmailMailboxCapacity = async <Result>(
         .where(
           and(
             eq(mailbox.organizationId, input.organizationId),
-            eq(mailbox.provider, "gmail")
+            inArray(mailbox.provider, ["gmail", "outlook"])
           )
         );
       if ((usage?.count ?? 0) >= limit) {
         throw new ORPCError("FORBIDDEN", {
-          message: `This team has reached its limit of ${limit} Gmail accounts. Disconnect an account or upgrade your plan.`,
+          message: `This team has reached its limit of ${limit} connected mail accounts. Disconnect an account or upgrade your plan.`,
         });
       }
     }

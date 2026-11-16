@@ -1,7 +1,7 @@
 import type * as DatabaseClientModule from "@quieter/database/client";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type { getGmailMailboxCapacity } from "../src/mailbox/gmail-capacity";
+import type { getExternalMailboxCapacity } from "../src/mailbox/gmail-capacity";
 import {
   completeGmailOAuth,
   getGmailOAuthCallbackContext,
@@ -9,7 +9,7 @@ import {
 } from "../src/mailbox/service";
 
 const mocks = vi.hoisted(() => ({
-  capacity: vi.fn<typeof getGmailMailboxCapacity>(),
+  capacity: vi.fn<typeof getExternalMailboxCapacity>(),
   query:
     vi.fn<
       (query: string, params: unknown[]) => Promise<{ rows: unknown[][] }>
@@ -24,7 +24,7 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => ({
 }));
 vi.mock(import("../src/mailbox/gmail-capacity"), async (importOriginal) => ({
   ...(await importOriginal()),
-  getGmailMailboxCapacity: mocks.capacity,
+  getExternalMailboxCapacity: mocks.capacity,
 }));
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The pg proxy exercises the generated atomic delete condition.

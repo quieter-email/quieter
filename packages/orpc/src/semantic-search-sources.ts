@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import {
   aiMemory,
   chat,
@@ -6,6 +7,7 @@ import {
   managedMailMessage,
 } from "@quieter/database/schema";
 import { MAIL_MESSAGE_ANALYSIS_VERSION } from "@quieter/mail/capture";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
@@ -17,7 +19,7 @@ export type SemanticSearchScope = {
 
 export const semanticSourceQuery = (
   input: SemanticSearchScope,
-  provider: "gmail" | "managed"
+  provider: Exclude<MailboxProvider, "api">
 ) => {
   let projected: SQL;
   if (input.kind === "memory") {
@@ -60,7 +62,7 @@ export const semanticSourceQuery = (
             where ${gmailCapturedMessage.mailboxId} = ${input.mailboxId}
               and ${gmailCapturedMessage.deletedAt} is null and ${gmailCapturedMessage.snapshot} is not null
               and not (coalesce(${gmailCapturedMessage.snapshot}->'labelIds', '[]'::jsonb) ?| array['DRAFT', 'SPAM', 'TRASH'])`;
-  } else {
+  } else if (provider === "managed") {
     projected = sql`select 'managed'::text as kind, ${managedMailMessage.id} as id,
               concat_ws(E'\n', ${managedMailMessage.subject}, coalesce(nullif(${managedMailMessage.bodyText}, ''),
                 ${managedMailMessage.analysis}->>'htmlText')) as content,
@@ -72,6 +74,10 @@ export const semanticSourceQuery = (
             from ${managedMailMessage}
             where ${managedMailMessage.mailboxId} = ${input.mailboxId}
               and ${managedMailMessage.mailboxState} = 'active'`;
+  } else {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Mail search is not available for this inbox yet.",
+    });
   }
   const whitespacePattern =
     "[\u0009-\u000D\u0020\u00A0\u1680\u2000-\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF]+";

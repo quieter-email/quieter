@@ -39,6 +39,10 @@ import { callGmail } from "../gmail-request";
 import { pausePersonalAgentConnections } from "../mail-agent/authority";
 import { getOrganizationApiMailboxId } from "../organization-api-mail";
 import {
+  getOwnedOutlookMailbox,
+  listOwnedOutlookMailboxState,
+} from "../outlook/mailbox-state";
+import {
   assertOwnedGmailMailbox,
   getAuthorizedManagedMailbox,
   getStrongestMailboxGrantRole,
@@ -50,8 +54,8 @@ import {
   getGmailMailboxDisplayName,
 } from "./display-name";
 import {
-  getGmailMailboxCapacity,
-  withGmailMailboxCapacity,
+  getExternalMailboxCapacity,
+  withExternalMailboxCapacity,
 } from "./gmail-capacity";
 import type {
   MailboxGroup,
@@ -177,9 +181,10 @@ const toMailboxListItem = (
     signatureText?: string | null;
     organizationId: string;
     ownerUserId: string | null;
-    provider: "api" | "gmail" | "managed";
+    provider: MailboxListItem["provider"];
     status: "connected" | "needs_reconnect";
     unreadNonSpamCount?: number | null;
+    unreadCountCoverage?: MailboxListItem["unreadCountCoverage"];
   },
   group: MailboxGroupMetadata
 ): MailboxListItem => ({
@@ -219,6 +224,9 @@ const toMailboxListItem = (
   signatureText: record.signatureText ?? null,
   unreadNonSpamCount: record.unreadNonSpamCount ?? 0,
   usefulDetailsEnabled: false,
+  ...(record.provider === "outlook"
+    ? { unreadCountCoverage: record.unreadCountCoverage }
+    : {}),
 });
 
 const getGmailUnreadNonSpamCount = async (input: {
@@ -271,6 +279,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     divisionManagedMailboxes,
     ownedManagedMailboxes,
     apiMessageCounts,
+    outlookMailboxes,
   ] = await Promise.all([
     db
       .select({
@@ -467,6 +476,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           : undefined
       )
       .groupBy(organizationApiMailMessage.organizationId),
+    listOwnedOutlookMailboxState(input.userId),
   ]);
   const managedUnreadCountsByMailboxId = await listManagedUnreadNonSpamCounts([
     ...directManagedMailboxes.map((record) => record.id),
@@ -602,6 +612,9 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
           group
         )
       );
+    const organizationOutlookMailboxes = outlookMailboxes
+      .filter((record) => record.organizationId === organizationRecord.id)
+      .map((record) => toMailboxListItem(record, group));
     const organizationManagedMailboxes = managedMailboxes
       .filter((record) => record.organizationId === organizationRecord.id)
       .map((record) =>
@@ -640,6 +653,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       mailboxes: [
         ...apiMailboxes,
         ...organizationGmailMailboxes,
+        ...organizationOutlookMailboxes,
         ...organizationManagedMailboxes,
       ],
       name: organizationRecord.name,
@@ -651,9 +665,15 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
   return { groups };
 };
 
-export const listAccessibleGmailUnreadCounts = async (input: {
+export const listAccessibleExternalUnreadCounts = async (input: {
   userId: string;
-}) => {
+}): Promise<
+  {
+    mailboxId: string;
+    unreadNonSpamCount: number;
+    unreadCountCoverage?: MailboxListItem["unreadCountCoverage"];
+  }[]
+> => {
   const gmailMailboxes = await db
     .select({
       gmailCredentialMailboxId: gmailCredential.mailboxId,
@@ -669,7 +689,7 @@ export const listAccessibleGmailUnreadCounts = async (input: {
       )
     );
 
-  return await Promise.all(
+  const gmailCounts = await Promise.all(
     gmailMailboxes.map(async (record) => ({
       mailboxId: record.id,
       unreadNonSpamCount:
@@ -681,6 +701,15 @@ export const listAccessibleGmailUnreadCounts = async (input: {
           : 0,
     }))
   );
+  const outlookMailboxes = await listOwnedOutlookMailboxState(input.userId);
+  return [
+    ...gmailCounts,
+    ...outlookMailboxes.map((record) => ({
+      mailboxId: record.id,
+      unreadCountCoverage: record.unreadCountCoverage,
+      unreadNonSpamCount: record.unreadNonSpamCount,
+    })),
+  ];
 };
 
 export const assertAccessibleMailbox = async (input: {
@@ -711,6 +740,14 @@ export const assertAccessibleMailbox = async (input: {
         provider: MAILBOX_PROVIDER_GMAIL,
       }),
       provider: MAILBOX_PROVIDER_GMAIL,
+    };
+  }
+
+  const ownedOutlookMailbox = await getOwnedOutlookMailbox(input);
+  if (ownedOutlookMailbox !== null) {
+    return {
+      ...ownedOutlookMailbox,
+      capabilities: getMailboxCapabilities({ provider: "outlook" }),
     };
   }
 
@@ -790,10 +827,10 @@ export const startGmailOAuth = async (input: {
   await assertOrganizationMembership(input.userId, organizationId);
 
   if (!input.mailboxId) {
-    const capacity = await getGmailMailboxCapacity(organizationId);
+    const capacity = await getExternalMailboxCapacity(organizationId);
     if (capacity.used >= capacity.limit) {
       throw new ORPCError("FORBIDDEN", {
-        message: `This team has reached its limit of ${capacity.limit} Gmail accounts. Disconnect an account or upgrade your plan.`,
+        message: `This team has reached its limit of ${capacity.limit} connected mail accounts. Disconnect an account or upgrade your plan.`,
       });
     }
   }
@@ -990,10 +1027,11 @@ const persistGmailOAuthMailbox = async (input: {
   tokenInfo: { sub: string };
   tokenResponse: z.infer<typeof googleTokenResponseSchema>;
 }) => {
-  await withGmailMailboxCapacity(
+  await withExternalMailboxCapacity(
     {
       mailboxId: input.existingMailboxId,
       organizationId: input.organizationId,
+      provider: "gmail",
       userId: input.ownerUserId,
     },
     async (database) => {
@@ -1330,25 +1368,35 @@ export const moveGmailMailbox = async (input: {
   organizationId: string;
   userId: string;
 }) => {
+  if ((await getOwnedOutlookMailbox(input)) !== null) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This mailbox supports reading only.",
+    });
+  }
   await assertOrganizationMembership(input.userId, input.organizationId);
 
-  return await withGmailMailboxCapacity(input, async (database) => {
-    const [updatedMailbox] = await database
-      .update(mailbox)
-      .set({ organizationId: input.organizationId, updatedAt: new Date() })
-      .where(
-        and(
-          eq(mailbox.id, input.mailboxId),
-          eq(mailbox.ownerUserId, input.userId),
-          eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+  return await withExternalMailboxCapacity(
+    { ...input, provider: "gmail" },
+    async (database) => {
+      const [updatedMailbox] = await database
+        .update(mailbox)
+        .set({ organizationId: input.organizationId, updatedAt: new Date() })
+        .where(
+          and(
+            eq(mailbox.id, input.mailboxId),
+            eq(mailbox.ownerUserId, input.userId),
+            eq(mailbox.provider, MAILBOX_PROVIDER_GMAIL)
+          )
         )
-      )
-      .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
-    if (updatedMailbox === undefined) {
-      throw new ORPCError("NOT_FOUND", { message: "Gmail mailbox not found." });
+        .returning({ id: mailbox.id, organizationId: mailbox.organizationId });
+      if (updatedMailbox === undefined) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Gmail mailbox not found.",
+        });
+      }
+      return updatedMailbox;
     }
-    return updatedMailbox;
-  });
+  );
 };
 
 export const updateGmailMailboxDisplayName = async (input: {
@@ -1356,6 +1404,11 @@ export const updateGmailMailboxDisplayName = async (input: {
   mailboxId: string;
   userId: string;
 }) => {
+  if ((await getOwnedOutlookMailbox(input)) !== null) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This mailbox supports reading only.",
+    });
+  }
   await assertOwnedGmailMailbox({
     mailboxId: input.mailboxId,
     userId: input.userId,
@@ -1396,6 +1449,14 @@ export const updateMailboxSignature = async (input: {
     });
   }
 
+  if (selectedMailbox.provider === "outlook") {
+    if ((await getOwnedOutlookMailbox(input)) === null) {
+      throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
+    }
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This mailbox supports reading only.",
+    });
+  }
   if (selectedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {
     await assertOwnedGmailMailbox({
       mailboxId: input.mailboxId,
@@ -1420,6 +1481,11 @@ export const updateMailboxSignature = async (input: {
       throw new ORPCError("NOT_FOUND", {
         data: { resource: "mailbox" },
         message: "Mailbox not found.",
+      });
+    }
+    if (lockedMailbox.provider === "outlook") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This mailbox supports reading only.",
       });
     }
     if (lockedMailbox.provider === MAILBOX_PROVIDER_GMAIL) {

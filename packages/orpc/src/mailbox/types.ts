@@ -37,6 +37,7 @@ export type MailboxListItem = MailboxGroupMetadata & {
   ownerUserId: string | null;
   provider: "api" | PersistedMailboxProvider;
   unreadNonSpamCount: number;
+  unreadCountCoverage?: { complete: boolean; scope: "mailbox" };
   usefulDetailsEnabled: boolean;
 };
 

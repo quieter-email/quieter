@@ -4,6 +4,7 @@ import {
   mailboxAutomationSettings,
 } from "@quieter/database/schema";
 
+import { assertMailWriteProvider } from "../mail/provider";
 import {
   assertAccessibleMailbox,
   getAuthorizedManagedMailbox,
@@ -18,6 +19,7 @@ export const setMailboxAutoLabeling = async (input: {
     mailboxId: input.mailboxId,
     userId: input.userId,
   });
+  assertMailWriteProvider(selectedMailbox.provider);
 
   if (selectedMailbox.provider === "managed") {
     await getAuthorizedManagedMailbox({

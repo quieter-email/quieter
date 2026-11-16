@@ -43,6 +43,7 @@ import { Route as ApiInternalScheduledSendRouteImport } from './routes/api.inter
 import { Route as ApiMessagesMessageIdRouteImport } from './routes/api/messages.$messageId'
 import { Route as ApiOTokenRouteImport } from './routes/api/o.$token'
 import { Route as ApiOrpcSplatRouteImport } from './routes/api/orpc.$'
+import { Route as ApiOutlookCallbackRouteImport } from './routes/api/outlook.callback'
 import { Route as ApiDomainConnectTemplatesServiceIdRouteImport } from './routes/api/domain-connect.templates.$serviceId'
 import { Route as ApiInternalGmailCredentialsRotateRouteImport } from './routes/api.internal.gmail-credentials.rotate'
 
@@ -220,6 +221,11 @@ const ApiOrpcSplatRoute = ApiOrpcSplatRouteImport.update({
   path: '/api/orpc/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiOutlookCallbackRoute = ApiOutlookCallbackRouteImport.update({
+  id: '/api/outlook/callback',
+  path: '/api/outlook/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDomainConnectTemplatesServiceIdRoute =
   ApiDomainConnectTemplatesServiceIdRouteImport.update({
     id: '/api/domain-connect/templates/$serviceId',
@@ -266,6 +272,7 @@ export interface FileRoutesByFullPath {
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/outlook/callback': typeof ApiOutlookCallbackRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
 }
@@ -302,6 +309,7 @@ export interface FileRoutesByTo {
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/outlook/callback': typeof ApiOutlookCallbackRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
 }
@@ -341,6 +349,7 @@ export interface FileRoutesById {
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
   '/api/orpc/$': typeof ApiOrpcSplatRoute
+  '/api/outlook/callback': typeof ApiOutlookCallbackRoute
   '/api/domain-connect/templates/$serviceId': typeof ApiDomainConnectTemplatesServiceIdRoute
   '/api/internal/gmail-credentials/rotate': typeof ApiInternalGmailCredentialsRotateRoute
 }
@@ -379,6 +388,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId'
     | '/api/o/$token'
     | '/api/orpc/$'
+    | '/api/outlook/callback'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
   fileRoutesByTo: FileRoutesByTo
@@ -415,6 +425,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId'
     | '/api/o/$token'
     | '/api/orpc/$'
+    | '/api/outlook/callback'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
   id:
@@ -453,6 +464,7 @@ export interface FileRouteTypes {
     | '/api/messages/$messageId'
     | '/api/o/$token'
     | '/api/orpc/$'
+    | '/api/outlook/callback'
     | '/api/domain-connect/templates/$serviceId'
     | '/api/internal/gmail-credentials/rotate'
   fileRoutesById: FileRoutesById
@@ -477,6 +489,7 @@ export interface RootRouteChildren {
   ApiMessagesMessageIdRoute: typeof ApiMessagesMessageIdRoute
   ApiOTokenRoute: typeof ApiOTokenRoute
   ApiOrpcSplatRoute: typeof ApiOrpcSplatRoute
+  ApiOutlookCallbackRoute: typeof ApiOutlookCallbackRoute
   ApiDomainConnectTemplatesServiceIdRoute: typeof ApiDomainConnectTemplatesServiceIdRoute
   ApiInternalGmailCredentialsRotateRoute: typeof ApiInternalGmailCredentialsRotateRoute
 }
@@ -721,6 +734,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiOrpcSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/outlook/callback': {
+      id: '/api/outlook/callback'
+      path: '/api/outlook/callback'
+      fullPath: '/api/outlook/callback'
+      preLoaderRoute: typeof ApiOutlookCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/domain-connect/templates/$serviceId': {
       id: '/api/domain-connect/templates/$serviceId'
       path: '/api/domain-connect/templates/$serviceId'
@@ -805,6 +825,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiMessagesMessageIdRoute: ApiMessagesMessageIdRoute,
   ApiOTokenRoute: ApiOTokenRoute,
   ApiOrpcSplatRoute: ApiOrpcSplatRoute,
+  ApiOutlookCallbackRoute: ApiOutlookCallbackRoute,
   ApiDomainConnectTemplatesServiceIdRoute:
     ApiDomainConnectTemplatesServiceIdRoute,
   ApiInternalGmailCredentialsRotateRoute:

@@ -29,6 +29,7 @@ import {
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
 import type { MailboxProvider } from "@quieter/mail/search";
+import type { MailboxListItem } from "@quieter/orpc/mailbox";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -61,6 +62,7 @@ type MailboxSwitcherMailbox = {
   provider: MailboxProvider;
   grantRole?: "manager" | "reader" | "responder" | null;
   unreadNonSpamCount: number;
+  unreadCountCoverage?: MailboxListItem["unreadCountCoverage"];
 };
 
 type MailboxSwitcherGroup = {
@@ -392,6 +394,12 @@ const MailboxInboxStatus = ({
     return <span className="text-caption text-muted-fg">Send only</span>;
   }
 
+  if (
+    mailbox.provider === "outlook" &&
+    mailbox.unreadCountCoverage?.complete !== true
+  ) {
+    return <span className="text-caption text-muted-fg">Count pending</span>;
+  }
   if (mailbox.unreadNonSpamCount === 0) {
     return null;
   }

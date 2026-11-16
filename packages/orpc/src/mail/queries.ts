@@ -54,6 +54,14 @@ import {
   listOrganizationApiMailMessages,
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
+import {
+  getOutlookDraft,
+  getOutlookMessageAttachment,
+  getOutlookMessageInspector,
+  getOutlookThread,
+  listOutlookThreads,
+} from "../outlook/queries";
+import { getOutlookMailboxSyncDelta } from "../outlook/sync-delta";
 import { loadDraftReminderIntent } from "../reminders/draft-state";
 import type { MailInputs } from "./inputs";
 
@@ -97,6 +105,13 @@ export const queriesMailOperations = {
         userId: context.userId,
       });
     }
+    if (selectedMailbox.provider === "outlook") {
+      return await getOutlookMessageAttachment({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }
     return await callGmail(
       context,
       input.mailboxId,
@@ -137,6 +152,20 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (selectedMailbox.provider === "outlook") {
+      const draft = await getOutlookDraft({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+      await captureMailboxDraftMemory({
+        draft,
+        draftId: input.draftId,
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return draft;
+    }
     const followUpReminder = await loadDraftReminderIntent({
       draftId: input.draftId,
       mailboxId: input.mailboxId,
@@ -240,6 +269,11 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (selectedMailbox.provider === "outlook") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Delivery receipts are not available for this inbox.",
+      });
+    }
     if (selectedMailbox.provider !== "managed") {
       return await getGmailMessageDelivery(input);
     }
@@ -277,6 +311,13 @@ export const queriesMailOperations = {
         userId: context.userId,
       });
     }
+    if (selectedMailbox.provider === "outlook") {
+      return await getOutlookMessageInspector({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }
 
     return await callGmail(
       context,
@@ -304,40 +345,48 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     const snapshots: CapturedMailSnapshot[] = [];
-    const thread =
-      selectedMailbox.provider === "managed"
-        ? await getManagedThread({ ...input, userId: context.userId })
-        : await callGmail(
-            context,
-            input.mailboxId,
-            async (accessToken, signal) =>
-              await getThreadWithDetails(
-                accessToken,
-                input.threadId,
-                signal,
-                (snapshot) => {
-                  snapshots.push(snapshot);
-                }
-              )
-          ).catch((error: unknown) => {
-            if (isGmailServiceError(error) && error.status === 404) {
-              throw new ORPCError("NOT_FOUND", {
-                message: "Message thread not found.",
-              });
+    let thread;
+    if (selectedMailbox.provider === "outlook") {
+      thread = await getOutlookThread({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    } else if (selectedMailbox.provider === "managed") {
+      thread = await getManagedThread({ ...input, userId: context.userId });
+    } else {
+      thread = await callGmail(
+        context,
+        input.mailboxId,
+        async (accessToken, signal) =>
+          await getThreadWithDetails(
+            accessToken,
+            input.threadId,
+            signal,
+            (snapshot) => {
+              snapshots.push(snapshot);
             }
-            throw error;
+          )
+      ).catch((error: unknown) => {
+        if (isGmailServiceError(error) && error.status === 404) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Message thread not found.",
           });
+        }
+        throw error;
+      });
+    }
     const result =
-      selectedMailbox.provider === "managed"
-        ? thread
-        : {
+      selectedMailbox.provider === "gmail"
+        ? {
             ...thread,
             messages: await hydrateGmailMessageMetadata(
               input.mailboxId,
               thread.messages,
               context.resHeaders
             ),
-          };
+          }
+        : thread;
     const capture = (async () => {
       try {
         await withRequestDatabaseClient(async () => {
@@ -371,7 +420,7 @@ export const queriesMailOperations = {
               }
             }
           }
-          if (selectedMailbox.provider !== "managed") {
+          if (selectedMailbox.provider === "gmail") {
             try {
               await processPendingMailImportance({
                 limit: 4,
@@ -417,6 +466,11 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (selectedMailbox.provider === "outlook") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Delivery receipts are not available for this inbox.",
+      });
+    }
     if (selectedMailbox.provider !== "managed") {
       return {};
     }
@@ -446,6 +500,13 @@ export const queriesMailOperations = {
     if (selectedMailbox.provider === "managed") {
       return await listManagedMessages({
         ...input,
+        userId: context.userId,
+      });
+    }
+    if (selectedMailbox.provider === "outlook") {
+      return await listOutlookThreads({
+        ...input,
+        signal: context.signal,
         userId: context.userId,
       });
     }
@@ -559,6 +620,13 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (selectedMailbox.provider === "outlook") {
+      return await getOutlookMailboxSyncDelta({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }
     if (selectedMailbox.provider === "managed") {
       const historyId = String(selectedMailbox.contentRevision);
       const hasChanges = historyId !== input.startHistoryId;

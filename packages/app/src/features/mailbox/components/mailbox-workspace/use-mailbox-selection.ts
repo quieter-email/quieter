@@ -63,27 +63,43 @@ const getSignatureText = (mailbox: MailboxRecord) =>
 
 const toMailboxGroup = (
   group: MailboxGroup,
-  unreadCounts: ReadonlyMap<string, number>
+  unreadCounts: ReadonlyMap<
+    string,
+    RouterOutputs["mail"]["listExternalUnreadCounts"][number]
+  >
 ) => ({
   id: group.id,
   kind: group.kind,
-  mailboxes: group.mailboxes.map((mailbox) => ({
-    capabilities: mailbox.capabilities,
-    connectionStatus: mailbox.connectionStatus,
-    displayName: mailbox.displayName,
-    divisionName: "divisionName" in mailbox ? mailbox.divisionName : null,
-    emailAddress: mailbox.emailAddress,
-    grantRole: mailbox.grantRole,
-    groupName: mailbox.groupName,
-    id: mailbox.id,
-    provider: mailbox.provider,
-    signatureHtml: getSignatureHtml(mailbox),
-    signatureText: getSignatureText(mailbox),
-    unreadNonSpamCount:
-      mailbox.provider === "gmail"
-        ? (unreadCounts.get(mailbox.id) ?? mailbox.unreadNonSpamCount)
-        : mailbox.unreadNonSpamCount,
-  })),
+  mailboxes: group.mailboxes.map((mailbox) => {
+    const polled =
+      mailbox.provider === "gmail" || mailbox.provider === "outlook"
+        ? unreadCounts.get(mailbox.id)
+        : undefined;
+    const unread = polled ?? {
+      unreadCountCoverage:
+        "unreadCountCoverage" in mailbox
+          ? mailbox.unreadCountCoverage
+          : undefined,
+      unreadNonSpamCount: mailbox.unreadNonSpamCount,
+    };
+    return {
+      capabilities: mailbox.capabilities,
+      connectionStatus: mailbox.connectionStatus,
+      displayName: mailbox.displayName,
+      divisionName: "divisionName" in mailbox ? mailbox.divisionName : null,
+      emailAddress: mailbox.emailAddress,
+      grantRole: mailbox.grantRole,
+      groupName: mailbox.groupName,
+      id: mailbox.id,
+      provider: mailbox.provider,
+      signatureHtml: getSignatureHtml(mailbox),
+      signatureText: getSignatureText(mailbox),
+      unreadNonSpamCount: unread.unreadNonSpamCount,
+      ...(mailbox.provider === "outlook"
+        ? { unreadCountCoverage: unread.unreadCountCoverage }
+        : {}),
+    };
+  }),
   name: group.name,
 });
 
@@ -180,22 +196,22 @@ export const useMailboxSelection = ({
   const mailboxesData = isSandboxMode
     ? sandboxMailboxesData
     : queriedMailboxesData;
-  const hasGmailMailbox =
+  const hasExternalMailbox =
     mailboxesData?.groups.some((group) =>
-      group.mailboxes.some((mailbox) => mailbox.provider === "gmail")
+      group.mailboxes.some(
+        (mailbox) =>
+          mailbox.provider === "gmail" || mailbox.provider === "outlook"
+      )
     ) ?? false;
-  const { data: gmailUnreadCounts = [] } = useQuery(
-    gmailUnreadCountsQueryOptions(!isSandboxMode && hasGmailMailbox)
+  const { data: externalUnreadCounts = [] } = useQuery(
+    gmailUnreadCountsQueryOptions(!isSandboxMode && hasExternalMailbox)
   );
-  const gmailUnreadCountsByMailboxId = new Map(
-    gmailUnreadCounts.map((record) => [
-      record.mailboxId,
-      record.unreadNonSpamCount,
-    ])
+  const externalUnreadCountsByMailboxId = new Map(
+    externalUnreadCounts.map((record) => [record.mailboxId, record])
   );
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) =>
-    toMailboxGroup(group, gmailUnreadCountsByMailboxId)
+    toMailboxGroup(group, externalUnreadCountsByMailboxId)
   );
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const selectedMailbox =

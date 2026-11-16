@@ -20,7 +20,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { APIError } from "better-auth/api";
-import { and, eq, isNull, ne, or, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 
 type AuthUser = typeof user.$inferSelect;
 
@@ -393,7 +393,7 @@ export const cleanupMailboxesForDeletedOrganization = async (
       }
     }
 
-    const gmailMailboxes = await transaction
+    const personalMailboxes = await transaction
       .select({
         id: mailbox.id,
         ownerUserId: mailbox.ownerUserId,
@@ -402,22 +402,22 @@ export const cleanupMailboxesForDeletedOrganization = async (
       .where(
         and(
           eq(mailbox.organizationId, organizationId),
-          eq(mailbox.provider, "gmail")
+          inArray(mailbox.provider, ["gmail", "outlook"])
         )
       )
       .for("update");
 
-    for (const gmailMailbox of gmailMailboxes) {
-      if (gmailMailbox.ownerUserId === options.deletingUserId) {
+    for (const personalMailbox of personalMailboxes) {
+      if (personalMailbox.ownerUserId === options.deletingUserId) {
         await transaction
           .delete(mailbox)
-          .where(eq(mailbox.id, gmailMailbox.id));
+          .where(eq(mailbox.id, personalMailbox.id));
         continue;
       }
       if (
-        gmailMailbox.ownerUserId === null ||
-        gmailMailbox.ownerUserId === undefined ||
-        gmailMailbox.ownerUserId === ""
+        personalMailbox.ownerUserId === null ||
+        personalMailbox.ownerUserId === undefined ||
+        personalMailbox.ownerUserId === ""
       ) {
         continue;
       }
@@ -426,7 +426,7 @@ export const cleanupMailboxesForDeletedOrganization = async (
         .from(member)
         .where(
           and(
-            eq(member.userId, gmailMailbox.ownerUserId),
+            eq(member.userId, personalMailbox.ownerUserId),
             ne(member.organizationId, organizationId)
           )
         )
@@ -445,7 +445,7 @@ export const cleanupMailboxesForDeletedOrganization = async (
         })
         .where(
           and(
-            eq(mailbox.id, gmailMailbox.id),
+            eq(mailbox.id, personalMailbox.id),
             eq(mailbox.organizationId, organizationId)
           )
         );

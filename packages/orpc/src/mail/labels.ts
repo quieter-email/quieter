@@ -15,6 +15,7 @@ import {
   listManagedLabels,
   updateManagedLabel,
 } from "../managed-mail/labels/service";
+import { listOutlookLabels } from "../outlook/queries";
 import type { MailInputs } from "./inputs";
 import { assertMailWriteProvider } from "./provider";
 
@@ -106,7 +107,13 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    assertMailWriteProvider(selectedMailbox.provider);
+    if (selectedMailbox.provider === "outlook") {
+      return await listOutlookLabels({
+        mailboxId: input.mailboxId,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }
     if (selectedMailbox.provider === "managed") {
       return await listManagedLabels({
         mailboxId: input.mailboxId,

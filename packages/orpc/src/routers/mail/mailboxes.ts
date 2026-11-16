@@ -24,8 +24,9 @@ import {
   resolveDefaultMailboxId,
 } from "../../mailbox/preferences";
 import {
+  assertAccessibleMailbox,
   disconnectGmailMailbox,
-  listAccessibleGmailUnreadCounts,
+  listAccessibleExternalUnreadCounts,
   listAccessibleMailboxState,
   moveGmailMailbox,
   startGmailOAuth,
@@ -37,6 +38,7 @@ import {
   backfillApiMessagesForManagedMailbox,
   createManagedMailboxForApiMessage,
 } from "../../organization-api-mail";
+import { disconnectOutlookMailbox } from "../../outlook/service";
 import {
   mailboxIdSchema,
   mailboxSwitcherOrderSchema,
@@ -86,10 +88,27 @@ export const mailboxProcedures = {
     ),
   disconnectMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(
-      async ({ context, input }) =>
-        await disconnectGmailMailbox({ ...input, userId: context.userId })
-    ),
+    .handler(async ({ context, input }) => {
+      const selectedMailbox = await assertAccessibleMailbox({
+        ...input,
+        userId: context.userId,
+      });
+      if (selectedMailbox.provider === "outlook") {
+        return await disconnectOutlookMailbox({
+          ...input,
+          userId: context.userId,
+        });
+      }
+      if (selectedMailbox.provider === "gmail") {
+        return await disconnectGmailMailbox({
+          ...input,
+          userId: context.userId,
+        });
+      }
+      throw new ORPCError("BAD_REQUEST", {
+        message: "This mailbox cannot be disconnected here.",
+      });
+    }),
   dismissGmailUsefulDetail: protectedProcedure
     .input(
       z.object({ id: z.string().trim().min(1), mailboxId: mailboxIdSchema })
@@ -109,6 +128,12 @@ export const mailboxProcedures = {
       async ({ context, input }) =>
         await getManagedMailboxDetails({ ...input, userId: context.userId })
     ),
+  listExternalUnreadCounts: protectedProcedure
+    .route({ method: "GET" })
+    .handler(
+      async ({ context }) =>
+        await listAccessibleExternalUnreadCounts({ userId: context.userId })
+    ),
   listGmailThreadUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(
@@ -125,12 +150,6 @@ export const mailboxProcedures = {
         userId: context.userId,
       });
     }),
-  listGmailUnreadCounts: protectedProcedure
-    .route({ method: "GET" })
-    .handler(
-      async ({ context }) =>
-        await listAccessibleGmailUnreadCounts({ userId: context.userId })
-    ),
   listGmailUsefulDetails: protectedProcedure
     .route({ method: "GET" })
     .input(z.object({ mailboxId: mailboxIdSchema }))
