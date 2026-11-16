@@ -10,7 +10,6 @@ const eventIdSchema = z
   .min(1)
   .refine((value) => value.trim().length > 0)
   .brand<"BookingEventId">();
-// A guest-data fingerprint remains private data and must not enter telemetry.
 const requestHashSchema = z
   .string()
   .regex(/^[\da-f]{64}$/u)

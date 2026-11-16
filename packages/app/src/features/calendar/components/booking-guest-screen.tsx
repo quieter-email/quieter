@@ -18,6 +18,7 @@ import { ClientOnly } from "@tanstack/react-router";
 import { createStore, useSelector } from "@tanstack/react-store";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
+import { z } from "zod";
 
 import {
   readBookingGuestReceipt,
@@ -241,6 +242,13 @@ const BookingGuestPanel = ({
             setProblem("Enter your name before confirming.");
             return;
           }
+          if (
+            current.guest.email.trim() &&
+            !z.email().max(254).safeParse(current.guest.email.trim()).success
+          ) {
+            setProblem("Enter a valid email address or leave it blank.");
+            return;
+          }
           if (Date.parse(current.slot.start) <= Date.now()) {
             setProblem("This time has passed. Choose another time.");
             return;
@@ -293,9 +301,7 @@ const BookingGuestPanel = ({
               maxLength={maxLength}
               onChange={(event) => {
                 const { value } = event.target;
-                if (field === "name") {
-                  setProblem("");
-                }
+                setProblem("");
                 session.store.setState((current) =>
                   current.kind === "reviewing"
                     ? {
