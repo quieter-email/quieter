@@ -47,8 +47,6 @@ const acceptFixtureConsent = (input: {
   assert.equal(attempt.purpose, "outlook-mail");
   input.attempts.delete(digest);
   return {
-    ownerUserId: attempt.ownerUserId,
-    mailboxId: attempt.mailboxId,
     credentialGeneration: attempt.credentialGeneration,
     folders: new Map(),
     kind:
@@ -58,6 +56,8 @@ const acceptFixtureConsent = (input: {
       )
         ? "connected"
         : "needs_reconnect",
+    mailboxId: attempt.mailboxId,
+    ownerUserId: attempt.ownerUserId,
   };
 };
 
@@ -83,14 +83,15 @@ const applyFixturePage = (input: {
   const url = new URL(cursor);
   assert.equal(url.origin, "https://graph.microsoft.com");
   const folderPath =
-    /^\/v1\.0\/me\/mailfolders\/([^/]+)\/messages\/delta$/iu.exec(
+    /^\/v1\.0\/me\/mailfolders\/(?<folderId>[^/]+)\/messages\/delta$/iu.exec(
       url.pathname
     ) ??
-    /^\/v1\.0\/me\/mailfolders\('([^']+)'\)\/messages\/delta$/iu.exec(
+    /^\/v1\.0\/me\/mailfolders\('(?<folderId>[^']+)'\)\/messages\/delta$/iu.exec(
       url.pathname
     );
-  assert.ok(folderPath?.[1]);
-  assert.equal(decodeURIComponent(folderPath[1]), folderId);
+  const matchedFolderId = folderPath?.groups?.folderId;
+  assert.ok(matchedFolderId);
+  assert.equal(decodeURIComponent(matchedFolderId), folderId);
   assert.ok(!url.username && !url.password && !url.hash);
   const changes: DeltaChange[] = page.value.map((value) => {
     assert.ok(
@@ -120,10 +121,10 @@ const applyFixturePage = (input: {
     return {
       kind: "message",
       message: {
-        id: value.id,
-        parentFolderId: value.parentFolderId,
-        isRead: value.isRead,
         changeKey: value.changeKey,
+        id: value.id,
+        isRead: value.isRead,
+        parentFolderId: value.parentFolderId,
       },
     };
   });
@@ -139,9 +140,9 @@ const applyFixturePage = (input: {
 };
 
 const attempt: OAuthAttempt = {
-  ownerUserId: "fixture-owner-a",
-  mailboxId: "fixture-mailbox-a",
   credentialGeneration: 1,
+  mailboxId: "fixture-mailbox-a",
+  ownerUserId: "fixture-owner-a",
   purpose: "outlook-mail",
 };
 const state = "synthetic-single-use-state";
@@ -150,8 +151,8 @@ const attempts = new Map([[digest, attempt]]);
 const consent = {
   attempts,
   callbackUserId: attempt.ownerUserId,
-  state,
   grantedScopes: ["User.Read", "Mail.Read"],
+  state,
   tokenResult: "accepted",
 } satisfies Parameters<typeof acceptFixtureConsent>[0];
 assert.throws(() => acceptFixtureConsent({ ...consent, state: "unknown" }));
@@ -171,19 +172,19 @@ const initialPage: GraphPage = {
   "@odata.nextLink":
     "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$skiptoken=opaque%2Bnext%3D",
   value: [
-    { id: "same-id", parentFolderId: folderId, isRead: false, changeKey: "z" },
+    { changeKey: "z", id: "same-id", isRead: false, parentFolderId: folderId },
   ],
 };
-const pageInput = { connection, capturedScope, folderId, page: initialPage };
+const pageInput = { capturedScope, connection, folderId, page: initialPage };
 applyFixturePage(pageInput);
 const checkpoint = connection.folders.get(folderId);
 assert.equal(checkpoint?.cursor, initialPage["@odata.nextLink"]);
-assert.throws(() =>
+assert.throws(() => {
   applyFixturePage({
     ...pageInput,
     capturedScope: { ...capturedScope, mailboxId: "other" },
-  })
-);
+  });
+});
 for (const link of [
   "https://example.invalid/v1.0/me/mailFolders/inbox/messages/delta",
   "https://graph.microsoft.com/v1.0/users/other/messages/delta",
@@ -191,30 +192,30 @@ for (const link of [
   "https://graph.microsoft.com/v1.0/me/mailfolders('INBOX')/messages/delta",
   "https://graph.microsoft.com:444/v1.0/me/mailFolders/inbox/messages/delta",
 ]) {
-  assert.throws(() =>
+  assert.throws(() => {
     applyFixturePage({
       ...pageInput,
-      page: { value: [], "@odata.deltaLink": link },
-    })
-  );
+      page: { "@odata.deltaLink": link, value: [] },
+    });
+  });
 }
-assert.throws(() =>
+assert.throws(() => {
   applyFixturePage({
     ...pageInput,
     page: {
       ...initialPage,
       value: [
         {
-          id: "partial-must-not-leak",
-          parentFolderId: folderId,
-          isRead: false,
           changeKey: "partial",
+          id: "partial-must-not-leak",
+          isRead: false,
+          parentFolderId: folderId,
         },
         { id: "malformed" },
       ],
     },
-  })
-);
+  });
+});
 assert.equal(connection.folders.get(folderId), checkpoint);
 assert.equal(checkpoint?.messages.has("partial-must-not-leak"), false);
 applyFixturePage(pageInput);
@@ -223,7 +224,7 @@ const deltaPage: GraphPage = {
   "@odata.deltaLink":
     "https://graph.microsoft.com/v1.0/me/mailFolders/inbox/messages/delta?$deltatoken=opaque%2Fdelta%3D",
   value: [
-    { id: "same-id", parentFolderId: folderId, isRead: true, changeKey: "a" },
+    { changeKey: "a", id: "same-id", isRead: true, parentFolderId: folderId },
   ],
 };
 applyFixturePage({ ...pageInput, page: deltaPage });
@@ -249,13 +250,13 @@ assert.equal(connection.folders.get(folderId)?.cursor, predicateLink);
 
 const otherConnection: Connection = {
   ...connection,
-  mailboxId: "fixture-mailbox-b",
   folders: new Map(),
+  mailboxId: "fixture-mailbox-b",
 };
 applyFixturePage({
   ...pageInput,
-  connection: otherConnection,
   capturedScope: { ...capturedScope, mailboxId: otherConnection.mailboxId },
+  connection: otherConnection,
 });
 assert.equal(
   otherConnection.folders.get(folderId)?.messages.get("same-id")?.isRead,
@@ -269,10 +270,10 @@ applyFixturePage({
       "https://graph.microsoft.com/v1.0/me/mailFolders/archive/messages/delta?$deltatoken=archive",
     value: [
       {
-        id: "same-id",
-        parentFolderId: "archive",
-        isRead: true,
         changeKey: "b",
+        id: "same-id",
+        isRead: true,
+        parentFolderId: "archive",
       },
     ],
   },
@@ -281,18 +282,21 @@ applyFixturePage({
   ...pageInput,
   page: {
     ...deltaPage,
-    value: [{ id: "same-id", "@removed": { reason: "deleted" } }],
+    value: [{ "@removed": { reason: "deleted" }, id: "same-id" }],
   },
 });
 assert.equal(connection.folders.get(folderId)?.messages.size, 0);
-assert.ok(connection.folders.get("archive")?.messages.has("same-id"));
-assert.ok(otherConnection.folders.get(folderId)?.messages.has("same-id"));
-assert.throws(() =>
+assert.equal(connection.folders.get("archive")?.messages.has("same-id"), true);
+assert.equal(
+  otherConnection.folders.get(folderId)?.messages.has("same-id"),
+  true
+);
+assert.throws(() => {
   applyFixturePage({
     ...pageInput,
     connection: { ...connection, credentialGeneration: 2 },
-  })
-);
+  });
+});
 const failures: Parameters<typeof acceptFixtureConsent>[0]["tokenResult"][] = [
   "invalid_grant",
   "consent_denied",
@@ -301,7 +305,9 @@ for (const tokenResult of failures) {
   attempts.set(digest, attempt);
   const rejected = acceptFixtureConsent({ ...consent, tokenResult });
   assert.equal(rejected.kind, "needs_reconnect");
-  assert.throws(() => applyFixturePage({ ...pageInput, connection: rejected }));
+  assert.throws(() => {
+    applyFixturePage({ ...pageInput, connection: rejected });
+  });
 }
 attempts.set(digest, attempt);
 const missingScope = acceptFixtureConsent({
@@ -309,9 +315,9 @@ const missingScope = acceptFixtureConsent({
   grantedScopes: ["User.Read"],
 });
 assert.equal(missingScope.kind, "needs_reconnect");
-assert.throws(() =>
-  applyFixturePage({ ...pageInput, connection: missingScope })
-);
+assert.throws(() => {
+  applyFixturePage({ ...pageInput, connection: missingScope });
+});
 process.stdout.write(
   "PASS synthetic folder moves, mailbox isolation and revocation\n"
 );
