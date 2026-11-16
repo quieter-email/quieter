@@ -313,15 +313,8 @@ export const composeDraftInputSchema = z.object({
   updatedAt: z.number(),
 });
 
-export const composeMessageInputSchema = composeDraftInputSchema.superRefine(
+export const composeMessageEnvelopeSchema = composeDraftInputSchema.superRefine(
   (value, ctx) => {
-    if (getUnresolvedSnippetFields(value).length > 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Complete the marked snippet fields before sending.",
-        path: ["bodyHtml"],
-      });
-    }
     if (splitMailAddressList(value.recipients.to).length === 0) {
       ctx.addIssue({
         code: "custom",
@@ -331,5 +324,16 @@ export const composeMessageInputSchema = composeDraftInputSchema.superRefine(
     }
   }
 );
+
+export const composeMessageInputSchema =
+  composeMessageEnvelopeSchema.superRefine((value, ctx) => {
+    if (getUnresolvedSnippetFields(value).length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Complete the marked snippet fields before sending.",
+        path: ["bodyHtml"],
+      });
+    }
+  });
 
 export const composeSendDraftInputSchema = composeMessageInputSchema;
