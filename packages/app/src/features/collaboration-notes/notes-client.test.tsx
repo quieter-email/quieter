@@ -1068,6 +1068,60 @@ describe("internal notes client behavior", () => {
       expect(server.mutate).not.toHaveBeenCalled();
     });
 
+    test("a reader recovery response discards the draft before later writer authorization", async () => {
+      const fixture = await edit();
+      act(() => {
+        fixture.read().store.setState((current) =>
+          transitionNotesClient(current, {
+            body: "Discard after confirmed write loss",
+            kind: "change",
+          })
+        );
+      });
+      server.notes.mockRejectedValueOnce(new Error("Temporary read failure"));
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "private", "notes"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.authority.kind).toBe("retry");
+      });
+      const pending = Promise.withResolvers<CollaborationState>();
+      server.get
+        .mockResolvedValueOnce(readerSnapshot)
+        .mockReturnValueOnce(pending.promise);
+      await act(async () => {
+        await fixture.queryClient.invalidateQueries({
+          queryKey: [...fixture.read().prefix, "authority"],
+        });
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().client.authority.kind).toBe("checking");
+        expect(fixture.read().client.attempt).toBeNull();
+      });
+      expect(fixture.read().draftVisible).toBeFalsy();
+      await act(async () => {
+        pending.resolve(snapshot);
+        await pending.promise;
+      });
+      await vi.waitFor(async () => {
+        await act(async () => {
+          await setTimeout(0);
+        });
+        expect(fixture.read().canWrite).toBeTruthy();
+      });
+      expect(fixture.read().client.attempt).toBeNull();
+      expect(fixture.read().draftVisible).toBeFalsy();
+      expect(server.mutate).not.toHaveBeenCalled();
+    });
+
     test("explicit reader evidence during retry cancels the draft and an older pending get", async () => {
       const fixture = await edit();
       act(() => {

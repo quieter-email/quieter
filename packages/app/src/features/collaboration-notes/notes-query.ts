@@ -101,6 +101,7 @@ export const useThreadNotes = ({ mailboxId, threadId }: CollaborationScope) => {
               (!active.authority.permissions.moderateNotes &&
                 result.permissions.moderateNotes)))
         ) {
+          handleSnapshot({ epoch, snapshot: result });
           restart(true);
         } else {
           store.setState((current) =>
