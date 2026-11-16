@@ -145,19 +145,20 @@ def main():
         "./opt/quieter/resources/apparmor-profile": "/opt/quieter/resources/apparmor-profile",
     }
     installed_hashes = {}
-    unpack = subprocess.Popen(
+    with subprocess.Popen(
         ["dpkg-deb", "--fsys-tarfile", manifest["debPath"]], stdout=subprocess.PIPE
-    )
-    with tarfile.open(fileobj=unpack.stdout, mode="r|") as payload:
-        for member in payload:
-            if member.name in installed_members:
-                if not member.isfile():
-                    raise ValueError("A pinned installed executable/profile is not a regular file.")
-                with payload.extractfile(member) as stream:
-                    installed_hashes[installed_members[member.name]] = hashlib.file_digest(
-                        stream, "sha256"
-                    ).hexdigest()
-    if unpack.wait() != 0 or set(installed_hashes) != set(installed_members.values()):
+    ) as unpack:
+        with tarfile.open(fileobj=unpack.stdout, mode="r|") as payload:
+            for member in payload:
+                if member.name in installed_members:
+                    if not member.isfile():
+                        raise ValueError("A pinned installed executable/profile is not a regular file.")
+                    with payload.extractfile(member) as stream:
+                        installed_hashes[installed_members[member.name]] = hashlib.file_digest(
+                            stream, "sha256"
+                        ).hexdigest()
+        unpack_status = unpack.wait()
+    if unpack_status != 0 or set(installed_hashes) != set(installed_members.values()):
         raise ValueError("The pinned DEB is missing its executable, sandbox helper or profile.")
     manifest["installedHashes"] = installed_hashes
     (output / "installed-expected.sha256").write_text("".join(

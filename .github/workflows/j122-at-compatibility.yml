@@ -15,7 +15,7 @@ concurrency:
 jobs:
   linux-at:
     if: >-
-      github.event.label.name == 'j122-at-approved' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/quieter-122-at-runner-probe' && github.event.pull_request.base.ref == 'feat/quieter-145-installed-candidate'
+      github.run_attempt == 1 && github.event.label.name == 'j122-at-approved' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/quieter-122-at-runner-probe' && github.event.pull_request.base.ref == 'feat/quieter-145-installed-candidate'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -53,7 +53,7 @@ jobs:
           J122_DEB: ${{ steps.artifact.outputs.deb }}
         run: |
           sudo apt-get update
-          sudo apt-get install --no-install-recommends -y dbus-x11 gnome-keyring openbox x11-utils xvfb xauth orca speech-dispatcher-espeak-ng pulseaudio pulseaudio-utils gir1.2-atspi-2.0 python3-pyatspi "$J122_DEB"
+          sudo apt-get install --no-install-recommends -y dbus-x11 gnome-keyring openbox x11-utils xvfb xauth orca speech-dispatcher-espeak-ng espeak-ng pulseaudio pulseaudio-utils gir1.2-atspi-2.0 python3-pyatspi "$J122_DEB"
           sha256sum --check "$J122_EVIDENCE/producer/installed-expected.sha256" > "$J122_EVIDENCE/installed-hash-check.txt"
           dpkg-query -W > "$J122_EVIDENCE/packages.tsv"
           stat -c '%u %g %a %n' /opt/quieter/quieter /opt/quieter/chrome-sandbox > "$J122_EVIDENCE/installed-permissions.txt"

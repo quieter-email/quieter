@@ -388,8 +388,17 @@ const main = async (): Promise<void> => {
         tracked.set(info.pid, { ...info, at: Date.now(), owner: name });
       }
     }
-    if (owned.pid > 0 && !tracked.has(owned.pid) && !owned.stopped) {
-      owned.error ??= "The owned process identity could not be recorded.";
+    if (owned.pid > 0 && !tracked.has(owned.pid)) {
+      await Promise.race([owned.closed, delay(250)]);
+    }
+    if (
+      owned.pid > 0 &&
+      !tracked.has(owned.pid) &&
+      !owned.stopped &&
+      child.exitCode === null &&
+      child.signalCode === null
+    ) {
+      owned.error ??= "The live owned process identity could not be recorded.";
       failure.message ??= owned.error;
     }
     await save();
@@ -794,7 +803,7 @@ const main = async (): Promise<void> => {
     Object.assign(environment, {
       NO_AT_BRIDGE: "0",
       PULSE_SERVER: `unix:${temporary}/pulse/native`,
-      SPEECHD_ADDRESS: `unix:${temporary}/runtime/speechd.sock`,
+      SPEECHD_ADDRESS: `unix_socket:${temporary}/runtime/speechd.sock`,
       XDG_CACHE_HOME: path.join(temporary, "cache"),
       XDG_CONFIG_HOME: path.join(temporary, "config"),
       XDG_DATA_HOME: path.join(temporary, "data"),
