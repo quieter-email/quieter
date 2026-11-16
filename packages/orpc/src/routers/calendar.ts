@@ -22,6 +22,10 @@ import { z } from "zod";
 import { proposeCalendarAvailabilityForUser } from "../calendar/availability";
 import { importCalendarInvitationAttachmentForUser } from "../calendar/invitation-import";
 import {
+  calendarProposalCreateInputSchema,
+  createCalendarProposalEventForUser,
+} from "../calendar/proposals";
+import {
   createCalendarEventForUser,
   deleteCalendarEventForUser,
   getCalendarEventForUser,
@@ -96,6 +100,18 @@ export const calendarRouter = {
     .handler(
       async ({ context, input }) =>
         await createCalendarEventForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  createFromProposal: protectedProcedure
+    .input(calendarProposalCreateInputSchema)
+    .output(calendarMutationResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await createCalendarProposalEventForUser({
           ...input,
           signal: context.signal,
           userId: context.userId,
