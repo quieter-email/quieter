@@ -105,9 +105,13 @@ export const createMailUpdateConnection = async (userId: string) => {
   return { url: url.toString() };
 };
 
+type MailUpdateInput<TUpdate = MailUpdate> = TUpdate extends unknown
+  ? Omit<TUpdate, "eventId">
+  : never;
+
 // Delivery is a hint. A committed mail operation remains successful if broadcasting fails.
 export const publishMailUpdate = async (
-  input: Omit<MailUpdate, "eventId">,
+  input: MailUpdateInput,
   options?: {
     recipientUserIds: readonly string[];
     eventId?: string;
@@ -191,7 +195,7 @@ export const withMailUpdate =
       input: TInput;
       context: TContext;
     }) => Promise<TResult>,
-    type: MailUpdate["type"] = "mailbox.changed"
+    type: Exclude<MailUpdate["type"], "mail.received"> = "mailbox.changed"
   ) =>
   async (options: { input: TInput; context: TContext }) => {
     const result = await handler(options);

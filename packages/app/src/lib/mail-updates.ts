@@ -499,6 +499,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           if (seen.size > 500) {
             seen.delete(seen.values().next().value ?? "");
           }
+          if (event.data.type === "mail.received") {
+            requestRefresh(
+              event.data.mailboxId,
+              "mailbox.changed",
+              undefined,
+              event.data.threadIds
+            );
+            return;
+          }
           if (
             event.data.type === "reminders.changed" &&
             event.data.reminderId &&
