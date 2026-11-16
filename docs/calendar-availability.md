@@ -18,3 +18,21 @@ Working hours use the requested timezone. All-day events use their source timezo
 This operation proposes times for the current user's explicitly selected calendars. It does not establish invitee availability, hold a slot, create an event, or send an invitation. Recheck current access and availability before a separately authorized event write. Saved preference UI, reply insertion, assistant tool registration and optional booking are separate consumers.
 
 These fixtures verify local application behavior. Live provider consent, provider data, and event writes require separate authorized verification. Use approved development credentials and account isolation for that work.
+
+## Reply proposal adapters
+
+`ComposeMeetingProposal` is an isolated scheduling dialog. Its host supplies the current actor, sender, mailbox, draft identity, reply source/context, and recipients. Its insertion callback receives the captured target and plain text. The composer owner must compare the target with the current reply and insert through the ordinary editor transaction, preserving draft recovery, attachments and send safeguards. A changed target resets the dialog selection. The component uses the shared availability operation and presents the selected timezone and incomplete coverage explanation.
+
+Inserted proposals are retained in an actor/mailbox/draft-scoped TanStack Store during the current app session. `MeetingProposalReview` in Calendar lets the actor choose one agreed slot and review it using the existing calendar event editor. Opening review refreshes current mailbox access before exposing proposal details. Background query refreshes preserve edits. The existing session teardown calls `revokeMeetingProposals(userId)`, which only clears the matching actor and cannot clear a newer actor's proposals. The queue is not persisted across reloads. The inserted reply wording follows ordinary draft recovery.
+
+`calendar.createFromProposal` accepts the exact reviewed event, original availability scope, mailbox and stable operation identity. It rejects incomplete calendar coverage, changed conflicts, past times, unsupported precision, recurrence, duration mismatch and a destination outside the checked scope. It uses the acting user's calendar access even when the mailbox is shared. A separate recheck happens immediately before the existing event creator. This is not a reservation or a guarantee against concurrent external calendar changes. If a response was lost after creation, reconcile the existing calendar before retrying; the fresh check may find that already-created event busy. Keep the same operation identity.
+
+`createSchedulingTools({ userId })` supplies a read-only `list_calendar_availability` assistant adapter. The assistant owner binds the authenticated actor and joins it to the existing tool composition. It cannot write a draft, create an event, send mail or establish invitee availability.
+
+The composer mount, assistant composition and session teardown are joined under their owners' narrow integration handoffs. Mounted local verification uses the real composer and event editor with synthetic authentication and RPC transports. It covers selection-safe insertion with quote, signature and attachment preservation, ordinary fixture send and composer close, separate event review, conflict/retry, permission loss, timezone changes and sender changes. These fixtures do not establish live consent, provider delivery or the separate held-send stack integration. No live mail or invitations are sent.
+
+Run the focused timing and isolation checks with:
+
+```bash
+vp test packages/orpc/tests/calendar-proposals.test.ts packages/app/src/features/calendar/domain/meeting-proposals.test.ts
+```

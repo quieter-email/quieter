@@ -121,6 +121,7 @@ import {
   chatReplyInterruption,
   filterChatToolInputDrafts,
 } from "./reply-stream";
+import { createSchedulingTools } from "./scheduling-tools";
 import { assertExactChatToolApproval } from "./tool-approval";
 
 type UIMessagePart = UIMessage["parts"][number];
@@ -1726,6 +1727,7 @@ const createAiChatResponseInRequest = async (
       userId: input.userId,
     }),
     ...createConnectorChatTools({ latestUserRequest, userId: input.userId }),
+    ...createSchedulingTools({ userId: input.userId }),
     ...createCalendarChatTools(
       createCalendarToolsContext({
         foreground: validated.foreground,

@@ -114,6 +114,7 @@ import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
 import type { CalendarConnectionTarget } from "./calendar-sidebar";
 import { CalendarTimeZonePicker } from "./calendar-time-zone-picker";
+import { MeetingProposalReview } from "./meeting-proposal-review";
 import { useCalendarData } from "./use-calendar-data";
 
 type CalendarConfirmation =
@@ -1175,6 +1176,7 @@ const CalendarWorkspaceContent = ({
           title="Calendar"
         />
         <WorkspaceHeader>
+          {preview === null ? <MeetingProposalReview userId={userId} /> : null}
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex max-w-full min-w-0 items-center gap-2">
               <div className="flex shrink-0 items-center gap-1">
