@@ -1,0 +1,103 @@
+name: J122 AT compatibility
+
+on:
+  pull_request:
+    types: [labeled]
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: j122-at-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+jobs:
+  linux-at:
+    if: >-
+      github.event.label.name == 'j122-at-approved' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/quieter-122-at-runner-probe' && github.event.pull_request.base.ref == 'feat/quieter-145-installed-candidate'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    env:
+      J122_REVISION: ${{ github.event.pull_request.head.sha }}
+      J122_EVIDENCE: ${{ runner.temp }}/j122-at-evidence
+      J122_UNIT: j122-at-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify the approved additive source boundary
+        shell: bash
+        run: |
+          test "$(git rev-parse HEAD)" = "$J122_REVISION"
+          git merge-base --is-ancestor 96c4be3b5c1087f3864d6b3f9f24fa185282c250 HEAD
+          printf '%s\n' \
+            $'A\t.github/workflows/j122-at-compatibility.yml' \
+            $'A\tapps/desktop/scripts/j122-at-companion.ts' \
+            $'A\tapps/desktop/scripts/j122-at-observer.py' \
+            $'A\tscripts/j122-at-artifact.py' > "$RUNNER_TEMP/j122-expected-diff"
+          git diff --name-status --no-renames 96c4be3b5c1087f3864d6b3f9f24fa185282c250 HEAD > "$RUNNER_TEMP/j122-actual-diff"
+          cmp "$RUNNER_TEMP/j122-expected-diff" "$RUNNER_TEMP/j122-actual-diff"
+      - name: Setup repository
+        uses: ./.github/actions/setup
+      - name: Verify the pinned K578 package and native receipt
+        id: artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: >-
+          vp exec /usr/bin/python3 scripts/j122-at-artifact.py --revision "$J122_REVISION" --output "$J122_EVIDENCE/producer" --github-output "$GITHUB_OUTPUT"
+      - name: Install the ordinary supported candidate and AT packages
+        env:
+          J122_DEB: ${{ steps.artifact.outputs.deb }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends -y dbus-x11 gnome-keyring openbox x11-utils xvfb xauth orca speech-dispatcher-espeak-ng pulseaudio pulseaudio-utils gir1.2-atspi-2.0 python3-pyatspi "$J122_DEB"
+          sha256sum --check "$J122_EVIDENCE/producer/installed-expected.sha256" > "$J122_EVIDENCE/installed-hash-check.txt"
+          dpkg-query -W > "$J122_EVIDENCE/packages.tsv"
+          stat -c '%u %g %a %n' /opt/quieter/quieter /opt/quieter/chrome-sandbox > "$J122_EVIDENCE/installed-permissions.txt"
+          sha256sum /opt/quieter/quieter /opt/quieter/chrome-sandbox /opt/quieter/resources/apparmor-profile > "$J122_EVIDENCE/installed-hashes.txt"
+          rm -- "$J122_DEB"
+      - name: Observe the existing native lifecycle with actual AT and audio
+        shell: bash
+        run: |
+          set -o pipefail
+          test "$(id -u)" -ne 0
+          test "$(awk '/MemAvailable:/ { print int($2 / 1024) }' /proc/meminfo)" -ge 3072
+          sudo systemd-run --unit="$J122_UNIT" --collect --wait --pipe --expand-environment=no \
+            --uid="$(id -u)" --gid="$(id -g)" \
+            --working-directory="$GITHUB_WORKSPACE" \
+            --property=Type=exec --property=MemoryMax=2G --property=MemorySwapMax=0 \
+            --property=CPUQuota=100% --property=TasksMax=256 \
+            --property=RuntimeMaxSec=180s --property=KillMode=control-group \
+            --setenv="PATH=$PATH" --setenv=LANG=C.UTF-8 --setenv=CI=1 \
+            xvfb-run -a dbus-run-session -- \
+            vp exec node apps/desktop/scripts/j122-at-companion.ts \
+            --revision "$J122_REVISION" --output "$J122_EVIDENCE" \
+            --executable /opt/quieter/quieter \
+            2>&1 | tee "$J122_EVIDENCE/runner.log"
+      - name: Stop only the owned resource unit
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$J122_EVIDENCE"
+          sudo journalctl --unit="$J122_UNIT" --no-pager > "$J122_EVIDENCE/unit.log"
+          load_state="$(sudo systemctl show "$J122_UNIT" --property=LoadState --value 2>/dev/null)" || true
+          printf '%s\n' "$load_state" > "$J122_EVIDENCE/unit-before-cleanup.txt"
+          if test "$load_state" = "loaded"; then
+            sudo systemctl stop "$J122_UNIT"
+          elif test "$load_state" != "not-found"; then
+            exit 1
+          fi
+          sudo systemctl show "$J122_UNIT" --property=ActiveState --property=SubState --property=LoadState > "$J122_EVIDENCE/unit-after-cleanup.txt" || true
+          after_load="$(awk -F= '$1 == "LoadState" { print $2 }' "$J122_EVIDENCE/unit-after-cleanup.txt")"
+          after_active="$(awk -F= '$1 == "ActiveState" { print $2 }' "$J122_EVIDENCE/unit-after-cleanup.txt")"
+          test "$after_load" = "not-found" || test "$after_active" = "inactive"
+      - name: Retain capability and failure evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: j122-at-${{ github.event.pull_request.head.sha }}
+          path: ${{ runner.temp }}/j122-at-evidence/
+          if-no-files-found: error
