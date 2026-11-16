@@ -1523,6 +1523,7 @@ export const gmailAutoLabelEvent = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     model: text("model"),
     nextAttemptAt: timestamp("nextAttemptAt"),
+    privateContextUserId: text("privateContextUserId"),
     promptTokens: integer("promptTokens"),
     updatedAt: timestamp("updatedAt").notNull(),
     usageReportedAt: timestamp("usageReportedAt"),
@@ -4230,6 +4231,7 @@ export const semanticIndexRequest = pgTable(
 export const scheduledMailSend = pgTable(
   "scheduledMailSend",
   {
+    cancellationOrigin: jsonb("cancellationOrigin").$type<unknown>(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
     deliveryKind: text("deliveryKind")
       .$type<"scheduled" | "undo">()
