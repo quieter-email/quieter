@@ -638,6 +638,8 @@ export const mailbox = pgTable(
       sql`(
         (${table.provider} = 'gmail' and ${table.ownerUserId} is not null and ${table.managedOwnerUserId} is null)
         or
+        (${table.provider} = 'outlook' and ${table.ownerUserId} is not null and ${table.accessMode} = 'private' and ${table.managedOwnerUserId} is null and ${table.divisionId} is null)
+        or
         (${table.provider} = 'managed' and ${table.accessMode} = 'private' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is not null and ${table.organizationId} is not null)
         or
         (${table.provider} = 'managed' and ${table.accessMode} = 'shared' and ${table.ownerUserId} is null and ${table.managedOwnerUserId} is null and ${table.organizationId} is not null)
@@ -653,7 +655,7 @@ export const mailbox = pgTable(
     ),
     check(
       "mailbox_provider_check",
-      sql`${table.provider} in ('gmail', 'managed')`
+      sql`${table.provider} in ('gmail', 'managed', 'outlook')`
     ),
     check(
       "mailbox_status_check",
@@ -664,6 +666,300 @@ export const mailbox = pgTable(
     index("mailbox_organization_id_idx").on(table.organizationId),
     index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
+    unique("mailbox_id_owner_user_id_unique").on(table.id, table.ownerUserId),
+  ]
+);
+
+export const outlookOAuthState = pgTable(
+  "outlookOAuthState",
+  {
+    claimId: text("claimId"),
+    consumedAt: timestamp("consumedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    credentialGeneration: integer("credentialGeneration"),
+    encryptedCodeVerifier: text("encryptedCodeVerifier").notNull(),
+    encryptedNonce: text("encryptedNonce").notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId"),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    redirectUri: text("redirectUri").notNull(),
+    requestedScopes: text("requestedScopes").notNull(),
+    returnTo: text("returnTo").notNull(),
+    sessionHash: text("sessionHash").notNull(),
+    stateHash: text("stateHash").primaryKey(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.mailboxId, table.userId],
+      foreignColumns: [mailbox.id, mailbox.ownerUserId],
+      name: "outlook_oauth_state_mailbox_owner_fk",
+    }).onDelete("cascade"),
+    check(
+      "outlook_oauth_state_reconnect_check",
+      sql`(${table.mailboxId} is null and ${table.credentialGeneration} is null) or (${table.mailboxId} is not null and ${table.credentialGeneration} is not null and ${table.credentialGeneration} >= 0)`
+    ),
+    check(
+      "outlook_oauth_state_claim_check",
+      sql`(${table.claimId} is null) = (${table.consumedAt} is null)`
+    ),
+    index("outlook_oauth_state_expiry_idx").on(table.expiresAt),
+    index("outlook_oauth_state_user_idx").on(table.userId),
+    index("outlook_oauth_state_organization_idx").on(table.organizationId),
+    index("outlook_oauth_state_mailbox_owner_idx").on(
+      table.mailboxId,
+      table.userId
+    ),
+  ]
+);
+
+export const outlookCredential = pgTable(
+  "outlookCredential",
+  {
+    accessTokenExpiresAt: timestamp("accessTokenExpiresAt", {
+      withTimezone: true,
+    }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    encryptedAccessToken: text("encryptedAccessToken"),
+    encryptedRefreshToken: text("encryptedRefreshToken"),
+    generation: integer("generation").notNull().default(0),
+    graphAccountId: text("graphAccountId").notNull(),
+    issuer: text("issuer").notNull(),
+    mailboxId: text("mailboxId").primaryKey(),
+    ownerUserId: text("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    scopes: text("scopes").notNull(),
+    status: text("status")
+      .$type<"connected" | "disconnected" | "needs_reconnect">()
+      .notNull(),
+    subject: text("subject").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.mailboxId, table.ownerUserId],
+      foreignColumns: [mailbox.id, mailbox.ownerUserId],
+      name: "outlook_credential_mailbox_owner_fk",
+    }).onDelete("cascade"),
+    check("outlook_credential_generation_check", sql`${table.generation} >= 0`),
+    check(
+      "outlook_credential_status_check",
+      sql`${table.status} in ('connected', 'needs_reconnect', 'disconnected')`
+    ),
+    unique("outlook_credential_owner_subject_unique").on(
+      table.ownerUserId,
+      table.issuer,
+      table.subject
+    ),
+  ]
+);
+
+export const outlookFolder = pgTable(
+  "outlookFolder",
+  {
+    checkpointVersion: integer("checkpointVersion").notNull().default(0),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    displayName: text("displayName").notNull(),
+    encryptedDeltaLink: text("encryptedDeltaLink"),
+    encryptedNextLink: text("encryptedNextLink"),
+    folderId: text("folderId").notNull(),
+    isHidden: boolean("isHidden").notNull().default(false),
+    lastCompletedAt: timestamp("lastCompletedAt", { withTimezone: true }),
+    lastDiscoveredAt: timestamp("lastDiscoveredAt", { withTimezone: true }),
+    lastErrorCode: text("lastErrorCode"),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { withTimezone: true }),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    parentFolderId: text("parentFolderId"),
+    role: text("role").$type<
+      "archive" | "drafts" | "inbox" | "sent" | "spam" | "trash"
+    >(),
+    state: text("state")
+      .$type<"error" | "hydrating" | "pending" | "ready" | "reconcile">()
+      .notNull()
+      .default("pending"),
+    syncEpoch: integer("syncEpoch").notNull().default(0),
+    totalItemCount: integer("totalItemCount").notNull().default(0),
+    unreadItemCount: integer("unreadItemCount").notNull().default(0),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.folderId] }),
+    check(
+      "outlook_folder_counters_check",
+      sql`${table.syncEpoch} >= 0 and ${table.checkpointVersion} >= 0 and ${table.totalItemCount} >= 0 and ${table.unreadItemCount} >= 0`
+    ),
+    check(
+      "outlook_folder_role_check",
+      sql`${table.role} is null or ${table.role} in ('inbox', 'sent', 'drafts', 'spam', 'trash', 'archive')`
+    ),
+    check(
+      "outlook_folder_state_check",
+      sql`${table.state} in ('pending', 'hydrating', 'ready', 'reconcile', 'error')`
+    ),
+    check(
+      "outlook_folder_lease_check",
+      sql`(${table.leaseId} is null) = (${table.leaseExpiresAt} is null)`
+    ),
+    index("outlook_folder_work_idx").on(
+      table.mailboxId,
+      table.state,
+      table.updatedAt
+    ),
+  ]
+);
+
+export const outlookMessage = pgTable(
+  "outlookMessage",
+  {
+    changeKey: text("changeKey").notNull(),
+    contentState: text("contentState")
+      .$type<"full" | "metadata" | "truncated">()
+      .notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    deletedAt: timestamp("deletedAt", { withTimezone: true }),
+    isDraft: boolean("isDraft").notNull(),
+    isRead: boolean("isRead").notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    messageId: text("messageId").notNull(),
+    projection: jsonb("projection").$type<Record<string, unknown>>().notNull(),
+    receivedAt: timestamp("receivedAt", { withTimezone: true }).notNull(),
+    sentAt: timestamp("sentAt", { withTimezone: true }),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "outlook_message_content_state_check",
+      sql`${table.contentState} in ('metadata', 'full', 'truncated')`
+    ),
+    check(
+      "outlook_message_projection_check",
+      sql`jsonb_typeof(${table.projection}) = 'object'`
+    ),
+    index("outlook_message_thread_idx").on(
+      table.mailboxId,
+      table.threadId,
+      table.receivedAt
+    ),
+    index("outlook_message_unread_idx").on(
+      table.mailboxId,
+      table.isRead,
+      table.receivedAt
+    ),
+  ]
+);
+
+export const outlookMessageFolder = pgTable(
+  "outlookMessageFolder",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    folderId: text("folderId").notNull(),
+    mailboxId: text("mailboxId").notNull(),
+    messageId: text("messageId").notNull(),
+    seenEpoch: integer("seenEpoch").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.mailboxId, table.folderId, table.messageId] }),
+    foreignKey({
+      columns: [table.mailboxId, table.folderId],
+      foreignColumns: [outlookFolder.mailboxId, outlookFolder.folderId],
+      name: "outlook_message_folder_folder_fk",
+    }).onDelete("cascade"),
+    foreignKey({
+      columns: [table.mailboxId, table.messageId],
+      foreignColumns: [outlookMessage.mailboxId, outlookMessage.messageId],
+      name: "outlook_message_folder_message_fk",
+    }).onDelete("cascade"),
+    check("outlook_message_folder_epoch_check", sql`${table.seenEpoch} >= 0`),
+    index("outlook_message_folder_message_idx").on(
+      table.mailboxId,
+      table.messageId
+    ),
+  ]
+);
+
+export const outlookReadCursor = pgTable(
+  "outlookReadCursor",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    credentialGeneration: integer("credentialGeneration").notNull(),
+    encryptedState: text("encryptedState").notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId").notNull(),
+    ownerUserId: text("ownerUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    queryHash: text("queryHash").notNull(),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.mailboxId, table.ownerUserId],
+      foreignColumns: [mailbox.id, mailbox.ownerUserId],
+      name: "outlook_read_cursor_mailbox_owner_fk",
+    }).onDelete("cascade"),
+    check(
+      "outlook_read_cursor_generation_check",
+      sql`${table.credentialGeneration} >= 0`
+    ),
+    index("outlook_read_cursor_expiry_idx").on(table.expiresAt),
+    index("outlook_read_cursor_mailbox_idx").on(table.mailboxId),
+  ]
+);
+
+export const outlookSyncState = pgTable(
+  "outlookSyncState",
+  {
+    activeParentFolderId: text("activeParentFolderId"),
+    checkpointVersion: integer("checkpointVersion").notNull().default(0),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    discoveryStartedAt: timestamp("discoveryStartedAt", { withTimezone: true }),
+    encryptedFolderPageUrl: text("encryptedFolderPageUrl"),
+    folderDiscoveryCompletedAt: timestamp("folderDiscoveryCompletedAt", {
+      withTimezone: true,
+    }),
+    folderQueue: jsonb("folderQueue").$type<string[]>().notNull().default([]),
+    generation: integer("generation").notNull(),
+    leaseExpiresAt: timestamp("leaseExpiresAt", { withTimezone: true }),
+    leaseId: text("leaseId"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    state: text("state").$type<"discovering" | "ready">().notNull(),
+    systemFolders: jsonb("systemFolders")
+      .$type<Record<string, string>>()
+      .notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    check(
+      "outlook_sync_state_generation_check",
+      sql`${table.generation} >= 0 and ${table.checkpointVersion} >= 0`
+    ),
+    check(
+      "outlook_sync_state_state_check",
+      sql`${table.state} in ('discovering', 'ready')`
+    ),
+    check(
+      "outlook_sync_state_folders_check",
+      sql`jsonb_typeof(${table.systemFolders}) = 'object' and jsonb_typeof(${table.folderQueue}) = 'array'`
+    ),
+    check(
+      "outlook_sync_state_lease_check",
+      sql`(${table.leaseId} is null) = (${table.leaseExpiresAt} is null)`
+    ),
   ]
 );
 
