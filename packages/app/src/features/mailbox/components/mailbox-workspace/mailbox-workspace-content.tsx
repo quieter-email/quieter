@@ -40,6 +40,7 @@ import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
@@ -136,7 +137,7 @@ type MailboxWorkspaceContentProps = {
   reconnectingMailboxId: string | null;
   searchQuery: string;
   selectedMailboxId: string | null;
-  selectedMailboxProvider: "api" | "gmail" | "managed" | null;
+  selectedMailboxProvider: MailboxProvider | null;
   selectedMailboxNeedsReconnect: boolean;
   selectedView: MailboxWorkspaceView;
   signature?: { html: string | null; text: string | null };

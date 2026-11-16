@@ -15,6 +15,7 @@ import {
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "@quieter/app/lib/orpc-errors";
+import type { MailboxProvider } from "@quieter/mail/search";
 import type { RouterOutputs } from "@quieter/orpc";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -24,7 +25,7 @@ type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   messageId?: string;
   threadId?: string;
   queryClient: QueryClient;

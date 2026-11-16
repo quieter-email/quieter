@@ -12,6 +12,7 @@ import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { rememberRequestedUnsubscribe } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { orpc } from "@quieter/app/lib/orpc";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useMemo, useState } from "react";
 
@@ -37,7 +38,7 @@ export const useMailboxListController = ({
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   messageId: string | null;
   searchQuery: string;
   selectionScopeKey?: string;

@@ -17,6 +17,7 @@ import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/componen
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Icon } from "@quieter/ui/icon";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
@@ -43,7 +44,7 @@ type SidebarMailboxNavProps = {
   animateEntrance: boolean;
   embedded: boolean;
   mailboxId: string | null;
-  mailboxProvider: "api" | "gmail" | "managed" | null;
+  mailboxProvider: MailboxProvider | null;
   onRequestClose?: () => void;
   selectedMailbox: MailboxCategory | null;
   onSelectMailbox: (mailbox: MailboxCategory) => void;
