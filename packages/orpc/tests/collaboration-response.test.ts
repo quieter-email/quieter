@@ -15,18 +15,6 @@ const fixtures = vi.hoisted(() => ({
   prepare: vi.fn<() => Promise<CollaborationState>>(),
 }));
 
-vi.mock(import("../src/routers/index"), async (original) => {
-  const router = await original();
-  const { collaborationRouter } = await import("../src/routers/collaboration");
-  return {
-    ...router,
-    appRouter: {
-      ...router.appRouter,
-      collaboration: collaborationRouter,
-    },
-  };
-});
-
 vi.mock(import("@quieter/auth/session"), async (original) => {
   const createdAt = new Date("2026-11-16T00:00:00Z");
   return {
