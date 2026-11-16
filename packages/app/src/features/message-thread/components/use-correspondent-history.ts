@@ -1,7 +1,6 @@
 import { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { subscribeMailboxAccessLoss } from "@quieter/app/lib/mail-cache-lifecycle";
-import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
 import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
 import type { RouterInputs, RouterOutputs } from "@quieter/orpc";
@@ -394,15 +393,6 @@ export const createCorrespondentHistory = ({
         ) {
           throw new Error("The source response did not match its selection.");
         }
-        const queryKey = getThreadQueryKey(
-          owner.mailboxId,
-          opened.thread.threadId
-        );
-        await queryClient.cancelQueries({ exact: true, queryKey });
-        if (!isCurrentRequest()) {
-          return;
-        }
-        queryClient.setQueryData(queryKey, opened.thread);
         focusHandoff.current = true;
         failureDomain = "navigation";
         const navigation = onOpenConversation({

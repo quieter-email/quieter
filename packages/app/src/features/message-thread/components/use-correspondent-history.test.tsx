@@ -2,6 +2,7 @@ import { ORPCError } from "@orpc/client";
 import type { AssistantSidebarContext } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { toastError } from "@quieter/app/lib/error-toast";
 // @vitest-environment jsdom
+import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
 import { setQueryPersistenceUser } from "@quieter/app/lib/query-persister";
@@ -10,6 +11,7 @@ import {
   InfiniteQueryObserver,
   QueryClient,
   QueryClientProvider,
+  QueryObserver,
 } from "@tanstack/react-query";
 import { act, StrictMode, useLayoutEffect } from "react";
 import type { ContextType } from "react";
@@ -48,6 +50,10 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
       correspondentHistory: {
         list: vi.fn<typeof actual.rpc.correspondentHistory.list>(),
         openSource: vi.fn<typeof actual.rpc.correspondentHistory.openSource>(),
+      },
+      mail: {
+        ...actual.rpc.mail,
+        getThread: vi.fn<typeof actual.rpc.mail.getThread>(),
       },
     },
   };
@@ -178,6 +184,7 @@ describe("correspondent history", () => {
       cleanup();
     }
     vi.restoreAllMocks();
+    vi.mocked(rpc.mail.getThread).mockReset();
   });
 
   test("can open after React StrictMode reattaches its effects", () => {
@@ -409,7 +416,7 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
-    test("opens only the latest freshly verified source and preserves the complete thread", async () => {
+    test("navigates only the latest freshly verified source", async () => {
       const { api, client, history, navigate, reportError } = setup();
       const first = Promise.withResolvers<typeof opened>();
       const second = Promise.withResolvers<typeof opened>();
@@ -428,7 +435,7 @@ describe("correspondent history", () => {
       await secondOpen;
       expect(
         client.getQueryData(getThreadQueryKey("mailbox", source.threadId))
-      ).toBe(opened.thread);
+      ).toBeUndefined();
       expect(navigate).toHaveBeenCalledExactlyOnceWith({
         mailboxId: "mailbox",
         messageId: source.messageId,
@@ -436,6 +443,58 @@ describe("correspondent history", () => {
       });
       expect(history.state.get().view.kind).toBe("closed");
       expect(history.consumeFocusHandoff()).toBeTruthy();
+      expect(reportError).not.toHaveBeenCalled();
+    });
+
+    test("leaves a cold destination to the canonical reader after a successful preflight", async () => {
+      const { api, client, history, navigate, reportError } = setup();
+      const preflight = Promise.withResolvers<typeof opened>();
+      const destination = {
+        ...opened.thread,
+        messages: opened.thread.messages.map((message) => ({
+          ...message,
+          bodyHtml: "<p>Content from the destination reader.</p>",
+        })),
+      };
+      api.openSource.mockReturnValueOnce(preflight.promise);
+      vi.mocked(rpc.mail.getThread).mockResolvedValueOnce(destination);
+      navigate.mockImplementationOnce(async ({ mailboxId, threadId }) => {
+        const observer = new QueryObserver(
+          client,
+          getThreadWithDetailsOptions(mailboxId, threadId)
+        );
+        const read = Promise.withResolvers<null>();
+        const unsubscribe = observer.subscribe((result) => {
+          if (result.isSuccess) {
+            read.resolve(null);
+          } else if (result.isError) {
+            read.reject(result.error);
+          }
+        });
+        try {
+          if (!observer.getCurrentResult().isSuccess) {
+            await read.promise;
+          }
+        } finally {
+          unsubscribe();
+        }
+      });
+
+      const opening = history.openSource(source, "mail");
+      expect(navigate).not.toHaveBeenCalled();
+      expect(rpc.mail.getThread).not.toHaveBeenCalled();
+      preflight.resolve(opened);
+      await opening;
+
+      expect(rpc.mail.getThread).toHaveBeenCalledOnce();
+      expect(vi.mocked(rpc.mail.getThread).mock.calls[0]?.[0]).toMatchObject({
+        mailboxId: "mailbox",
+        threadId: source.threadId,
+      });
+      expect(
+        client.getQueryData(getThreadQueryKey("mailbox", source.threadId))
+      ).toBe(destination);
+      expect(history.state.get().view.kind).toBe("closed");
       expect(reportError).not.toHaveBeenCalled();
     });
 
@@ -543,19 +602,13 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
-    test("does not seed or navigate when retired during canonical query cancellation", async () => {
+    test("does not navigate when closed during source verification", async () => {
       const { api, client, history, navigate, reportError } = setup();
-      const cancellation = Promise.withResolvers<null>();
-      const waiting = Promise.withResolvers<null>();
-      api.openSource.mockResolvedValueOnce(opened);
-      vi.spyOn(client, "cancelQueries").mockImplementationOnce(async () => {
-        waiting.resolve(null);
-        await cancellation.promise;
-      });
+      const preflight = Promise.withResolvers<typeof opened>();
+      api.openSource.mockReturnValueOnce(preflight.promise);
       const operation = history.openSource(source, "mail");
-      await waiting.promise;
       history.close();
-      cancellation.resolve(null);
+      preflight.resolve(opened);
       await operation;
       expect(
         client.getQueryData(getThreadQueryKey("mailbox", source.threadId))
@@ -564,24 +617,32 @@ describe("correspondent history", () => {
       expect(reportError).not.toHaveBeenCalled();
     });
 
-    test("prevents an older canonical fetch from overwriting the verified source", async () => {
+    test("does not interrupt an existing canonical destination fetch", async () => {
       const { api, client, history, navigate } = setup();
       const previous = Promise.withResolvers<typeof opened.thread>();
       const queryKey = getThreadQueryKey("mailbox", source.threadId);
       const oldFetch = Promise.allSettled([
         client.query({
           queryFn: async ({ signal }) => {
+            const result = await previous.promise;
             signal.throwIfAborted();
-            return await previous.promise;
+            return result;
           },
           queryKey,
         }),
       ]);
       api.openSource.mockResolvedValueOnce(opened);
       await history.openSource(source, "mail");
-      previous.resolve({ messages: [], threadId: source.threadId });
+      const destination = {
+        ...opened.thread,
+        messages: opened.thread.messages.map((message) => ({
+          ...message,
+          bodyHtml: "<p>Content from the destination reader.</p>",
+        })),
+      };
+      previous.resolve(destination);
       await oldFetch;
-      expect(client.getQueryData(queryKey)).toBe(opened.thread);
+      expect(client.getQueryData(queryKey)).toBe(destination);
       expect(navigate).toHaveBeenCalledOnce();
     });
 
