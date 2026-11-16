@@ -9,6 +9,7 @@ import {
 } from "@quieter/app/lib/mail-mutations";
 import {
   applyBulkChangesInMailbox,
+  applySnoozeInMailbox,
   updateMessageInMailbox,
   updateThreadInMailbox,
 } from "@quieter/app/lib/mail/inbox-query/actions";
@@ -25,6 +26,7 @@ vi.mock("@quieter/app/lib/orpc", () => ({
   rpc: {
     mail: {
       applyChanges: vi.fn<typeof rpc.mail.applyChanges>(),
+      applySnooze: vi.fn<typeof rpc.mail.applySnooze>(),
       markMessageAsRead: vi.fn<typeof rpc.mail.markMessageAsRead>(),
       markMessageAsUnread: vi.fn<typeof rpc.mail.markMessageAsUnread>(),
       markThreadAsRead: vi.fn<typeof rpc.mail.markThreadAsRead>(),
@@ -491,6 +493,92 @@ describe("mail metadata cache updates", () => {
         .data?.pages[0].messages.find((message) => message.id === "a")?.isUnread
     ).toBeFalsy();
     unsubscribe();
+    queryClient.clear();
+  });
+
+  test("an authoritative Snooze serializes a read without projecting placement or losing incoming mail", async () => {
+    const { queryClient, inboxKey } = setup();
+    const response =
+      Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.applySnooze>>>();
+    const started = Promise.withResolvers<null>();
+    const readResponse =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof rpc.mail.markMessageAsRead>>
+      >();
+    vi.mocked(rpc.mail.applySnooze).mockImplementation(async () => {
+      started.resolve(null);
+      return await response.promise;
+    });
+    let snoozeCompleted = false;
+    let readSawCompletion = false;
+    vi.mocked(rpc.mail.markMessageAsRead).mockImplementation(async () => {
+      readSawCompletion = snoozeCompleted;
+      return await readResponse.promise;
+    });
+    const snooze = applySnoozeInMailbox(
+      queryClient,
+      "mailbox",
+      [{ expectedVersion: null, messageIds: ["a"], threadId: "thread" }],
+      {
+        kind: "snooze",
+        returnAt: new Date(Date.now() + 86_400_000).toISOString(),
+        timeZone: "UTC",
+      }
+    );
+    await started.promise;
+    const beforeRead = queryClient
+      .getQueryData<MessagesQueryData>(inboxKey)
+      ?.pages[0].messages.find((message) => message.id === "a");
+    updateMailQueryFromServer<MessagesQueryData>(
+      queryClient,
+      inboxKey,
+      (current) =>
+        current === undefined
+          ? current
+          : {
+              ...current,
+              pages: current.pages.map((page, index) =>
+                index === 0
+                  ? {
+                      ...page,
+                      messages: [
+                        ...page.messages,
+                        {
+                          id: "incoming",
+                          labelIds: ["INBOX"],
+                          threadId: "new-thread",
+                        },
+                      ],
+                    }
+                  : page
+              ),
+            }
+    );
+    const read = updateMessageInMailbox(
+      {
+        mailbox: "inbox",
+        mailboxId: "mailbox",
+        messageId: "a",
+        queryClient,
+        searchQuery: undefined,
+      },
+      "read"
+    );
+    await Promise.resolve();
+    snoozeCompleted = true;
+    response.resolve({ targets: [{ status: "applied", threadId: "thread" }] });
+    readResponse.resolve({ id: "a", isUnread: false, labelIds: ["INBOX"] });
+    await Promise.all([snooze, read]);
+    expect(beforeRead?.labelIds).toContain("INBOX");
+    expect(beforeRead?.snooze).toBeUndefined();
+    expect(readSawCompletion).toBeTruthy();
+    const messages =
+      queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0].messages;
+    expect(messages?.find((message) => message.id === "a")).toMatchObject({
+      bodyHtml: "<p>a</p>",
+      isUnread: false,
+    });
+    expect(messages?.map((message) => message.id)).toContain("incoming");
     queryClient.clear();
   });
 

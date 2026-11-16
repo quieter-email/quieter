@@ -63,15 +63,13 @@ export const applySnoozeInMailbox = async (
   let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
   try {
     await runMailMutation(queryClient, {
-      apply: () => {},
-      execute: async () => {
+      execute: async (): Promise<undefined> => {
         result = await rpc.mail.applySnooze({
           command,
           mailboxId,
           requestId,
           targets,
         });
-        return () => {};
       },
       mailboxId,
       targets: targets.map((target) => target.threadId),
