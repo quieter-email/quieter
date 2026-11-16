@@ -4460,6 +4460,224 @@ export const calendarBookingReservation = pgTable(
   ]
 );
 
+export type ManagementMutationStatus =
+  | "prepared"
+  | "approved"
+  | "succeeded"
+  | "failed"
+  | "cancelled"
+  | "expired";
+
+export type ManagementMutationErrorCode =
+  | "BAD_REQUEST"
+  | "UNAUTHORIZED"
+  | "FORBIDDEN"
+  | "NOT_FOUND"
+  | "CONFLICT"
+  | "RATE_LIMITED"
+  | "REAUTHENTICATION_REQUIRED"
+  | "CANCELLED"
+  | "UNSUPPORTED_OPERATION"
+  | "INTERNAL_ERROR";
+
+export const managementMutation = pgTable(
+  "managementMutation",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    approvedAt: timestamp("approvedAt", { withTimezone: true }),
+    completedAt: timestamp("completedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    credentialId: text("credentialId").notNull(),
+    credentialKind: text("credentialKind").$type<"session">().notNull(),
+    errorCode: text("errorCode").$type<ManagementMutationErrorCode>(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    idempotencyKey: text("idempotencyKey").notNull(),
+    mailboxId: text("mailboxId"),
+    operation: text("operation")
+      .$type<"organization.settings.update">()
+      .notNull(),
+    organizationId: text("organizationId")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    parameters: jsonb("parameters")
+      .$type<{
+        allowPerSendOverride?: boolean;
+        openTrackingEnabled?: boolean;
+      }>()
+      .notNull(),
+    requestHash: text("requestHash").notNull(),
+    result: jsonb("result").$type<{
+      allowPerSendOverride: boolean;
+      openTrackingEnabled: boolean;
+    }>(),
+    status: text("status").$type<ManagementMutationStatus>().notNull(),
+  },
+  (table) => [
+    unique("management_mutation_replay_unique").on(
+      table.actorUserId,
+      table.credentialKind,
+      table.credentialId,
+      table.idempotencyKey
+    ),
+    index("management_mutation_actor_target_created_idx").on(
+      table.actorUserId,
+      table.organizationId,
+      table.createdAt
+    ),
+    index("management_mutation_status_expiry_idx").on(
+      table.status,
+      table.expiresAt
+    ),
+    check(
+      "management_mutation_scope_check",
+      sql`${table.credentialKind} = 'session'
+        and ${table.operation} = 'organization.settings.update'
+        and ${table.mailboxId} is null`
+    ),
+    check(
+      "management_mutation_identity_check",
+      sql`length(btrim(${table.credentialId})) > 0
+        and length(${table.credentialId}) <= 255
+        and length(${table.idempotencyKey}) between 1 and 255
+        and ${table.idempotencyKey} = btrim(${table.idempotencyKey})
+        and ${table.requestHash} ~ '^v1:[a-f0-9]{64}$'`
+    ),
+    check(
+      "management_mutation_parameters_check",
+      sql`case when jsonb_typeof(${table.parameters}) = 'object' then
+        ${table.parameters} <> '{}'::jsonb
+        and ${table.parameters} - array['allowPerSendOverride', 'openTrackingEnabled'] = '{}'::jsonb
+        and (not (${table.parameters} ? 'allowPerSendOverride') or jsonb_typeof(${table.parameters}->'allowPerSendOverride') = 'boolean')
+        and (not (${table.parameters} ? 'openTrackingEnabled') or jsonb_typeof(${table.parameters}->'openTrackingEnabled') = 'boolean')
+        else false end`
+    ),
+    check(
+      "management_mutation_result_check",
+      sql`${table.result} is null or case when jsonb_typeof(${table.result}) = 'object' then
+        ${table.result} ?& array['allowPerSendOverride', 'openTrackingEnabled']
+        and ${table.result} - array['allowPerSendOverride', 'openTrackingEnabled'] = '{}'::jsonb
+        and jsonb_typeof(${table.result}->'allowPerSendOverride') = 'boolean'
+        and jsonb_typeof(${table.result}->'openTrackingEnabled') = 'boolean'
+        else false end`
+    ),
+    check(
+      "management_mutation_error_check",
+      sql`${table.errorCode} is null or ${table.errorCode} in (
+        'BAD_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT',
+        'RATE_LIMITED', 'REAUTHENTICATION_REQUIRED', 'CANCELLED', 'UNSUPPORTED_OPERATION', 'INTERNAL_ERROR'
+      )`
+    ),
+    check(
+      "management_mutation_time_check",
+      sql`${table.expiresAt} > ${table.createdAt}
+        and (${table.approvedAt} is null or (
+          ${table.approvedAt} >= ${table.createdAt} and ${table.approvedAt} < ${table.expiresAt}
+        ))
+        and (${table.completedAt} is null or (
+          ${table.completedAt} >= ${table.createdAt}
+          and (${table.approvedAt} is null or ${table.completedAt} >= ${table.approvedAt})
+        ))`
+    ),
+    check(
+      "management_mutation_state_check",
+      sql`(
+        ${table.status} = 'prepared' and ${table.approvedAt} is null
+        and ${table.completedAt} is null and ${table.result} is null and ${table.errorCode} is null
+      ) or (
+        ${table.status} = 'approved' and ${table.approvedAt} is not null
+        and ${table.completedAt} is null and ${table.result} is null and ${table.errorCode} is null
+      ) or (
+        ${table.status} = 'succeeded' and ${table.approvedAt} is not null
+        and ${table.completedAt} is not null and ${table.result} is not null and ${table.errorCode} is null
+      ) or (
+        ${table.status} = 'failed' and ${table.completedAt} is not null
+        and ${table.result} is null and ${table.errorCode} is not null
+      ) or (
+        ${table.status} in ('cancelled', 'expired') and ${table.completedAt} is not null
+        and ${table.result} is null and ${table.errorCode} is null
+      )`
+    ),
+  ]
+);
+
+export const managementMutationAuditEvent = pgTable(
+  "managementMutationAuditEvent",
+  {
+    actorUserId: text("actorUserId").notNull(),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    credentialId: text("credentialId").notNull(),
+    credentialKind: text("credentialKind").$type<"session">().notNull(),
+    eventKind: text("eventKind")
+      .$type<
+        | "prepared"
+        | "approved"
+        | "executed"
+        | "replayed"
+        | "cancelled"
+        | "expired"
+        | "denied"
+        | "failed"
+      >()
+      .notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId"),
+    mutationId: text("mutationId").references(() => managementMutation.id, {
+      onDelete: "set null",
+    }),
+    operation: text("operation")
+      .$type<"organization.settings.update">()
+      .notNull(),
+    organizationId: text("organizationId").references(() => organization.id, {
+      onDelete: "cascade",
+    }),
+    outcomeCode: text("outcomeCode")
+      .$type<
+        | ManagementMutationErrorCode
+        | "PREPARED"
+        | "APPROVED"
+        | "EXECUTED"
+        | "REPLAYED"
+        | "SUCCEEDED"
+        | "EXPIRED"
+      >()
+      .notNull(),
+  },
+  (table) => [
+    index("management_mutation_audit_mutation_created_idx").on(
+      table.mutationId,
+      table.createdAt
+    ),
+    index("management_mutation_audit_organization_created_idx").on(
+      table.organizationId,
+      table.createdAt
+    ),
+    check(
+      "management_mutation_audit_scope_check",
+      sql`${table.credentialKind} = 'session'
+        and ${table.operation} = 'organization.settings.update'
+        and ${table.mailboxId} is null
+        and length(btrim(${table.actorUserId})) > 0
+        and length(btrim(${table.credentialId})) > 0
+        and length(${table.credentialId}) <= 255`
+    ),
+    check(
+      "management_mutation_audit_event_check",
+      sql`${table.eventKind} in ('prepared', 'approved', 'executed', 'replayed', 'cancelled', 'expired', 'denied', 'failed')`
+    ),
+    check(
+      "management_mutation_audit_outcome_check",
+      sql`${table.outcomeCode} in (
+        'BAD_REQUEST', 'UNAUTHORIZED', 'FORBIDDEN', 'NOT_FOUND', 'CONFLICT',
+        'RATE_LIMITED', 'REAUTHENTICATION_REQUIRED', 'CANCELLED', 'UNSUPPORTED_OPERATION', 'INTERNAL_ERROR',
+        'PREPARED', 'APPROVED', 'EXECUTED', 'REPLAYED', 'SUCCEEDED', 'EXPIRED'
+      )`
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4531,6 +4749,8 @@ export const tables = {
   managedMailRuleApplication,
   managedMailRuleBackfill,
   managedMailRuleRun,
+  managementMutation,
+  managementMutationAuditEvent,
   member,
   organization,
   organizationApiMailAttachment,
