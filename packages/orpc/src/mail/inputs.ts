@@ -187,13 +187,24 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageIds: z.array(z.string().trim().min(1)).max(100),
   }),
-  listThreads: z.object({
-    category: mailCategorySchema,
-    mailboxId: z.string().trim().min(1),
-    maxResults: z.number().int().positive().max(100).optional(),
-    pageToken: z.string().optional(),
-    query: z.string().optional(),
-  }),
+  listThreads: z
+    .object({
+      category: mailCategorySchema,
+      correspondentEmail: z.email().trim().toLowerCase().optional(),
+      mailboxId: z.string().trim().min(1),
+      maxResults: z.number().int().positive().max(100).optional(),
+      pageToken: z.string().optional(),
+      query: z.string().optional(),
+      scope: z.literal("all_mail").optional(),
+    })
+    .refine(
+      (input) =>
+        input.correspondentEmail === undefined || input.scope === "all_mail",
+      {
+        message: "Correspondent history requires all mail.",
+        path: ["scope"],
+      }
+    ),
   markMessageAsRead: z.object({
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),

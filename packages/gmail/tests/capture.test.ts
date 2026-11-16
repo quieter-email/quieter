@@ -122,54 +122,71 @@ describe("Gmail capture adapter", () => {
     expect(retained).toStrictEqual([snapshot]);
   });
 
-  test("captures deeply nested content when an older thread is opened", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
-        const url = new URL(new Request(input, init).url);
-        if (!url.pathname.endsWith("/threads/older-thread")) {
-          throw new Error("Unexpected resource while opening a thread.");
-        }
-        let payload: MessagePart = {
-          body: {
-            data: btoa("Deep retained content"),
-          },
-          mimeType: "text/plain",
-        };
-        for (let depth = 0; depth < 8; depth += 1) {
-          payload = { mimeType: "multipart/mixed", parts: [payload] };
-        }
-        return await Promise.resolve(
-          Response.json({
-            id: "older-thread",
-            messages: [
+  test.each(["capture", "passive"])(
+    "preserves deeply nested content in a %s thread read",
+    async (mode) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+          const url = new URL(new Request(input, init).url);
+          if (!url.pathname.endsWith("/threads/older-thread")) {
+            throw new Error("Unexpected resource while opening a thread.");
+          }
+          let payload: MessagePart = {
+            mimeType: "multipart/mixed",
+            parts: [
               {
-                historyId: "55",
-                id: "old-message",
-                internalDate: "1600000000000",
-                labelIds: ["INBOX"],
-                payload: url.searchParams.has("fields")
-                  ? { mimeType: "multipart/mixed" }
-                  : payload,
-                threadId: "older-thread",
+                body: { data: btoa("Deep retained content") },
+                mimeType: "text/plain",
+              },
+              {
+                body: { attachmentId: "deep-pdf", size: 100 },
+                filename: "deep-note.pdf",
+                mimeType: "application/pdf",
+                partId: "deep-part",
               },
             ],
-          })
-        );
-      })
-    );
-    const captured: CapturedMailSnapshot[] = [];
-    await getThreadWithDetails(
-      "synthetic-token",
-      "older-thread",
-      undefined,
-      async (snapshot) => {
-        captured.push(snapshot);
-        await Promise.resolve();
-      }
-    );
-    expect(captured[0]?.bodyText).toContain("Deep retained content");
-  });
+          };
+          for (let depth = 0; depth < 8; depth += 1) {
+            payload = { mimeType: "multipart/mixed", parts: [payload] };
+          }
+          return await Promise.resolve(
+            Response.json({
+              id: "older-thread",
+              messages: [
+                {
+                  historyId: "55",
+                  id: "old-message",
+                  internalDate: "1600000000000",
+                  labelIds: ["INBOX"],
+                  payload:
+                    url.searchParams.get("fields")?.includes("payload(") ===
+                    true
+                      ? { mimeType: "multipart/mixed" }
+                      : payload,
+                  threadId: "older-thread",
+                },
+              ],
+            })
+          );
+        })
+      );
+      const capture = vi.fn<(snapshot: CapturedMailSnapshot) => void>();
+      const thread = await getThreadWithDetails(
+        "synthetic-token",
+        "older-thread",
+        undefined,
+        mode === "capture" ? capture : undefined
+      );
+      expect(thread.messages[0]?.bodyText).toContain("Deep retained content");
+      expect(thread.messages[0]?.attachments).toContainEqual(
+        expect.objectContaining({
+          attachmentId: "deep-pdf",
+          fileName: "deep-note.pdf",
+        })
+      );
+    }
+  );
 
   test("preserves added, label and permanent deletion events across a bounded history page", async () => {
     vi.stubGlobal(
