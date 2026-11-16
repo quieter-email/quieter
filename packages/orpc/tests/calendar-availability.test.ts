@@ -12,6 +12,7 @@ import {
 import { proposeCalendarAvailabilityForUser } from "../src/calendar/availability";
 /* oxlint-disable eslint/require-await -- Transport fixtures preserve asynchronous provider and database contracts. */
 import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
+import type { PreparedGmailMailboxIdentity } from "../src/gmail-mailbox-access";
 
 const mocks = vi.hoisted(() => ({
   gmailScopes: "",
@@ -31,9 +32,13 @@ vi.mock(import("../src/gmail-mailbox-access"), async (importOriginal) => {
   return {
     ...actual,
     runAuthorizedGmailMailbox: async <T>(
-      _input: Parameters<typeof actual.runAuthorizedGmailMailbox>[0],
-      run: (token: string) => Promise<T>
-    ): Promise<T> => await run("fixture-token"),
+      input: Parameters<typeof actual.runAuthorizedGmailMailbox>[0],
+      run: (token: string, identity: PreparedGmailMailboxIdentity) => Promise<T>
+    ): Promise<T> =>
+      await run("fixture-token", {
+        googleSubject: "owned-subject",
+        mailboxId: input.mailboxId,
+      }),
   };
 });
 vi.mock(import("../src/connectors/runtime"), async (importOriginal) => {

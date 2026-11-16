@@ -174,6 +174,7 @@ const PRIVATE_CONTEXT_TOOLS = new Set([
   "linear_read",
   "linear_write",
   "list_calendars",
+  "list_calendar_availability",
   "list_calendar_events",
   "get_calendar_event",
   "create_calendar_event",

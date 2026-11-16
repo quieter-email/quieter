@@ -18,6 +18,7 @@ import {
 } from "../src/calendar/booking-access";
 import { calendarBookingCreateInputSchema } from "../src/calendar/booking-contracts";
 import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
+import type { PreparedGmailMailboxIdentity } from "../src/gmail-mailbox-access";
 
 const mocks = vi.hoisted(() => ({
   account: {
@@ -51,9 +52,13 @@ vi.mock(import("../src/gmail-mailbox-access"), async (importOriginal) => {
   return {
     ...actual,
     runAuthorizedGmailMailbox: async <T>(
-      _input: Parameters<typeof actual.runAuthorizedGmailMailbox>[0],
-      run: (token: string) => Promise<T>
-    ): Promise<T> => await run("fixture-token"),
+      input: Parameters<typeof actual.runAuthorizedGmailMailbox>[0],
+      run: (token: string, identity: PreparedGmailMailboxIdentity) => Promise<T>
+    ): Promise<T> =>
+      await run("fixture-token", {
+        googleSubject: mocks.account.googleSubject,
+        mailboxId: input.mailboxId,
+      }),
   };
 });
 vi.mock(import("../src/connectors/runtime"), async (importOriginal) => {
