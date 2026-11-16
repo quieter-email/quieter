@@ -1,5 +1,7 @@
+/* oxlint-disable eslint/require-await -- MCP and guard doubles preserve asynchronous service boundaries. */
 import type { MCPClient, MCPTransport } from "@ai-sdk/mcp";
 import type * as McpModule from "@ai-sdk/mcp";
+import { ORPCError } from "@orpc/server";
 import type * as DatabaseClientModule from "@quieter/database/client";
 import {
   afterEach,
@@ -30,6 +32,7 @@ const mocks = vi.hoisted(() => {
     close: vi.fn<MCPClient["close"]>(),
     env,
     listTools: vi.fn<MCPClient["listTools"]>(),
+    status: "connected",
   };
 });
 
@@ -111,24 +114,31 @@ vi.mock("@ai-sdk/mcp", async (importOriginal) => {
 // oxlint-disable-next-line vitest/prefer-import-in-mock
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
+  const reader = {
+    select: () => ({
+      from: () => ({
+        where: () => ({
+          limit: () => [
+            {
+              accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
+              connectionId: "connection-owned",
+              encryptedAccessToken: "encrypted-test",
+              provider: "linear",
+              scopes: "read write",
+              status: mocks.status,
+            },
+          ],
+        }),
+      }),
+    }),
+  };
   return {
     ...actual,
     db: {
-      select: () => ({
-        from: () => ({
-          where: () => ({
-            limit: () => [
-              {
-                accessTokenExpiresAt: new Date(Date.now() + 3_600_000),
-                encryptedAccessToken: "encrypted-test",
-                provider: "linear",
-                scopes: "read write",
-                status: "connected",
-              },
-            ],
-          }),
-        }),
-      }),
+      select: reader.select,
+      transaction: async <Result>(
+        run: (database: typeof reader) => Promise<Result>
+      ) => await run(reader),
     },
   };
 });
@@ -143,6 +153,7 @@ describe("independent local connector write controls", () => {
     mocks.env.QUIETER_LOCAL_PROVIDER_MODE = "write";
     mocks.env.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS = undefined;
     mocks.env.QUIETER_LOCAL_LINEAR_WRITES = false;
+    mocks.status = "connected";
     mocks.callTool.mockResolvedValue({ content: [] });
     mocks.listTools.mockResolvedValue({
       tools: [
@@ -242,6 +253,76 @@ describe("independent local connector write controls", () => {
       userId: "test",
     });
     expect(result[0]?.status).toBe("error");
+    expect(mocks.callTool).not.toHaveBeenCalled();
+  });
+
+  test("a policy changed during discovery blocks writes while reads remain available", async () => {
+    mocks.env.QUIETER_LOCAL_LINEAR_WRITES = true;
+    const started = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    let blocked = false;
+    const discovery = await mocks.listTools();
+    mocks.listTools.mockImplementation(async () => {
+      started.resolve(true);
+      await release.promise;
+      return discovery;
+    });
+    const result = runLinearMcpToolCallsForUser({
+      beforeEffect: async () => {
+        if (blocked) {
+          throw new ORPCError("FORBIDDEN");
+        }
+      },
+      calls: [{ toolName: "get_issue" }, { toolName: "create_issue" }],
+      connectionId: "connection-owned",
+      userId: "test",
+    });
+    await started.promise;
+    blocked = true;
+    release.resolve(true);
+    await expect(result).resolves.toMatchObject([
+      { status: "success", toolName: "get_issue" },
+      { status: "error", toolName: "create_issue" },
+    ]);
+    expect(mocks.callTool.mock.calls.map(([call]) => call.name)).toStrictEqual([
+      "get_issue",
+    ]);
+  });
+
+  test("a disconnected account cannot reuse credentials resolved before discovery", async () => {
+    mocks.env.QUIETER_LOCAL_LINEAR_WRITES = true;
+    const discovery = await mocks.listTools();
+    mocks.listTools.mockImplementation(async () => {
+      mocks.status = "needs_reconnect";
+      return discovery;
+    });
+    await expect(
+      runLinearMcpToolCallsForUser({
+        calls: [{ toolName: "create_issue" }],
+        connectionId: "connection-owned",
+        userId: "test",
+      })
+    ).resolves.toMatchObject([{ status: "error" }]);
+    expect(mocks.callTool).not.toHaveBeenCalled();
+  });
+
+  test("an account disconnected during caller preparation cannot dispatch a Linear write", async () => {
+    mocks.env.QUIETER_LOCAL_LINEAR_WRITES = true;
+    const started = Promise.withResolvers<boolean>();
+    const release = Promise.withResolvers<boolean>();
+    const result = runLinearMcpToolCallsForUser({
+      calls: [{ toolName: "create_issue" }],
+      connectionId: "connection-owned",
+      prepareEffect: async () => {
+        started.resolve(true);
+        await release.promise;
+      },
+      userId: "test",
+    });
+    await started.promise;
+    mocks.status = "needs_reconnect";
+    release.resolve(true);
+    await expect(result).resolves.toMatchObject([{ status: "error" }]);
     expect(mocks.callTool).not.toHaveBeenCalled();
   });
 

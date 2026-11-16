@@ -15,6 +15,9 @@ import type {
 } from "@quieter/mail/reminders";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
 
+import { assertAiAuthority } from "../ai-authority";
+import type { AiOperationOrigin } from "../ai-authority";
+import type { MailEffectAssertion } from "../gmail-request";
 import { publishMailUpdate } from "../mail-updates";
 import { queriesMailOperations } from "../mail/queries";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -72,6 +75,9 @@ const validateTarget = async (input: {
 
 export const createReminder = async (
   input: CreateReminder & {
+    beforeEffect?: MailEffectAssertion;
+    origin?: AiOperationOrigin;
+    signal?: AbortSignal;
     userId: string;
     source?: ReminderSource;
     suggestionLeaseToken?: string;
@@ -119,6 +125,9 @@ export const createReminder = async (
   await validateTarget(input);
   const row = await createReminderRecord({
     ...value,
+    beforeEffect: input.beforeEffect,
+    origin: input.origin,
+    signal: input.signal,
     source: input.source,
     suggestionLeaseToken: input.suggestionLeaseToken,
     userId: input.userId,
@@ -137,7 +146,12 @@ export const createReminder = async (
 };
 
 export const changeReminder = async (
-  input: ChangeReminder & { userId: string }
+  input: ChangeReminder & {
+    beforeEffect?: MailEffectAssertion;
+    origin?: AiOperationOrigin;
+    signal?: AbortSignal;
+    userId: string;
+  }
 ): Promise<Reminder> => {
   const value = changeReminderSchema.parse({
     command: input.command,
@@ -150,6 +164,19 @@ export const changeReminder = async (
     await validateTarget({ ...input, target: value.command.target });
   }
   const row = await db.transaction(async (tx) => {
+    await input.beforeEffect?.(tx);
+    if (input.origin !== undefined) {
+      await assertAiAuthority(
+        {
+          effect: "write",
+          mailboxId: input.mailboxId,
+          origin: input.origin,
+          userId: input.userId,
+        },
+        tx,
+        { lock: true }
+      );
+    }
     const [current] = await tx
       .select()
       .from(mailReminder)
@@ -230,6 +257,7 @@ export const changeReminder = async (
         status: command.kind === "complete" ? "completed" : "cancelled",
       });
     }
+    input.signal?.throwIfAborted();
     const [updated] = await tx
       .update(mailReminder)
       .set(next)

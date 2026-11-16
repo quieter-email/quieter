@@ -7,32 +7,47 @@ import {
   mailboxAgentRun,
   mailboxPersonalAgentSetting,
 } from "@quieter/database/schema";
-import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, or, sql } from "drizzle-orm";
 
 import { assertAgentMailboxAccess } from "./access";
 
 export const pausePersonalAgentConnections = async (
-  input: { connectionIds: string[]; userId: string },
+  input: {
+    additionalMailboxLockIds?: string[];
+    connectionIds: string[];
+    userId: string;
+  },
   database: Pick<typeof db, "select" | "update">
 ) => {
   const settings = await database
     .select({ mailboxId: mailboxPersonalAgentSetting.mailboxId })
     .from(mailboxPersonalAgentSetting)
     .where(eq(mailboxPersonalAgentSetting.userId, input.userId));
-  if (settings.length === 0 || input.connectionIds.length === 0) {
+  const additionalMailboxLockIds = input.additionalMailboxLockIds ?? [];
+  if (settings.length === 0 && additionalMailboxLockIds.length === 0) {
     return;
   }
   await database
     .select({ id: mailbox.id })
     .from(mailbox)
     .where(
-      inArray(
-        mailbox.id,
-        settings.map((setting) => setting.mailboxId)
+      or(
+        inArray(
+          mailbox.id,
+          settings.map((setting) => setting.mailboxId)
+        ),
+        and(
+          inArray(mailbox.id, additionalMailboxLockIds),
+          eq(mailbox.ownerUserId, input.userId),
+          eq(mailbox.provider, "gmail")
+        )
       )
     )
     .orderBy(asc(mailbox.id))
     .for("update");
+  if (settings.length === 0 || input.connectionIds.length === 0) {
+    return;
+  }
   const active = await database
     .select({
       setting: mailboxPersonalAgentSetting,

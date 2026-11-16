@@ -78,6 +78,7 @@ describe("live calendar context", () => {
               "owner@example.test",
               "owner-credential",
               null,
+              "owned-subject",
               range.connectionId,
               CALENDAR_SCOPES.join(" "),
               "connected",
@@ -158,11 +159,11 @@ describe("live calendar context", () => {
       );
       expect(values).toContain("owner");
     }
-    expect(request).toHaveBeenCalledWith(
-      expect.stringContaining("/calendars/team-calendar/events?"),
-      expect.objectContaining({
-        headers: { authorization: "Bearer token-owner-credential" },
-      })
+    const eventRequest = request.mock.calls.find(([url]) =>
+      new Request(url).url.includes("/calendars/team-calendar/events?")
+    );
+    expect(new Headers(eventRequest?.[1]?.headers).get("authorization")).toBe(
+      "Bearer token-owner-credential"
     );
     expect(result.events).toHaveLength(2);
     expect(result.events).toMatchObject([

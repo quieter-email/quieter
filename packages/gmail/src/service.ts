@@ -762,6 +762,7 @@ const requestGmail = async <T>(
   path: string,
   schema: z.ZodType<T>,
   options?: {
+    beforeEffect?: () => Promise<void>;
     method?: "GET" | "POST" | "PUT" | "DELETE";
     query?: GmailRequestQuery;
     body?: unknown;
@@ -817,6 +818,7 @@ const requestGmail = async <T>(
     body = JSON.stringify(options.body);
   }
 
+  await options?.beforeEffect?.();
   const response = await fetch(url.toString(), {
     body,
     cache: "no-store",
@@ -2301,13 +2303,15 @@ export const listLabels = async (
 export const createLabel = async (
   accessToken: string,
   name: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<MailLabelListItem> =>
   await requestGmail(
     accessToken,
     "/gmail/v1/users/me/labels",
     labelMutationSchema,
     {
+      beforeEffect,
       body: {
         labelListVisibility: "labelShow",
         messageListVisibility: "show",
@@ -2322,13 +2326,15 @@ export const updateLabel = async (
   accessToken: string,
   labelId: string,
   name: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<MailLabelListItem> =>
   await requestGmail(
     accessToken,
     `/gmail/v1/users/me/labels/${encodeURIComponent(labelId)}`,
     labelMutationSchema,
     {
+      beforeEffect,
       body: {
         labelListVisibility: "labelShow",
         messageListVisibility: "show",
@@ -2342,13 +2348,15 @@ export const updateLabel = async (
 export const deleteLabel = async (
   accessToken: string,
   labelId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<{ id: string }> => {
   await requestGmail(
     accessToken,
     `/gmail/v1/users/me/labels/${encodeURIComponent(labelId)}`,
     emptyGmailResponseSchema,
     {
+      beforeEffect,
       method: "DELETE",
       signal,
     }
@@ -2671,7 +2679,8 @@ export const mutateGmailMessage = async (
   accessToken: string,
   messageId: string,
   change: GmailMetadataChange,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ) => {
   const updated = await requestGmail(
     accessToken,
@@ -2679,6 +2688,7 @@ export const mutateGmailMessage = async (
     gmailMessageMutationSchema,
     {
       ...(typeof change === "string" ? {} : { body: change }),
+      beforeEffect,
       method: "POST",
       query: { fields: "id,labelIds,historyId" },
       signal,
@@ -2691,7 +2701,8 @@ export const mutateGmailThread = async (
   accessToken: string,
   threadId: string,
   change: GmailMetadataChange,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ) => {
   const updated = await requestGmail(
     accessToken,
@@ -2699,6 +2710,7 @@ export const mutateGmailThread = async (
     gmailThreadMutationSchema,
     {
       ...(typeof change === "string" ? {} : { body: change }),
+      beforeEffect,
       method: "POST",
       query: { fields: "id,historyId,messages(id,labelIds,historyId)" },
       signal,
@@ -2711,7 +2723,8 @@ export const batchModifyMessages = async (
   accessToken: string,
   messageIds: readonly string[],
   changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ) => {
   const ids = [...new Set(messageIds.map((id) => id.trim()).filter(Boolean))];
   await Promise.all(
@@ -2722,6 +2735,7 @@ export const batchModifyMessages = async (
           "/gmail/v1/users/me/messages/batchModify",
           emptyGmailResponseSchema,
           {
+            beforeEffect,
             body: { ids: chunk, ...changes },
             method: "POST",
             signal,
@@ -2775,13 +2789,15 @@ export const createDraft = async (
   accessToken: string,
   raw: string,
   threadId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<GmailDraft> =>
   await requestGmail(
     accessToken,
     "/gmail/v1/users/me/drafts",
     gmailDraftSchema,
     {
+      beforeEffect,
       body: {
         message: {
           raw,
@@ -2798,13 +2814,15 @@ export const updateDraft = async (
   draftId: string,
   raw: string,
   threadId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<GmailDraft> =>
   await requestGmail(
     accessToken,
     `/gmail/v1/users/me/drafts/${encodeURIComponent(draftId)}`,
     gmailDraftSchema,
     {
+      beforeEffect,
       body: {
         id: draftId,
         message: {
@@ -2822,13 +2840,15 @@ export const sendDraft = async (
   draftId: string,
   raw?: string,
   threadId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<GmailMessage> =>
   await requestGmail(
     accessToken,
     "/gmail/v1/users/me/drafts/send",
     gmailMessageSchema,
     {
+      beforeEffect,
       body:
         (raw ?? "") === ""
           ? { id: draftId }
@@ -2848,13 +2868,15 @@ export const sendRawMessage = async (
   accessToken: string,
   raw: string,
   threadId?: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<GmailMessage> =>
   await requestGmail(
     accessToken,
     "/gmail/v1/users/me/messages/send",
     gmailMessageSchema,
     {
+      beforeEffect,
       body: {
         raw,
         ...((threadId ?? "") === "" ? {} : { threadId }),
@@ -2867,13 +2889,15 @@ export const sendRawMessage = async (
 export const deleteDraft = async (
   accessToken: string,
   draftId: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<void> => {
   await requestGmail(
     accessToken,
     `/gmail/v1/users/me/drafts/${encodeURIComponent(draftId)}`,
     emptyGmailResponseSchema,
     {
+      beforeEffect,
       method: "DELETE",
       signal,
     }

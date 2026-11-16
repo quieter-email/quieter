@@ -238,15 +238,39 @@ export const saveComposeDraftOutputSchema = z
 export const sendMailInputSchema = z
   .object({ draft: foregroundComposeDraftSchema })
   .strict();
-export const sendMailOutputSchema = z
-  .object({
+export const heldSendStatusOutputSchema = z.strictObject({
+  canUndo: z.boolean(),
+  draftId: z.string().min(1).nullable(),
+  errorMessage: z.string().nullable(),
+  id: z.string().min(1),
+  mailboxId: z.string().min(1),
+  sendOperationId: z.string().min(1),
+  status: z.enum([
+    "preparing",
+    "held",
+    "dispatching",
+    "accepted",
+    "failed",
+    "uncertain",
+    "canceled",
+  ]),
+  undoUntil: z.iso.datetime().nullable(),
+});
+
+export const sendMailOutputSchema = z.union([
+  z.strictObject({
     draftId: z.string().trim().min(1).max(256),
     draftRevision: z.number().int().nonnegative(),
     id: z.string().trim().min(1).max(256),
     status: z.literal("sent"),
     threadId: z.string().trim().min(1).max(256).optional(),
-  })
-  .strict();
+  }),
+  heldSendStatusOutputSchema.omit({ draftId: true }).extend({
+    draftId: z.string().trim().min(1).max(256),
+    draftRevision: z.number().int().nonnegative(),
+    restoredDraftId: z.string().min(1).nullable(),
+  }),
+]);
 
 export const calendarToolErrorSchema = z.object({
   error: z.string(),
@@ -665,7 +689,7 @@ export const createForegroundServerTools = (
   }),
   send_mail: tool({
     description:
-      "Send the requested email using the exact current visible draft and revision. Read the workspace first. If it has attachments or inline images, ask the user to send it from the composer instead.",
+      "Hold the requested email for sending using the exact current visible draft and revision. The result reports the current send status and permanent sendOperationId. A held message has not been sent yet. Use get_send_status to confirm delivery and undo_send while Undo is available. Read the workspace first. If it has attachments or inline images, ask the user to send it from the composer instead.",
     execute: async ({ draft }, { abortSignal, toolCallId }) =>
       await context.sendMail({ draft, toolCallId }, abortSignal),
     inputSchema: sendMailInputSchema,

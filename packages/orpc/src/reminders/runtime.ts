@@ -19,6 +19,8 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { convert } from "html-to-text";
 
 import { assertCanUseAi } from "../ai-access";
+import { aiOriginSchema, assertAiAuthority } from "../ai-authority";
+import type { AiOrigin } from "../ai-authority";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { queriesMailOperations } from "../mail/queries";
@@ -30,6 +32,7 @@ import { processReminderSuggestions } from "./suggestions";
 export { advanceReminderScope, reconcileReminderSchedules } from "./clock";
 
 const applyReminderEvaluation = async (input: {
+  origin: AiOrigin;
   jobId: string;
   token: string;
   reminderId: string;
@@ -38,6 +41,16 @@ const applyReminderEvaluation = async (input: {
   summary: string;
 }) => {
   const changed = await db.transaction(async (tx) => {
+    try {
+      await assertAiAuthority({ effect: "write", origin: input.origin }, tx, {
+        lock: true,
+      });
+    } catch (error) {
+      if (error instanceof ORPCError && error.status < 500) {
+        return null;
+      }
+      throw error;
+    }
     const [lease] = await tx
       .select()
       .from(mailReminderJob)
@@ -209,6 +222,7 @@ export const processReminderJobs = async (
     const { job, token } = claimed;
     let usage: AiUsageReport | undefined;
     let submitted = job.usageModel !== null;
+    let origin: AiOrigin | undefined;
     let result:
       | Awaited<ReturnType<typeof evaluateReminderCondition>>
       | undefined;
@@ -228,11 +242,24 @@ export const processReminderJobs = async (
         await finishReminderJob({ id: job.id, token });
         continue;
       }
+      const parsedOrigin = aiOriginSchema.safeParse({
+        kind: "ai",
+        mailboxId: row.mailboxId,
+        mode: "automation",
+        policyVersion: job.authorityVersion,
+        userId: row.userId,
+      });
+      if (!parsedOrigin.success) {
+        await finishReminderJob({ id: job.id, token });
+        continue;
+      }
+      origin = parsedOrigin.data;
       const access = await assertReminderScopeAccess(row);
       if (!access) {
         await finishReminderJob({ id: job.id, token });
         continue;
       }
+      await assertAiAuthority({ effect: "write", origin });
       if (job.usage?.result === undefined) {
         const budget = await getMailAutomationAiBudgetStatus({
           organizationId: access.organizationId,
@@ -248,6 +275,7 @@ export const processReminderJobs = async (
         ) {
           await applyReminderEvaluation({
             jobId: job.id,
+            origin,
             reminderId: row.id,
             status: "failed",
             summary:
@@ -306,6 +334,7 @@ export const processReminderJobs = async (
       if (!evidence.length) {
         await applyReminderEvaluation({
           jobId: job.id,
+          origin,
           reminderId: row.id,
           status: "unfulfilled",
           summary: "No subsequent reply is available.",
@@ -318,6 +347,7 @@ export const processReminderJobs = async (
       if (submitted && job.usage?.result === undefined) {
         await applyReminderEvaluation({
           jobId: job.id,
+          origin,
           reminderId: row.id,
           status: "failed",
           summary:
@@ -345,9 +375,16 @@ export const processReminderJobs = async (
         }
         submitted = true;
       }
-      const decision =
-        job.usage?.result ??
-        (await evaluateReminderCondition({
+      let decision = job.usage?.result;
+      if (decision === undefined) {
+        const billing = await createMailboxAiBillingContext({
+          externalId: `reminder:${job.id}`,
+          mailboxId: row.mailboxId,
+          usageKind: "mailAction",
+          userId: row.userId,
+        });
+        await assertAiAuthority({ effect: "write", origin });
+        decision = await evaluateReminderCondition({
           anchor: {
             bodyText: (
               anchor.bodyText ||
@@ -359,12 +396,7 @@ export const processReminderJobs = async (
             from: anchor.from,
             id: anchor.id,
           },
-          billing: await createMailboxAiBillingContext({
-            externalId: `reminder:${job.id}`,
-            mailboxId: row.mailboxId,
-            usageKind: "mailAction",
-            userId: row.userId,
-          }),
+          billing,
           condition: row.target.condition,
           messages: evidence.map((message) => ({
             attachments:
@@ -384,7 +416,8 @@ export const processReminderJobs = async (
           onUsage: (report) => {
             usage = report;
           },
-        }));
+        });
+      }
       result = decision;
       if (usage) {
         await db
@@ -414,6 +447,7 @@ export const processReminderJobs = async (
       }
       await applyReminderEvaluation({
         jobId: job.id,
+        origin,
         reminderId: row.id,
         status: decision.kind,
         summary: decision.explanation,
@@ -426,10 +460,8 @@ export const processReminderJobs = async (
         job.usageModel === null &&
         usage === undefined &&
         isAiCreditAdmissionBusy(error);
-      if (
-        !(error instanceof ORPCError && error.status < 500) &&
-        !admissionBusy
-      ) {
+      const expectedState = error instanceof ORPCError && error.status < 500;
+      if (!expectedState && !admissionBusy) {
         reportError(new Error("Reminder reply check failed."), {
           operation: "reminder-evaluation",
         });
@@ -446,18 +478,22 @@ export const processReminderJobs = async (
             )
           );
       }
-      await applyReminderEvaluation({
-        jobId: job.id,
-        reminderId: job.reminderId,
-        status: "failed",
-        summary:
-          "The reply check could not finish. Your reminder remains active.",
-        token,
-        version: job.reminderVersion,
-      });
+      if (origin !== undefined) {
+        await applyReminderEvaluation({
+          jobId: job.id,
+          origin,
+          reminderId: job.reminderId,
+          status: "failed",
+          summary:
+            "The reply check could not finish. Your reminder remains active.",
+          token,
+          version: job.reminderVersion,
+        });
+      }
       await finishReminderJob({
         id: job.id,
         retry:
+          (!expectedState || admissionBusy) &&
           (!submitted || admissionBusy) &&
           usage === undefined &&
           job.attempts < 3,

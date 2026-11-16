@@ -4,6 +4,7 @@ import type {
 } from "@quieter/ai/chat-tools";
 import { createForegroundControl } from "@quieter/app/features/chat/domain/foreground-control";
 import { AgentWorkspaceContext } from "@quieter/app/features/chat/domain/workspace-context";
+import type { ComposeHeldReceipt } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
   createEmptyComposeDraft,
@@ -33,6 +34,7 @@ export type InlineComposeBridge = {
 };
 
 type ComposeBridge = {
+  applyHeldReceipt: (receipt: ComposeHeldReceipt) => Promise<void>;
   applyReceipt: (receipt: {
     attachments?: ComposeDraftState["attachments"];
     baseRevision?: string;

@@ -35,6 +35,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { captureAiOrigin } from "../ai-authority";
 import { runAuthorizedGmailMailbox } from "../gmail-mailbox-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { autoLabelBudgetDeferred } from "../mail-automation/auto-label-events";
@@ -200,36 +201,47 @@ export const retryPendingAutomationMessages = async ({
   userId: string;
 }) => {
   const now = new Date();
-  const autoLabelEvents = autoLabelEnabled
-    ? await db
-        .select({
-          gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
-          nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
-        })
-        .from(gmailAutoLabelEvent)
-        .where(
-          and(
-            eq(gmailAutoLabelEvent.mailboxId, mailboxId),
-            isNull(gmailAutoLabelEvent.appliedAt),
-            or(
-              isNull(gmailAutoLabelEvent.nextAttemptAt),
-              lte(gmailAutoLabelEvent.nextAttemptAt, now),
-              and(
-                autoLabelBudgetDeferred,
-                ne(
-                  gmailAutoLabelEvent.lastError,
-                  AI_CREDIT_ADMISSION_BUSY_MESSAGE
+  const origin = autoLabelEnabled
+    ? await captureAiOrigin({ mailboxId, mode: "automation", userId })
+    : null;
+  const autoLabelEvents =
+    origin === null
+      ? []
+      : await db
+          .select({
+            gmailMessageId: gmailAutoLabelEvent.gmailMessageId,
+            nextAttemptAt: gmailAutoLabelEvent.nextAttemptAt,
+          })
+          .from(gmailAutoLabelEvent)
+          .where(
+            and(
+              eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+              isNull(gmailAutoLabelEvent.appliedAt),
+              or(
+                eq(gmailAutoLabelEvent.authorityVersion, origin.policyVersion),
+                and(
+                  isNull(gmailAutoLabelEvent.model),
+                  isNotNull(gmailAutoLabelEvent.labelIds)
+                )
+              ),
+              or(
+                isNull(gmailAutoLabelEvent.nextAttemptAt),
+                lte(gmailAutoLabelEvent.nextAttemptAt, now),
+                and(
+                  autoLabelBudgetDeferred,
+                  ne(
+                    gmailAutoLabelEvent.lastError,
+                    AI_CREDIT_ADMISSION_BUSY_MESSAGE
+                  )
                 )
               )
             )
           )
-        )
-        .orderBy(
-          desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
-          asc(gmailAutoLabelEvent.nextAttemptAt)
-        )
-        .limit(20)
-    : [];
+          .orderBy(
+            desc(isNull(gmailAutoLabelEvent.nextAttemptAt)),
+            asc(gmailAutoLabelEvent.nextAttemptAt)
+          )
+          .limit(20);
   const pendingCodeMessageIds =
     await listPendingMailboxVerificationCodeMessageIds(mailboxId, 20);
   const budgetStatus = autoLabelEvents.some(

@@ -70,11 +70,17 @@ vi.mock("@quieter/database/client", () => ({
 }));
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
   runAuthorizedGmailMailbox: async <T>(
-    _input: Parameters<typeof runAuthorizedGmailMailbox>[0],
-    operation: (accessToken: string) => Promise<T>
+    input: Parameters<typeof runAuthorizedGmailMailbox>[0],
+    operation: (
+      accessToken: string,
+      identity: { googleSubject: string; mailboxId: string }
+    ) => Promise<T>
   ) => {
     fixtures.authorize();
-    return await operation("current-token");
+    return await operation("current-token", {
+      googleSubject: "fixture-subject",
+      mailboxId: input.mailboxId,
+    });
   },
 }));
 

@@ -88,9 +88,16 @@ vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake supplies an already authorized provider token without OAuth I/O.
 vi.mock("../src/gmail-mailbox-access", () => ({
   runAuthorizedGmailMailbox: async <Result>(
-    _input: unknown,
-    run: (token: string) => Promise<Result>
-  ) => await run("mail-token"),
+    input: { mailboxId: string },
+    run: (
+      token: string,
+      identity: { googleSubject: string; mailboxId: string }
+    ) => Promise<Result>
+  ) =>
+    await run("mail-token", {
+      googleSubject: "fixture-subject",
+      mailboxId: input.mailboxId,
+    }),
 }));
 vi.mock(import("../src/mail-agent/inbox"), () => ({
   enqueueMailAgentMessage: fixtures.enqueue,
@@ -193,6 +200,10 @@ describe("Gmail action receive acknowledgement", () => {
           },
           extractCodes: false,
           gmailMessageId: messageId,
+          identity: {
+            googleSubject: "fixture-subject",
+            mailboxId: job.mailboxId,
+          },
           mailboxId: job.mailboxId,
           organizationId: null,
           triggerActions: job.triggerActions,
