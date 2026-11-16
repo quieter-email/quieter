@@ -9,6 +9,7 @@
     "packages/mail/src/mailbox-organization.ts",
     "packages/mail/src/messages.ts",
     "packages/orpc/src/control/contracts.ts",
+    "packages/orpc/src/control/mutation-contracts.ts",
     "packages/orpc/src/control/openapi.ts",
     "packages/orpc/src/control/registry.ts"
   ]

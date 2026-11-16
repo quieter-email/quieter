@@ -9,6 +9,11 @@ import type {
   ControlResult,
 } from "@quieter/orpc/control/contracts";
 import {
+  controlMutationActionSchema,
+  controlMutationPrepareSchema,
+  controlMutationReviewSchema,
+} from "@quieter/orpc/control/mutation-contracts";
+import {
   CONTROL_API_PATH,
   CONTROL_API_VERSION,
   CONTROL_API_VERSION_HEADER,
@@ -26,6 +31,15 @@ export type ManagementTarget = z.input<typeof controlDiscoveryInputSchema>;
 export type ManagementCapabilities = z.output<
   typeof controlDiscoveryOutputSchema
 >;
+export type ManagementSettingsUpdatePreparation = z.input<
+  typeof controlMutationPrepareSchema
+>;
+export type ManagementMutationAction = z.input<
+  typeof controlMutationActionSchema
+>;
+export type ManagementMutationReview = z.output<
+  typeof controlMutationReviewSchema
+>;
 
 type ParsedRequests = {
   [Operation in ManagementOperationId]: z.output<
@@ -41,6 +55,9 @@ export const managementContracts: {
 } = controlContracts;
 export const managementOperationIdSchema = controlOperationIdSchema;
 export const managementTargetSchema = controlDiscoveryInputSchema;
+export const managementSettingsUpdatePreparationSchema =
+  controlMutationPrepareSchema;
+export const managementMutationActionSchema = controlMutationActionSchema;
 
 const errorMessages = {
   BAD_REQUEST: "Invalid management request.",
@@ -121,6 +138,16 @@ export type ManagementClient = {
     target: ManagementTarget;
     signal?: AbortSignal;
   }) => Promise<ManagementCapabilities>;
+  prepareSettingsUpdate: (input: {
+    parameters: ManagementSettingsUpdatePreparation;
+    signal?: AbortSignal;
+  }) => Promise<ManagementMutationReview>;
+  reviewMutation: (
+    input: ManagementMutationAction & { signal?: AbortSignal }
+  ) => Promise<ManagementMutationReview>;
+  cancelMutation: (
+    input: ManagementMutationAction & { signal?: AbortSignal }
+  ) => Promise<ManagementMutationReview>;
   execute: <Operation extends ManagementOperationId>(input: {
     operation: Operation;
     parameters: ManagementRequest<NoInfer<Operation>>;
@@ -237,6 +264,24 @@ export const createManagementClient = (options: {
   };
 
   return {
+    async cancelMutation(input) {
+      const { signal, ...action } = input;
+      const parameters = managementMutationActionSchema.safeParse(action);
+      if (!parameters.success) {
+        throw new ManagementError("INVALID_REQUEST");
+      }
+      const result = controlMutationReviewSchema.safeParse(
+        await request({
+          parameters: parameters.data,
+          path: "mutations/cancel",
+          signal,
+        })
+      );
+      if (!result.success || result.data.id !== parameters.data.id) {
+        throw new ManagementError("INVALID_RESPONSE");
+      }
+      return result.data;
+    },
     async capabilities(input) {
       const target = managementTargetSchema.safeParse(input.target);
       if (!target.success) {
@@ -276,6 +321,50 @@ export const createManagementClient = (options: {
         })
       );
       if (!result.success) {
+        throw new ManagementError("INVALID_RESPONSE");
+      }
+      return result.data;
+    },
+    async prepareSettingsUpdate(input) {
+      const parameters = managementSettingsUpdatePreparationSchema.safeParse(
+        input.parameters
+      );
+      if (!parameters.success) {
+        throw new ManagementError("INVALID_REQUEST");
+      }
+      const result = controlMutationReviewSchema.safeParse(
+        await request({
+          parameters: parameters.data,
+          path: "mutations/prepare",
+          signal: input.signal,
+        })
+      );
+      if (
+        !result.success ||
+        result.data.organizationId !== parameters.data.organizationId ||
+        result.data.patch.allowPerSendOverride !==
+          parameters.data.allowPerSendOverride ||
+        result.data.patch.openTrackingEnabled !==
+          parameters.data.openTrackingEnabled
+      ) {
+        throw new ManagementError("INVALID_RESPONSE");
+      }
+      return result.data;
+    },
+    async reviewMutation(input) {
+      const { signal, ...action } = input;
+      const parameters = managementMutationActionSchema.safeParse(action);
+      if (!parameters.success) {
+        throw new ManagementError("INVALID_REQUEST");
+      }
+      const result = controlMutationReviewSchema.safeParse(
+        await request({
+          parameters: parameters.data,
+          path: "mutations/review",
+          signal,
+        })
+      );
+      if (!result.success || result.data.id !== parameters.data.id) {
         throw new ManagementError("INVALID_RESPONSE");
       }
       return result.data;

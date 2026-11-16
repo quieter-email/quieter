@@ -5,7 +5,9 @@ import {
   createManagementClient,
   managementContracts,
   ManagementError,
+  managementMutationActionSchema,
   managementOperationIdSchema,
+  managementSettingsUpdatePreparationSchema,
   managementTargetSchema,
   normalizeManagementOrigin,
 } from "@quieter/management-sdk";
@@ -13,11 +15,16 @@ import { z } from "zod";
 
 const help = `Usage:
   quieter-management capabilities --origin URL --session-file PATH --input PATH|-
+  quieter-management prepare-settings-update --origin URL --session-file PATH --input PATH|-
+  quieter-management review-mutation --origin URL --session-file PATH --input PATH|-
+  quieter-management cancel-mutation --origin URL --session-file PATH --input PATH|-
   quieter-management execute OPERATION --origin URL --session-file PATH --input PATH|-
 
 The input is JSON. Use --input - to read it from stdin.
 The session file contains JSON with origin and cookie fields.
 Capabilities reports operations available to the current session and target.
+Preparation returns a browser review link without approving or executing.
+Review and cancellation take JSON containing only the mutation id.
 Execution never retries or creates mutation approvals.
 `;
 
@@ -80,12 +87,29 @@ export const runManagementCli = async (options: {
       typeof sessionFile !== "string" ||
       !sessionFile ||
       sessionFile === "-" ||
-      extra.length > 0 ||
-      (command !== "capabilities" && command !== "execute") ||
-      (command === "capabilities" && operation !== undefined) ||
-      (command === "execute" && operation === undefined)
+      extra.length > 0
     ) {
       throw new CommandError("INVALID_ARGUMENTS");
+    }
+    switch (command) {
+      case "capabilities":
+      case "prepare-settings-update":
+      case "review-mutation":
+      case "cancel-mutation": {
+        if (operation !== undefined) {
+          throw new CommandError("INVALID_ARGUMENTS");
+        }
+        break;
+      }
+      case "execute": {
+        if (operation === undefined) {
+          throw new CommandError("INVALID_ARGUMENTS");
+        }
+        break;
+      }
+      default: {
+        throw new CommandError("INVALID_ARGUMENTS");
+      }
     }
     const origin = normalizeManagementOrigin(originInput);
     let input: unknown;
@@ -116,26 +140,57 @@ export const runManagementCli = async (options: {
       origin,
     });
     let result: unknown;
-    if (command === "capabilities") {
-      const target = managementTargetSchema.safeParse(input);
-      if (!target.success) {
-        throw new CommandError("INVALID_INPUT");
+    switch (command) {
+      case "capabilities": {
+        const target = managementTargetSchema.safeParse(input);
+        if (!target.success) {
+          throw new CommandError("INVALID_INPUT");
+        }
+        result = await client.capabilities({ target: target.data });
+        break;
       }
-      result = await client.capabilities({ target: target.data });
-    } else {
-      const selected = managementOperationIdSchema.safeParse(operation);
-      if (!selected.success) {
+      case "prepare-settings-update": {
+        const parameters =
+          managementSettingsUpdatePreparationSchema.safeParse(input);
+        if (!parameters.success) {
+          throw new CommandError("INVALID_INPUT");
+        }
+        result = await client.prepareSettingsUpdate({
+          parameters: parameters.data,
+        });
+        break;
+      }
+      case "review-mutation":
+      case "cancel-mutation": {
+        const action = managementMutationActionSchema.safeParse(input);
+        if (!action.success) {
+          throw new CommandError("INVALID_INPUT");
+        }
+        result =
+          command === "review-mutation"
+            ? await client.reviewMutation(action.data)
+            : await client.cancelMutation(action.data);
+        break;
+      }
+      case "execute": {
+        const selected = managementOperationIdSchema.safeParse(operation);
+        if (!selected.success) {
+          throw new CommandError("INVALID_ARGUMENTS");
+        }
+        const parameters =
+          managementContracts[selected.data].input.safeParse(input);
+        if (!parameters.success) {
+          throw new CommandError("INVALID_INPUT");
+        }
+        result = await client.execute({
+          operation: selected.data,
+          parameters: parameters.data,
+        });
+        break;
+      }
+      default: {
         throw new CommandError("INVALID_ARGUMENTS");
       }
-      const parameters =
-        managementContracts[selected.data].input.safeParse(input);
-      if (!parameters.success) {
-        throw new CommandError("INVALID_INPUT");
-      }
-      result = await client.execute({
-        operation: selected.data,
-        parameters: parameters.data,
-      });
     }
     options.stdout(`${JSON.stringify(result)}\n`);
     return 0;
