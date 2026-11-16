@@ -272,10 +272,9 @@ const GMAIL_RATE_LIMIT_REASONS = new Set([
 const GMAIL_RATE_LIMIT_RETRY_AFTER_MS = 1000 * 60;
 const GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS =
   "headers(name,value),mimeType,filename,body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size)))))";
-const GMAIL_THREAD_PAYLOAD_METADATA_FIELDS =
-  "headers(name,value),mimeType,filename,body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data),parts(partId,mimeType,filename,headers(name,value),body(attachmentId,size,data)))))";
 const GMAIL_MESSAGE_METADATA_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS})`;
-const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS = `id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_THREAD_PAYLOAD_METADATA_FIELDS})`;
+const GMAIL_THREAD_DETAIL_MESSAGE_FIELDS =
+  "id,threadId,labelIds,snippet,historyId,internalDate,payload";
 const GMAIL_THREAD_DETAIL_FIELDS = `id,snippet,messages(${GMAIL_THREAD_DETAIL_MESSAGE_FIELDS})`;
 const GMAIL_THREAD_LIST_METADATA_FIELDS = `id,historyId,snippet,messages(id,threadId,labelIds,snippet,historyId,internalDate,payload(${GMAIL_MESSAGE_PAYLOAD_METADATA_FIELDS}))`;
 const GMAIL_MESSAGE_LIST_FIELDS =
