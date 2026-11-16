@@ -40,6 +40,7 @@ import { m, useReducedMotion } from "motion/react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
 
+import { MailSnoozeStatus } from "../../mailbox/components/mail-snooze-dialog";
 import { createMessageRowHandlers } from "./message-row-handlers";
 
 type MessageRowSelectionGesture = {
@@ -344,6 +345,11 @@ const MessageRowDetails = ({
     }
     subjectTrailing={
       <>
+        {thread.anchorMessage.snooze ? (
+          <div className="max-w-60 min-w-0 truncate">
+            <MailSnoozeStatus snooze={thread.anchorMessage.snooze} />
+          </div>
+        ) : null}
         {verificationCode && (
           <CopyVerificationCode code={verificationCode} size="xs" />
         )}

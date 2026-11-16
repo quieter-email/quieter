@@ -1,3 +1,4 @@
+import * as gmail from "@quieter/gmail";
 import {
   afterEach,
   beforeEach,
@@ -19,11 +20,13 @@ import type {
   markGmailMailboxNeedsReconnect,
 } from "../src/gmail-mailbox-access";
 import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
+import type { filterMailSnoozeVisibility } from "../src/snooze/queries";
 
 const fixtures = vi.hoisted(() => ({
   getMailbox: vi.fn<typeof getAuthorizedGmailMailbox>(),
   queueMemory: vi.fn<() => Promise<void>>(),
   refresh: vi.fn<() => Promise<string>>(),
+  visible: vi.fn<typeof filterMailSnoozeVisibility>(),
 }));
 
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
@@ -38,6 +41,9 @@ vi.mock(import("../src/ai-memory-capture"), () => ({
 }));
 vi.mock(import("../src/mail/feedback"), () => ({
   learnAiMemoryFromMailAction: vi.fn<typeof learnAiMemoryFromMailAction>(),
+}));
+vi.mock(import("../src/snooze/queries"), () => ({
+  filterMailSnoozeVisibility: fixtures.visible,
 }));
 
 const mailbox = {
@@ -66,6 +72,7 @@ describe("Gmail chat search and batch actions", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -406,5 +413,87 @@ describe("Gmail chat search and batch actions", () => {
     expect(searches[2]?.has("labelIds")).toBeFalsy();
     expect(searches[2]?.get("q")).toBe(query);
     expect(searches[2]?.get("pageToken")).toBe(first.nextPageToken);
+  });
+
+  test.each(["done", "later"] as const)(
+    "continues native %s search after Snooze visibility removes a page",
+    async (category) => {
+      const first = {
+        id: "first-message",
+        labelIds: [],
+        threadId: "first-thread",
+        threadInboxIncomingMessageIds: ["first-reply"],
+        threadLabelIds: ["INBOX"],
+      };
+      const visible = {
+        id: "visible-message",
+        labelIds: [],
+        threadId: "visible-thread",
+        threadLabelIds: [],
+      };
+      const list = vi
+        .spyOn(gmail, "listMessagesForAgent")
+        .mockResolvedValueOnce({
+          messages: [first],
+          nextPageToken: "next-native-page",
+        })
+        .mockResolvedValueOnce({
+          messages: [visible],
+          nextPageToken: "remaining-native-page",
+        });
+      fixtures.visible.mockResolvedValue(new Set([visible.threadId]));
+
+      const result = await searchGmailForUser({
+        ...mailbox,
+        category,
+        maxResults: 1,
+        query: "subject:latency",
+      });
+
+      expect(result).toMatchObject({
+        messages: [{ id: visible.id }],
+        nextPageToken: "remaining-native-page",
+      });
+      expect(list).toHaveBeenCalledWith(
+        "fixture-token",
+        expect.objectContaining({
+          mailbox: category,
+          pageToken: "next-native-page",
+          query: "subject:latency",
+        })
+      );
+      expect(fixtures.visible).toHaveBeenCalledWith({
+        category,
+        mailboxId: mailbox.mailboxId,
+        messages: [first],
+        threadIds: [first.threadId],
+        userId: mailbox.userId,
+      });
+    }
+  );
+
+  test("keeps mailbox-wide search unrestricted by Snooze visibility", async () => {
+    const messages = [
+      { id: "scheduled", threadId: "scheduled-thread" },
+      { id: "done", threadId: "done-thread" },
+    ];
+    const list = vi
+      .spyOn(gmail, "listMessagesForAgent")
+      .mockResolvedValue({ messages });
+    fixtures.visible.mockRejectedValue(new Error("Folder filter called."));
+
+    const result = await searchGmailForUser({
+      ...mailbox,
+      category: "done",
+      maxResults: 10,
+      query: "subject:latency",
+      scope: "all_mail",
+    });
+
+    expect(result).toMatchObject({ messages });
+    expect(list).toHaveBeenCalledWith(
+      "fixture-token",
+      expect.objectContaining({ mailbox: undefined })
+    );
   });
 });

@@ -36,6 +36,7 @@ import {
 } from "../../mail-importance";
 import { publishMailUpdate } from "../../mail-updates";
 import { observeReminderMail } from "../../reminders/service";
+import { handleSnoozeInbound } from "../../snooze/service";
 import {
   processMailVerificationCode,
   reportPendingMailboxVerificationCodeUsage,
@@ -228,12 +229,21 @@ const finishIngestion = async (input: {
   receivedAt: Date;
   threadId: string;
 }) => {
-  await enqueueMailAgentMessage({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    receivedAt: input.receivedAt,
-    threadId: input.threadId,
-  });
+  const [snooze, enqueue] = await Promise.allSettled([
+    handleSnoozeInbound(input),
+    enqueueMailAgentMessage({
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+      receivedAt: input.receivedAt,
+      threadId: input.threadId,
+    }),
+  ]);
+  if (snooze.status === "rejected") {
+    reportError(snooze.reason, { operation: "managed-ingestion-snooze" });
+  }
+  if (enqueue.status === "rejected") {
+    throw enqueue.reason;
+  }
   const results = await Promise.allSettled([
     observeReminderMail(input),
     captureManagedMessageMemory({
@@ -263,6 +273,9 @@ const finishIngestion = async (input: {
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     throw failed.reason;
+  }
+  if (snooze.status === "rejected") {
+    throw snooze.reason;
   }
 };
 

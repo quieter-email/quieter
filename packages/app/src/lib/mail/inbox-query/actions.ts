@@ -38,6 +38,10 @@ import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-k
 import { getGmailUnreadCountsQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailSnoozeApplyInput,
+  MailSnoozeCommand,
+} from "@quieter/mail/snooze";
 import type { QueryClient } from "@tanstack/react-query";
 
 type MessageActionArgs = {
@@ -49,6 +53,41 @@ type MessageActionArgs = {
   signal?: AbortSignal;
 };
 
+export const applySnoozeInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  targets: MailSnoozeApplyInput["targets"],
+  command: MailSnoozeCommand
+) => {
+  const requestId = crypto.randomUUID();
+  let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
+  try {
+    await runMailMutation(queryClient, {
+      execute: async (): Promise<undefined> => {
+        result = await rpc.mail.applySnooze({
+          command,
+          mailboxId,
+          requestId,
+          targets,
+        });
+      },
+      mailboxId,
+      targets: targets.map((target) => target.threadId),
+    });
+  } finally {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
+      queryClient.invalidateQueries({
+        queryKey: getMailboxThreadQueriesKey(mailboxId),
+      }),
+    ]);
+  }
+  if (!result) {
+    throw new Error("The conversation update did not complete.");
+  }
+  return result;
+};
+
 export const applyBulkChangesInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
@@ -57,6 +96,8 @@ export const applyBulkChangesInMailbox = async (
 ) => {
   let result: Awaited<ReturnType<typeof rpc.mail.applyChanges>> | undefined;
   const updater = getMailCommandUpdater(command);
+  const requestId =
+    command.kind === "set-placement" ? crypto.randomUUID() : undefined;
   const apply = (
     appliedTargets: MailMutationTarget[],
     confirmed?: NonNullable<typeof result>
@@ -115,16 +156,31 @@ export const applyBulkChangesInMailbox = async (
       apply(targets);
     },
     execute: async () => {
-      result = await rpc.mail.applyChanges({ command, mailboxId, targets });
+      result = await rpc.mail.applyChanges({
+        command,
+        mailboxId,
+        requestId,
+        targets,
+      });
       const confirmed = result;
       const applied = new Set(
         confirmed.targets
-          .filter((target) => target.status === "applied")
+          .filter(
+            (target) => target.status === "applied" && target.replayed !== true
+          )
           .map((target) => target.threadId)
       );
       return () => {
         apply(
-          targets.filter((target) => applied.has(target.threadId)),
+          targets
+            .filter((target) => applied.has(target.threadId))
+            .map((target) => ({
+              ...target,
+              messageIds:
+                confirmed.targets.find(
+                  (item) => item.threadId === target.threadId
+                )?.messageIds ?? target.messageIds,
+            })),
           confirmed
         );
       };
@@ -138,7 +194,7 @@ export const applyBulkChangesInMailbox = async (
   await Promise.all([
     queryClient.invalidateQueries({
       queryKey:
-        command.kind === "set-importance"
+        command.kind === "set-importance" || command.kind === "set-placement"
           ? ["messages", mailboxId]
           : ["messages", mailboxId, "important"],
     }),

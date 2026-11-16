@@ -3,6 +3,9 @@
 import {
   ArrowLeft01Icon,
   ArrowRightDoubleIcon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  InboxIcon,
   Edit01Icon,
   Flag01Icon,
   FlagOffIcon,
@@ -69,6 +72,12 @@ import {
   useState,
 } from "react";
 
+import {
+  MailSnoozeDialog,
+  MailSnoozeStatus,
+  snoozeLiveStatuses,
+} from "../../mailbox/components/mail-snooze-dialog";
+
 const InlineComposeSurface = lazy(
   async () =>
     await import("@quieter/app/features/compose/components/compose-workspace").then(
@@ -96,6 +105,7 @@ type MessageViewContentProps = MessageViewProps &
   };
 
 const MessageViewContent = (props: MessageViewContentProps) => {
+  const [snoozeOpen, setSnoozeOpen] = useState(false);
   const {
     activeMailbox,
     apiSource,
@@ -233,6 +243,35 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     supportsLabels: true,
     supportsUnsubscribe: mailboxProvider === "gmail",
   });
+  const canSetThreadPlacement =
+    mailboxActions.canSetPlacement &&
+    !["drafts", "sent", "spam", "trash"].includes(activeMailbox);
+  const returnThreadToInbox = !threadLabelIds.includes(MAILBOX_LABELS.inbox);
+  const snooze =
+    threadMessages
+      .map((item) => item.snooze)
+      .filter((state) => state !== undefined)
+      .toSorted((left, right) => right.version - left.version)
+      .at(0) ?? message.snooze;
+  const hasSnooze =
+    snooze !== undefined && snoozeLiveStatuses.has(snooze.status);
+  const canSnooze =
+    canSetThreadPlacement &&
+    ((hasSnooze &&
+      (snooze?.status === "active" || snooze?.status === "suspended")) ||
+      (!hasSnooze &&
+        threadMessages.some(
+          (item) =>
+            (item.threadInboxIncomingMessageIds?.length ?? 0) > 0 ||
+            (item.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+              !item.labelIds.some((id) =>
+                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
+              ))
+        )));
+  const sharedPlacement = mailboxActions.placementScope === "shared";
+  const placementLabel = returnThreadToInbox
+    ? `Return conversation to Inbox${sharedPlacement ? " for everyone" : ""}`
+    : `Mark conversation Done${sharedPlacement ? " for everyone" : ""}`;
   const canSetThreadImportance =
     mailboxProvider !== "api" &&
     threadActions.onSetImportance !== undefined &&
@@ -322,6 +361,24 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       tabIndex={-1}
       className="@container flex min-h-0 w-full flex-1 flex-col"
     >
+      <MailSnoozeDialog
+        initial={snooze}
+        onApply={async (command, expectedVersion) => {
+          await mailboxActions.applyThreadSnooze(
+            message.threadId,
+            command,
+            expectedVersion
+          );
+          if (command.kind === "snooze") {
+            onBackToList?.();
+          }
+        }}
+        onOpenChange={setSnoozeOpen}
+        open={snoozeOpen}
+        preview={composeDemoMode === true || composeManagedDemoMode === true}
+        reschedule={hasSnooze}
+        shared={sharedPlacement}
+      />
       <WorkspaceHeader>
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
@@ -366,6 +423,57 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               mailboxId={mailboxId}
               message={hotkeyMessage}
             />
+          )}
+          {canSetThreadPlacement && (
+            <IconButtonTooltip label={placementLabel}>
+              <Button
+                chrome="toolbar"
+                aria-label={placementLabel}
+                disabled={isActionPending}
+                onClick={() => {
+                  if (returnThreadToInbox && hasSnooze) {
+                    void threadActions.onApplySnooze?.(message.threadId, {
+                      kind: "return-now",
+                    });
+                    return;
+                  }
+                  void (
+                    returnThreadToInbox
+                      ? threadActions.onReturnToInbox
+                      : threadActions.onMarkDone
+                  )?.(message.threadId);
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon
+                  aria-hidden
+                  icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
+                />
+              </Button>
+            </IconButtonTooltip>
+          )}
+          {canSnooze && (
+            <IconButtonTooltip
+              label={`${hasSnooze ? "Change return time" : "Snooze conversation"}${sharedPlacement ? " for everyone" : ""}`}
+            >
+              <Button
+                aria-label={
+                  hasSnooze ? "Change return time" : "Snooze conversation"
+                }
+                chrome="toolbar"
+                disabled={isActionPending}
+                onClick={() => {
+                  setSnoozeOpen(true);
+                }}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Icon aria-hidden icon={Clock01Icon} />
+              </Button>
+            </IconButtonTooltip>
           )}
           {canSetThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
@@ -437,6 +545,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           className="mt-3"
           mailboxId={mailboxId}
         />
+        {snooze === undefined ? null : (
+          <div className="mt-2">
+            <MailSnoozeStatus snooze={snooze} />
+          </div>
+        )}
       </WorkspaceHeader>
 
       <div className="flex min-h-0 flex-1">
