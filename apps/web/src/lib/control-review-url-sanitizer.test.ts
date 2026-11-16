@@ -33,7 +33,11 @@ const history = {
   },
 };
 
-const captureReviewFailure = async (sanitize: boolean, stackless = false) => {
+const captureReviewFailure = async (
+  sanitize: boolean,
+  stackless = false,
+  currentUrl = reviewUrl
+) => {
   Sentry.getCurrentScope().clearBreadcrumbs();
   Sentry.getIsolationScope().clearBreadcrumbs();
   const envelopes: Envelope[] = [];
@@ -71,10 +75,10 @@ const captureReviewFailure = async (sanitize: boolean, stackless = false) => {
       },
     }),
   });
-  document.referrer = `https://app.quieter.test/auth?returnTo=${encodeURIComponent(reviewUrl)}`;
-  history.pushState(null, "", `${reviewUrl}#${privateApprovalId}`);
+  document.referrer = `https://app.quieter.test/auth?returnTo=${encodeURIComponent(currentUrl)}`;
+  history.pushState(null, "", `${currentUrl}#${privateApprovalId}`);
   history.pushState(null, "", "/settings");
-  history.pushState(null, "", reviewUrl);
+  history.pushState(null, "", currentUrl);
   Sentry.setTag("diagnosticId", unrelatedId);
   Sentry.addBreadcrumb({
     category: "navigation",
@@ -125,13 +129,18 @@ describe("control review telemetry privacy", () => {
     const additionallyEncoded = `/auth?returnTo=${encodeURIComponent(encodeURIComponent(reviewUrl))}`;
     for (const input of [
       reviewUrl,
+      `/CONTROL/REVIEW///?approvalId=${privateApprovalId}`,
+      `https://app.quieter.test/CONTROL/REVIEW?approvalId=${privateApprovalId}`,
+      `/auth?returnTo=${encodeURIComponent(`/CoNtRoL/ReViEw?approvalId=${privateApprovalId}`)}`,
       `/control/review#${privateApprovalId}`,
       nested,
       additionallyEncoded,
       `/auth?returnTo=${encodeURIComponent(reviewUrl)}&returnTo=${encodeURIComponent(`${reviewUrl}#${privateApprovalId}`)}`,
     ]) {
       expect(sanitizeControlReviewUrl(input)).not.toContain(privateApprovalId);
-      expect(sanitizeControlReviewUrl(input)).toContain("control");
+      expect(sanitizeControlReviewUrl(input).toLowerCase()).toContain(
+        "control"
+      );
     }
     expect(sanitizeControlReviewUrl(unrelatedUrl)).toBe(unrelatedUrl);
     expect(
@@ -195,36 +204,53 @@ describe("control review telemetry privacy", () => {
   });
 
   test("scrubs the current URL when the installed global handler creates a fallback stack frame", async () => {
-    const baseline = await captureReviewFailure(false, true);
-    const originalEvents = baseline.flatMap(([, items]) =>
-      items
-        .filter(([header]) => header.type === "event")
-        .map(([, payload]) => payload)
-    );
-    expect(originalEvents[0]).toMatchObject({
-      exception: {
-        values: [{ stacktrace: { frames: [{ filename: reviewUrl }] } }],
+    for (const { currentUrl, safeUrl } of [
+      {
+        currentUrl: reviewUrl,
+        safeUrl: "https://app.quieter.test/control/review",
       },
-    });
-    const sanitized = await captureReviewFailure(true, true);
-    const events = sanitized.flatMap(([, items]) =>
-      items
-        .filter(([header]) => header.type === "event")
-        .map(([, payload]) => payload)
-    );
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      exception: {
-        values: [
-          {
-            stacktrace: {
-              frames: [{ filename: "https://app.quieter.test/control/review" }],
+      {
+        currentUrl: `https://app.quieter.test/CONTROL/REVIEW?approvalId=${privateApprovalId}`,
+        safeUrl: "https://app.quieter.test/CONTROL/REVIEW",
+      },
+      {
+        currentUrl: `https://app.quieter.test/CONTROL/REVIEW///?approvalId=${privateApprovalId}`,
+        safeUrl: "https://app.quieter.test/CONTROL/REVIEW///",
+      },
+    ]) {
+      const baseline = await captureReviewFailure(false, true, currentUrl);
+      const originalEvents = baseline.flatMap(([, items]) =>
+        items
+          .filter(([header]) => header.type === "event")
+          .map(([, payload]) => payload)
+      );
+      expect(originalEvents[0]).toMatchObject({
+        exception: {
+          values: [{ stacktrace: { frames: [{ filename: currentUrl }] } }],
+        },
+      });
+      const sanitized = await captureReviewFailure(true, true, currentUrl);
+      const events = sanitized.flatMap(([, items]) =>
+        items
+          .filter(([header]) => header.type === "event")
+          .map(([, payload]) => payload)
+      );
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject({
+        exception: {
+          values: [
+            {
+              stacktrace: {
+                frames: [{ filename: safeUrl }],
+              },
             },
-          },
-        ],
-      },
-    });
-    expect(JSON.stringify(sanitized)).not.toContain(privateApprovalId);
-    expect(JSON.stringify(events)).toContain("Uncaught review runtime failure");
+          ],
+        },
+      });
+      expect(JSON.stringify(sanitized)).not.toContain(privateApprovalId);
+      expect(JSON.stringify(events)).toContain(
+        "Uncaught review runtime failure"
+      );
+    }
   });
 });

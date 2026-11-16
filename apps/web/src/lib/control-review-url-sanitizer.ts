@@ -1,4 +1,5 @@
 import type { BrowserOptions, Event } from "@sentry/react";
+import { trimPathRight } from "@tanstack/react-router";
 
 type StreamedSpan = Parameters<
   NonNullable<BrowserOptions["beforeSendSpan"]>
@@ -26,7 +27,7 @@ export const sanitizeControlReviewUrl = (
   } catch {
     return "[Filtered URL]";
   }
-  if (url.pathname.replace(/\/$/u, "") === "/control/review") {
+  if (trimPathRight(url.pathname).toLowerCase() === "/control/review") {
     return input.split(/[?#]/u, 1)[0] ?? "/control/review";
   }
 
