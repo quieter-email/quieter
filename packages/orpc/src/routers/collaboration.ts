@@ -12,8 +12,15 @@ import {
 } from "../mailbox/collaboration/service";
 import { protectedProcedure } from "./base";
 
+const collaborationProcedure = protectedProcedure.use(
+  async ({ context, next }) => {
+    context.resHeaders?.set("cache-control", "private, no-store");
+    return await next();
+  }
+);
+
 export const collaborationRouter = {
-  changes: protectedProcedure
+  changes: collaborationProcedure
     .route({ method: "GET" })
     .input(collaborationChangesInputSchema)
     .output(collaborationChangesSchema)
@@ -21,7 +28,7 @@ export const collaborationRouter = {
       async ({ context, input }) =>
         await getCollaborationChanges({ ...input, userId: context.userId })
     ),
-  get: protectedProcedure
+  get: collaborationProcedure
     .route({ method: "GET" })
     .input(collaborationScopeSchema)
     .output(collaborationStateSchema)
@@ -29,7 +36,7 @@ export const collaborationRouter = {
       async ({ context, input }) =>
         await getCollaboration({ ...input, userId: context.userId })
     ),
-  prepare: protectedProcedure
+  prepare: collaborationProcedure
     .input(collaborationScopeSchema)
     .output(collaborationStateSchema)
     .handler(
