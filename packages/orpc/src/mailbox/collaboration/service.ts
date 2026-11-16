@@ -4,12 +4,10 @@ import {
   managedThreadCollaboration,
   managedThreadCollaborationEvent,
 } from "@quieter/database/schema";
-import type { MailboxGrantRole } from "@quieter/database/schema";
 import { compareCollaborationCursor } from "@quieter/mail/collaboration";
 import type {
   CollaborationChanges,
   CollaborationChangesInput,
-  CollaborationPermissions,
   CollaborationState,
 } from "@quieter/mail/collaboration";
 import { and, eq } from "drizzle-orm";
@@ -19,58 +17,7 @@ import {
   lockCollaborationThread,
 } from "./access";
 import type { CollaborationActorScope } from "./access";
-
-const permissionsByRole = {
-  manager: {
-    assignOthers: true,
-    claimSelf: true,
-    moderateNotes: true,
-    read: true,
-    writeOwnNotes: true,
-  },
-  reader: {
-    assignOthers: false,
-    claimSelf: false,
-    moderateNotes: false,
-    read: true,
-    writeOwnNotes: false,
-  },
-  responder: {
-    assignOthers: false,
-    claimSelf: true,
-    moderateNotes: false,
-    read: true,
-    writeOwnNotes: true,
-  },
-} satisfies Record<MailboxGrantRole, CollaborationPermissions>;
-
-const snapshotFor = (
-  input: CollaborationActorScope,
-  role: MailboxGrantRole,
-  context: typeof managedThreadCollaboration.$inferSelect | undefined
-): CollaborationState => {
-  const search = new URLSearchParams({
-    mailboxId: input.mailboxId,
-    threadId: input.threadId,
-  });
-  return {
-    href: `/?${search.toString()}`,
-    mailboxId: input.mailboxId,
-    permissions: { ...permissionsByRole[role] },
-    role,
-    state:
-      context === undefined
-        ? { kind: "unprepared" }
-        : {
-            cursor: {
-              contextId: context.id,
-              revision: context.revision.toString(),
-            },
-            kind: "prepared",
-          },
-    threadId: input.threadId,
-  };
-};
+import { projectCollaborationState } from "./state";
 
 export const getCollaboration = async (
   input: CollaborationActorScope
@@ -100,7 +47,7 @@ export const getCollaboration = async (
               message: "Conversation is not available.",
             });
           }
-          return snapshotFor(input, current.role, context);
+          return projectCollaborationState(input, current.role, context);
         },
         { isolationLevel: "read committed" }
       )
@@ -176,7 +123,7 @@ export const prepareCollaboration = async (
               message: "You need reply access to start collaborating.",
             });
           }
-          return snapshotFor(input, current.role, context);
+          return projectCollaborationState(input, current.role, context);
         },
         { isolationLevel: "read committed" }
       )
