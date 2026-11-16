@@ -1,6 +1,8 @@
 import type { ReminderNotifications } from "@quieter/app/runtime";
 import { z } from "zod";
 
+import type { NativeLinkReadInput, NativeMailIntent } from "./native-links";
+
 export const reminderNotificationEvent = z.strictObject({
   id: z.uuid(),
   mailboxId: z.string().min(1).max(500),
@@ -44,6 +46,10 @@ export const DESKTOP_TITLE_BAR_HEIGHT = 40;
 
 export type DesktopBridge = Readonly<{
   apiBaseURL: string;
+  nativeLinks: Readonly<{
+    onPending: (listener: () => void) => () => void;
+    read: (input: NativeLinkReadInput) => Promise<NativeMailIntent | null>;
+  }>;
   onSignOutCleanup: (
     listener: (command: SignOutCleanupCommand) => Promise<void>
   ) => () => void;

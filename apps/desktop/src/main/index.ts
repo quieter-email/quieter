@@ -19,12 +19,13 @@ import {
   BrowserWindow,
   dialog,
   ipcMain,
+  Menu,
   net,
   protocol,
   session,
   shell,
 } from "electron";
-import type { IpcMainInvokeEvent } from "electron";
+import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from "electron";
 
 import {
   DESKTOP_APP_ORIGIN,
@@ -33,7 +34,12 @@ import {
   reminderNotificationsEnabled,
   reminderNotificationUser,
 } from "../shared/bridge";
+import {
+  nativeLinkReadInput,
+  parseNativeMailTarget,
+} from "../shared/native-links";
 import { createAuthStorage } from "./auth-storage";
+import { NativeLinkInbox } from "./native-links";
 import { ReminderNotificationService } from "./reminder-notifications";
 import {
   getAuthCallbackToken,
@@ -163,6 +169,24 @@ const reminderNotifications = new ReminderNotificationService({
   },
   origin: new URL(env.DESKTOP_SERVER_URL).origin,
 });
+const nativeLinks = new NativeLinkInbox({
+  getSession: async () => {
+    const result = await authClient.getSession();
+    if (result.error) {
+      throw new Error(
+        "Your account could not be verified. Reopen the email link."
+      );
+    }
+    return result.data
+      ? { sessionId: result.data.session.id, userId: result.data.user.id }
+      : null;
+  },
+  onPending: () => {
+    if (mainWindow && !reminderSignOut) {
+      mainWindow.webContents.send("quieter:native-link-pending");
+    }
+  },
+});
 
 const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
   if (
@@ -174,6 +198,28 @@ const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
     throw new Error("This window cannot access quieter.");
   }
 };
+
+ipcMain.handle("quieter:native-link-listen", (event) => {
+  assertTrustedSender(event);
+  nativeLinks.notifyPending();
+});
+ipcMain.handle("quieter:native-link-read", async (event, rawInput: unknown) => {
+  assertTrustedSender(event);
+  const input = nativeLinkReadInput.parse(rawInput);
+  const frame = event.senderFrame;
+  if (reminderSignOut) {
+    return null;
+  }
+  return await nativeLinks.read({
+    assertCurrent: () => {
+      assertTrustedSender(event);
+      if (event.senderFrame !== frame || reminderSignOut) {
+        throw new Error("The email link window changed. Reopen the link.");
+      }
+    },
+    input,
+  });
+});
 
 ipcMain.handle(
   "quieter:reminder-notification-user",
@@ -222,6 +268,7 @@ ipcMain.handle("better-auth:getUser", async (event) => {
 });
 ipcMain.handle("better-auth:requestAuth", async (event) => {
   assertTrustedSender(event);
+  nativeLinks.beginAuthentication();
   await authClient.requestAuth();
 });
 ipcMain.handle("better-auth:authenticate", async (event, data: unknown) => {
@@ -235,6 +282,7 @@ ipcMain.handle("better-auth:authenticate", async (event, data: unknown) => {
   ) {
     throw new Error("Enter the sign-in code from your browser.");
   }
+  nativeLinks.beginAuthentication();
   reminderNotifications.clearSession();
   const result = await authClient.authenticate({ token: data.token });
   if (result.error) {
@@ -255,6 +303,7 @@ ipcMain.handle("better-auth:signOut", async (event) => {
     throw new Error("Sign-out is already in progress.");
   }
   reminderSignOut = true;
+  nativeLinks.clear();
   reminderNotifications.clearSession();
   const frame = event.senderFrame;
   let signedOut = false;
@@ -269,6 +318,7 @@ ipcMain.handle("better-auth:signOut", async (event) => {
         );
       },
       onSignedOut: () => {
+        nativeLinks.clear();
         reminderNotifications.clearSession();
         if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
           event.sender.send("better-auth:user-updated", null);
@@ -344,6 +394,7 @@ const completeAuthentication = async (token: string): Promise<void> => {
     pendingTokens.push(token);
     return;
   }
+  nativeLinks.beginAuthentication();
   reminderNotifications.clearSession();
   try {
     const result = await authClient.authenticate({ token });
@@ -362,43 +413,6 @@ const completeAuthentication = async (token: string): Promise<void> => {
     });
   }
 };
-
-app.on("open-url", (event, url) => {
-  event.preventDefault();
-  const token = getAuthCallbackToken(url);
-  if (token) {
-    void completeAuthentication(token);
-  }
-});
-
-const hasInstanceLock = app.requestSingleInstanceLock();
-if (hasInstanceLock) {
-  app.on("second-instance", (_event, commandLine) => {
-    if (mainWindow?.isMinimized() === true) {
-      mainWindow.restore();
-    }
-    mainWindow?.show();
-    mainWindow?.focus();
-    for (const argument of commandLine) {
-      const token = getAuthCallbackToken(argument);
-      if (token) {
-        void completeAuthentication(token);
-        break;
-      }
-    }
-  });
-  if (process.defaultApp && process.argv[1]) {
-    app.setAsDefaultProtocolClient(
-      DESKTOP_AUTH_PROTOCOL_SCHEME,
-      process.execPath,
-      [path.resolve(process.argv[1])]
-    );
-  } else {
-    app.setAsDefaultProtocolClient(DESKTOP_AUTH_PROTOCOL_SCHEME);
-  }
-} else {
-  app.quit();
-}
 
 const proxyRequest = async (
   request: Request,
@@ -568,23 +582,32 @@ const createWindow = async (): Promise<void> => {
     width: 1440,
   });
   const window = mainWindow;
+  let hasLoaded = false;
   window.once("ready-to-show", () => {
     window.show();
   });
+  window.webContents.once("did-finish-load", () => {
+    hasLoaded = true;
+  });
   window.webContents.on(
     "did-start-navigation",
-    (_event, _url, _inPlace, isMainFrame) => {
+    (_event, _url, inPlace, isMainFrame) => {
       if (isMainFrame) {
+        if (hasLoaded && !inPlace) {
+          nativeLinks.clear();
+        }
         signOutCleanup.cancel();
         reminderNotifications.clearSession();
       }
     }
   );
   window.webContents.on("render-process-gone", () => {
+    nativeLinks.clear();
     signOutCleanup.cancel();
     reminderNotifications.clearSession();
   });
   window.on("closed", () => {
+    nativeLinks.clear();
     signOutCleanup.cancel();
     reminderNotifications.clearSession();
     if (mainWindow === window) {
@@ -615,8 +638,114 @@ const createWindow = async (): Promise<void> => {
     }
     return { action: "deny" };
   });
-  await window.loadURL(developmentURL ?? `${DESKTOP_APP_ORIGIN}/`);
+  try {
+    await window.loadURL(developmentURL ?? `${DESKTOP_APP_ORIGIN}/`);
+  } catch (error) {
+    window.destroy();
+    throw error;
+  }
 };
+
+const restoreMainWindow = async (): Promise<void> => {
+  if (!initialized) {
+    return;
+  }
+  try {
+    if (!mainWindow) {
+      await createWindow();
+    }
+    if (mainWindow?.isMinimized() === true) {
+      mainWindow.restore();
+    }
+    mainWindow?.show();
+    mainWindow?.focus();
+  } catch (error) {
+    Sentry.captureException(error, {
+      tags: { boundary: "desktop-window-restore" },
+    });
+    dialog.showErrorBox(
+      "quieter could not open its window",
+      "Reopen quieter to try again."
+    );
+  }
+};
+
+const dispatchNativeURL = (input: string): boolean => {
+  const token = getAuthCallbackToken(input);
+  if (token) {
+    if (initialized) {
+      void (async () => {
+        await restoreMainWindow();
+        await completeAuthentication(token);
+      })();
+    } else {
+      pendingTokens.push(token);
+    }
+    return true;
+  }
+  const target = parseNativeMailTarget(input);
+  if (!target) {
+    return false;
+  }
+  if (reminderSignOut) {
+    dialog.showErrorBox(
+      "Email link could not be opened",
+      "Finish signing out, then reopen the email link."
+    );
+    return true;
+  }
+  void (async () => {
+    try {
+      await Promise.all([nativeLinks.receive(target), restoreMainWindow()]);
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { boundary: "desktop-native-link" },
+      });
+      dialog.showErrorBox(
+        "Email link could not be opened",
+        "Your account could not be checked. Reopen the email link to try again."
+      );
+    }
+  })();
+  return true;
+};
+
+app.on("open-url", (event, url) => {
+  event.preventDefault();
+  dispatchNativeURL(url);
+});
+
+const protocolLaunchArgs =
+  process.defaultApp && process.argv[1] ? [path.resolve(process.argv[1])] : [];
+if (
+  process.platform === "win32" &&
+  app.commandLine.getSwitchValue("user-data-dir") !== ""
+) {
+  protocolLaunchArgs.push(`--user-data-dir=${app.getPath("userData")}`);
+}
+
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (hasInstanceLock) {
+  app.on("second-instance", (_event, commandLine) => {
+    void restoreMainWindow();
+    for (const argument of commandLine) {
+      if (dispatchNativeURL(argument)) {
+        break;
+      }
+    }
+  });
+  if (protocolLaunchArgs.length > 0) {
+    app.setAsDefaultProtocolClient(
+      DESKTOP_AUTH_PROTOCOL_SCHEME,
+      process.execPath,
+      protocolLaunchArgs
+    );
+  } else {
+    app.setAsDefaultProtocolClient(DESKTOP_AUTH_PROTOCOL_SCHEME);
+  }
+} else {
+  app.quit();
+}
 
 const startApp = async (): Promise<void> => {
   try {
@@ -624,6 +753,63 @@ const startApp = async (): Promise<void> => {
     app.setAppUserModelId(DESKTOP_AUTH_PROTOCOL_SCHEME);
     await credentials.initialize();
     await reminderNotifications.initialize();
+    try {
+      await nativeLinks.start();
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { boundary: "desktop-native-link" },
+      });
+    }
+    const fileMenu: MenuItemConstructorOptions = {
+      label: "File",
+      submenu: [
+        {
+          click: () => {
+            void (async () => {
+              try {
+                const registered =
+                  protocolLaunchArgs.length > 0
+                    ? app.setAsDefaultProtocolClient(
+                        "mailto",
+                        process.execPath,
+                        protocolLaunchArgs
+                      )
+                    : app.setAsDefaultProtocolClient("mailto");
+                await dialog.showMessageBox({
+                  message: registered
+                    ? "Choose quieter in your system's default email app settings to finish."
+                    : "Email links could not be registered. Choose quieter in your system's default email app settings.",
+                  type: "info",
+                });
+              } catch (error) {
+                Sentry.captureException(error, {
+                  tags: { boundary: "desktop-mailto-registration" },
+                });
+                dialog.showErrorBox(
+                  "Email links could not be registered",
+                  "Try again from your system's default email app settings."
+                );
+              }
+            })();
+          },
+          id: "default-mail-handler",
+          label: "Use quieter for email links",
+        },
+        { type: "separator" },
+        { role: process.platform === "darwin" ? "close" : "quit" },
+      ],
+    };
+    Menu.setApplicationMenu(
+      Menu.buildFromTemplate([
+        ...(process.platform === "darwin"
+          ? [{ role: "appMenu" } satisfies MenuItemConstructorOptions]
+          : []),
+        fileMenu,
+        { role: "editMenu" },
+        { role: "viewMenu" },
+        { role: "windowMenu" },
+      ])
+    );
     // oxlint-disable promise/prefer-await-to-callbacks -- Electron's permission API requires callbacks.
     session.defaultSession.setPermissionRequestHandler(
       (contents, permission, callback, details) => {
@@ -692,15 +878,13 @@ const startApp = async (): Promise<void> => {
     // oxlint-enable promise/prefer-await-to-callbacks
     installAppProtocol();
     await createWindow();
-    initialized = true;
     for (const argument of process.argv) {
-      const token = getAuthCallbackToken(argument);
-      if (token) {
-        pendingTokens.push(token);
+      if (dispatchNativeURL(argument)) {
         break;
       }
     }
-    for (const token of pendingTokens.splice(0)) {
+    initialized = true;
+    for (const token of new Set(pendingTokens.splice(0))) {
       await completeAuthentication(token);
     }
   } catch (error) {
@@ -720,7 +904,7 @@ if (hasInstanceLock) {
 
 app.on("activate", () => {
   if (initialized && !mainWindow) {
-    void createWindow();
+    void restoreMainWindow();
   }
 });
 app.on("window-all-closed", () => {
@@ -730,6 +914,7 @@ app.on("window-all-closed", () => {
 });
 const flushCredentialsAndQuit = async (): Promise<void> => {
   try {
+    nativeLinks.clear();
     reminderNotifications.clearSession();
     await credentials.flush();
     await reminderNotifications.flush();
