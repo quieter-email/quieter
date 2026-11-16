@@ -1,6 +1,13 @@
 import { z } from "zod";
 
 import { followUpReminderIntentSchema } from "../reminders";
+import { getUnresolvedSnippetFields } from "./snippet-variables";
+
+export {
+  getUnresolvedSnippetFields,
+  resolveSnippetVariables,
+} from "./snippet-variables";
+export type { SnippetContextValues } from "./snippet-variables";
 
 const normalizeMailAddressValue = (value: string | undefined) =>
   value?.replaceAll(/\r?\n\s+/gu, " ").trim() ?? "";
@@ -308,6 +315,13 @@ export const composeDraftInputSchema = z.object({
 
 export const composeMessageInputSchema = composeDraftInputSchema.superRefine(
   (value, ctx) => {
+    if (getUnresolvedSnippetFields(value).length > 0) {
+      ctx.addIssue({
+        code: "custom",
+        message: "Complete the marked snippet fields before sending.",
+        path: ["bodyHtml"],
+      });
+    }
     if (splitMailAddressList(value.recipients.to).length === 0) {
       ctx.addIssue({
         code: "custom",

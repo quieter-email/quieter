@@ -1500,6 +1500,9 @@ importers:
       nodemailer:
         specifier: ^10.1.0
         version: 10.1.0
+      parse5:
+        specifier: 8.1.1
+        version: 8.1.1
       postal-mime:
         specifier: ^4.0.5
         version: 4.0.5
