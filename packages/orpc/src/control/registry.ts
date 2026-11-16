@@ -35,6 +35,8 @@ export const controlScopeSchema = z.enum([
   "calendar:read",
   "organization:read",
   "organization:write",
+  "settings:read",
+  "automation:read",
 ]);
 
 export type ControlScope = z.infer<typeof controlScopeSchema>;
@@ -125,6 +127,18 @@ export const controlOperations = [
     organizationManager: true,
     scope: "organization:write",
     target: "organization",
+  },
+  {
+    effect: { kind: "read" },
+    id: "settings.read",
+    scope: "settings:read",
+    target: "user",
+  },
+  {
+    effect: { kind: "read" },
+    id: "automation.read",
+    scope: "automation:read",
+    target: "mailbox",
   },
 ] as const satisfies readonly ControlOperationDefinition[];
 

@@ -2,7 +2,7 @@
 
 The management API controls the signed-in user's Quieter application resources. It is separate from transactional sending. A transactional organization API key proves permission to send from a verified domain. It does not identify an acting user or grant inbox, calendar, organization administration, or personal-context access.
 
-This document records the QUIETER-125 authority contract and application capability inventory. The runtime contract lives in `packages/orpc/src/control/`. HTTP adapters, external credential issuance, OpenAPI, management MCP, and the management SDK are subsequent deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
+This document records the authority contract, shared wire contracts, and application capability inventory. The runtime contracts live in `packages/orpc/src/control/`. HTTP adapters, external credential issuance, management MCP, and the management SDK are subsequent deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
 
 ## Credentials and scope
 
@@ -76,6 +76,24 @@ Use the shared registry for operation requirements and discover only operations 
 Use the established mail and calendar application services. `queriesMailOperations` preserves provider dispatch, source capture, importance, unsubscribe information, and content revisions. Calendar services preserve account ownership and provider error handling. Adapters must not query the database or call Gmail REST directly.
 
 HTTP and MCP adapters share runtime request/result schemas with OpenAPI and the separately named management SDK. Public output contains provider-neutral application results and canonical source references. Provider tokens, encrypted credentials, database-shaped internal records, and another user's private context are excluded. Authentication failures, denied scope, expired confirmation, idempotency conflict, cancellation, reconnect requirements, partial results, and uncertain execution need safe explicit outcomes.
+
+## Shared runtime and OpenAPI contracts
+
+`control/contracts.ts` owns the operation input and result schemas, discovery output, safe errors, and mutation receipt states. Types derive from these schemas. Inputs carry their explicit resource identifiers once and reject extra actor, role, or credential claims. Calendar reads reuse the existing calendar schemas, including their runtime date-range and time-zone checks.
+
+`control/openapi.ts` generates OpenAPI 3.1 from those same schemas and operation requirements. The server supplies the selected operation IDs to `createControlOpenApiDocument`. Selection describes the adapter's implemented coverage; it does not grant authorization. Every selected operation uses a JSON POST under `/api/control/{operation}` so private search text stays out of request URLs. The management version header is `Quieter-Control-Version`. It is separate from transactional API versioning.
+
+For example, a server boundary parses a thread request with `controlContracts["mail.read_thread"].input.parse(body)`. The request contains `mailboxId`, `organizationId`, and `threadId`. It then authorizes the operation with the current request headers and calls the complete application thread operation using the server-derived actor. The result schema validates the public response. This contract source does not publish that HTTP route by itself.
+
+Mail search retains the application's opaque `pageToken` and `nextPageToken` convention. Continue with the same mailbox, organization, category, and query. A page and its size estimate do not establish complete mailbox coverage. Adapters must bind any stored cursor to that request scope and reauthorize every page.
+
+`toControlMailMessage` projects the enriched application message into the public schema and adds an explicit mailbox/thread/message source reference. Its root application link encodes these identifiers with `URLSearchParams`. It preserves useful optional read state, importance, recipients, threading, bodies, attachments, inline images, draft anchors, and unsubscribe state. Credentials, private action keys, and internal provider records are excluded. External links cannot rely on the in-app chat reference's implicit active mailbox.
+
+Errors use a named code and safe message, with optional request and retry metadata. The schema strips unrecognized fields; adapters must still select a safe message rather than copy an unexpected exception. Mutation results distinguish pending and uncertain execution from succeeded, failed, and cancelled outcomes. A successful mutation result requires its completed receipt and typed result. These schemas do not create durable execution records.
+
+Settings, organization, and automation schemas define representative broader contracts. They remain unadvertised until an adapter implements and verifies the corresponding application path. Streaming is unsupported. OpenAPI describes the shared JSON shapes; runtime validation remains authoritative for cross-field calendar constraints that JSON Schema cannot express.
+
+The pure contract leaves can be bundled into a separately named standalone management SDK, following the existing workspace contract-bundling pattern. A client distribution must not import server authority, database, environment, or provider modules. The SDK's built artifact and external-client acceptance still require verification in their own units.
 
 ## Evidence boundaries
 
