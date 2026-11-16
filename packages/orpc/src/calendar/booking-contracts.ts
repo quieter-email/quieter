@@ -182,6 +182,38 @@ export const calendarBookingResultSchema = z.discriminatedUnion("kind", [
   unavailableSchema,
 ]);
 
+export const calendarBookingLinkRefSchema = z
+  .object({ linkId: z.string().min(1).max(1024) })
+  .strict();
+const ownerCursorSchema = z
+  .object({ createdAt: instantSchema, id: z.string().min(1).max(1024) })
+  .strict();
+export const calendarBookingOwnerListInputSchema = z
+  .object({ after: ownerCursorSchema.optional() })
+  .strict();
+export const calendarBookingOwnerLinkSchema = z
+  .object({
+    createdAt: instantSchema,
+    expiresAt: instantSchema,
+    id: z.string().min(1),
+    revokedAt: instantSchema.nullable(),
+    status: z.enum(["active", "expired", "revoked"]),
+    title: titleSchema,
+  })
+  .strict();
+export const calendarBookingCreateResultSchema = z
+  .object({
+    capability: calendarBookingCapabilitySchema,
+    link: calendarBookingOwnerLinkSchema,
+  })
+  .strict();
+export const calendarBookingOwnerListSchema = z
+  .object({
+    links: z.array(calendarBookingOwnerLinkSchema).max(20),
+    next: ownerCursorSchema.optional(),
+  })
+  .strict();
+
 export type CalendarBookingCapability = z.infer<
   typeof calendarBookingCapabilitySchema
 >;
@@ -203,3 +235,12 @@ export type CalendarBookingResultInput = z.infer<
 >;
 export type CalendarBookingView = z.infer<typeof calendarBookingViewSchema>;
 export type CalendarBookingResult = z.infer<typeof calendarBookingResultSchema>;
+export type CalendarBookingOwnerLink = z.infer<
+  typeof calendarBookingOwnerLinkSchema
+>;
+export type CalendarBookingOwnerListInput = z.infer<
+  typeof calendarBookingOwnerListInputSchema
+>;
+export type CalendarBookingOwnerList = z.infer<
+  typeof calendarBookingOwnerListSchema
+>;
