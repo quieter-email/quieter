@@ -89,6 +89,13 @@ type ComposeBridge = NonNullable<
   ReturnType<NonNullable<ReturnType<typeof useAgentWorkspace>>["getCompose"]>
 >;
 
+type ComposeActionToken = {
+  mailboxId: string | null;
+  localId: string;
+  sendOperationId: ComposeDraftState["sendOperationId"];
+  draftRevision: number;
+};
+
 export type ComposeHeldReceipt = Pick<
   NonNullable<RouterOutputs["mail"]["getHeldSend"]>,
   "sendOperationId" | "status" | "canUndo" | "undoUntil"
@@ -224,8 +231,10 @@ export const useComposeDialogController = ({
       (state.draft.saveStatus === "idle" && !!state.draft.draftId)
   );
   const draftClosedRef = useRef(false);
+  const mountedRef = useRef(false);
   const savingRef = useRef<Promise<boolean> | null>(null);
   const finishingRef = useRef(false);
+  const finishingActionRef = useRef<ComposeActionToken | null>(null);
   const senderRouteMailboxIdRef = useRef<string | null>(null);
   const navigationCleanupRef = useRef(false);
   const senderSourceUnavailableRef = useRef(false);
@@ -287,6 +296,46 @@ export const useComposeDialogController = ({
       ],
     };
     setState((current) => ({ ...current, draft }));
+  };
+
+  const captureComposeAction = (): ComposeActionToken => {
+    const draft = activeDraftRef.current;
+    return {
+      draftRevision: draftRevisionRef.current,
+      localId: draft.localId,
+      mailboxId,
+      sendOperationId: draft.sendOperationId,
+    };
+  };
+
+  const isCurrentComposeAction = (
+    action: ComposeActionToken,
+    {
+      allowNewerEdits = false,
+      allowUncertain = false,
+    }: { allowNewerEdits?: boolean; allowUncertain?: boolean } = {}
+  ) => {
+    const draft = activeDraftRef.current;
+    return (
+      mountedRef.current &&
+      !draftClosedRef.current &&
+      currentMailboxIdRef.current === action.mailboxId &&
+      draft.localId === action.localId &&
+      draft.sendOperationId === action.sendOperationId &&
+      (allowNewerEdits || draftRevisionRef.current === action.draftRevision) &&
+      (allowUncertain || draft.sendUncertain !== true)
+    );
+  };
+
+  const finishComposeAction = (action: ComposeActionToken) => {
+    if (finishingActionRef.current !== action) {
+      return;
+    }
+    finishingActionRef.current = null;
+    finishingRef.current = false;
+    if (mountedRef.current) {
+      setState((current) => ({ ...current, isFinishing: false }));
+    }
   };
 
   const buildDraftFromForm = (values: ComposeFormValues): ComposeDraftState => {
@@ -477,6 +526,8 @@ export const useComposeDialogController = ({
     if (
       mailboxId === null ||
       mailboxId === "" ||
+      !mountedRef.current ||
+      draftClosedRef.current ||
       finishingRef.current ||
       activeDraftRef.current.saveStatus === "sending"
     ) {
@@ -493,7 +544,26 @@ export const useComposeDialogController = ({
       scheduleAttempt: schedule ?? undefined,
       sendOperationId: current.sendOperationId ?? crypto.randomUUID(),
     }));
+    const action = captureComposeAction();
     await savingRef.current;
+    const { current: waitingDraft } = activeDraftRef;
+    if (!isCurrentComposeAction(action) || heldTaskRef.current !== null) {
+      if (
+        isCurrentComposeAction(action, { allowNewerEdits: true }) &&
+        waitingDraft.saveStatus === "sending" &&
+        heldTaskRef.current === null
+      ) {
+        setDraft((current) => ({
+          ...current,
+          holdAttempt: undefined,
+          saveStatus: "idle",
+          scheduleAttempt: undefined,
+        }));
+        // oxlint-disable-next-line no-use-before-define -- Submission runs after recovery initializes.
+        recovery.checkpoint();
+      }
+      return;
+    }
     const message = buildDraftFromForm(values);
     setDraft({ ...message, saveStatus: "sending" });
     // oxlint-disable-next-line no-use-before-define -- The form invokes this handler after recovery initializes.
@@ -506,6 +576,18 @@ export const useComposeDialogController = ({
           message,
           schedule
         );
+        if (!isCurrentComposeAction(action)) {
+          if (isCurrentComposeAction(action, { allowNewerEdits: true })) {
+            setDraft((draft) => ({
+              ...draft,
+              saveStatus: "idle",
+              sendUncertain: true,
+            }));
+            // oxlint-disable-next-line no-use-before-define -- Submission runs after recovery initializes.
+            recovery.checkpoint();
+          }
+          return;
+        }
         await completeScheduledMessage({
           message,
           scheduled,
@@ -525,18 +607,20 @@ export const useComposeDialogController = ({
           }).queryKey,
           held
         );
-        setDraft({
-          ...message,
-          holdAttempt: true,
-          saveStatus: "idle",
-          sendUncertain: true,
+        // oxlint-disable-next-line no-use-before-define -- Submission runs after the held receipt handler initializes.
+        await receiveHeldReceipt({
+          ...held,
+          draftId: action.localId,
+          draftRevision: action.draftRevision,
+          mailboxId,
+          restoredDraftId: held.status === "canceled" ? held.draftId : null,
         });
-        // oxlint-disable-next-line no-use-before-define -- Submission runs after the recovery hook initializes.
-        recovery.checkpoint();
         return;
       }
     } catch (error) {
-      handleSendFailure(error);
+      if (isCurrentComposeAction(action, { allowNewerEdits: true })) {
+        handleSendFailure(error);
+      }
       return;
     }
 
@@ -614,7 +698,6 @@ export const useComposeDialogController = ({
     recovery.checkpoint();
   });
 
-  const mountedRef = useRef(false);
   const releaseUnmountedDraft = useEffectEvent(async () => {
     const draft = buildDraftFromForm(form.state.values);
     clearComposeDraftRuntimeFiles(runtimeDraftRef.current);
@@ -722,6 +805,7 @@ export const useComposeDialogController = ({
   ) => {
     const { values } = form.state;
     const draft = buildDraftFromForm(values);
+    const action = captureComposeAction();
     const savedRevision = draftRevisionRef.current;
     if (
       draft.sendUncertain === true ||
@@ -736,6 +820,9 @@ export const useComposeDialogController = ({
       !composeDraftFormValuesSchema.safeParse(values).success
     ) {
       await form.validateAllFields("change");
+      if (!isCurrentComposeAction(action)) {
+        return false;
+      }
       setDraft({
         ...draft,
         errorMessage: "Check the recipient addresses before saving your draft.",
@@ -786,14 +873,8 @@ export const useComposeDialogController = ({
         saved = await saveComposeDraft(mailboxId, draft);
       }
     } catch (error) {
-      if (
-        !mountedRef.current ||
-        currentMailboxIdRef.current !== mailboxId ||
-        activeDraftRef.current.localId !== draft.localId ||
-        activeDraftRef.current.sendOperationId !== draft.sendOperationId ||
-        draftClosedRef.current
-      ) {
-        return true;
+      if (!isCurrentComposeAction(action, { allowNewerEdits: true })) {
+        return false;
       }
       retryableSaveErrorRef.current = shouldRetryOrpcError(0, error);
       const data =
@@ -831,14 +912,8 @@ export const useComposeDialogController = ({
       return false;
     }
     const current = buildDraftFromForm(form.state.values);
-    if (
-      !mountedRef.current ||
-      currentMailboxIdRef.current !== mailboxId ||
-      current.localId !== draft.localId ||
-      current.sendOperationId !== draft.sendOperationId ||
-      draftClosedRef.current
-    ) {
-      return true;
+    if (!isCurrentComposeAction(action, { allowNewerEdits: true })) {
+      return false;
     }
     lastSavedDraftRef.current = saved;
     needsSaveRef.current = false;
@@ -901,8 +976,15 @@ export const useComposeDialogController = ({
     hydrateAttachments = false,
     authorizeProposal = false
   ): Promise<boolean> => {
+    const action = captureComposeAction();
     while (savingRef.current !== null) {
       await savingRef.current;
+      if (
+        !isCurrentComposeAction(action) ||
+        (activeDraftRef.current.assistantUnsaved === true && !authorizeProposal)
+      ) {
+        return false;
+      }
     }
     if (
       background &&
@@ -943,7 +1025,8 @@ export const useComposeDialogController = ({
       ...activeDraftRef.current.attachments,
       ...activeDraftRef.current.inlineImages,
     ].some((asset) => asset.gmailAttachmentId !== undefined);
-    const sourceDraft = activeDraftRef.current;
+    const action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
@@ -955,13 +1038,7 @@ export const useComposeDialogController = ({
         return null;
       }
       let current = buildDraftFromForm(form.state.values);
-      if (
-        !mountedRef.current ||
-        draftClosedRef.current ||
-        currentMailboxIdRef.current !== mailboxId ||
-        activeDraftRef.current.localId !== sourceDraft.localId ||
-        current.sendUncertain === true
-      ) {
+      if (!isCurrentComposeAction(action)) {
         return null;
       }
       if (
@@ -971,13 +1048,7 @@ export const useComposeDialogController = ({
         !sourceUnavailable
       ) {
         current = await prepareLoadedComposeDraft(mailboxId, current);
-        if (
-          !mountedRef.current ||
-          draftClosedRef.current ||
-          currentMailboxIdRef.current !== mailboxId ||
-          activeDraftRef.current.localId !== sourceDraft.localId ||
-          buildDraftFromForm(form.state.values).sendUncertain === true
-        ) {
+        if (!isCurrentComposeAction(action)) {
           return null;
         }
       }
@@ -1003,15 +1074,16 @@ export const useComposeDialogController = ({
         },
       };
     } catch (error) {
-      toastError(error, {
-        boundary: "compose-change-sender",
-        fallback:
-          "Some draft files could not be prepared. Reattach them before changing the sending address.",
-      });
+      if (isCurrentComposeAction(action)) {
+        toastError(error, {
+          boundary: "compose-change-sender",
+          fallback:
+            "Some draft files could not be prepared. Reattach them before changing the sending address.",
+        });
+      }
       return null;
     } finally {
-      finishingRef.current = false;
-      setState((current) => ({ ...current, isFinishing: false }));
+      finishComposeAction(action);
     }
   };
 
@@ -1107,6 +1179,8 @@ export const useComposeDialogController = ({
       ) {
         return true;
       }
+      const action = captureComposeAction();
+      finishingActionRef.current = action;
       finishingRef.current = true;
       setState((current) => ({ ...current, isFinishing: true }));
       try {
@@ -1118,14 +1192,30 @@ export const useComposeDialogController = ({
           recovery.checkpoint();
           return false;
         }
-        if (!(await persistCurrentDraft())) {
+        const persisted = await persistCurrentDraft();
+        const draft = activeDraftRef.current;
+        if (
+          !isCurrentComposeAction(action) ||
+          draft.assistantUnsaved === true ||
+          !persisted
+        ) {
+          if (finishingActionRef.current === action) {
+            navigationCleanupRef.current = false;
+          }
+          if (
+            isCurrentComposeAction(action, {
+              allowNewerEdits: true,
+              allowUncertain: true,
+            })
+          ) {
+            recovery.checkpoint();
+          }
           return true;
         }
         navigationCleanupRef.current = true;
         return false;
       } finally {
-        finishingRef.current = false;
-        setState((current) => ({ ...current, isFinishing: false }));
+        finishComposeAction(action);
       }
     },
   });
@@ -1157,6 +1247,8 @@ export const useComposeDialogController = ({
     ) {
       return;
     }
+    const action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
@@ -1167,14 +1259,27 @@ export const useComposeDialogController = ({
         closeDialog(afterClose, true);
         return;
       }
-      if (!(await persistCurrentDraft())) {
+      const persisted = await persistCurrentDraft();
+      const draft = activeDraftRef.current;
+      if (
+        !isCurrentComposeAction(action) ||
+        draft.assistantUnsaved === true ||
+        !persisted
+      ) {
+        if (
+          isCurrentComposeAction(action, {
+            allowNewerEdits: true,
+            allowUncertain: true,
+          })
+        ) {
+          recovery.checkpoint();
+        }
         return;
       }
       clearComposeDraftRuntimeFiles(activeDraftRef.current);
       closeDialog(afterClose);
     } finally {
-      finishingRef.current = false;
-      setState((current) => ({ ...current, isFinishing: false }));
+      finishComposeAction(action);
     }
   };
 
@@ -1187,10 +1292,15 @@ export const useComposeDialogController = ({
     ) {
       return;
     }
+    let action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
       await savingRef.current;
+      if (!isCurrentComposeAction(action)) {
+        return;
+      }
       const original = activeDraftRef.current;
       saveConflictRef.current = false;
       setCanSaveDraftCopy(false);
@@ -1217,13 +1327,29 @@ export const useComposeDialogController = ({
         sendOperationId: crypto.randomUUID(),
       });
       lastSavedDraftRef.current = activeDraftRef.current;
-      if (await persistCurrentDraft(false, false, true)) {
-        await recovery.complete(original);
+      action = captureComposeAction();
+      finishingActionRef.current = action;
+      if (
+        (await persistCurrentDraft(false, false, true)) &&
+        isCurrentComposeAction(action) &&
+        activeDraftRef.current.assistantUnsaved !== true
+      ) {
+        await recovery.complete(
+          original,
+          () =>
+            isCurrentComposeAction(action) &&
+            activeDraftRef.current.assistantUnsaved !== true
+        );
+        if (
+          !isCurrentComposeAction(action) ||
+          Object.is(activeDraftRef.current.assistantUnsaved, true)
+        ) {
+          return;
+        }
         closeDialog();
       }
     } finally {
-      finishingRef.current = false;
-      setState((current) => ({ ...current, isFinishing: false }));
+      finishComposeAction(action);
     }
   };
 
@@ -1256,6 +1382,7 @@ export const useComposeDialogController = ({
     ) {
       return await existing.promise;
     }
+    finishingActionRef.current = null;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     const task: HeldTask = {
@@ -1461,65 +1588,64 @@ export const useComposeDialogController = ({
     return await task.promise;
   };
 
-  const applyHeldReceipt = useEffectEvent(
-    async (receipt: ComposeHeldReceipt) => {
-      const { current } = activeDraftRef;
-      if (
-        !mountedRef.current ||
-        draftClosedRef.current ||
-        mailboxId !== receipt.mailboxId ||
-        current.localId !== receipt.draftId ||
-        current.sendOperationId !== receipt.sendOperationId
-      ) {
-        return;
-      }
-      if (heldTaskRef.current !== null) {
-        if (receipt.status === "accepted" || receipt.status === "canceled") {
-          const result = await heldTaskRef.current.promise;
-          if (result.kind === "failed") {
-            throw result.error;
-          }
-        }
-        return;
-      }
-      if (
-        heldTerminalRef.current?.sendOperationId === receipt.sendOperationId &&
-        receipt.status !== "accepted" &&
-        receipt.status !== "canceled"
-      ) {
-        return;
-      }
-      const snapshot = cloneComposeDraft(buildDraftFromForm(form.state.values));
-      setDraft({
-        ...snapshot,
-        heldDraftHasNewerEdits:
-          current.heldDraftHasNewerEdits === true ||
-          draftRevisionRef.current !== receipt.draftRevision,
-        holdAttempt: true,
-        saveStatus: "idle",
-        sendUncertain: true,
-      });
-      recovery.checkpoint();
-      void queryClient.invalidateQueries({
-        queryKey: orpc.mail.getHeldSend.queryOptions({
-          input: {
-            mailboxId: receipt.mailboxId,
-            sendOperationId: receipt.sendOperationId,
-          },
-        }).queryKey,
-      });
+  const receiveHeldReceipt = async (receipt: ComposeHeldReceipt) => {
+    const { current } = activeDraftRef;
+    if (
+      !mountedRef.current ||
+      draftClosedRef.current ||
+      currentMailboxIdRef.current !== receipt.mailboxId ||
+      current.localId !== receipt.draftId ||
+      current.sendOperationId !== receipt.sendOperationId
+    ) {
+      return;
+    }
+    if (heldTaskRef.current !== null) {
       if (receipt.status === "accepted" || receipt.status === "canceled") {
-        const result = await finishHeldOperation(
-          receipt.status === "accepted"
-            ? { kind: "accepted" }
-            : { draftId: receipt.restoredDraftId, kind: "canceled" }
-        );
+        const result = await heldTaskRef.current.promise;
         if (result.kind === "failed") {
           throw result.error;
         }
       }
+      return;
     }
-  );
+    if (
+      heldTerminalRef.current?.sendOperationId === receipt.sendOperationId &&
+      receipt.status !== "accepted" &&
+      receipt.status !== "canceled"
+    ) {
+      return;
+    }
+    const snapshot = cloneComposeDraft(buildDraftFromForm(form.state.values));
+    setDraft({
+      ...snapshot,
+      heldDraftHasNewerEdits:
+        current.heldDraftHasNewerEdits === true ||
+        draftRevisionRef.current !== receipt.draftRevision,
+      holdAttempt: true,
+      saveStatus: "idle",
+      sendUncertain: true,
+    });
+    recovery.checkpoint();
+    void queryClient.invalidateQueries({
+      queryKey: orpc.mail.getHeldSend.queryOptions({
+        input: {
+          mailboxId: receipt.mailboxId,
+          sendOperationId: receipt.sendOperationId,
+        },
+      }).queryKey,
+    });
+    if (receipt.status === "accepted" || receipt.status === "canceled") {
+      const result = await finishHeldOperation(
+        receipt.status === "accepted"
+          ? { kind: "accepted" }
+          : { draftId: receipt.restoredDraftId, kind: "canceled" }
+      );
+      if (result.kind === "failed") {
+        throw result.error;
+      }
+    }
+  };
+  const applyHeldReceipt = useEffectEvent(receiveHeldReceipt);
 
   const restoreHeldMessage = async () => {
     await finishHeldOperation({ kind: "undo" });
@@ -1545,6 +1671,8 @@ export const useComposeDialogController = ({
       recovery.checkpoint();
       return;
     }
+    const action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     try {
@@ -1553,13 +1681,7 @@ export const useComposeDialogController = ({
           mailboxId,
           sendOperationId: draft.sendOperationId,
         });
-        if (
-          !mountedRef.current ||
-          draftClosedRef.current ||
-          currentMailboxIdRef.current !== mailboxId ||
-          activeDraftRef.current.localId !== draft.localId ||
-          activeDraftRef.current.sendOperationId !== draft.sendOperationId
-        ) {
+        if (!isCurrentComposeAction(action, { allowUncertain: true })) {
           return;
         }
         if (held !== null) {
@@ -1586,6 +1708,9 @@ export const useComposeDialogController = ({
           draft: buildDraftFromForm(form.state.values),
           mailboxId,
         });
+        if (!isCurrentComposeAction(action, { allowUncertain: true })) {
+          return;
+        }
         if (recovered.status === "editable") {
           setDraft(recovered.draft);
           recovery.checkpoint();
@@ -1602,6 +1727,9 @@ export const useComposeDialogController = ({
         mailboxId,
         sendOperationId: draft.sendOperationId,
       });
+      if (!isCurrentComposeAction(action, { allowUncertain: true })) {
+        return;
+      }
       if (delivery.status === "sent") {
         closeDialog();
         try {
@@ -1628,8 +1756,14 @@ export const useComposeDialogController = ({
             mailboxId,
             buildDraftFromForm(form.state.values)
           );
+          if (!isCurrentComposeAction(action)) {
+            return;
+          }
           form.setFieldValue("bodyHtml", prepared.bodyHtml);
         } catch (error) {
+          if (!isCurrentComposeAction(action)) {
+            return;
+          }
           setDraft((current) => ({
             ...current,
             errorMessage:
@@ -1649,17 +1783,18 @@ export const useComposeDialogController = ({
         recovery.checkpoint();
       }
     } catch (error) {
-      toastError(error, {
-        boundary: draft.scheduleAttempt
-          ? "compose-check-schedule"
-          : "compose-check-delivery",
-        fallback: draft.scheduleAttempt
-          ? "Could not confirm the schedule. Please try again."
-          : "Could not check delivery. Please try again.",
-      });
+      if (isCurrentComposeAction(action, { allowUncertain: true })) {
+        toastError(error, {
+          boundary: draft.scheduleAttempt
+            ? "compose-check-schedule"
+            : "compose-check-delivery",
+          fallback: draft.scheduleAttempt
+            ? "Could not confirm the schedule. Please try again."
+            : "Could not check delivery. Please try again.",
+        });
+      }
     } finally {
-      finishingRef.current = false;
-      setState((current) => ({ ...current, isFinishing: false }));
+      finishComposeAction(action);
     }
   };
 
@@ -1848,14 +1983,21 @@ export const useComposeDialogController = ({
 
   const discardActiveDraft = async () => {
     if (
+      activeDraftRef.current.sendUncertain === true ||
       activeDraftRef.current.saveStatus === "sending" ||
       finishingRef.current
     ) {
       return;
     }
+    const action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     await savingRef.current;
+    if (!isCurrentComposeAction(action)) {
+      finishComposeAction(action);
+      return;
+    }
     const draft = activeDraftRef.current;
     setDraft({ ...draft, saveStatus: "saving" });
     try {
@@ -1874,14 +2016,19 @@ export const useComposeDialogController = ({
         }
       }
     } catch (error) {
-      setDraft({
-        ...draft,
-        errorMessage: "Your draft could not be deleted. Please try again.",
-        saveStatus: "error",
-      });
-      toastError(error, { boundary: "compose-discard" });
-      finishingRef.current = false;
-      setState((current) => ({ ...current, isFinishing: false }));
+      if (isCurrentComposeAction(action)) {
+        setDraft({
+          ...draft,
+          errorMessage: "Your draft could not be deleted. Please try again.",
+          saveStatus: "error",
+        });
+        toastError(error, { boundary: "compose-discard" });
+      }
+      return;
+    } finally {
+      finishComposeAction(action);
+    }
+    if (!isCurrentComposeAction(action)) {
       return;
     }
     clearComposeDraftRuntimeFiles(draft);
@@ -1931,12 +2078,17 @@ export const useComposeDialogController = ({
     ) {
       return;
     }
+    const action = captureComposeAction();
+    finishingActionRef.current = action;
     finishingRef.current = true;
     actionRunningRef.current = true;
     setState((current) => ({ ...current, isFinishing: true }));
     let prepared: ComposeDraftState | null = null;
     try {
       await savingRef.current;
+      if (!isCurrentComposeAction(action)) {
+        return;
+      }
       const previous = previousActionRef.current;
       const quote = next.actionQuote;
       const replaceQuote =
@@ -1959,12 +2111,7 @@ export const useComposeDialogController = ({
           prepared = await prepareLoadedComposeDraft(mailboxId, prepared);
         }
       }
-      if (
-        !mountedRef.current ||
-        draftClosedRef.current ||
-        Object.is(activeDraftRef.current.sendUncertain, true) ||
-        queuedActionRef.current
-      ) {
+      if (!isCurrentComposeAction(action) || queuedActionRef.current) {
         return;
       }
       handleUserDraftChange();
@@ -2047,7 +2194,7 @@ export const useComposeDialogController = ({
       }));
       recovery.checkpoint();
     } catch (error) {
-      if (!queuedActionRef.current) {
+      if (isCurrentComposeAction(action) && !queuedActionRef.current) {
         toastError(error, {
           boundary: "compose-change-action",
           fallback:
@@ -2070,12 +2217,11 @@ export const useComposeDialogController = ({
           ),
         });
       }
-      finishingRef.current = false;
       actionRunningRef.current = false;
-      setState((value) => ({ ...value, isFinishing: false }));
+      finishComposeAction(action);
       const queued = queuedActionRef.current;
       queuedActionRef.current = null;
-      if (queued && mountedRef.current) {
+      if (queued && isCurrentComposeAction(action, { allowNewerEdits: true })) {
         void changeComposeAction(queued);
       }
     }

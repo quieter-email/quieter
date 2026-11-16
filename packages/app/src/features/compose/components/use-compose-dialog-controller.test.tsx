@@ -787,6 +787,290 @@ describe("compose controller", () => {
       }
     );
 
+    it("does not resume a waiting human Send after canonical Undo", async () => {
+      await mount({ ...initial(), draftId: "existing" }, true);
+      const pendingSave =
+        Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.saveDraft>>>();
+      boundary.saveDraft.mockReturnValueOnce(pendingSave.promise);
+      let saving: Promise<void> | undefined;
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        saving = controller.saveDraft();
+      });
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      expect(controller.state.draft.saveStatus).toBe("sending");
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+        await readCompose().applyHeldReceipt({
+          ...receipt,
+          restoredDraftId: "restored",
+          status: "canceled",
+        });
+      });
+      await act(async () => {
+        pendingSave.resolve({
+          ...canonicalDraft(),
+          baseRevision: "old-revision",
+          draftId: "existing",
+          messageId: "old-message",
+        });
+        await Promise.all([saving, sending]);
+      });
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(controller.state).toMatchObject({
+        draft: { draftId: "restored", sendUncertain: false },
+        open: true,
+      });
+      expect(controller.form.state.values.subject).toBe("Canonical");
+      expect(readCompose().read().sendOperationId).not.toBe(
+        receipt.sendOperationId
+      );
+    });
+
+    it("leaves an edited waiting Send editable for a fresh submission", async () => {
+      await mount({ ...initial(), draftId: "existing" }, true);
+      const pendingSave =
+        Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.saveDraft>>>();
+      boundary.saveDraft.mockReturnValueOnce(pendingSave.promise);
+      let saving: Promise<void> | undefined;
+      let sending: Promise<void> | undefined;
+      await flush(() => {
+        saving = controller.saveDraft();
+      });
+      await flush(() => {
+        sending = controller.form.handleSubmit();
+      });
+      await flush(() => {
+        controller.form.setFieldValue("subject", "Revised before sending");
+      });
+      await act(async () => {
+        pendingSave.resolve({
+          ...canonicalDraft(),
+          baseRevision: "old-revision",
+          draftId: "existing",
+          messageId: "old-message",
+        });
+        await Promise.all([saving, sending]);
+      });
+      expect(boundary.sendMessage).not.toHaveBeenCalled();
+      expect(controller.state.draft.saveStatus).toBe("idle");
+      expect(controller.state.draft.sendUncertain).not.toBeTruthy();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(boundary.sendMessage.mock.calls[0]?.[0]).toMatchObject({
+        message: { subject: "Revised before sending" },
+      });
+    });
+
+    it("retains newly held recovery when a waiting Close resumes", async () => {
+      await mount({ ...initial(), draftId: "existing" }, true);
+      const pendingSave =
+        Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.saveDraft>>>();
+      boundary.saveDraft.mockReturnValueOnce(pendingSave.promise);
+      let saving: Promise<void> | undefined;
+      let closing: Promise<void> | undefined;
+      await flush(() => {
+        saving = controller.saveDraft();
+      });
+      await flush(() => {
+        closing = controller.closeComposeDialog();
+      });
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+      });
+      await act(async () => {
+        pendingSave.resolve({
+          ...canonicalDraft(),
+          baseRevision: "old-revision",
+          draftId: "existing",
+          messageId: "old-message",
+        });
+        await Promise.all([saving, closing]);
+      });
+      expect(controller.state.open).toBeTruthy();
+      await vi.waitFor(async () => {
+        const records = await draftRecoveryJournal
+          .session("user", boundary.sessionId)
+          .list({ mailboxId: "mailbox", userId: "user" });
+        expect(
+          records.some((record) => {
+            const draft = restoreComposeDraft(record.payload, record.editorId);
+            return (
+              draft.sendOperationId === receipt.sendOperationId &&
+              draft.sendUncertain === true
+            );
+          })
+        ).toBeTruthy();
+      });
+    });
+
+    it("does not release a restoring held task when the old Close finishes", async () => {
+      await mount({ ...initial(), draftId: "existing" }, true);
+      const pendingSave =
+        Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.saveDraft>>>();
+      const pendingRestore =
+        Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.getDraft>>>();
+      boundary.saveDraft.mockReturnValueOnce(pendingSave.promise);
+      boundary.getDraft.mockReturnValueOnce(pendingRestore.promise);
+      let saving: Promise<void> | undefined;
+      let closing: Promise<void> | undefined;
+      let restoring: Promise<void> | undefined;
+      await flush(() => {
+        saving = controller.saveDraft();
+      });
+      await flush(() => {
+        closing = controller.closeComposeDialog();
+      });
+      const receipt = receiptFor();
+      await flush(() => {
+        restoring = readCompose().applyHeldReceipt({
+          ...receipt,
+          restoredDraftId: "restored",
+          status: "canceled",
+        });
+      });
+      await act(async () => {
+        pendingSave.resolve({
+          ...canonicalDraft(),
+          baseRevision: "old-revision",
+          draftId: "existing",
+          messageId: "old-message",
+        });
+        await Promise.all([saving, closing]);
+      });
+      expect(controller.state).toMatchObject({
+        draft: { sendUncertain: true },
+        isFinishing: true,
+        open: true,
+      });
+      await act(async () => {
+        pendingRestore.resolve(canonicalDraft());
+        await restoring;
+      });
+      expect(controller.state).toMatchObject({
+        draft: { draftId: "restored", sendUncertain: false },
+        isFinishing: false,
+        open: true,
+      });
+    });
+
+    it.each(["close", "navigate"])(
+      "does not let a waiting %s discard canonical edits after Undo",
+      async (action) => {
+        await mount({ ...initial(), draftId: "existing" }, true);
+        const pendingSave =
+          Promise.withResolvers<
+            Awaited<ReturnType<typeof rpc.mail.saveDraft>>
+          >();
+        boundary.saveDraft.mockReturnValueOnce(pendingSave.promise);
+        let saving: Promise<void> | undefined;
+        let finishing: Promise<unknown> | undefined;
+        await flush(() => {
+          saving = controller.saveDraft();
+        });
+        await flush(() => {
+          finishing =
+            action === "close"
+              ? controller.closeComposeDialog()
+              : boundary.navigate?.();
+        });
+        const receipt = receiptFor();
+        await act(async () => {
+          await readCompose().applyHeldReceipt(receipt);
+          await controller.restoreHeldMessage();
+        });
+        await flush(() => {
+          controller.form.setFieldValue("subject", "New canonical edits");
+          window.dispatchEvent(new Event("pagehide"));
+        });
+        let blocked: unknown;
+        await act(async () => {
+          pendingSave.resolve({
+            ...canonicalDraft(),
+            baseRevision: "old-revision",
+            draftId: "existing",
+            messageId: "old-message",
+          });
+          await saving;
+          blocked = await finishing;
+        });
+        expect(controller.state).toMatchObject({
+          draft: { draftId: "restored", sendUncertain: false },
+          open: true,
+        });
+        expect(controller.form.state.values.subject).toBe(
+          "New canonical edits"
+        );
+        expect(blocked).toBe(action === "navigate" ? true : undefined);
+        await vi.waitFor(async () => {
+          const records = await draftRecoveryJournal
+            .session("user", boundary.sessionId)
+            .list({ mailboxId: "mailbox", userId: "user" });
+          expect(
+            records.some(
+              (record) =>
+                restoreComposeDraft(record.payload, record.editorId).subject ===
+                "New canonical edits"
+            )
+          ).toBeTruthy();
+        });
+      }
+    );
+
+    it("does not transfer the former operation after sender files finish loading", async () => {
+      await mount({
+        ...initial(),
+        assistantUnsaved: true,
+        attachments: [
+          {
+            gmailAttachmentId: "provider-attachment",
+            id: "notes",
+            isInline: false,
+            mimeType: "text/plain",
+            name: "notes.txt",
+            size: 5,
+            sourceMessageId: "provider-message",
+          },
+        ],
+      });
+      const pendingFile =
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getAttachment>>
+        >();
+      boundary.getAttachment.mockReturnValueOnce(pendingFile.promise);
+      let transfer:
+        | ReturnType<ComposeDialogController["prepareSenderSwitch"]>
+        | undefined;
+      await flush(() => {
+        transfer = controller.prepareSenderSwitch();
+      });
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receiptFor());
+        await controller.restoreHeldMessage();
+      });
+      await flush(() => {
+        controller.form.setFieldValue("subject", "Current sender work");
+      });
+      await act(async () => {
+        pendingFile.resolve({
+          attachmentId: "provider-attachment",
+          file: new File(["notes"], "notes.txt", { type: "text/plain" }),
+          size: 5,
+        });
+        await expect(transfer).resolves.toBeNull();
+      });
+      expect(controller.state).toMatchObject({
+        draft: { draftId: "restored", sendUncertain: false },
+        open: true,
+      });
+      expect(controller.form.state.values.subject).toBe("Current sender work");
+    });
+
     it("ignores a saved-tool receipt submitted before canonical Undo", async () => {
       await mount();
       const submitted = readCompose().read();
