@@ -850,6 +850,7 @@ const main = async (): Promise<void> => {
     const packageFiles = await command("espeak-package-files", "dpkg-query", [
       "-L",
       "speech-dispatcher-espeak-ng",
+      "speech-dispatcher",
     ]);
     const moduleFiles = packageFiles.split("\n");
     const modulePath = moduleFiles.find((file) =>
