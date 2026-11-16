@@ -1,6 +1,9 @@
 name: J122 AT compatibility
 
 on:
+  push:
+    branches: [feat/quieter-122-at-runner-probe]
+    paths: [.github/workflows/j122-at-compatibility.yml]
   pull_request:
     types: [labeled]
 
@@ -9,20 +12,38 @@ permissions:
   actions: read
 
 concurrency:
-  group: j122-at-${{ github.event.pull_request.number }}
+  group: j122-at-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: false
 
 jobs:
+  startup-preflight:
+    if: >-
+      github.event_name == 'push' && github.ref == 'refs/heads/feat/quieter-122-at-runner-probe' && github.run_attempt == 1
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Set the evidence path
+        shell: bash
+        run: |
+          J122_EVIDENCE="$RUNNER_TEMP/j122-at-evidence"
+          printf 'J122_EVIDENCE=%s\n' "$J122_EVIDENCE" >> "$GITHUB_ENV"
+      - name: Verify the exported evidence path
+        shell: bash
+        run: test "$J122_EVIDENCE" = "$RUNNER_TEMP/j122-at-evidence"
   linux-at:
     if: >-
-      github.run_attempt == 1 && github.event.label.name == 'j122-at-approved' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/quieter-122-at-runner-probe' && github.event.pull_request.base.ref == 'feat/quieter-145-installed-candidate'
+      github.event_name == 'pull_request' && github.run_attempt == 1 && github.event.label.name == 'j122-at-approved' && github.event.pull_request.head.repo.full_name == github.repository && github.event.pull_request.head.ref == 'feat/quieter-122-at-runner-probe' && github.event.pull_request.base.ref == 'feat/quieter-145-installed-candidate'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
       J122_REVISION: ${{ github.event.pull_request.head.sha }}
-      J122_EVIDENCE: ${{ runner.temp }}/j122-at-evidence
       J122_UNIT: j122-at-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
+      - name: Set the evidence path
+        shell: bash
+        run: |
+          J122_EVIDENCE="$RUNNER_TEMP/j122-at-evidence"
+          printf 'J122_EVIDENCE=%s\n' "$J122_EVIDENCE" >> "$GITHUB_ENV"
       - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.pull_request.head.sha }}
