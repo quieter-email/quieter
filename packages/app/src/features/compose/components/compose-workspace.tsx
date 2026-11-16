@@ -127,6 +127,7 @@ import {
   useRef,
   useState,
 } from "react";
+import type { KeyboardEvent } from "react";
 
 import { HeldSendNotice } from "./held-send-notice";
 
@@ -202,6 +203,17 @@ const composeRecipientMotion = {
   transition: { duration: 0.16, ease: "easeOut" },
 } as const;
 
+const handleComposeHeaderKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+  // Safari may clear isComposing before the IME confirmation key event.
+  // oxlint-disable-next-line typescript/no-deprecated
+  if (event.nativeEvent.isComposing || event.keyCode === 229) {
+    return;
+  }
+  if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
+    event.preventDefault();
+  }
+};
+
 const ComposeFormField = ({
   handleUserDraftChange,
   disabled,
@@ -222,6 +234,7 @@ const ComposeFormField = ({
             aria-invalid={!!error}
             chrome="composer"
             disabled={disabled}
+            onKeyDown={handleComposeHeaderKeyDown}
             onBlur={() => {
               field.handleBlur();
             }}
@@ -1165,6 +1178,7 @@ const ReadyComposeSurface = ({
                                 chrome="composer"
                                 data-compose-recipient-field
                                 disabled={!canEditBody}
+                                onKeyDown={handleComposeHeaderKeyDown}
                                 placeholder="Add recipients"
                                 onBlur={() => {
                                   recipientField.handleBlur();
