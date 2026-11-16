@@ -67,6 +67,7 @@ const toAutomationMessage = (
       MAILBOX_LABELS.inbox,
       ...(message.isRead ? [] : [MAILBOX_LABELS.unread]),
     ],
+    done: message.isRead ? [] : [MAILBOX_LABELS.unread],
     draft: [MAILBOX_LABELS.drafts],
     spam: [MAILBOX_LABELS.spam],
     trash: [MAILBOX_LABELS.trash],
