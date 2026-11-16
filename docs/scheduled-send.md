@@ -30,6 +30,18 @@ The callback wait runs outside the Durable Object's short state gates and allows
 
 If the original draft disappears during transfer, scheduling stops for review and keeps the saved message. This also covers a crash after deleting the draft but before recording that deletion. Cancel the failed schedule to restore a draft before trying again. A missing draft cannot prove whether another mail client sent it.
 
+## Assistant-held drafts
+
+The composer bridge accepts held-send receipts separately from saved-draft receipts. A held receipt carries the current mailbox, the composer's local draft identity and revision, and its permanent send operation ID. The restored draft ID identifies the server draft returned by cancellation. It never replaces the local identity used to match receipts.
+
+The existing held-send query owns status, the deadline and `canUndo`. Receipt admission freezes the matching composer without replacing its visible content. Repeated updates for the same operation remain valid after local revision changes. Successful cancellation loads and prepares the complete restored draft before making the composer editable with a fresh operation ID. A canceled result without an available restored draft stays read-only for retry. A definitively abandoned, never-admitted operation restores its local snapshot instead.
+
+Actions waiting for a save or attachment loading retain their original draft identity and revision. They recheck ownership before sending, closing, navigating or changing senders. Undo invalidates those continuations so an older Send cannot resume with the restored draft's new operation ID.
+
+If visible edits raced the assistant's send request, the held recovery record retains that fact. Those edits stay under the original uncertainty fence while delivery is pending. After authoritative cancellation or acceptance, the composer saves a separate local recovery copy before replacing or closing the held draft. The copy has a stable identity derived from the original operation, so retrying preservation does not overwrite a newer recovery copy. Storage ownership or persistence failures keep the original visible draft available for retry.
+
+Assistant proposals remain local until explicit human Save draft or Send intent. Typing, reminders, autosave, closing, navigation and sender transfer preserve proposal ownership. They do not implicitly save or delete its server draft. A later assistant edit reasserts this protection even if an earlier save completes. Local recovery remains scoped to its current user, session and mailbox.
+
 ## Local development
 
 Use the standard development setup and start the web application and local background worker with `vp run dev:full`. The ignored worker bindings include `BETTER_AUTH_URL` and the development live-update signing secret. Keep the configured web origin aligned with the port running the application. The local worker exports the same `ScheduledSend` Durable Object and uses persisted local alarms.

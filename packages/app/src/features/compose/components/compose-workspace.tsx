@@ -22,7 +22,10 @@ import {
   getDraftStatusMessage,
   useComposeDialogController,
 } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
-import type { ComposeDialogController } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
+import type {
+  ComposeDialogController,
+  PreparedComposeSenderSwitch,
+} from "@quieter/app/features/compose/components/use-compose-dialog-controller";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
   appendComposeSignature,
@@ -165,8 +168,12 @@ export type ComposeSurfaceProps = {
     mailboxId: string,
     currentDraft: ComposeDraftState,
     transferDraft: ComposeDraftState,
-    hasAuthoredContent: boolean
-  ) => Promise<void> | void;
+    hasAuthoredContent: boolean,
+    handoff: Pick<
+      PreparedComposeSenderSwitch,
+      "completeSenderSwitch" | "isCurrent"
+    >
+  ) => Promise<boolean>;
   persistDrafts?: boolean;
   senderEmail?: string | null;
   senderMailbox?: ComposeSenderMailbox | null;
@@ -544,12 +551,12 @@ const ReadyComposeSurface = ({
       return;
     }
     setSwitchingSender(true);
-    let preparedTransfer: ComposeDraftState | null = null;
+    let prepared: PreparedComposeSenderSwitch | null = null;
     let senderTransferred = false;
     try {
       const drafts = await compose.prepareSenderSwitch(senderUnavailable);
       if (drafts) {
-        preparedTransfer = drafts.transferDraft;
+        prepared = drafts;
         const nextSender = senderMailboxes?.find(
           (sender) => sender.id === nextMailboxId
         );
@@ -590,27 +597,28 @@ const ReadyComposeSurface = ({
           text: nextSender?.signatureText ?? null,
         });
         compose.allowSenderRouteChange(nextMailboxId);
-        await onSenderSwitch?.(
-          nextMailboxId,
-          drafts.currentDraft,
-          transferDraft,
-          hasAuthoredContent
-        );
-        senderTransferred = true;
-        await compose.completeSenderSwitch();
-      } else {
-        setSwitchingSender(false);
+        senderTransferred =
+          (await onSenderSwitch?.(
+            nextMailboxId,
+            drafts.currentDraft,
+            transferDraft,
+            hasAuthoredContent,
+            drafts
+          )) === true;
       }
     } catch (error) {
-      if (!senderTransferred && preparedTransfer) {
-        clearComposeDraftRuntimeFiles(preparedTransfer);
-      }
-      setSwitchingSender(false);
       toastError(error, {
         boundary: "compose-switch-sender",
         fallback: "Could not change the sending address. Please try again.",
       });
     } finally {
+      if (!senderTransferred) {
+        if (prepared) {
+          clearComposeDraftRuntimeFiles(prepared.transferDraft);
+        }
+        setSwitchingSender(false);
+      }
+      prepared?.release();
       compose.clearSenderRouteChange();
     }
   };
@@ -1489,6 +1497,20 @@ const ReadyComposeSurface = ({
                               shortcutId="compose-send"
                             />
                           </ToolbarButton>
+                          {state.draft.assistantUnsaved === true &&
+                          state.draft.sendUncertain !== true ? (
+                            <ToolbarButton
+                              disabled={
+                                !canEditBody || senderUnavailable || audioBusy
+                              }
+                              onClick={() => {
+                                void compose.saveDraft();
+                              }}
+                              type="button"
+                            >
+                              Save draft
+                            </ToolbarButton>
+                          ) : null}
                           <ComposeScheduleSend
                             disabled={
                               !canEditBody ||
@@ -1699,7 +1721,6 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     !!initialDraft &&
     demoMode !== true &&
     managedDemoMode !== true &&
-    props.initialDraftNeedsSave !== true &&
     (!!initialDraft.draftId ||
       [...initialDraft.attachments, ...initialDraft.inlineImages].some(
         (asset) => !!asset.gmailAttachmentId
@@ -1774,7 +1795,11 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       if (draft.sendUncertain === true) {
         return draft;
       }
-      if (seed.draftId) {
+      if (
+        seed.draftId &&
+        draft.assistantUnsaved !== true &&
+        props.initialDraftNeedsSave !== true
+      ) {
         const saved = await rpc.mail.getDraft(
           { draftId: seed.draftId, mailboxId },
           { signal }
@@ -1964,6 +1989,7 @@ export const ComposeWorkspace = ({
       ([sourceMailboxId, draft]) =>
         sourceMailboxId !== senderSession.mailboxId &&
         sourceMailboxId !== "" &&
+        draft.assistantUnsaved !== true &&
         (draft.draftId?.trim() ?? "") !== ""
     );
     cleanupPromiseRef.current = (async () => {
@@ -2044,38 +2070,46 @@ export const ComposeWorkspace = ({
           nextMailboxId,
           currentDraft,
           transferDraft,
-          hasAuthoredContent
+          hasAuthoredContent,
+          handoff
         ) => {
-          if (senderSession.mailboxId && selectedSender !== undefined) {
-            savedSenderDrafts.current.set(
-              senderSession.mailboxId,
-              currentDraft
-            );
-          }
           await onSwitchSenderMailbox?.(nextMailboxId);
-          const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
-          setSenderSession({
-            draft: savedDraft
-              ? {
-                  ...savedDraft,
-                  attachments: transferDraft.attachments,
-                  bodyHtml: transferDraft.bodyHtml,
-                  bodyText: transferDraft.bodyText,
-                  errorMessage: null,
-                  followUpReminder: transferDraft.followUpReminder,
-                  inlineImages: transferDraft.inlineImages,
-                  recipients: transferDraft.recipients,
-                  saveStatus: "idle",
-                  subject: transferDraft.subject,
-                  updatedAt: Date.now(),
-                }
-              : transferDraft,
-            mailboxId: nextMailboxId,
-            needsSave:
-              (savedDraft?.draftId?.trim() ?? "") !== "" || hasAuthoredContent,
-            senderEmail:
-              senderMailboxes?.find((sender) => sender.id === nextMailboxId)
-                ?.emailAddress ?? null,
+          if (!handoff.isCurrent()) {
+            return false;
+          }
+          return await handoff.completeSenderSwitch(() => {
+            if (senderSession.mailboxId && selectedSender !== undefined) {
+              savedSenderDrafts.current.set(
+                senderSession.mailboxId,
+                currentDraft
+              );
+            }
+            const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
+            setSenderSession({
+              draft: savedDraft
+                ? {
+                    ...savedDraft,
+                    assistantUnsaved: transferDraft.assistantUnsaved,
+                    attachments: transferDraft.attachments,
+                    bodyHtml: transferDraft.bodyHtml,
+                    bodyText: transferDraft.bodyText,
+                    errorMessage: null,
+                    followUpReminder: transferDraft.followUpReminder,
+                    inlineImages: transferDraft.inlineImages,
+                    recipients: transferDraft.recipients,
+                    saveStatus: "idle",
+                    subject: transferDraft.subject,
+                    updatedAt: Date.now(),
+                  }
+                : transferDraft,
+              mailboxId: nextMailboxId,
+              needsSave:
+                (savedDraft?.draftId?.trim() ?? "") !== "" ||
+                hasAuthoredContent,
+              senderEmail:
+                senderMailboxes?.find((sender) => sender.id === nextMailboxId)
+                  ?.emailAddress ?? null,
+            });
           });
         }}
         persistDrafts={persistDrafts}
