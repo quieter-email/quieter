@@ -4,6 +4,7 @@
   "type": "module",
   "exports": {
     ".": "./src/contracts.ts",
+    "./availability": "./src/availability.ts",
     "./time": "./src/time.ts",
     "./time-zones": "./src/time-zones.ts",
     "./recurrence": "./src/recurrence.ts"

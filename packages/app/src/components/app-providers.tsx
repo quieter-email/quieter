@@ -20,6 +20,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useLayoutEffect, useState } from "react";
 import type { PropsWithChildren } from "react";
 
+import { revokeMeetingProposals } from "../features/calendar/domain/meeting-proposals";
 import { AccountDateTimeProvider } from "../features/settings/components/account-date-time-provider";
 
 const SessionQueryProvider = ({
@@ -69,6 +70,7 @@ const SessionQueryProvider = ({
       unbind();
       unbindCalendar();
       disposeMailMutations(queryClient);
+      revokeMeetingProposals(userId);
       queryClient.clear();
     };
   }, [queryClient, sessionId, sessionUnresolved, userId]);
