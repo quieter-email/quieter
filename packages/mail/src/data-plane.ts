@@ -1,6 +1,7 @@
 import { z } from "zod";
 
 import type { MailSnoozeState } from "./snooze";
+import type { MailUndoOffer } from "./undo";
 
 export const mailCategorySchema = z.enum([
   "inbox",
@@ -94,6 +95,7 @@ export type MailMutationTargetResult = {
 
 export type MailMutationResult = {
   targets: MailMutationTargetResult[];
+  undoOffer?: MailUndoOffer;
   syncToken?: MailSyncToken;
   confirmedThreadSummaries?: MailThreadSummary[];
   badgeDelta?: Partial<Record<MailCategory, number>>;
