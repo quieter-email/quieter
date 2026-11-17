@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./correspondent-history": "./src/correspondent-history.ts",
     "./reminders": "./src/reminders.ts",
     "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
