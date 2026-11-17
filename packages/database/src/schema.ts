@@ -21,6 +21,7 @@ import type { ScheduledSendStatus } from "@quieter/mail/scheduled-send";
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  bigserial,
   boolean,
   check,
   doublePrecision,
@@ -124,7 +125,12 @@ export type GmailUsefulDetailFeedbackSignal = "not_useful" | "useful";
 export type MailAutomationAgent = "auto_label" | "useful_detail";
 export type MailAutoLabelFeedbackSignal = "added" | "removed";
 export type ManagedMailDirection = "inbound" | "outbound";
-export type ManagedMailMailboxState = "active" | "draft" | "spam" | "trash";
+export type ManagedMailMailboxState =
+  | "active"
+  | "done"
+  | "draft"
+  | "spam"
+  | "trash";
 export type ManagedMailRawObjectProvider = "r2" | "s3";
 export type ManagedMailLabelAssignmentSource =
   | "ai_auto_label"
@@ -1731,6 +1737,83 @@ export const gmailUsefulDetailFeedback = pgTable(
   ]
 );
 
+export const mailPlacementOperation = pgTable(
+  "mailPlacementOperation",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    messageIds: jsonb("messageIds").$type<string[]>().notNull(),
+    placement: text("placement").$type<"done" | "inbox">().notNull(),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    requestedMessageIds: jsonb("requestedMessageIds")
+      .$type<string[]>()
+      .notNull(),
+    sequence: bigserial("sequence", { mode: "number" }).notNull().unique(),
+    status: text("status")
+      .$type<
+        | "pending"
+        | "submitting"
+        | "applied"
+        | "failed"
+        | "uncertain"
+        | "superseded"
+      >()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("mail_placement_operation_request_unique").on(
+      table.actorUserId,
+      table.mailboxId,
+      table.requestId,
+      table.threadId
+    ),
+    index("mail_placement_operation_thread_sequence_idx").on(
+      table.mailboxId,
+      table.threadId,
+      table.sequence
+    ),
+    check(
+      "mail_placement_operation_placement_check",
+      sql`${table.placement} in ('done', 'inbox')`
+    ),
+    check(
+      "mail_placement_operation_status_check",
+      sql`${table.status} in ('pending', 'submitting', 'applied', 'failed', 'uncertain', 'superseded')`
+    ),
+  ]
+);
+
+export const mailboxAiAuthority = pgTable(
+  "mailboxAiAuthority",
+  {
+    automationPaused: boolean("automationPaused").notNull().default(false),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    readOnly: boolean("readOnly").notNull().default(false),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    version: integer("version").notNull().default(0),
+  },
+  (table) => [
+    check("mailbox_ai_authority_version_check", sql`${table.version} >= 0`),
+  ]
+);
+
 export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
   autoLabelEnabled: boolean("autoLabelEnabled").notNull().default(false),
   createdAt: timestamp("createdAt").notNull(),
@@ -2397,7 +2480,7 @@ export const managedMailMessage = pgTable(
     ),
     check(
       "managed_mail_message_mailbox_state_check",
-      sql`${table.mailboxState} in ('active', 'draft', 'spam', 'trash')`
+      sql`${table.mailboxState} in ('active', 'done', 'draft', 'spam', 'trash')`
     ),
     check(
       "managed_mail_message_raw_object_provider_check",
@@ -4109,6 +4192,7 @@ export const tables = {
   mailDomainConnectAttempt,
   mailImportanceAttempt,
   mailMessageImportance,
+  mailPlacementOperation,
   mailSnippet,
   mailbox,
   mailboxAction,
