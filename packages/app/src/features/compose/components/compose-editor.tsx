@@ -13,9 +13,15 @@ import {
   TextStrikethroughIcon,
   TextUnderlineIcon,
 } from "@hugeicons/core-free-icons";
-import { buildComposeCommands } from "@quieter/app/features/compose/domain/compose-commands";
+import { getComposeTextFromHtml } from "@quieter/app/features/compose/domain/compose-action-quote";
+import {
+  buildComposeCommands,
+  insertComposeSnippet,
+} from "@quieter/app/features/compose/domain/compose-commands";
 import { normalizeComposeBodyHtml } from "@quieter/app/features/compose/domain/draft";
 import { SlashCommands } from "@quieter/app/features/compose/domain/slash-commands";
+import { resolveSnippetVariables } from "@quieter/mail/compose/schema";
+import type { SnippetContextValues } from "@quieter/mail/compose/schema";
 import type { VisualEmailDocument } from "@quieter/mail/visual-email";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -66,6 +72,21 @@ import {
 import type { ReactNode, Ref } from "react";
 
 import { ComposeImage } from "../domain/compose-image";
+import { InsertSnippetDialog } from "./insert-snippet-dialog";
+
+type ComposeSnippetContext = {
+  mailboxId: string | null;
+  scopeKey: string;
+  values: SnippetContextValues;
+};
+
+type SnippetReview = {
+  context: ComposeSnippetContext;
+  document: Editor["state"]["doc"];
+  editor: Editor;
+  range: Range;
+  source: string;
+};
 
 const ComposeQuote = Extension.create({
   addGlobalAttributes() {
@@ -108,6 +129,8 @@ type ComposeEditorProps = {
   onCreateSnippet?: (text: string) => void;
   onManageSnippets?: () => void;
   onSlashMenuOpenChange?: (open: boolean) => void;
+  getSnippetContext?: () => ComposeSnippetContext;
+  onSnippetReviewOpenChange?: (open: boolean) => void;
   onRecordingStart?: () => void;
   onRecordingStop?: () => void;
   onRecordingCancel?: () => void;
@@ -120,6 +143,7 @@ type ComposeEditorProps = {
 };
 
 export type ComposeEditorHandle = {
+  getElement: () => HTMLElement | null;
   getDocument: () => unknown;
   normalizeHtml: (html: string) => string;
   getTextFromHtml: (html: string) => string;
@@ -168,6 +192,8 @@ export const ComposeEditor = ({
   onCreateSnippet,
   onManageSnippets,
   onSlashMenuOpenChange,
+  getSnippetContext,
+  onSnippetReviewOpenChange,
   onRecordingStart,
   onRecordingStop,
   onRecordingCancel,
@@ -181,22 +207,31 @@ export const ComposeEditor = ({
   const imageInputRef = useRef<HTMLInputElement | null>(null);
   const [linkRange, setLinkRange] = useState<Range | null>(null);
   const [linkUrl, setLinkUrl] = useState("");
+  const [snippetReview, setSnippetReview] = useState<SnippetReview | null>(
+    null
+  );
   const commandOptions = useRef({
+    getSnippetContext,
     onCreateSnippet,
     onManageSnippets,
     onSlashMenuOpenChange,
+    onSnippetReviewOpenChange,
     snippetStatus,
     snippets,
   });
   useEffect(() => {
     commandOptions.current = {
+      getSnippetContext,
       onCreateSnippet,
       onManageSnippets,
       onSlashMenuOpenChange,
+      onSnippetReviewOpenChange,
       snippetStatus,
       snippets,
     };
   }, [
+    getSnippetContext,
+    onSnippetReviewOpenChange,
     snippets,
     snippetStatus,
     onCreateSnippet,
@@ -232,6 +267,26 @@ export const ComposeEditor = ({
             onInsertLink: (range) => {
               setLinkUrl("");
               setLinkRange(range);
+            },
+            onInsertSnippet: (targetEditor, range, source) => {
+              const context = commandOptions.current.getSnippetContext?.() ?? {
+                mailboxId: null,
+                scopeKey: "",
+                values: {},
+              };
+              const resolved = resolveSnippetVariables(source, context.values);
+              if (resolved.fields.length === 0) {
+                insertComposeSnippet(targetEditor, range, resolved.text);
+                return;
+              }
+              setSnippetReview({
+                context,
+                document: targetEditor.state.doc,
+                editor: targetEditor,
+                range,
+                source,
+              });
+              commandOptions.current.onSnippetReviewOpenChange?.(true);
             },
             onManageSnippets: commandOptions.current.onManageSnippets,
             query,
@@ -282,6 +337,7 @@ export const ComposeEditor = ({
   useImperativeHandle(ref, () => ({
     getDocument: () =>
       editor ? { content: editor.getJSON(), version: 1 } : null,
+    getElement: () => editor?.view.dom ?? null,
     getTextFromHtml: (value) => {
       if (!editor) {
         return (
@@ -289,11 +345,7 @@ export const ComposeEditor = ({
             .textContent ?? ""
         );
       }
-      const content = createNodeFromContent(value, editor.schema, {
-        slice: false,
-      });
-      const size = "type" in content ? content.content.size : content.size;
-      return content.textBetween(0, size, "\n\n");
+      return getComposeTextFromHtml(value, editor.schema);
     },
     insertHtml: (nextHtml) => {
       editor?.chain().focus().insertContent(nextHtml).run();
@@ -419,6 +471,41 @@ export const ComposeEditor = ({
         ref={imageInputRef}
         type="file"
       />
+      {snippetReview ? (
+        <InsertSnippetDialog
+          source={snippetReview.source}
+          context={snippetReview.context.values}
+          editorElement={snippetReview.editor.view.dom}
+          onCancel={() => {
+            setSnippetReview(null);
+            onSnippetReviewOpenChange?.(false);
+          }}
+          onInsert={(text) => {
+            const currentContext = getSnippetContext?.() ?? {
+              mailboxId: null,
+              scopeKey: "",
+              values: {},
+            };
+            if (
+              snippetReview.editor.isDestroyed ||
+              !snippetReview.editor.isEditable ||
+              !snippetReview.editor.state.doc.eq(snippetReview.document) ||
+              JSON.stringify(currentContext) !==
+                JSON.stringify(snippetReview.context)
+            ) {
+              return "This draft or its recipients changed. Cancel and insert the snippet again.";
+            }
+            insertComposeSnippet(
+              snippetReview.editor,
+              snippetReview.range,
+              text
+            );
+            setSnippetReview(null);
+            onSnippetReviewOpenChange?.(false);
+            return null;
+          }}
+        />
+      ) : null}
       <Dialog
         open={linkRange !== null}
         onOpenChange={(open) => {
