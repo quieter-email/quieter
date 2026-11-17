@@ -15,30 +15,7 @@ import {
 import path from "node:path";
 import { parseArgs } from "node:util";
 
-type SizeEntry =
-  | {
-      kind: "distribution";
-      path: string;
-      bytes: number;
-      sha256: string;
-    }
-  | {
-      kind: "unpacked-app";
-      path: string;
-      regularFileBytes: number;
-      files: number;
-      symlinksSkipped: number;
-    };
-
-type SizeReport = {
-  schemaVersion: 1;
-  sourceRevision: string;
-  sourceDirty: boolean;
-  packageVersion: string;
-  platform: NodeJS.Platform;
-  hostArchitecture: string;
-  entries: SizeEntry[];
-};
+import type { SizeEntry, SizeReport } from "./release-report.ts";
 
 const platformTargets = new Map<
   NodeJS.Platform,

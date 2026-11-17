@@ -33,8 +33,13 @@ jobs:
         id: sizes
         shell: bash
         run: vp run @quieter/desktop#release:size --revision "${{ github.sha }}" --github-output "$GITHUB_OUTPUT"
+      - name: Verify distribution integrity
+        shell: bash
+        run: vp run @quieter/desktop#release:verify --revision "${{ github.sha }}"
       - uses: actions/upload-artifact@v4
         with:
           name: quieter-${{ matrix.os }}
-          path: ${{ steps.sizes.outputs.artifact_paths }}
+          path: |
+            ${{ steps.sizes.outputs.artifact_paths }}
+            apps/desktop/release/release-integrity.json
           if-no-files-found: error

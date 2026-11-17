@@ -18,7 +18,8 @@
     "preview": "electron-vite preview",
     "package": "vp run build && electron-builder --dir",
     "dist": "vp run build && electron-builder --publish never",
-    "release:size": "node scripts/release-size.ts"
+    "release:size": "node scripts/release-size.ts",
+    "release:verify": "node scripts/verify-release.ts"
   },
   "devDependencies": {
     "@better-auth/core": "catalog:",
