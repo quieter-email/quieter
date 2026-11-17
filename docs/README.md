@@ -2,6 +2,7 @@
 
 - [Development](development.md)
 - [Electron desktop](desktop.md)
+- [Mobile MVP and delivery decision](mobile.md)
 - [Development integration plan](development-integrations.md)
 - [Architecture](architecture.md)
 - [AI trust boundaries](ai-security.md)
