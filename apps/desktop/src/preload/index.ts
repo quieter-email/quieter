@@ -9,11 +9,38 @@ import {
   signOutCleanupCommand,
 } from "../shared/bridge";
 import type { DesktopBridge } from "../shared/bridge";
+import { nativeMailIntentSchema } from "../shared/native-links";
 
 setupRenderer();
 
 contextBridge.exposeInMainWorld("quieterDesktop", {
   apiBaseURL: DESKTOP_APP_ORIGIN,
+  nativeLinks: {
+    onPending: (listener) => {
+      let active = true;
+      const receive = () => {
+        if (active) {
+          listener();
+        }
+      };
+      ipcRenderer.on("quieter:native-link-pending", receive);
+      void (async () => {
+        try {
+          await ipcRenderer.invoke("quieter:native-link-listen");
+        } catch {
+          receive();
+        }
+      })();
+      return () => {
+        active = false;
+        ipcRenderer.removeListener("quieter:native-link-pending", receive);
+      };
+    },
+    read: async (input) =>
+      nativeMailIntentSchema
+        .nullable()
+        .parse(await ipcRenderer.invoke("quieter:native-link-read", input)),
+  },
   onSignOutCleanup: (listener) => {
     const receive = async (
       _event: Electron.IpcRendererEvent,

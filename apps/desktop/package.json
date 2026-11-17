@@ -17,7 +17,8 @@
     "generate:icon": "node ../../scripts/generate-desktop-icon.ts",
     "preview": "electron-vite preview",
     "package": "vp run build && electron-builder --dir",
-    "dist": "vp run build && electron-builder --publish never"
+    "dist": "vp run build && electron-builder --publish never",
+    "test:native": "node scripts/native-smoke.ts"
   },
   "devDependencies": {
     "@better-auth/core": "catalog:",
@@ -52,6 +53,7 @@
     "electron-builder-squirrel-windows": "26.15.3",
     "electron-vite": "6.0.0",
     "motion": "catalog:",
+    "playwright-core": "1.65.1",
     "react": "catalog:",
     "react-dom": "catalog:",
     "typescript": "catalog:",
