@@ -1,7 +1,10 @@
 import { ORPCError } from "@orpc/server";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
-import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
+import type {
+  PreparedGmailMailboxIdentity,
+  runAuthorizedGmailMailbox,
+} from "../src/gmail-mailbox-access";
 import { callGmail } from "../src/gmail-request";
 
 const authorization = vi.hoisted(() => ({
@@ -12,10 +15,16 @@ const authorization = vi.hoisted(() => ({
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
   runAuthorizedGmailMailbox: async <T>(
     _input: Parameters<typeof runAuthorizedGmailMailbox>[0],
-    operation: (accessToken: string) => Promise<T>
+    operation: (
+      accessToken: string,
+      identity: PreparedGmailMailboxIdentity
+    ) => Promise<T>
   ) => {
     await authorization.beforeOperation();
-    const result = await operation("fixture-token");
+    const result = await operation("fixture-token", {
+      googleSubject: "subject",
+      mailboxId: "fixture-mailbox",
+    });
     await authorization.afterOperation();
     return result;
   },

@@ -31,11 +31,13 @@ import {
 } from "../connectors/microsoft-graph";
 import type { MicrosoftGraphAuth } from "../connectors/microsoft-graph";
 import { runAuthorizedConnector } from "../connectors/runtime";
+import type { MailEffectAssertion } from "../gmail-request";
 import {
   fromMicrosoftRecurrence,
   microsoftRecurrenceSchema,
   toMicrosoftRecurrence,
 } from "./microsoft-recurrence";
+import type { CalendarNativeLockPlan } from "./native-lock-plan";
 
 const emailSchema = z.object({
   address: z.string().optional(),
@@ -86,7 +88,14 @@ const eventSchema = z.object({
   webLink: z.string().optional(),
 });
 type MicrosoftEvent = z.infer<typeof eventSchema>;
-type UserRequest = { userId: string; signal?: AbortSignal };
+type UserRequest = {
+  authorityMailboxId?: string;
+  beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
+  prepareEffect?: () => Promise<void>;
+  userId: string;
+  signal?: AbortSignal;
+};
 type CalendarContext = MicrosoftGraphAuth &
   CalendarRef & { calendar: z.infer<typeof calendarSchema> };
 const prefer =
@@ -151,6 +160,9 @@ const toEvent = (
         endDate: event.end.dateTime.slice(0, 10),
         kind: "all-day",
         startDate: event.start.dateTime.slice(0, 10),
+        timeZone: event.originalStartTimeZone
+          ? originalZone
+          : resolveCalendarTimeZone(event.start.timeZone),
       }
     : {
         end: `${event.end.dateTime.replace(/Z$/u, "")}Z`,
@@ -265,7 +277,7 @@ const withCalendar = async <T>(
 ): Promise<T> =>
   await runAuthorizedConnector(
     { ...input, mutates, provider: "microsoft_calendar" },
-    async (accessToken, signal) => {
+    async (accessToken, signal, beforeEffect) => {
       const path =
         input.calendarId === "primary"
           ? "me/calendar"
@@ -286,6 +298,27 @@ const withCalendar = async <T>(
       }
       return await run({
         accessToken,
+        beforeEffect: mutates
+          ? async () => {
+              const currentResponse = await requestMicrosoftGraph({
+                accessToken,
+                path,
+                signal,
+              });
+              const current = calendarSchema.parse(
+                JSON.parse(
+                  await readBoundedMicrosoftContent(currentResponse, 64 * 1024)
+                )
+              );
+              if (!current.canEdit || current.id !== calendar.id) {
+                throw new ORPCError("FORBIDDEN", {
+                  message:
+                    "This calendar is read only. Choose a calendar you can edit.",
+                });
+              }
+              await beforeEffect?.();
+            }
+          : undefined,
         calendar,
         calendarId: calendar.id,
         connectionId: input.connectionId,

@@ -23,7 +23,8 @@ import { reportError } from "@quieter/observability";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { consumeRateLimit } from "../abuse-protection";
-import { callGmail } from "../gmail-request";
+import type { PreparedGmailMailboxIdentity } from "../gmail-mailbox-access";
+import { assertMailEffectAllowed, callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import {
   refreshGmailCapturedMessageMetadata,
@@ -34,6 +35,11 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 import type { MailInputs } from "./inputs";
 import { resolvePlacementMessageIds } from "./placement-model";
 import type { PlacementMessage } from "./placement-model";
+
+type PreparedPlacementGmail = {
+  accessToken: string;
+  gmailIdentity: PreparedGmailMailboxIdentity;
+};
 
 const authorizePlacement = async (
   context: MailRequestContext,
@@ -69,11 +75,9 @@ export const supersedePendingMailPlacement = async (input: {
       ? inArray(mailPlacementOperation.threadId, input.threadIds ?? [])
       : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::jsonb)`;
   await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
-      .from(mailbox)
-      .where(eq(mailbox.id, input.mailboxId))
-      .for("update");
+    await assertMailEffectAllowed(input.context, input.mailboxId, tx, {
+      providerWrite: false,
+    });
     await tx
       .update(mailPlacementOperation)
       .set({
@@ -498,9 +502,14 @@ export const applyMailPlacement = async ({
         });
         continue;
       }
-      const commit = async (accessToken?: string) =>
+      const commit = async (preparedGmail?: PreparedPlacementGmail) =>
         await db.transaction(async (tx) => {
           context.signal?.throwIfAborted();
+          const effectContext =
+            preparedGmail === undefined
+              ? context
+              : { ...context, gmailIdentity: preparedGmail.gmailIdentity };
+          await assertMailEffectAllowed(effectContext, input.mailboxId, tx);
           const lockedMessages =
             selected.provider === "managed" && messageIds.length > 0
               ? await tx
@@ -520,11 +529,6 @@ export const applyMailPlacement = async ({
                   .orderBy(asc(managedMailMessage.id))
                   .for("update")
               : [];
-          await tx
-            .select({ id: mailbox.id })
-            .from(mailbox)
-            .where(eq(mailbox.id, input.mailboxId))
-            .for("update");
           const [locked] = await tx
             .select()
             .from(mailPlacementOperation)
@@ -597,19 +601,26 @@ export const applyMailPlacement = async ({
               })
               .where(eq(mailbox.id, input.mailboxId));
           } else if (selected.provider === "gmail" && messageIds.length > 0) {
-            if (accessToken === undefined) {
+            if (preparedGmail === undefined) {
               throw new Error(
                 "Placement dispatch requires an authorized mailbox token."
               );
             }
-            dispatched = true;
             await batchModifyMessages(
-              accessToken,
+              preparedGmail.accessToken,
               messageIds,
               input.command.placement === "done"
                 ? { removeLabelIds: ["INBOX"] }
                 : { addLabelIds: ["INBOX"] },
-              context.signal
+              context.signal,
+              async () => {
+                await assertMailEffectAllowed(
+                  effectContext,
+                  input.mailboxId,
+                  tx
+                );
+                dispatched = true;
+              }
             );
           }
           const [completed] = await tx
@@ -632,7 +643,7 @@ export const applyMailPlacement = async ({
           ? await callGmail(
               context,
               input.mailboxId,
-              async (accessToken, signal) => {
+              async (accessToken, signal, _beforeEffect, gmailIdentity) => {
                 for (let offset = 0; offset < messageIds.length; offset += 4) {
                   signal?.throwIfAborted();
                   const metadata = await Promise.all(
@@ -664,7 +675,7 @@ export const applyMailPlacement = async ({
                   }
                 }
                 signal?.throwIfAborted();
-                return await commit(accessToken);
+                return await commit({ accessToken, gmailIdentity });
               }
             )
           : await commit();

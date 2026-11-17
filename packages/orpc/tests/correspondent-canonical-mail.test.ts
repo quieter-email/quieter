@@ -62,6 +62,7 @@ const fixtures = vi.hoisted(() => ({
   capture: vi.fn<typeof captureMailboxMessageMemory>(),
   databaseScope: vi.fn<typeof DatabaseClientModule.withRequestDatabaseClient>(),
   drafts: vi.fn<typeof listDraftsWithDetails>(),
+  guard: vi.fn<() => Promise<void>>().mockResolvedValue(),
   importantList: vi.fn<typeof listCapturedImportantMessages>(),
   list: vi.fn<typeof listMessagesWithDetails>(),
   organizationList: vi.fn<typeof listOrganizationApiMailMessages>(),
@@ -106,9 +107,12 @@ vi.mock(import("../src/gmail-compose"), () => ({
 }));
 vi.mock(import("../src/gmail-open-tracking"), () => ({}));
 vi.mock(import("../src/gmail-request"), () => ({
-  callGmail: async (_context, _mailboxId, operation) => {
+  callGmail: async (context, mailboxId, operation) => {
     fixtures.provider();
-    return await operation("fixture-token");
+    return await operation("fixture-token", context.signal, fixtures.guard, {
+      googleSubject: "fixture-google-subject",
+      mailboxId,
+    });
   },
 }));
 vi.mock(import("../src/mail-capture"), () => ({}));

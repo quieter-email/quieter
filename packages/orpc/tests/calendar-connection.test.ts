@@ -16,6 +16,11 @@ import {
 import { CALENDAR_SCOPES } from "../src/gmail-mailbox-access";
 
 const mocks = vi.hoisted(() => ({
+  credential: {
+    encryptedAccessToken: "gmail-access",
+    encryptedRefreshToken: "gmail-refresh",
+    googleSubject: "same-google-subject",
+  },
   decrypt: vi.fn<(encrypted: string) => string>(),
   legacyRows: [] as unknown[][],
   mailboxRows: [] as unknown[][],
@@ -29,7 +34,15 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { ...actual, db: drizzle(mocks.query) };
+  const database = drizzle(mocks.query);
+  return {
+    ...actual,
+    db: Object.assign(database, {
+      transaction: async <Result>(
+        run: (reader: typeof database) => Promise<Result>
+      ) => await run(database),
+    }),
+  };
 });
 vi.mock(import("../src/gmail-credential-crypto"), () => ({
   decryptGmailCredentialSecret: mocks.decrypt,
@@ -45,6 +58,11 @@ const input = { connectionId: "legacy-account", userId: "owner-1" };
 describe("Gmail calendar account authorization", () => {
   beforeEach(() => {
     mocks.decrypt.mockReset().mockImplementation((encrypted) => encrypted);
+    mocks.credential = {
+      encryptedAccessToken: "gmail-access",
+      encryptedRefreshToken: "gmail-refresh",
+      googleSubject: "same-google-subject",
+    };
     mocks.scopes = CALENDAR_SCOPES.join(" ");
     mocks.mailboxRows = [
       [
@@ -65,8 +83,30 @@ describe("Gmail calendar account authorization", () => {
       ],
     ];
     mocks.query.mockReset().mockImplementation(async (query, params) => {
+      if (query.startsWith('update "gmailCredential"')) {
+        mocks.credential.encryptedAccessToken = "encrypted-test";
+        return await Promise.resolve({ rows: [["mailbox-1"]] });
+      }
       if (query.startsWith("update")) {
         return await Promise.resolve({ rows: [["mailbox-1"]] });
+      }
+      if (query.includes('from "mailbox"') && query.includes("for update")) {
+        return await Promise.resolve({
+          rows: params.includes("mailbox-1") ? [["mailbox-1"]] : [],
+        });
+      }
+      if (query.includes('from "gmailCredential"')) {
+        return await Promise.resolve({
+          rows: params.includes("mailbox-1")
+            ? [
+                [
+                  mocks.credential.encryptedAccessToken,
+                  mocks.credential.encryptedRefreshToken,
+                  mocks.credential.googleSubject,
+                ],
+              ]
+            : [],
+        });
       }
       if (!params.includes(input.userId)) {
         return await Promise.resolve({ rows: [] });
@@ -80,8 +120,9 @@ describe("Gmail calendar account authorization", () => {
             [
               new Date("2099-01-01T00:00:00Z"),
               "current@example.test",
-              "gmail-access",
-              "gmail-refresh",
+              mocks.credential.encryptedAccessToken,
+              mocks.credential.encryptedRefreshToken,
+              mocks.credential.googleSubject,
               "mailbox-1",
               mocks.scopes,
               "connected",
@@ -210,12 +251,9 @@ describe("Gmail calendar account authorization", () => {
       ],
     });
     expect(mocks.decrypt.mock.calls[0]?.[0]).toBe("gmail-access");
-    expect(request).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({
-        headers: { authorization: "Bearer gmail-access" },
-      })
-    );
+    expect(
+      new Headers(request.mock.calls[0]?.[1]?.headers).get("authorization")
+    ).toBe("Bearer gmail-access");
     for (const [query] of mocks.query.mock.calls.filter(([sql]) =>
       sql.includes('from "connectorCredential"')
     )) {

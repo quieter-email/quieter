@@ -45,6 +45,8 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { assertMailEffectAllowed } from "../../gmail-request";
+import type { MailRequestContext } from "../../gmail-request";
 import { hydrateMailImportance } from "../../mail-importance";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
@@ -678,6 +680,7 @@ const resolveManagedMoveMailboxState = (
 };
 
 const updateManagedMessageState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
@@ -689,6 +692,11 @@ const updateManagedMessageState = async (input: {
     userId: input.userId,
   });
   const { record, customLabels } = await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const [lockedRecord] = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -742,6 +750,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
+  context?: MailRequestContext;
   command: Exclude<MailCommand, { kind: "set-importance" | "set-placement" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
@@ -765,6 +774,11 @@ export const applyManagedMessageChanges = async (input: {
   }
 
   return await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const records = await tx
       .select({
         id: managedMailMessage.id,
@@ -894,6 +908,7 @@ export const applyManagedMessageChanges = async (input: {
 };
 
 const updateManagedThreadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   changes: { isRead: boolean } | { mailboxState: ManagedMailMailboxState };
   threadId: string;
@@ -905,6 +920,11 @@ const updateManagedThreadState = async (input: {
     userId: input.userId,
   });
   const { records, customLabels } = await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const lockedRecords = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -983,6 +1003,7 @@ const updateManagedThreadState = async (input: {
 };
 
 export const setManagedMessageReadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   read: boolean;
@@ -994,6 +1015,7 @@ export const setManagedMessageReadState = async (input: {
   });
 
 export const setManagedThreadReadState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   read: boolean;
   threadId: string;
@@ -1002,6 +1024,7 @@ export const setManagedThreadReadState = async (input: {
   await updateManagedThreadState({ ...input, changes: { isRead: input.read } });
 
 export const setManagedMessageMailboxState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   messageId: string;
   state: ManagedMailMailboxState;
@@ -1013,6 +1036,7 @@ export const setManagedMessageMailboxState = async (input: {
   });
 
 export const setManagedThreadMailboxState = async (input: {
+  context?: MailRequestContext;
   mailboxId: string;
   state: ManagedMailMailboxState;
   threadId: string;

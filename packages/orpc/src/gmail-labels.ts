@@ -1,11 +1,16 @@
+import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { gmailLabel } from "@quieter/database/schema";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import type { MailLabelListItem } from "@quieter/mail/messages";
+import { reportError } from "@quieter/observability";
 import { and, eq, notInArray } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
+
+import { assertMailEffectAllowed } from "./gmail-request";
+import type { MailRequestContext } from "./gmail-request";
 
 export type GmailLabelWithDetails = MailLabelListItem & {
   autoLabel: AutoLabelSettings | null;
@@ -86,35 +91,42 @@ export const syncGmailLabels = async (
 };
 
 export const saveGmailLabelDetails = async (input: {
+  context: MailRequestContext;
   autoLabel?: AutoLabelSettings | null;
   description: string | null;
   inclusionCriteria: string | null;
   labelId: string;
   mailboxId: string;
-}) => {
-  const [updatedLabel] = await db
-    .update(gmailLabel)
-    .set({
-      ...(input.autoLabel === undefined ? {} : { autoLabel: input.autoLabel }),
-      description: input.description,
-      inclusionCriteria: input.inclusionCriteria,
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(gmailLabel.mailboxId, input.mailboxId),
-        eq(gmailLabel.labelId, input.labelId)
-      )
-    )
-    .returning({
-      autoLabel: gmailLabel.autoLabel,
-      description: gmailLabel.description,
-      inclusionCriteria: gmailLabel.inclusionCriteria,
-      labelId: gmailLabel.labelId,
+}) =>
+  await db.transaction(async (transaction) => {
+    await assertMailEffectAllowed(input.context, input.mailboxId, transaction, {
+      providerWrite: false,
     });
+    const [updatedLabel] = await transaction
+      .update(gmailLabel)
+      .set({
+        ...(input.autoLabel === undefined
+          ? {}
+          : { autoLabel: input.autoLabel }),
+        description: input.description,
+        inclusionCriteria: input.inclusionCriteria,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(gmailLabel.mailboxId, input.mailboxId),
+          eq(gmailLabel.labelId, input.labelId)
+        )
+      )
+      .returning({
+        autoLabel: gmailLabel.autoLabel,
+        description: gmailLabel.description,
+        inclusionCriteria: gmailLabel.inclusionCriteria,
+        labelId: gmailLabel.labelId,
+      });
 
-  return updatedLabel;
-};
+    return updatedLabel;
+  });
 
 export const upsertSyncedGmailLabel = async (
   mailboxId: string,
@@ -127,29 +139,21 @@ export const upsertSyncedGmailLabel = async (
     autoLabel?: AutoLabelSettings | null;
     color?: MailboxLabelColor;
     description?: string | null;
-  } = {}
+  },
+  context: MailRequestContext
 ): Promise<GmailLabelWithDetails> => {
   const now = new Date();
   const [record] = await db
     .insert(gmailLabel)
     .values({
-      autoLabel,
-      color: color ?? "gray",
       createdAt: now,
-      description,
       labelId: label.id,
       mailboxId,
       name: label.name,
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      set: {
-        ...(color ? { color } : {}),
-        ...(autoLabel === undefined ? {} : { autoLabel }),
-        ...(description === undefined ? {} : { description }),
-        name: label.name,
-        updatedAt: now,
-      },
+      set: { name: label.name, updatedAt: now },
       target: [gmailLabel.mailboxId, gmailLabel.labelId],
     })
     .returning({
@@ -158,13 +162,56 @@ export const upsertSyncedGmailLabel = async (
       description: gmailLabel.description,
       inclusionCriteria: gmailLabel.inclusionCriteria,
     });
-
+  let details = record;
+  if (
+    autoLabel !== undefined ||
+    color !== undefined ||
+    description !== undefined
+  ) {
+    try {
+      const [updated] = await db.transaction(async (transaction) => {
+        await assertMailEffectAllowed(context, mailboxId, transaction, {
+          providerWrite: false,
+        });
+        return await transaction
+          .update(gmailLabel)
+          .set({
+            ...(autoLabel === undefined ? {} : { autoLabel }),
+            ...(color === undefined ? {} : { color }),
+            ...(description === undefined ? {} : { description }),
+            updatedAt: now,
+          })
+          .where(
+            and(
+              eq(gmailLabel.mailboxId, mailboxId),
+              eq(gmailLabel.labelId, label.id)
+            )
+          )
+          .returning({
+            autoLabel: gmailLabel.autoLabel,
+            color: gmailLabel.color,
+            description: gmailLabel.description,
+            inclusionCriteria: gmailLabel.inclusionCriteria,
+          });
+      });
+      details = updated ?? record;
+    } catch (error) {
+      if (!(error instanceof ORPCError) || error.status >= 500) {
+        reportError(
+          new Error(
+            "The label was saved, but its details could not be updated."
+          ),
+          { operation: "mail:save-label-details" }
+        );
+      }
+    }
+  }
   return {
     ...label,
-    autoLabel: record?.autoLabel ?? null,
-    color: mailboxLabelColorSchema.parse(record?.color ?? "gray"),
-    description: record?.description ?? null,
-    inclusionCriteria: record?.inclusionCriteria ?? null,
+    autoLabel: details?.autoLabel ?? null,
+    color: mailboxLabelColorSchema.parse(details?.color ?? "gray"),
+    description: details?.description ?? null,
+    inclusionCriteria: details?.inclusionCriteria ?? null,
   };
 };
 

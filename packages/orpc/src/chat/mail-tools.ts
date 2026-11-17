@@ -108,12 +108,12 @@ export const createMailReadChatTools = (input: {
       abortSignal?.throwIfAborted();
       const page = await queriesMailOperations.listThreads({
         context: { signal: abortSignal, userId: input.userId },
-        input: {
+        input: mailInputSchemas.listThreads.parse({
           ...value,
           category: value.category ?? input.category,
           mailboxId: input.mailboxId,
           maxResults: value.maxResults ?? 10,
-        },
+        }),
       });
       abortSignal?.throwIfAborted();
       return {
@@ -122,8 +122,11 @@ export const createMailReadChatTools = (input: {
         status: "success",
       };
     },
-    inputSchema: mailInputSchemas.listThreads.omit({ mailboxId: true }).extend({
-      category: mailInputSchemas.listThreads.shape.category.optional(),
-    }),
+    inputSchema: z
+      .object(mailInputSchemas.listThreads.shape)
+      .omit({ mailboxId: true })
+      .extend({
+        category: mailInputSchemas.listThreads.shape.category.optional(),
+      }),
   }),
 });

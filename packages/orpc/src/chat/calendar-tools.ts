@@ -23,6 +23,7 @@ import {
   respondToCalendarEventForUser,
   updateCalendarEventForUser,
 } from "../calendar/service";
+import type { MailEffectAssertion } from "../gmail-request";
 
 export const assertCalendarToolExecution = ({
   foreground,
@@ -154,10 +155,14 @@ const runCalendarTool = async <T>(
 };
 
 export const createCalendarToolsContext = ({
+  authorityMailboxId,
+  beforeEffect,
   foreground,
   transcript,
   userId,
 }: {
+  authorityMailboxId?: string;
+  beforeEffect?: MailEffectAssertion;
   foreground: ForegroundSnapshot;
   transcript: readonly UIMessage[];
   userId: string;
@@ -181,6 +186,8 @@ export const createCalendarToolsContext = ({
         });
         return await createCalendarEventForUser({
           ...input,
+          authorityMailboxId,
+          beforeEffect,
           operationId,
           signal: runSignal,
           userId,
@@ -198,6 +205,8 @@ export const createCalendarToolsContext = ({
         });
         return await deleteCalendarEventForUser({
           ...input,
+          authorityMailboxId,
+          beforeEffect,
           signal: runSignal,
           userId,
         });
@@ -275,6 +284,8 @@ export const createCalendarToolsContext = ({
         });
         return await respondToCalendarEventForUser({
           ...input,
+          authorityMailboxId,
+          beforeEffect,
           signal: runSignal,
           userId,
         });
@@ -291,6 +302,8 @@ export const createCalendarToolsContext = ({
         });
         return await updateCalendarEventForUser({
           ...input,
+          authorityMailboxId,
+          beforeEffect,
           signal: runSignal,
           userId,
         });

@@ -11,7 +11,12 @@ import {
 import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
-import { gmailAutoLabelEvent } from "@quieter/database/schema";
+import {
+  gmailAutoLabelEvent,
+  gmailLabel,
+  mailbox,
+  mailboxAutomationSettings,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
   getMessageWithDetails,
@@ -24,8 +29,9 @@ import { partitionAutoLabelCandidates } from "@quieter/mail/auto-label-matching"
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
 import {
   buildMailMemoryQuery,
   loadAiAgentContext,
@@ -36,6 +42,9 @@ import type {
   AiMemoryDiagnostics,
 } from "../ai-memory";
 import { captureMailboxMessageMemory } from "../ai-memory-capture";
+import type { PreparedGmailMailboxIdentity } from "../gmail-mailbox-access";
+import { assertMailWriteAccess } from "../gmail-request";
+import { assertAgentMailboxAccess } from "../mail-agent/access";
 import { enqueueMailAgentMessage } from "../mail-agent/inbox";
 import type { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
@@ -74,10 +83,9 @@ export type MailAutomationRuntime = {
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
 };
-export type AutoLabelProcessingResult = Exclude<
-  ReceiveStageOutcome<"auto_label">,
-  { status: "skipped" }
->;
+export type AutoLabelProcessingResult =
+  | Exclude<ReceiveStageOutcome<"auto_label">, { status: "skipped" }>
+  | { reason: "policy"; status: "skipped" };
 
 type AutoLabelStage =
   | "event"
@@ -149,14 +157,20 @@ const getErrorMessage = (error: unknown) =>
     ? error.message.slice(0, 2000)
     : "Unknown Gmail update error.";
 
-const getOrCreateAutoLabelEvent = async (
-  mailboxId: string,
-  gmailMessageId: string
-) => {
+const getOrCreateAutoLabelEvent = async ({
+  authorityVersion,
+  mailboxId,
+  gmailMessageId,
+}: {
+  authorityVersion: number;
+  mailboxId: string;
+  gmailMessageId: string;
+}) => {
   const now = new Date();
   await db
     .insert(gmailAutoLabelEvent)
     .values({
+      authorityVersion,
       createdAt: now,
       gmailMessageId,
       id: randomUUID(),
@@ -193,6 +207,7 @@ const processAutoLabelMessage = async ({
   getAutoLabelContext,
   getBudgetStatus,
   gmailMessageId,
+  identity,
   loadMessage,
   mailboxId,
   userId,
@@ -202,12 +217,14 @@ const processAutoLabelMessage = async ({
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
   gmailMessageId: string;
+  identity: PreparedGmailMailboxIdentity;
   loadMessage: () => Promise<Awaited<
     ReturnType<typeof getMessageWithDetails>
   > | null>;
   mailboxId: string;
   userId: string;
 }): Promise<AutoLabelProcessingResult> => {
+  let classificationUsage: AiUsageReport | undefined;
   let activeStage: { name: AutoLabelStage; startedAt: number } | null = null;
   const recordStage = (next: AutoLabelStage | null, failed = false) => {
     if (activeStage !== null) {
@@ -225,9 +242,122 @@ const processAutoLabelMessage = async ({
       next === null ? null : { name: next, startedAt: performance.now() };
   };
   try {
+    const origin = await captureAiOrigin({
+      mailboxId,
+      mode: "automation",
+      userId,
+    });
     recordStage("event");
-    let event = await getOrCreateAutoLabelEvent(mailboxId, gmailMessageId);
+    let event = await getOrCreateAutoLabelEvent({
+      authorityVersion: origin.policyVersion,
+      gmailMessageId,
+      mailboxId,
+    });
     recordStage(null);
+    let { privateContextUserId } = event;
+    const beforeLabelWrite = async ({
+      effect,
+      database = db,
+      lock = false,
+      selectedLabelIds = [],
+    }: {
+      database?: Pick<typeof db, "select">;
+      effect: "ai" | "rule";
+      lock?: boolean;
+      selectedLabelIds?: string[];
+    }) => {
+      if (lock) {
+        await database
+          .select({ id: mailbox.id })
+          .from(mailbox)
+          .where(eq(mailbox.id, mailboxId))
+          .for("update");
+      }
+      const settingsQuery = database
+        .select({ enabled: mailboxAutomationSettings.autoLabelEnabled })
+        .from(mailboxAutomationSettings)
+        .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
+        .limit(1);
+      const [settings] = await (lock
+        ? settingsQuery.for("no key update")
+        : settingsQuery);
+      if (!settings?.enabled) {
+        throw new ORPCError("FORBIDDEN", {
+          data: { aiAuthorityReason: "feature_disabled" },
+          message: "Automatic labeling is disabled for this inbox.",
+        });
+      }
+      if (selectedLabelIds.length > 0) {
+        const labelsQuery = database
+          .select({ autoLabel: gmailLabel.autoLabel })
+          .from(gmailLabel)
+          .where(
+            and(
+              eq(gmailLabel.mailboxId, mailboxId),
+              inArray(gmailLabel.labelId, selectedLabelIds)
+            )
+          );
+        const labels = await (lock
+          ? labelsQuery.for("no key update")
+          : labelsQuery);
+        if (
+          labels.length !== new Set(selectedLabelIds).size ||
+          labels.some((label) => label.autoLabel?.enabled === false)
+        ) {
+          throw new ORPCError("FORBIDDEN", {
+            data: { aiAuthorityReason: "feature_disabled" },
+            message:
+              "Automatic labeling changed before this message could be labeled.",
+          });
+        }
+      }
+      if (effect === "rule") {
+        await assertAiAuthority({ effect: "read", origin }, database);
+        return;
+      }
+      const { authorityVersion } = event;
+      if (authorityVersion === null) {
+        throw new ORPCError("FORBIDDEN", {
+          data: { aiAuthorityReason: "policy_changed" },
+          message:
+            "This earlier assistant action needs a new request before it can continue.",
+        });
+      }
+      if (privateContextUserId !== null) {
+        const access = await assertAgentMailboxAccess(
+          { mailboxId, userId: privateContextUserId },
+          database
+        );
+        if (access.shared) {
+          throw new ORPCError("FORBIDDEN", {
+            data: { aiAuthorityReason: "private_context_changed" },
+            message:
+              "This inbox became shared while personal context was in use.",
+          });
+        }
+      }
+      await assertAiAuthority(
+        {
+          effect: "write",
+          origin: { ...origin, policyVersion: authorityVersion },
+        },
+        database
+      );
+    };
+    const beforeProviderLabelWrite = async (
+      input: Pick<
+        Parameters<typeof beforeLabelWrite>[0],
+        "effect" | "selectedLabelIds"
+      >
+    ) => {
+      await db.transaction(async (transaction) => {
+        await beforeLabelWrite({ ...input, database: transaction, lock: true });
+        await assertMailWriteAccess(
+          { gmailIdentity: identity, mailboxId, userId },
+          transaction
+        );
+      });
+    };
 
     if (event.appliedAt) {
       attempt.path = "already_applied";
@@ -353,6 +483,7 @@ const processAutoLabelMessage = async ({
         attempt.aiLabelCount = aiLabels.length;
         attempt.deterministicLabelCount = deterministicLabelIds.length;
         if (aiLabels.length > 0) {
+          await beforeLabelWrite({ effect: "ai" });
           if (budgetStatus === undefined) {
             recordStage("budget");
             budgetStatus = await getBudgetStatus();
@@ -366,9 +497,20 @@ const processAutoLabelMessage = async ({
             ) {
               recordStage("apply");
               attempt.providerMutationCount += 1;
-              await mutateGmailMessage(accessToken, gmailMessageId, {
-                addLabelIds: deterministicLabelIds,
-              });
+              await mutateGmailMessage(
+                accessToken,
+                gmailMessageId,
+                {
+                  addLabelIds: deterministicLabelIds,
+                },
+                undefined,
+                async () => {
+                  await beforeProviderLabelWrite({
+                    effect: "rule",
+                    selectedLabelIds: deterministicLabelIds,
+                  });
+                }
+              );
               recordStage(null);
             }
             recordStage("saveRetry");
@@ -388,6 +530,7 @@ const processAutoLabelMessage = async ({
         }
 
         if (aiLabels.length > 0) {
+          await beforeLabelWrite({ effect: "ai" });
           recordStage("history");
         }
         const labelHistory =
@@ -403,6 +546,7 @@ const processAutoLabelMessage = async ({
               });
         recordStage(null);
         if (aiLabels.length > 0 && autoLabelContext.memoryCandidates !== null) {
+          await beforeLabelWrite({ effect: "ai" });
           recordStage("memory");
         }
         const memoryContext =
@@ -420,6 +564,15 @@ const processAutoLabelMessage = async ({
                 userId: autoLabelContext.memoryCandidates.userId,
               });
         recordStage(null);
+        const serializedMemoryContext =
+          memoryContext === null
+            ? null
+            : serializeAiAgentContext(memoryContext);
+        privateContextUserId =
+          autoLabelContext.memoryCandidates?.userId ?? null;
+        if (serializedMemoryContext === null) {
+          privateContextUserId = null;
+        }
         let aiLabelIds: string[] = [];
         if (aiLabels.length > 0) {
           recordStage("classificationBillingContext");
@@ -430,18 +583,17 @@ const processAutoLabelMessage = async ({
             userId,
           });
           recordStage("classifier");
+          await beforeLabelWrite({ effect: "ai" });
           aiLabelIds = await classifyMailMessage({
             billing,
             labelHistory,
             labels: aiLabels,
-            memoryContext:
-              memoryContext === null
-                ? null
-                : serializeAiAgentContext(memoryContext),
+            memoryContext: serializedMemoryContext,
             message,
             model: autoLabelContext.model,
             onUsage: (reportedUsage) => {
               usage = reportedUsage;
+              classificationUsage = reportedUsage;
             },
           });
           recordStage(null);
@@ -451,24 +603,33 @@ const processAutoLabelMessage = async ({
         ];
         const now = new Date();
         recordStage("saveClassification");
-        const [classified] = await db
-          .update(gmailAutoLabelEvent)
-          .set({
-            cacheWriteTokens: usage.cacheWriteTokens,
-            cachedTokens: usage.cachedTokens,
-            completionTokens: usage.completionTokens,
-            costUsd: usage.costUsd,
-            labelIds,
-            lastError: null,
-            model: aiLabels.length > 0 ? autoLabelContext.model : null,
-            promptTokens: usage.promptTokens,
-            updatedAt: now,
-            // Unreportable usage is terminal; only retryable reporting failures
-            // keep usageReportedAt unset.
-            usageReportedAt: usage.costUsd === undefined ? now : null,
-          })
-          .where(eq(gmailAutoLabelEvent.id, event.id))
-          .returning();
+        const [classified] = await db.transaction(async (transaction) => {
+          await beforeLabelWrite({
+            database: transaction,
+            effect: aiLabels.length > 0 ? "ai" : "rule",
+            lock: true,
+            selectedLabelIds: labelIds,
+          });
+          return await transaction
+            .update(gmailAutoLabelEvent)
+            .set({
+              cacheWriteTokens: usage.cacheWriteTokens,
+              cachedTokens: usage.cachedTokens,
+              completionTokens: usage.completionTokens,
+              costUsd: usage.costUsd,
+              labelIds,
+              lastError: null,
+              model: aiLabels.length > 0 ? autoLabelContext.model : null,
+              privateContextUserId,
+              promptTokens: usage.promptTokens,
+              updatedAt: now,
+              // Unreportable usage is terminal; only retryable reporting failures
+              // keep usageReportedAt unset.
+              usageReportedAt: usage.costUsd === undefined ? now : null,
+            })
+            .where(eq(gmailAutoLabelEvent.id, event.id))
+            .returning();
+        });
         recordStage(null);
         event = classified ?? event;
       }
@@ -504,9 +665,23 @@ const processAutoLabelMessage = async ({
         try {
           recordStage("apply");
           attempt.providerMutationCount += 1;
-          await mutateGmailMessage(accessToken, gmailMessageId, {
-            addLabelIds: labelIds,
-          });
+          await mutateGmailMessage(
+            accessToken,
+            gmailMessageId,
+            {
+              addLabelIds: labelIds,
+            },
+            undefined,
+            async () => {
+              await beforeProviderLabelWrite({
+                effect:
+                  event.model !== null && event.model !== undefined
+                    ? "ai"
+                    : "rule",
+                selectedLabelIds: labelIds,
+              });
+            }
+          );
           recordStage(null);
         } catch (error) {
           recordStage(null, true);
@@ -535,6 +710,76 @@ const processAutoLabelMessage = async ({
       attempt.outcome = "complete";
       return { status: "complete" };
     } catch (error) {
+      if (
+        error instanceof ORPCError &&
+        (error.code === "NOT_FOUND" ||
+          error.code === "UNAUTHORIZED" ||
+          (typeof error.data === "object" &&
+            error.data !== null &&
+            "aiAuthorityReason" in error.data))
+      ) {
+        const autoLabelContext = await getAutoLabelContext();
+        if (classificationUsage !== undefined) {
+          const [accounted] = await db
+            .update(gmailAutoLabelEvent)
+            .set({
+              cacheWriteTokens: classificationUsage.cacheWriteTokens,
+              cachedTokens: classificationUsage.cachedTokens,
+              completionTokens: classificationUsage.completionTokens,
+              costUsd: classificationUsage.costUsd ?? null,
+              model: autoLabelContext.model,
+              promptTokens: classificationUsage.promptTokens,
+              updatedAt: new Date(),
+              usageReportedAt:
+                classificationUsage.costUsd === undefined ? new Date() : null,
+            })
+            .where(eq(gmailAutoLabelEvent.id, event.id))
+            .returning();
+          event = accounted ?? event;
+        }
+        const message = await loadMessage();
+        const deterministic =
+          message === null
+            ? []
+            : partitionAutoLabelCandidates(autoLabelContext.labels, message)
+                .deterministicLabelIds;
+        if (
+          deterministic.length > 0 &&
+          (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" ||
+            serverEnv.QUIETER_LOCAL_PROVIDER_MODE === "write")
+        ) {
+          try {
+            await mutateGmailMessage(
+              accessToken,
+              gmailMessageId,
+              { addLabelIds: deterministic },
+              undefined,
+              async () => {
+                await beforeProviderLabelWrite({
+                  effect: "rule",
+                  selectedLabelIds: deterministic,
+                });
+              }
+            );
+          } catch (ruleError) {
+            if (
+              !(ruleError instanceof ORPCError) ||
+              (ruleError.code !== "NOT_FOUND" &&
+                ruleError.code !== "UNAUTHORIZED" &&
+                !(
+                  typeof ruleError.data === "object" &&
+                  ruleError.data !== null &&
+                  "aiAuthorityReason" in ruleError.data
+                ))
+            ) {
+              throw ruleError;
+            }
+          }
+        }
+        await reportAutoLabelUsage({ ...event, userId });
+        attempt.outcome = "skipped";
+        return { reason: "policy", status: "skipped" };
+      }
       recordStage(null, true);
       if (isAiCreditAdmissionBusy(error)) {
         const now = new Date();
@@ -599,6 +844,7 @@ export type GmailMessageCriticalTimings = {
 
 export const processGmailMessage = async ({
   accessToken,
+  identity: preparedIdentity,
   automationRuntime,
   autoLabelEnabled,
   extractCodes,
@@ -611,6 +857,7 @@ export const processGmailMessage = async ({
   userId,
 }: {
   accessToken: string;
+  identity: PreparedGmailMailboxIdentity;
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   extractCodes: boolean;
@@ -624,6 +871,11 @@ export const processGmailMessage = async ({
   triggerActions?: boolean;
   userId: string;
 }) => {
+  if (preparedIdentity.mailboxId !== mailboxId) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "The prepared inbox changed before processing could start.",
+    });
+  }
   const attempt: GmailMessageAttempt = {
     autoLabel: {
       application: "not_reached",
@@ -707,6 +959,7 @@ export const processGmailMessage = async ({
                 getAutoLabelContext: automationRuntime.getAutoLabelContext,
                 getBudgetStatus: automationRuntime.getBudgetStatus,
                 gmailMessageId: identity.messageId,
+                identity: preparedIdentity,
                 loadMessage,
                 mailboxId: identity.mailboxId,
                 userId,

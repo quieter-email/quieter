@@ -20,7 +20,11 @@ import { parseRawMailMessage } from "@quieter/mail/raw-message";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { assertMailEffectAllowed } from "../../gmail-request";
+import type { MailRequestContext } from "../../gmail-request";
 import { sendPreparedMail } from "../../mail-send";
+import { captureMailSendIntentAuthority } from "../../mail/intent-authority";
+import type { MailSendIntentAuthority } from "../../mail/intent-authority";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   buildOpenTrackingHtmlTransform,
@@ -30,6 +34,8 @@ import { OrganizationMailSendError } from "../../organization-mail-policy";
 import { hashRequest } from "../../request-hash";
 
 export const sendManagedMailboxMessage = async (input: {
+  context?: MailRequestContext;
+  intentAuthority?: MailSendIntentAuthority;
   mailboxId: string;
   message: z.infer<typeof composeMessageInputSchema>;
   userId: string;
@@ -45,6 +51,13 @@ export const sendManagedMailboxMessage = async (input: {
       message: "Managed mailbox team is missing.",
     });
   }
+  const intentAuthority =
+    input.intentAuthority ??
+    (await captureMailSendIntentAuthority({
+      mailboxId: input.mailboxId,
+      origin: input.context?.origin ?? { kind: "human" },
+      userId: input.userId,
+    }));
   const { message } = input;
   const idempotencyKey = `compose:${input.mailboxId}:${message.sendOperationId ?? message.localId}`;
   const [prior] = await db
@@ -162,6 +175,12 @@ export const sendManagedMailboxMessage = async (input: {
   const parsed = await parseRawMailMessage(raw);
   try {
     const result = await sendPreparedMail({
+      beforeEffect: async () => {
+        await assertMailEffectAllowed(
+          input.context ?? { userId: input.userId },
+          input.mailboxId
+        );
+      },
       id,
       idempotencyKey,
       messageHeaderId,
@@ -186,6 +205,7 @@ export const sendManagedMailboxMessage = async (input: {
         headers: parsed.headers,
         kind: "mailbox",
         mailboxId: input.mailboxId,
+        origin: intentAuthority,
         rawSizeBytes: Buffer.byteLength(raw),
         replyTo: [selectedMailbox.emailAddress],
         sender: parsed.from,

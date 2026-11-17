@@ -33,6 +33,8 @@ import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { useNavigate } from "@tanstack/react-router";
 
+import { MailboxAiAuthoritySettings } from "./mailbox-ai-authority-settings";
+
 type Mailbox =
   RouterOutputs["mail"]["listMailboxes"]["groups"][number]["mailboxes"][number];
 
@@ -149,6 +151,13 @@ export const MailboxDetailSettingsContent = ({
         <MailboxSignatureSettings
           key={`signature-${mailbox.id}`}
           mailbox={mailbox}
+        />
+      )}
+
+      {(isGmail || mailbox.provider === "managed") && (
+        <MailboxAiAuthoritySettings
+          key={`assistant-permissions-${mailbox.id}`}
+          mailboxId={mailbox.id}
         />
       )}
 

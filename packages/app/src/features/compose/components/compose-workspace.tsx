@@ -140,6 +140,8 @@ import {
 } from "react";
 import type { KeyboardEvent } from "react";
 
+import { ComposeMeetingProposal } from "../../calendar/components/meeting-proposal-picker";
+import type { MeetingReplyTarget } from "../../calendar/domain/meeting-proposals";
 import { HeldSendNotice } from "./held-send-notice";
 
 export type ComposeSenderMailbox = {
@@ -349,6 +351,7 @@ const ReadyComposeSurface = ({
   variant = "workspace",
 }: ComposeSurfaceProps) => {
   const queryClient = useQueryClient();
+  const userId = authClient.useSession().data?.user.id;
   const reducedMotion = useReducedMotion();
   const composeEditorRef = useRef<ComposeEditorHandle | null>(null);
   const [editorReady, setEditorReady] = useState(false);
@@ -1538,6 +1541,77 @@ const ReadyComposeSurface = ({
                               <Icon icon={Attachment01Icon} />
                             </ToolbarButton>
                           </IconButtonTooltip>
+                          <form.Subscribe
+                            selector={(formState) => formState.values}
+                          >
+                            {(values) => {
+                              if (
+                                !mailboxId ||
+                                !userId ||
+                                !senderEmail ||
+                                !state.draft.replyContext
+                              ) {
+                                return null;
+                              }
+                              const target: MeetingReplyTarget = {
+                                localId: state.draft.localId,
+                                mailboxId,
+                                recipients: {
+                                  bcc: values.bcc,
+                                  cc: values.cc,
+                                  to: values.to,
+                                },
+                                replyContext: state.draft.replyContext,
+                                senderEmail,
+                                sourceMessageId:
+                                  state.draft.draftAnchor?.sourceMessageId ??
+                                  null,
+                              };
+                              return (
+                                <ComposeMeetingProposal
+                                  disabled={
+                                    !canEditBody ||
+                                    audioBusy ||
+                                    switchingSender ||
+                                    senderUnavailable ||
+                                    demoMode ||
+                                    managedDemoMode
+                                  }
+                                  onInsert={({ target: captured, text }) => {
+                                    const current: MeetingReplyTarget = {
+                                      ...target,
+                                      recipients: {
+                                        bcc: form.state.values.bcc,
+                                        cc: form.state.values.cc,
+                                        to: form.state.values.to,
+                                      },
+                                    };
+                                    if (
+                                      !mountedRef.current ||
+                                      !state.open ||
+                                      state.isFinishing ||
+                                      !canEditBody ||
+                                      audioBusy ||
+                                      switchingSender ||
+                                      senderUnavailable ||
+                                      JSON.stringify(captured) !==
+                                        JSON.stringify(current)
+                                    ) {
+                                      return false;
+                                    }
+                                    return (
+                                      composeEditorRef.current?.insertAuthoredHtml(
+                                        textToComposeBodyHtml(text)
+                                      ) ?? false
+                                    );
+                                  }}
+                                  target={target}
+                                  title={values.subject}
+                                  userId={userId}
+                                />
+                              );
+                            }}
+                          </form.Subscribe>
                           <ComposeEditorDictationButton />
                           <form.Subscribe
                             selector={(formState) => formState.values.subject}

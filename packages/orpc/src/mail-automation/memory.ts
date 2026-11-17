@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import { AI_MEMORY_CONTENT_MAX_LENGTH } from "@quieter/ai/ai-memory";
 import { db } from "@quieter/database/client";
 import {
@@ -24,6 +25,8 @@ import { and, count, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
+import type { AiOrigin } from "../ai-authority";
 import {
   getPersonalAiMemoryScopeConfig,
   replaceAiMemoryFeedback,
@@ -278,158 +281,208 @@ export const groupAutoLabelMemoryRules = (rules: AutoLabelMemoryRule[]) => {
 export const refreshAutoLabelMemoryProfile = async (
   mailboxId: string,
   userId: string,
-  expectedRevision?: number
+  expectedRevision?: number,
+  originalOrigin?: AiOrigin
 ) => {
-  let revision = expectedRevision;
-  if (revision === undefined) {
-    ({ revision } = await getPersonalAiMemoryScopeConfig(userId));
-  }
-  const rows = await db
-    .select({
-      added:
-        sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "added")})`.mapWith(
-          Number
-        ),
-      labelId: mailAutoLabelFeedback.labelId,
-      labelName: max(mailAutoLabelFeedback.labelName),
-      removed:
-        sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "removed")})`.mapWith(
-          Number
-        ),
-      source: mailAutoLabelFeedback.source,
-    })
-    .from(mailAutoLabelFeedback)
-    .where(
-      and(
-        eq(mailAutoLabelFeedback.mailboxId, mailboxId),
-        eq(mailAutoLabelFeedback.createdByUserId, userId)
+  try {
+    const capturedOrigin =
+      originalOrigin ??
+      (await captureAiOrigin({ mailboxId, mode: "automation", userId }));
+    const origin = { ...capturedOrigin, mode: "automation" as const };
+    await assertAiAuthority({ effect: "write", mailboxId, origin, userId });
+    let revision = expectedRevision;
+    if (revision === undefined) {
+      ({ revision } = await getPersonalAiMemoryScopeConfig(userId));
+    }
+    const rows = await db
+      .select({
+        added:
+          sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "added")})`.mapWith(
+            Number
+          ),
+        labelId: mailAutoLabelFeedback.labelId,
+        labelName: max(mailAutoLabelFeedback.labelName),
+        removed:
+          sql`${count()} filter (where ${eq(mailAutoLabelFeedback.signal, "removed")})`.mapWith(
+            Number
+          ),
+        source: mailAutoLabelFeedback.source,
+      })
+      .from(mailAutoLabelFeedback)
+      .where(
+        and(
+          eq(mailAutoLabelFeedback.mailboxId, mailboxId),
+          eq(mailAutoLabelFeedback.createdByUserId, userId)
+        )
       )
-    )
-    .groupBy(mailAutoLabelFeedback.labelId, mailAutoLabelFeedback.source)
-    .orderBy(desc(count()));
+      .groupBy(mailAutoLabelFeedback.labelId, mailAutoLabelFeedback.source)
+      .orderBy(desc(count()));
 
-  const explicit = await db
-    .select({ metadata: aiMemory.metadata })
-    .from(aiMemory)
-    .where(
-      and(
-        eq(aiMemory.userId, userId),
-        eq(aiMemory.scopeKey, `user:${userId}`),
-        eq(aiMemory.source, "explicit"),
-        eq(sql`${aiMemory.metadata}->>'sourceMailboxId'`, mailboxId)
-      )
-    );
-  const protectedMembers = explicit.flatMap(({ metadata }) => {
-    if (metadata.feedbackMembers) {
-      return metadata.feedbackMembers;
+    const explicit = await db
+      .select({ metadata: aiMemory.metadata })
+      .from(aiMemory)
+      .where(
+        and(
+          eq(aiMemory.userId, userId),
+          eq(aiMemory.scopeKey, `user:${userId}`),
+          eq(aiMemory.source, "explicit"),
+          eq(sql`${aiMemory.metadata}->>'sourceMailboxId'`, mailboxId)
+        )
+      );
+    const protectedMembers = explicit.flatMap(({ metadata }) => {
+      if (metadata.feedbackMembers) {
+        return metadata.feedbackMembers;
+      }
+      if (
+        typeof metadata.labelId === "string" &&
+        "feedbackSource" in metadata &&
+        (typeof metadata.feedbackSource === "string" ||
+          metadata.feedbackSource === null)
+      ) {
+        return [
+          {
+            labelId: metadata.labelId,
+            policy:
+              metadata.policy === "suppress"
+                ? ("suppress" as const)
+                : ("prefer" as const),
+            source: metadata.feedbackSource,
+          },
+        ];
+      }
+      return [];
+    });
+    const profile = buildAutoLabelMemoryProfile(rows);
+    await replaceAiMemoryFeedback({
+      agent: "auto_label",
+      expectedRevision: revision,
+      mailboxId,
+      memories: groupAutoLabelMemoryRules(
+        profile.rules.filter(
+          (rule) =>
+            !protectedMembers.some(
+              (member) =>
+                member.labelId === rule.labelId && member.source === rule.source
+            )
+        )
+      ),
+      origin,
+      userId,
+    });
+  } catch (error) {
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      throw error;
     }
-    if (
-      typeof metadata.labelId === "string" &&
-      "feedbackSource" in metadata &&
-      (typeof metadata.feedbackSource === "string" ||
-        metadata.feedbackSource === null)
-    ) {
-      return [
-        {
-          labelId: metadata.labelId,
-          policy:
-            metadata.policy === "suppress"
-              ? ("suppress" as const)
-              : ("prefer" as const),
-          source: metadata.feedbackSource,
-        },
-      ];
-    }
-    return [];
-  });
-  const profile = buildAutoLabelMemoryProfile(rows);
-  await replaceAiMemoryFeedback({
-    agent: "auto_label",
-    expectedRevision: revision,
-    mailboxId,
-    memories: groupAutoLabelMemoryRules(
-      profile.rules.filter(
-        (rule) =>
-          !protectedMembers.some(
-            (member) =>
-              member.labelId === rule.labelId && member.source === rule.source
-          )
-      )
-    ),
-    userId,
-  });
+  }
 };
 
 const refreshAutoLabelMemoryInBackground = async (
   mailboxId: string,
   userId: string,
-  expectedRevision?: number
+  expectedRevision?: number,
+  origin?: AiOrigin
 ) => {
   try {
-    await refreshAutoLabelMemoryProfile(mailboxId, userId, expectedRevision);
+    await refreshAutoLabelMemoryProfile(
+      mailboxId,
+      userId,
+      expectedRevision,
+      origin
+    );
   } catch (error: unknown) {
-    reportError(error, { operation: "mail-automation:refresh-memory" });
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      reportError(error, { operation: "mail-automation:refresh-memory" });
+    }
   }
 };
 
 export const enrichMailAutoLabelFeedbackSource = async (input: {
+  origin?: AiOrigin;
   from?: string;
   mailboxId: string;
   providerMessageId: string;
   userId: string;
 }) => {
-  const source = getSenderSource(input.from);
-  if (source === null) {
-    return;
-  }
-  const { getMailboxMemoryActor } = await import("../ai-memory-capture");
-  const [actor, config] = await Promise.all([
-    getMailboxMemoryActor({
-      actorUserId: input.userId,
-      mailboxId: input.mailboxId,
-    }),
-    getPersonalAiMemoryScopeConfig(input.userId),
-  ]);
-  if (actor === null) {
-    return;
-  }
-  const enriched = await db
-    .update(mailAutoLabelFeedback)
-    .set({ source })
-    .where(
-      and(
-        eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
-        eq(mailAutoLabelFeedback.createdByUserId, input.userId),
-        eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
-        isNull(mailAutoLabelFeedback.source)
-      )
-    )
-    .returning({ id: mailAutoLabelFeedback.id });
-  if (enriched.length === 0) {
-    const [existing] = await db
-      .select({ id: mailAutoLabelFeedback.id })
-      .from(mailAutoLabelFeedback)
-      .where(
-        and(
-          eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
-          eq(mailAutoLabelFeedback.createdByUserId, input.userId),
-          eq(mailAutoLabelFeedback.providerMessageId, input.providerMessageId),
-          eq(mailAutoLabelFeedback.source, source)
-        )
-      )
-      .limit(1);
-    if (existing === undefined) {
+  try {
+    const source = getSenderSource(input.from);
+    if (source === null) {
       return;
     }
+    const { getMailboxMemoryActor } = await import("../ai-memory-capture");
+    const [actor, config] = await Promise.all([
+      getMailboxMemoryActor({
+        actorUserId: input.userId,
+        mailboxId: input.mailboxId,
+      }),
+      getPersonalAiMemoryScopeConfig(input.userId),
+    ]);
+    if (actor === null) {
+      return;
+    }
+    const enriched = await db.transaction(async (tx) => {
+      if (input.origin !== undefined) {
+        await assertAiAuthority(
+          {
+            effect: "write",
+            mailboxId: input.mailboxId,
+            origin: input.origin,
+            userId: input.userId,
+          },
+          tx,
+          { lock: true }
+        );
+      }
+      return await tx
+        .update(mailAutoLabelFeedback)
+        .set({ source })
+        .where(
+          and(
+            eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+            eq(mailAutoLabelFeedback.createdByUserId, input.userId),
+            eq(
+              mailAutoLabelFeedback.providerMessageId,
+              input.providerMessageId
+            ),
+            isNull(mailAutoLabelFeedback.source)
+          )
+        )
+        .returning({ id: mailAutoLabelFeedback.id });
+    });
+    if (enriched.length === 0) {
+      const [existing] = await db
+        .select({ id: mailAutoLabelFeedback.id })
+        .from(mailAutoLabelFeedback)
+        .where(
+          and(
+            eq(mailAutoLabelFeedback.mailboxId, input.mailboxId),
+            eq(mailAutoLabelFeedback.createdByUserId, input.userId),
+            eq(
+              mailAutoLabelFeedback.providerMessageId,
+              input.providerMessageId
+            ),
+            eq(mailAutoLabelFeedback.source, source)
+          )
+        )
+        .limit(1);
+      if (existing === undefined) {
+        return;
+      }
+    }
+    await refreshAutoLabelMemoryProfile(
+      input.mailboxId,
+      actor.userId,
+      config.revision,
+      input.origin
+    );
+  } catch (error) {
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      throw error;
+    }
   }
-  await refreshAutoLabelMemoryProfile(
-    input.mailboxId,
-    actor.userId,
-    config.revision
-  );
 };
 
 export const recordMailAutoLabelFeedback = async (input: {
+  origin?: AiOrigin;
   addLabelIds?: string[];
   mailboxId: string;
   messageSources?: Record<string, string | null | undefined>;
@@ -461,6 +514,13 @@ export const recordMailAutoLabelFeedback = async (input: {
     return null;
   }
 
+  const origin =
+    input.origin ??
+    (await captureAiOrigin({
+      mailboxId: input.mailboxId,
+      mode: "automation",
+      userId: input.userId,
+    }));
   const labelNames = await listLabelNames(
     input.mailboxId,
     selectedMailbox.provider,
@@ -506,6 +566,18 @@ export const recordMailAutoLabelFeedback = async (input: {
   ]);
 
   const captured = await db.transaction(async (tx) => {
+    if (input.origin !== undefined) {
+      await assertAiAuthority(
+        {
+          effect: "write",
+          mailboxId: input.mailboxId,
+          origin: input.origin,
+          userId: input.userId,
+        },
+        tx,
+        { lock: true }
+      );
+    }
     await tx
       .select({ id: user.id })
       .from(user)
@@ -562,7 +634,8 @@ export const recordMailAutoLabelFeedback = async (input: {
   await refreshAutoLabelMemoryInBackground(
     input.mailboxId,
     input.userId,
-    config.revision
+    config.revision,
+    origin
   );
   return labelChanges;
 };

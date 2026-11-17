@@ -11,6 +11,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { assertMailEffectAllowed } from "../src/gmail-request";
 import type { composeMailOperations } from "../src/mail/compose";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 import type { readRawMailObject } from "../src/managed-mail/messages/raw-object";
@@ -32,6 +33,7 @@ const fixture = vi.hoisted(() => ({
   database: vi.fn<() => PostgresJsDatabase>(),
   deleteDraft: vi.fn<typeof composeMailOperations.deleteDraft>(),
   getStatus: vi.fn<typeof composeMailOperations.getComposeSendStatus>(),
+  guard: vi.fn<typeof assertMailEffectAllowed>(),
   readObject: vi.fn<typeof readRawMailObject>(),
   saveDraft:
     vi.fn<
@@ -60,6 +62,9 @@ vi.mock("../src/mail/compose", () => ({
 }));
 vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: fixture.access,
+}));
+vi.mock(import("../src/gmail-request"), () => ({
+  assertMailEffectAllowed: fixture.guard,
 }));
 vi.mock(import("../src/mail-updates"), () => ({
   publishMailUpdate: vi.fn<() => Promise<void>>(),
@@ -108,6 +113,13 @@ describe("held-send concurrency", () => {
     (provider) => {
       beforeEach(async () => {
         vi.clearAllMocks();
+        fixture.guard.mockImplementation(
+          async (context, _mailboxId, transaction) => {
+            context.signal?.throwIfAborted();
+            await context.beforeEffect?.(transaction);
+            context.signal?.throwIfAborted();
+          }
+        );
         await database.client`
         TRUNCATE "scheduledMailSend", "scheduledMailSendAbandonment",
           "gmailComposeOperation", "managedMailMessage"

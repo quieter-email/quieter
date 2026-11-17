@@ -11,6 +11,7 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, sql } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
 import type { ReceiveStageOutcome } from "../mail-receive";
 import { publishMailUpdate } from "../mail-updates";
 import { assertPersonalAgentSettingAccess } from "./authority";
@@ -93,6 +94,15 @@ export const enqueueMailAgentMessage = async (
       }
       try {
         await assertPersonalAgentSettingAccess(active.setting, tx);
+        const origin = await captureAiOrigin(
+          {
+            mailboxId: input.mailboxId,
+            mode: "automation",
+            userId,
+          },
+          tx
+        );
+        await assertAiAuthority({ effect: "execute", origin }, tx);
       } catch (error) {
         if (
           error instanceof ORPCError &&

@@ -28,6 +28,7 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { captureMailboxAutomationOrigin } from "../../ai-authority";
 import { captureManagedMessageMemory } from "../../ai-memory-capture";
 import { enqueueMailAgentMessage } from "../../mail-agent/inbox";
 import {
@@ -113,6 +114,9 @@ const processManagedVerificationCode = async (input: {
         mailboxId: identity.mailboxId,
         messageId: identity.messageId,
         organizationId: owner.organizationId,
+        origin: await captureMailboxAutomationOrigin({
+          mailboxId: identity.mailboxId,
+        }),
         userId: owner.userId,
       });
       await reportPendingMailboxVerificationCodeUsage(

@@ -30,6 +30,7 @@ import { reportError } from "@quieter/observability";
 import { and, eq, inArray } from "drizzle-orm";
 import type { z } from "zod";
 
+import type { AiOperationOrigin } from "./ai-authority";
 import { prepareGmailOpenTracking } from "./gmail-open-tracking";
 import { withMailComposeLock } from "./mail/compose-lock";
 import {
@@ -184,6 +185,24 @@ const recordComposeFailure = async (
   operation: ComposeOperation,
   error: unknown
 ): Promise<never> => {
+  const data: unknown = error instanceof ORPCError ? error.data : undefined;
+  if (
+    typeof data === "object" &&
+    data !== null &&
+    "sendNotStarted" in data &&
+    data.sendNotStarted === true
+  ) {
+    await db
+      .update(gmailComposeOperation)
+      .set({ status: "prepared", updatedAt: new Date() })
+      .where(
+        and(
+          eq(gmailComposeOperation.id, operation.id),
+          eq(gmailComposeOperation.status, "submitting")
+        )
+      );
+    throw error;
+  }
   const rejected =
     isGmailServiceError(error) &&
     error.status >= 400 &&
@@ -340,7 +359,8 @@ export const saveGmailDraft = async (
   accessToken: string,
   mailboxId: string,
   inputDraft: ComposeDraftInput,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ) => {
   const requestSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
@@ -532,13 +552,15 @@ export const saveGmailDraft = async (
               draft.draftId,
               raw,
               draft.replyContext?.threadId,
-              requestSignal
+              requestSignal,
+              beforeEffect
             )
           : await createDraft(
               accessToken,
               raw,
               draft.replyContext?.threadId,
-              requestSignal
+              requestSignal,
+              beforeEffect
             );
       } catch (error) {
         return await recordComposeFailure(operation, error);
@@ -564,7 +586,9 @@ export const sendGmailMessage = async (
   inputMessage: ComposeDraftInput,
   signal?: AbortSignal,
   organizationId?: string | null,
-  actorUserId?: string
+  actorUserId?: string,
+  beforeEffect?: () => Promise<void>,
+  origin?: AiOperationOrigin
 ): Promise<{
   id: string;
   threadId?: string;
@@ -672,7 +696,11 @@ export const sendGmailMessage = async (
         draftId: message.draftId,
         followUpReminder:
           message.followUpReminder && actorUserId
-            ? { intent: message.followUpReminder, userId: actorUserId }
+            ? {
+                intent: message.followUpReminder,
+                origin: origin ?? { kind: "human" },
+                userId: actorUserId,
+              }
             : undefined,
         kind: "send",
         mailboxId,
@@ -755,13 +783,15 @@ export const sendGmailMessage = async (
               message.draftId,
               raw,
               message.replyContext?.threadId,
-              requestSignal
+              requestSignal,
+              beforeEffect
             )
           : await sendRawMessage(
               accessToken,
               raw,
               message.replyContext?.threadId,
-              requestSignal
+              requestSignal,
+              beforeEffect
             );
       } catch (error) {
         return await recordComposeFailure(operation, error);
@@ -779,7 +809,8 @@ export const deleteGmailComposeDraft = async (
   accessToken: string,
   mailboxId: string,
   input: { draftId: string; baseRevision?: string; requireExisting?: boolean },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ) => {
   const requestSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
@@ -811,7 +842,12 @@ export const deleteGmailComposeDraft = async (
           message: DRAFT_CONFLICT_MESSAGE,
         });
       }
-      await deleteDraft(accessToken, input.draftId, requestSignal);
+      await deleteDraft(
+        accessToken,
+        input.draftId,
+        requestSignal,
+        beforeEffect
+      );
     } catch (error) {
       if (
         input.requireExisting === true &&
@@ -957,7 +993,8 @@ export const sendGmailUnsubscribe = async (
     key: string;
     message: { body: string; subject: string; to: string };
   },
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  beforeEffect?: () => Promise<void>
 ): Promise<{ idempotent: boolean }> => {
   const requestSignal = signal
     ? AbortSignal.any([signal, AbortSignal.timeout(45_000)])
@@ -1001,7 +1038,13 @@ export const sendGmailUnsubscribe = async (
   await claimComposeOperation(operation);
   let sent: GmailMessage;
   try {
-    sent = await sendRawMessage(accessToken, raw, undefined, requestSignal);
+    sent = await sendRawMessage(
+      accessToken,
+      raw,
+      undefined,
+      requestSignal,
+      beforeEffect
+    );
   } catch (error) {
     return await recordComposeFailure(operation, error);
   }

@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailReminderPreference,
@@ -5,9 +6,13 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
+import type { AiOrigin } from "../ai-authority";
+
 export type SuggestionRow = typeof mailReminderSuggestion.$inferSelect;
 
 export const enqueueReminderSuggestion = async (input: {
+  origin: AiOrigin;
   userId: string;
   mailboxId: string;
   threadId: string;
@@ -15,34 +20,57 @@ export const enqueueReminderSuggestion = async (input: {
   timeZone: string;
   automatic: boolean;
 }) => {
-  await db
-    .insert(mailReminderSuggestion)
-    .values({
-      ...input,
-      availableAt: new Date(),
-      createdAt: new Date(),
-      id: crypto.randomUUID(),
-      status: "pending",
-    })
-    .onConflictDoUpdate({
-      set: {
-        automatic: sql`${mailReminderSuggestion.automatic} or ${input.automatic}`,
-        status: sql`case
-          when ${input.automatic} and not ${mailReminderSuggestion.automatic}
+  const { origin: admittedOrigin, ...values } = input;
+  const automatic = input.automatic || admittedOrigin.mode === "automation";
+  const origin: AiOrigin = {
+    ...admittedOrigin,
+    mode: automatic ? "automation" : "interactive",
+  };
+  await db.transaction(async (tx) => {
+    await assertAiAuthority(
+      {
+        effect: "write",
+        mailboxId: input.mailboxId,
+        origin,
+        userId: input.userId,
+      },
+      tx,
+      { lock: true }
+    );
+    await tx
+      .insert(mailReminderSuggestion)
+      .values({
+        ...values,
+        authorityVersion: origin.policyVersion,
+        automatic,
+        availableAt: new Date(),
+        createdAt: new Date(),
+        id: crypto.randomUUID(),
+        status: "pending",
+      })
+      .onConflictDoUpdate({
+        set: {
+          automatic: sql`${mailReminderSuggestion.automatic} or ${automatic}`,
+          status: sql`case
+          when ${automatic} and not ${mailReminderSuggestion.automatic}
             and ${mailReminderSuggestion.status} = 'suggested'
             and ${mailReminderSuggestion.result}->>'automaticEligible' = 'true'
           then 'pending' else ${mailReminderSuggestion.status} end`,
-      },
-      setWhere: or(
-        eq(mailReminderSuggestion.status, "pending"),
-        eq(mailReminderSuggestion.status, "suggested")
-      ),
-      target: [
-        mailReminderSuggestion.userId,
-        mailReminderSuggestion.mailboxId,
-        mailReminderSuggestion.messageId,
-      ],
-    });
+        },
+        setWhere: and(
+          eq(mailReminderSuggestion.authorityVersion, origin.policyVersion),
+          or(
+            eq(mailReminderSuggestion.status, "pending"),
+            eq(mailReminderSuggestion.status, "suggested")
+          )
+        ),
+        target: [
+          mailReminderSuggestion.userId,
+          mailReminderSuggestion.mailboxId,
+          mailReminderSuggestion.messageId,
+        ],
+      });
+  });
   const [row] = await db
     .select()
     .from(mailReminderSuggestion)
@@ -77,14 +105,26 @@ export const enqueueAutomaticReminderSuggestions = async (input: {
       )
     );
   for (const preference of preferences) {
-    await enqueueReminderSuggestion({
-      automatic: true,
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-      threadId: input.threadId,
-      timeZone: preference.timeZone,
-      userId: preference.userId,
-    });
+    try {
+      const origin = await captureAiOrigin({
+        mailboxId: input.mailboxId,
+        mode: "automation",
+        userId: preference.userId,
+      });
+      await enqueueReminderSuggestion({
+        automatic: true,
+        mailboxId: input.mailboxId,
+        messageId: input.messageId,
+        origin,
+        threadId: input.threadId,
+        timeZone: preference.timeZone,
+        userId: preference.userId,
+      });
+    } catch (error) {
+      if (!(error instanceof ORPCError && error.status < 500)) {
+        throw error;
+      }
+    }
   }
 };
 

@@ -13,9 +13,37 @@ import {
   calendarUpdateInputSchema,
   calendarUpdateColorInputSchema,
 } from "@quieter/calendar";
+import {
+  calendarAvailabilityInputSchema,
+  calendarAvailabilityResultSchema,
+} from "@quieter/calendar/availability";
 import { z } from "zod";
 
+import { proposeCalendarAvailabilityForUser } from "../calendar/availability";
+import {
+  calendarBookingCreateInputSchema,
+  calendarBookingCreateResultSchema,
+  calendarBookingLinkRefSchema,
+  calendarBookingOwnerLinkSchema,
+  calendarBookingOwnerListInputSchema,
+  calendarBookingOwnerListSchema,
+  calendarBookingResultInputSchema,
+  calendarBookingResultSchema,
+  calendarBookingViewInputSchema,
+  calendarBookingViewSchema,
+} from "../calendar/booking-contracts";
+import {
+  createCalendarBookingLinkForUser,
+  listCalendarBookingLinksForUser,
+  lookupCalendarBookingResult,
+  revokeCalendarBookingLinkForUser,
+  viewCalendarBooking,
+} from "../calendar/bookings";
 import { importCalendarInvitationAttachmentForUser } from "../calendar/invitation-import";
+import {
+  calendarProposalCreateInputSchema,
+  createCalendarProposalEventForUser,
+} from "../calendar/proposals";
 import {
   createCalendarEventForUser,
   deleteCalendarEventForUser,
@@ -28,7 +56,7 @@ import {
   updateCalendarEventForUser,
   updateCalendarColorForUser,
 } from "../calendar/service";
-import { mailboxIdSchema, protectedProcedure } from "./base";
+import { mailboxIdSchema, protectedProcedure, publicProcedure } from "./base";
 
 export const calendarRouter = {
   accounts: protectedProcedure
@@ -48,6 +76,52 @@ export const calendarRouter = {
           userId: context.userId,
         })
     ),
+
+  availability: protectedProcedure
+    .input(calendarAvailabilityInputSchema)
+    .output(calendarAvailabilityResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await proposeCalendarAvailabilityForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  bookingLinks: protectedProcedure
+    .route({ method: "GET" })
+    .input(calendarBookingOwnerListInputSchema)
+    .output(calendarBookingOwnerListSchema)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await listCalendarBookingLinksForUser({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }),
+
+  bookingResult: publicProcedure
+    .route({ method: "POST" })
+    .input(calendarBookingResultInputSchema)
+    .output(calendarBookingResultSchema)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await lookupCalendarBookingResult({
+        ...input,
+        signal: context.signal,
+      });
+    }),
+
+  bookingView: publicProcedure
+    .route({ method: "POST" })
+    .input(calendarBookingViewInputSchema)
+    .output(calendarBookingViewSchema)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await viewCalendarBooking({ ...input, signal: context.signal });
+    }),
 
   calendars: protectedProcedure
     .input(calendarRefSchema.pick({ connectionId: true }))
@@ -79,6 +153,30 @@ export const calendarRouter = {
     .handler(
       async ({ context, input }) =>
         await createCalendarEventForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  createBookingLink: protectedProcedure
+    .input(calendarBookingCreateInputSchema)
+    .output(calendarBookingCreateResultSchema)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await createCalendarBookingLinkForUser({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }),
+
+  createFromProposal: protectedProcedure
+    .input(calendarProposalCreateInputSchema)
+    .output(calendarMutationResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await createCalendarProposalEventForUser({
           ...input,
           signal: context.signal,
           userId: context.userId,
@@ -151,6 +249,18 @@ export const calendarRouter = {
           userId: context.userId,
         })
     ),
+
+  revokeBookingLink: protectedProcedure
+    .input(calendarBookingLinkRefSchema)
+    .output(calendarBookingOwnerLinkSchema)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await revokeCalendarBookingLinkForUser({
+        ...input,
+        signal: context.signal,
+        userId: context.userId,
+      });
+    }),
 
   update: protectedProcedure
     .input(calendarUpdateInputSchema)
