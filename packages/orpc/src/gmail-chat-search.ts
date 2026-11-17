@@ -41,6 +41,7 @@ import {
 } from "./gmail-mailbox-access";
 import { writeGmailCapturedMessage } from "./mail-capture";
 import { learnAiMemoryFromMailAction } from "./mail/feedback";
+import { filterMailSnoozeVisibility } from "./snooze/queries";
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -119,33 +120,54 @@ export const searchGmailForUser = async (
   }
 ): Promise<GmailSearchResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const result = await listMessagesForAgent(accessToken, {
-      mailbox: input.scope === "all_mail" ? undefined : input.category,
-      maxResults: input.maxResults,
-      pageToken: input.pageToken,
-      query: input.query,
-      signal: input.signal,
-    });
+    let { pageToken } = input;
+    while (true) {
+      const result = await listMessagesForAgent(accessToken, {
+        mailbox: input.scope === "all_mail" ? undefined : input.category,
+        maxResults: input.maxResults,
+        pageToken,
+        query: input.query,
+        signal: input.signal,
+      });
+      let { messages } = result;
+      if (
+        input.scope !== "all_mail" &&
+        (input.category === "done" || input.category === "later")
+      ) {
+        const visible = await filterMailSnoozeVisibility({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          messages,
+          threadIds: messages.map((message) => message.threadId),
+          userId: input.userId,
+        });
+        messages = messages.filter((message) => visible.has(message.threadId));
+        if (messages.length === 0 && result.nextPageToken) {
+          pageToken = result.nextPageToken;
+          continue;
+        }
+      }
 
-    return {
-      category: input.category,
-      fetchedAt: new Date().toISOString(),
-      messages: result.messages.map((message) => ({
-        date: message.date ?? message.internalDate,
-        from: message.from,
-        id: message.id,
-        isUnread: message.isUnread,
-        labelIds: message.labelIds,
-        snippet: message.snippet,
-        subject: message.subject,
-        threadId: message.threadId,
-      })),
-      nextPageToken: result.nextPageToken,
-      query: input.query,
-      resultSizeEstimate: result.resultSizeEstimate,
-      scope: input.scope,
-      status: "success",
-    };
+      return {
+        category: input.category,
+        fetchedAt: new Date().toISOString(),
+        messages: messages.map((message) => ({
+          date: message.date ?? message.internalDate,
+          from: message.from,
+          id: message.id,
+          isUnread: message.isUnread,
+          labelIds: message.labelIds,
+          snippet: message.snippet,
+          subject: message.subject,
+          threadId: message.threadId,
+        })),
+        nextPageToken: result.nextPageToken,
+        query: input.query,
+        resultSizeEstimate: result.resultSizeEstimate,
+        scope: input.scope,
+        status: "success",
+      };
+    }
   });
 
 const THREAD_MESSAGE_LIMIT = 12;

@@ -47,6 +47,8 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
+import { snoozeLiveStatuses } from "../../mailbox/components/mail-snooze-dialog";
+
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
   mailboxId: string;
@@ -275,6 +277,9 @@ const createFolderEntries = (
 ): MenuEntry[] => {
   const entries: MenuEntry[] = [];
   const hasInbox = props.threadLabelIds.includes("INBOX");
+  const hasSnooze =
+    props.message.snooze !== undefined &&
+    snoozeLiveStatuses.has(props.message.snooze.status);
   const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
     props.mailbox
   );
@@ -299,7 +304,31 @@ const createFolderEntries = (
         ? "Return to Inbox for everyone"
         : "Return to Inbox",
       onAction: () => {
+        if (hasSnooze) {
+          void props.actions.onApplySnooze?.(props.message.threadId, {
+            kind: "return-now",
+          });
+          return;
+        }
         void props.actions.onReturnToInbox?.(props.message.threadId);
+      },
+      type: "item",
+    });
+  }
+  if (canChangePlacement && hasSnooze && props.actions.onApplySnooze) {
+    const keepInDone =
+      props.message.snooze?.status === "active" &&
+      !hasInbox &&
+      (props.message.threadInboxIncomingMessageIds?.length ?? 0) === 0;
+    entries.push({
+      disabled: isBusy,
+      icon: CheckmarkCircle02Icon,
+      id: "cancel-snooze",
+      label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: () => {
+        void props.actions.onApplySnooze?.(props.message.threadId, {
+          kind: "cancel",
+        });
       },
       type: "item",
     });

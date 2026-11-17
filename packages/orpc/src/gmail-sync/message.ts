@@ -46,6 +46,7 @@ import { loadMailAutoLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { writeGmailCapturedMessage } from "../mail-capture";
 import { observeReminderMail } from "../reminders/service";
+import { handleSnoozeInbound } from "../snooze/service";
 import {
   processMailVerificationCode,
   AI_ADMISSION_RETRY_MS,
@@ -738,6 +739,11 @@ export const processGmailMessage = async ({
             mailboxId,
             snapshot: capturedSnapshot,
             source: "history",
+          });
+          await handleSnoozeInbound({
+            mailboxId,
+            messageId: capturedSnapshot.id,
+            threadId: capturedSnapshot.threadId,
           });
         }
       }),
