@@ -26,6 +26,7 @@ import { textToComposeBodyHtml } from "@quieter/app/features/compose/domain/draf
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { MessageLabels } from "@quieter/app/features/message-labels/components/message-labels";
+import { CorrespondentHistoryAction } from "@quieter/app/features/message-thread/components/correspondent-history-action";
 import { createMailboxThreadMessageActionHandlers } from "@quieter/app/features/message-thread/components/message-action-handlers";
 import { MessageActionsDropdown } from "@quieter/app/features/message-thread/components/message-actions";
 import { MessageAttachments } from "@quieter/app/features/message-thread/components/message-attachments";
@@ -49,6 +50,7 @@ import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -123,6 +125,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     message,
     navigationScope,
     onBackToList,
+    onOpenConversation,
     onManageSnippets,
     subject,
     threadAttachments,
@@ -377,6 +380,20 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               message={hotkeyMessage}
             />
           )}
+          {mailboxProvider !== "api" &&
+          !isSandboxMailboxId(mailboxId) &&
+          activeMailbox !== "drafts" &&
+          !message.draftId &&
+          message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true &&
+          onOpenConversation ? (
+            <CorrespondentHistoryAction
+              mailboxEmail={currentUserEmail ?? null}
+              mailboxId={mailboxId}
+              messages={threadMessages}
+              onOpenConversation={onOpenConversation}
+              threadId={message.threadId}
+            />
+          ) : null}
           {canSetThreadPlacement && (
             <IconButtonTooltip label={placementLabel}>
               <Button

@@ -36,6 +36,7 @@ import {
   textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { useMailboxNavigationBlocker } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { toastError } from "@quieter/app/lib/error-toast";
 import {
   deleteDemoDraft,
@@ -67,7 +68,6 @@ import type { ScheduledSendTime } from "@quieter/mail/scheduled-send";
 import { toast } from "@quieter/ui/toast";
 import { revalidateLogic, useForm } from "@tanstack/react-form";
 import { useQueryClient } from "@tanstack/react-query";
-import { useBlocker } from "@tanstack/react-router";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 import { recoverComposeSchedule } from "../domain/scheduled-recovery";
@@ -1016,7 +1016,7 @@ export const useComposeDialogController = ({
     subscribe: (onChange) => form.store.subscribe(onChange),
   });
 
-  useBlocker({
+  useMailboxNavigationBlocker({
     enableBeforeUnload: () => {
       if (
         !draftClosedRef.current &&
