@@ -2,7 +2,9 @@
 import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
+import { mailbox } from "@quieter/database/schema";
 import type { MessageListItem } from "@quieter/mail/messages";
+import { eq } from "drizzle-orm";
 import {
   afterAll,
   beforeAll,
@@ -14,7 +16,11 @@ import {
 } from "vite-plus/test";
 
 import { consumeRateLimit } from "../src/abuse-protection";
-import type { MailRequestContext } from "../src/gmail-request";
+import type {
+  assertMailEffectAllowed,
+  callGmail,
+  MailRequestContext,
+} from "../src/gmail-request";
 import { mailInputSchemas } from "../src/mail/inputs";
 import {
   applyMailPlacement,
@@ -95,11 +101,41 @@ vi.mock("../src/mailbox/access", () => ({
   },
 }));
 vi.mock("../src/gmail-request", () => ({
+  assertMailEffectAllowed: async (
+    ...[context, mailboxId, transaction]: Parameters<
+      typeof assertMailEffectAllowed
+    >
+  ) => {
+    context.signal?.throwIfAborted();
+    if (transaction === undefined) {
+      throw new Error("Placement authorization needs its transaction.");
+    }
+    await transaction
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, mailboxId))
+      .for("update");
+    if (!fixture.state.access || !fixture.state.write) {
+      throw new ORPCError("FORBIDDEN");
+    }
+    await context.beforeEffect?.(transaction);
+    context.signal?.throwIfAborted();
+  },
   callGmail: async <Result>(
     context: MailRequestContext,
-    _mailboxId: string,
-    run: (accessToken: string, signal?: AbortSignal) => Promise<Result>
-  ) => await run("placement-fixture-token", context.signal),
+    mailboxId: string,
+    run: (
+      ...args: Parameters<Parameters<typeof callGmail>[2]>
+    ) => Promise<Result>
+  ) =>
+    await run(
+      "placement-fixture-token",
+      context.signal,
+      async () => {
+        await context.beforeEffect?.();
+      },
+      { googleSubject: "placement-fixture-subject", mailboxId }
+    ),
 }));
 vi.mock("../src/mail-capture", () => ({
   refreshGmailCapturedMessageMetadata: async () => {},
@@ -110,8 +146,10 @@ vi.mock("@quieter/gmail", () => ({
     _accessToken: string,
     messageIds: readonly string[],
     changes: { addLabelIds?: string[]; removeLabelIds?: string[] },
-    signal?: AbortSignal
+    signal?: AbortSignal,
+    beforeEffect?: () => Promise<void>
   ) => {
+    await beforeEffect?.();
     await fixture.state.beforeWrite?.();
     signal?.throwIfAborted();
     fixture.state.providerWrites += 1;

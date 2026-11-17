@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 /* oxlint-disable eslint/require-await -- Fetch mocks preserve the asynchronous transport contract. */
 import type { CalendarEventTime } from "@quieter/calendar";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
@@ -11,9 +12,14 @@ vi.mock(import("../src/connectors/runtime"), async (importOriginal) => {
   return {
     ...actual,
     runAuthorizedConnector: async <T>(
-      _input: Parameters<typeof actual.runAuthorizedConnector>[0],
-      run: (token: string) => Promise<T>
-    ): Promise<T> => await run("owned-test-token"),
+      input: Parameters<typeof actual.runAuthorizedConnector>[0],
+      run: (
+        token: string,
+        signal?: AbortSignal,
+        beforeEffect?: () => Promise<void>
+      ) => Promise<T>
+    ): Promise<T> =>
+      await run("owned-test-token", input.signal, input.beforeEffect),
   };
 });
 
@@ -117,6 +123,63 @@ const times: {
 
 describe("Microsoft calendar series edits", () => {
   afterEach(() => vi.unstubAllGlobals());
+
+  test("a policy changed while the event loads prevents the final mutation", async () => {
+    let blocked = false;
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (new URL(new Request(url).url).pathname.endsWith("/calendar-1")) {
+        return Response.json({
+          canEdit: true,
+          id: reference.calendarId,
+          name: "Calendar",
+        });
+      }
+      blocked = true;
+      return Response.json(event);
+    });
+    vi.stubGlobal("fetch", request);
+    await expect(
+      updateMicrosoftCalendarEventForUser({
+        ...reference,
+        beforeEffect: async () => {
+          if (blocked) {
+            throw new ORPCError("FORBIDDEN");
+          }
+        },
+        changes: { title: "Changed" },
+        version: event["@odata.etag"],
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      request.mock.calls.some(([, init]) => init?.method !== undefined)
+    ).toBeFalsy();
+  });
+
+  test("a revoked calendar edit grant prevents the final mutation", async () => {
+    let canEdit = true;
+    const request = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      if (new URL(new Request(url).url).pathname.endsWith("/calendar-1")) {
+        return Response.json({
+          canEdit,
+          id: reference.calendarId,
+          name: "Calendar",
+        });
+      }
+      canEdit = false;
+      return Response.json(event);
+    });
+    vi.stubGlobal("fetch", request);
+    await expect(
+      updateMicrosoftCalendarEventForUser({
+        ...reference,
+        changes: { title: "Changed" },
+        version: event["@odata.etag"],
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(
+      request.mock.calls.some(([, init]) => init?.method !== undefined)
+    ).toBeFalsy();
+  });
 
   test.each(
     times.flatMap((time) => ranges.map((range) => ({ ...time, range })))

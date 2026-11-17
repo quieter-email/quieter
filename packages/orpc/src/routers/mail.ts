@@ -1,6 +1,7 @@
 import { getMailCaptureStatus } from "../mail-capture";
 import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
+import { getComposeSendReadiness } from "../mail/compose-readiness";
 import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
@@ -37,6 +38,9 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getAttachment)
     .handler(queriesMailOperations.getAttachment),
+  getComposeSendReadiness: protectedProcedure
+    .input(mailInputSchemas.getComposeSendReadiness)
+    .handler(getComposeSendReadiness),
   getComposeSendStatus: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getComposeSendStatus)

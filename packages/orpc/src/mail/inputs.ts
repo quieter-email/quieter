@@ -8,6 +8,8 @@ import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import { z } from "zod";
 
+import { composeSendReadinessInputSchema } from "./snippet-quote-provenance";
+
 const updateLabelsInputSchema = z
   .object({
     addLabelIds: z.array(z.string()).optional(),
@@ -159,6 +161,7 @@ export const mailInputSchemas = {
     messageId: z.string(),
     mimeType: z.string().min(1),
   }),
+  getComposeSendReadiness: composeSendReadinessInputSchema,
   getComposeSendStatus: z.object({
     mailboxId: z.string().trim().min(1),
     sendOperationId: z.string().trim().min(1),

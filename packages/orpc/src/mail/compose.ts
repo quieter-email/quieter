@@ -24,7 +24,7 @@ import {
   sendGmailMessage,
   sendGmailUnsubscribe,
 } from "../gmail-compose";
-import { callGmail } from "../gmail-request";
+import { assertMailWriteAccess, callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
@@ -41,6 +41,92 @@ import {
 import { withMailComposeLock } from "./compose-lock";
 import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
+import { captureMailSendIntentAuthority } from "./intent-authority";
+import type { MailSendIntentAuthority } from "./intent-authority";
+import { assertComposeSnippetFieldsResolved } from "./snippet-quote-provenance";
+
+const saveDraftMetadata = async (input: {
+  context: MailRequestContext;
+  draft: MailInputs["saveDraft"]["draft"];
+  draftId: string;
+  learningOrigin: MailSendIntentAuthority["learning"];
+  mailboxId: string;
+}) => {
+  let reminderSaved = false;
+  try {
+    await saveDraftReminderIntent({
+      beforeEffect: async (database) => {
+        await input.context.beforeEffect?.(database);
+        await assertMailWriteAccess(
+          {
+            gmailIdentity: input.context.gmailIdentity,
+            mailboxId: input.mailboxId,
+            userId: input.context.userId,
+          },
+          database
+        );
+      },
+      draftId: input.draftId,
+      intent: input.draft.followUpReminder,
+      mailboxId: input.mailboxId,
+      origin: input.context.origin,
+      userId: input.context.userId,
+    });
+    reminderSaved = true;
+  } catch (error) {
+    const data: unknown = error instanceof ORPCError ? error.data : undefined;
+    const expectedAbort = error instanceof Error && error.name === "AbortError";
+    const expectedAuthorityChange =
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" ||
+        error.code === "UNAUTHORIZED" ||
+        error.code === "CONFLICT" ||
+        error.code === "NOT_FOUND");
+    if (
+      !(
+        typeof data === "object" &&
+        data !== null &&
+        "aiAuthorityReason" in data
+      ) &&
+      !expectedAuthorityChange &&
+      !expectedAbort
+    ) {
+      throw error;
+    }
+  }
+  try {
+    if (input.learningOrigin !== null) {
+      await captureMailboxDraftMemory({
+        draft: input.draft,
+        draftId: input.draftId,
+        mailboxId: input.mailboxId,
+        origin: input.learningOrigin,
+        userId: input.context.userId,
+      });
+    }
+  } catch (error) {
+    const data: unknown = error instanceof ORPCError ? error.data : undefined;
+    const expectedAbort = error instanceof Error && error.name === "AbortError";
+    const expectedAuthorityChange =
+      error instanceof ORPCError &&
+      (error.code === "FORBIDDEN" ||
+        error.code === "UNAUTHORIZED" ||
+        error.code === "CONFLICT" ||
+        error.code === "NOT_FOUND");
+    if (
+      !(
+        typeof data === "object" &&
+        data !== null &&
+        "aiAuthorityReason" in data
+      ) &&
+      !expectedAuthorityChange &&
+      !expectedAbort
+    ) {
+      throw error;
+    }
+  }
+  return reminderSaved ? input.draft.followUpReminder : undefined;
+};
 
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
@@ -103,6 +189,7 @@ export const composeMailOperations = {
     if (selectedMailbox.provider === "managed") {
       return await deleteManagedDraft({
         ...input,
+        context,
         requireExisting: requireExistingDraft,
         userId: context.userId,
       });
@@ -111,12 +198,13 @@ export const composeMailOperations = {
     return await callGmail(
       context,
       input.mailboxId,
-      async (accessToken) =>
+      async (accessToken, signal, beforeEffect) =>
         await deleteGmailComposeDraft(
           accessToken,
           input.mailboxId,
           { ...input, requireExisting: requireExistingDraft },
-          context.signal
+          signal,
+          beforeEffect
         )
     );
   },
@@ -206,6 +294,11 @@ export const composeMailOperations = {
         message: "You do not have permission to send from this mailbox.",
       });
     }
+    const intentAuthority = await captureMailSendIntentAuthority({
+      mailboxId: input.mailboxId,
+      origin: context.origin ?? { kind: "human" },
+      userId: context.userId,
+    });
     const sourceDraftId = await resolveComposeSourceDraftId({
       ...input.draft,
       mailboxId: input.mailboxId,
@@ -224,56 +317,44 @@ export const composeMailOperations = {
         if (selectedMailbox.provider === "managed") {
           const saved = await saveManagedDraft({
             ...input,
-            privateContext,
+            context,
+            privateContext: privateContext || context.privateContext === true,
             userId: context.userId,
           });
-          await saveDraftReminderIntent({
-            draftId: saved.draftId,
-            intent: input.draft.followUpReminder,
-            mailboxId: input.mailboxId,
-            userId: context.userId,
-          });
-          await captureMailboxDraftMemory({
+          const followUpReminder = await saveDraftMetadata({
+            context,
             draft: input.draft,
             draftId: saved.draftId,
+            learningOrigin: intentAuthority.learning,
             mailboxId: input.mailboxId,
-            userId: context.userId,
           });
           return {
             ...saved,
-            ...(input.draft.followUpReminder === undefined
-              ? {}
-              : { followUpReminder: input.draft.followUpReminder }),
+            ...(followUpReminder === undefined ? {} : { followUpReminder }),
           };
         }
 
         return await callGmail(
           context,
           input.mailboxId,
-          async (accessToken) => {
+          async (accessToken, signal, beforeEffect, gmailIdentity) => {
             const saved = await saveGmailDraft(
               accessToken,
               input.mailboxId,
               input.draft,
-              context.signal
+              signal,
+              beforeEffect
             );
-            await saveDraftReminderIntent({
-              draftId: saved.draftId,
-              intent: input.draft.followUpReminder,
-              mailboxId: input.mailboxId,
-              userId: context.userId,
-            });
-            await captureMailboxDraftMemory({
+            const followUpReminder = await saveDraftMetadata({
+              context: { ...context, gmailIdentity },
               draft: input.draft,
               draftId: saved.draftId,
+              learningOrigin: intentAuthority.learning,
               mailboxId: input.mailboxId,
-              userId: context.userId,
             });
             return {
               ...saved,
-              ...(input.draft.followUpReminder === undefined
-                ? {}
-                : { followUpReminder: input.draft.followUpReminder }),
+              ...(followUpReminder === undefined ? {} : { followUpReminder }),
             };
           }
         );
@@ -292,7 +373,7 @@ export const composeMailOperations = {
       input: { mailboxId: input.mailboxId, message: input.draft },
     }),
   sendMessage: async ({
-    context,
+    context: requestContext,
     input,
     scheduledSendId,
   }: {
@@ -300,6 +381,28 @@ export const composeMailOperations = {
     input: MailInputs["sendMessage"];
     scheduledSendId?: string;
   }) => {
+    const sendOperationId =
+      input.message.sendOperationId ?? input.message.localId;
+    assertComposeSnippetFieldsResolved({
+      actorUserId: requestContext.userId,
+      mailboxId: input.mailboxId,
+      message: input.message,
+      sendOperationId,
+      snippetQuote: requestContext.snippetQuote,
+    });
+    const context: MailRequestContext = {
+      ...requestContext,
+      beforeEffect: async (database) => {
+        await requestContext.beforeEffect?.(database);
+        assertComposeSnippetFieldsResolved({
+          actorUserId: requestContext.userId,
+          mailboxId: input.mailboxId,
+          message: input.message,
+          sendOperationId,
+          snippetQuote: requestContext.snippetQuote,
+        });
+      },
+    };
     const selectedMailbox = await assertAccessibleMailbox({
       mailboxId: input.mailboxId,
       userId: context.userId,
@@ -309,6 +412,11 @@ export const composeMailOperations = {
         message: "You do not have permission to send from this mailbox.",
       });
     }
+    const intentAuthority = await captureMailSendIntentAuthority({
+      mailboxId: input.mailboxId,
+      origin: context.origin ?? { kind: "human" },
+      userId: context.userId,
+    });
     const sourceDraftId = await resolveComposeSourceDraftId({
       ...input.message,
       mailboxId: input.mailboxId,
@@ -334,6 +442,8 @@ export const composeMailOperations = {
         if (selectedMailbox.provider === "managed") {
           return await sendManagedMailboxMessage({
             ...input,
+            context,
+            intentAuthority,
             userId: context.userId,
           });
         }
@@ -341,36 +451,41 @@ export const composeMailOperations = {
         return await callGmail(
           context,
           input.mailboxId,
-          async (accessToken) => {
+          async (accessToken, signal, beforeEffect) => {
             const sent = await sendGmailMessage(
               accessToken,
               input.mailboxId,
               input.message,
-              context.signal,
+              signal,
               selectedMailbox.organizationId,
-              context.userId
+              context.userId,
+              beforeEffect,
+              intentAuthority.operation
             );
-            await captureMailboxMessageMemory({
-              actorUserId: context.userId,
-              mailboxId: input.mailboxId,
-              message: {
-                bcc: input.message.recipients.bcc,
-                bodyHtml: input.message.bodyHtml,
-                bodyText: input.message.bodyText,
-                cc: input.message.recipients.cc,
-                date: new Date().toISOString(),
-                id: sent.id,
-                inReplyTo: input.message.replyContext?.messageHeaderId,
-                subject: input.message.subject,
-                threadId: sent.threadId ?? sent.id,
-                to: input.message.recipients.to,
-              },
-              source: "sent",
-            }).catch((error: unknown) => {
-              reportError(error, {
-                operation: "Could not record sent-message learning.",
+            if (!sent.idempotent && intentAuthority.learning !== null) {
+              await captureMailboxMessageMemory({
+                actorUserId: context.userId,
+                mailboxId: input.mailboxId,
+                message: {
+                  bcc: input.message.recipients.bcc,
+                  bodyHtml: input.message.bodyHtml,
+                  bodyText: input.message.bodyText,
+                  cc: input.message.recipients.cc,
+                  date: new Date().toISOString(),
+                  id: sent.id,
+                  inReplyTo: input.message.replyContext?.messageHeaderId,
+                  subject: input.message.subject,
+                  threadId: sent.threadId ?? sent.id,
+                  to: input.message.recipients.to,
+                },
+                origin: intentAuthority.learning,
+                source: "sent",
+              }).catch((error: unknown) => {
+                reportError(error, {
+                  operation: "Could not record sent-message learning.",
+                });
               });
-            });
+            }
             return sent;
           },
           { kind: "send" }
@@ -385,67 +500,74 @@ export const composeMailOperations = {
     context: MailRequestContext;
     input: MailInputs["unsubscribeFromMessage"];
   }) =>
-    await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-      const message = await getGmailMessageMetadata(
-        accessToken,
-        input.messageId,
-        signal
-      );
-      const unsubscribeMailto = extractListUnsubscribeTargets(
-        message.payload?.headers?.find(
-          (header) => header.name.toLowerCase() === "list-unsubscribe"
-        )?.value
-      ).mailto;
+    await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken, signal, beforeEffect) => {
+        const message = await getGmailMessageMetadata(
+          accessToken,
+          input.messageId,
+          signal
+        );
+        const unsubscribeMailto = extractListUnsubscribeTargets(
+          message.payload?.headers?.find(
+            (header) => header.name.toLowerCase() === "list-unsubscribe"
+          )?.value
+        ).mailto;
 
-      if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not expose a valid unsubscribe address.",
-        });
-      }
-
-      const key = getUnsubscribeKey(message.payload?.headers ?? []);
-      if (key === undefined) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not identify a mailing list or sender.",
-        });
-      }
-      const result = await sendGmailUnsubscribe(
-        accessToken,
-        input.mailboxId,
-        {
-          key,
-          message: parseListUnsubscribeMailto(unsubscribeMailto),
-        },
-        signal
-      );
-
-      if (!result.idempotent) {
-        await learnAiMemoryFromMailAction({
-          action: "unsubscribe",
-          mailboxId: input.mailboxId,
-          metadata: {
-            senderDomain:
-              message.payload?.headers
-                ?.find((header) => header.name.toLowerCase() === "from")
-                ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
-                ?.groups?.domain?.toLowerCase() ?? null,
-            subject:
-              message.payload?.headers?.find(
-                (header) => header.name.toLowerCase() === "subject"
-              )?.value ?? null,
-          },
-          targetCount: 1,
-          userId: context.userId,
-        }).catch((error: unknown) => {
-          reportError(error, {
-            operation: "Could not record unsubscribe learning.",
+        if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "This message does not expose a valid unsubscribe address.",
           });
-        });
+        }
+
+        const key = getUnsubscribeKey(message.payload?.headers ?? []);
+        if (key === undefined) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "This message does not identify a mailing list or sender.",
+          });
+        }
+        const result = await sendGmailUnsubscribe(
+          accessToken,
+          input.mailboxId,
+          {
+            key,
+            message: parseListUnsubscribeMailto(unsubscribeMailto),
+          },
+          signal,
+          beforeEffect
+        );
+
+        if (!result.idempotent) {
+          await learnAiMemoryFromMailAction({
+            action: "unsubscribe",
+            mailboxId: input.mailboxId,
+            metadata: {
+              senderDomain:
+                message.payload?.headers
+                  ?.find((header) => header.name.toLowerCase() === "from")
+                  ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
+                  ?.groups?.domain?.toLowerCase() ?? null,
+              subject:
+                message.payload?.headers?.find(
+                  (header) => header.name.toLowerCase() === "subject"
+                )?.value ?? null,
+            },
+            origin: context.origin?.kind === "ai" ? context.origin : undefined,
+            targetCount: 1,
+            userId: context.userId,
+          }).catch((error: unknown) => {
+            reportError(error, {
+              operation: "Could not record unsubscribe learning.",
+            });
+          });
+        }
+        return {
+          key,
+          newlyRequested: !result.idempotent,
+          status: "requested" as const,
+        };
       }
-      return {
-        key,
-        newlyRequested: !result.idempotent,
-        status: "requested" as const,
-      };
-    }),
+    ),
 };

@@ -19,6 +19,7 @@ import { reportError } from "@quieter/observability";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { assertAgentMailboxAccess } from "./access";
@@ -774,6 +775,15 @@ export const enqueueManualMailAgentRun = async (input: {
         message: currentView.blockingReasons[0],
       });
     }
+    const origin = await captureAiOrigin(
+      {
+        mailboxId: input.mailboxId,
+        mode: "interactive",
+        userId: input.userId,
+      },
+      tx
+    );
+    await assertAiAuthority({ effect: "execute", origin }, tx);
     await tx
       .insert(mailboxAgentRun)
       .values({

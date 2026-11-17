@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { readFile } from "node:fs/promises";
 import { setTimeout } from "node:timers/promises";
 import { promisify } from "node:util";
 
@@ -9,6 +10,14 @@ import postgres from "postgres";
 const execute = promisify(execFile);
 
 export const createHeldSendDatabase = async () => {
+  if (process.platform === "linux") {
+    const available = /^MemAvailable:\s+(?<available>\d+)\s+kB$/mu.exec(
+      await readFile("/proc/meminfo", "utf-8")
+    )?.groups?.available;
+    if (available === undefined || Number(available) < 3 * 1024 * 1024) {
+      throw new Error("The test database requires 3 GiB available memory.");
+    }
+  }
   const container = `quieter-held-send-${crypto.randomUUID()}`;
   let client: ReturnType<typeof postgres> | undefined;
   const dispose = async () => {
@@ -22,6 +31,10 @@ export const createHeldSendDatabase = async () => {
     "run",
     "--detach",
     "--rm",
+    "--memory",
+    "512m",
+    "--memory-swap",
+    "512m",
     "--name",
     container,
     "--publish",

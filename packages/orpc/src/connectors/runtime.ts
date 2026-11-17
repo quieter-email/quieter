@@ -5,10 +5,14 @@ import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { lockCalendarNativeAccounts } from "../calendar/native-lock-plan";
+import type { CalendarNativeLockPlan } from "../calendar/native-lock-plan";
+import { lockCalendarBookingOwner } from "../calendar/owner-lock";
 import {
   decryptGmailCredentialSecret,
   encryptGmailCredentialSecret,
 } from "../gmail-credential-crypto";
+import type { MailEffectAssertion } from "../gmail-request";
 import { connectorDisplayNames } from "./contracts";
 import type { ConnectorProvider } from "./contracts";
 import {
@@ -22,7 +26,11 @@ export { LINEAR_SCOPES } from "./oauth-provider";
 export const LINEAR_MCP_URL = "https://mcp.linear.app/mcp";
 
 type ConnectorAuthorizationInput = {
+  authorityMailboxId?: string;
+  beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
   connectionId?: string;
+  prepareEffect?: () => Promise<void>;
   provider: ConnectorProvider;
   signal?: AbortSignal;
   userId: string;
@@ -136,6 +144,38 @@ const getConnectorRepairRequiredError = (provider: ConnectorProvider) =>
   new ORPCError("BAD_REQUEST", {
     message: `Reconnect ${connectorDisplayNames[provider]} before using this action.`,
   });
+
+export const assertConnectorWriteAccess = async (
+  input: {
+    connectionId: string;
+    provider: ConnectorProvider;
+    providerAccountId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db
+) => {
+  const [record] = await database
+    .select({
+      scopes: connectorCredential.scopes,
+      status: connectorCredential.status,
+    })
+    .from(connectorCredential)
+    .where(
+      and(
+        eq(connectorCredential.id, input.connectionId),
+        eq(connectorCredential.userId, input.userId),
+        eq(connectorCredential.provider, input.provider),
+        eq(connectorCredential.providerAccountId, input.providerAccountId)
+      )
+    )
+    .limit(1);
+  if (
+    record?.status !== "connected" ||
+    !hasRequiredConnectorScopes(input.provider, record.scopes)
+  ) {
+    throw getConnectorRepairRequiredError(input.provider);
+  }
+};
 
 const getAuthorizedConnectorToken = async (
   input: ConnectorAuthorizationInput,
@@ -290,7 +330,11 @@ const getAuthorizedConnectorToken = async (
 
 export const runAuthorizedConnector = async <Result>(
   input: ConnectorAuthorizationInput,
-  run: (accessToken: string, signal?: AbortSignal) => Promise<Result>
+  run: (
+    accessToken: string,
+    signal?: AbortSignal,
+    beforeEffect?: () => Promise<void>
+  ) => Promise<Result>
 ): Promise<Result> => {
   const connection = await getConnectorConnectionForUser(input);
   if (input.mutates === true && serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
@@ -310,9 +354,49 @@ export const runAuthorizedConnector = async <Result>(
     }
   }
   const authorization = { ...input, connectionId: connection.connectionId };
+  const beforeEffect =
+    input.mutates === true
+      ? async () => {
+          input.signal?.throwIfAborted();
+          await input.prepareEffect?.();
+          input.signal?.throwIfAborted();
+          await db.transaction(async (transaction) => {
+            if (input.provider === "microsoft_calendar") {
+              await lockCalendarBookingOwner({
+                executor: transaction,
+                userId: input.userId,
+              });
+              await lockCalendarNativeAccounts({
+                authorityMailboxId: input.authorityMailboxId,
+                calendarLockPlan: input.calendarLockPlan,
+                executor: transaction,
+                microsoftConnectionId: connection.connectionId,
+              });
+              await assertConnectorWriteAccess(
+                {
+                  ...authorization,
+                  providerAccountId: connection.providerAccountId,
+                },
+                transaction
+              );
+            }
+            await input.beforeEffect?.(transaction);
+            if (input.provider !== "microsoft_calendar") {
+              await assertConnectorWriteAccess(
+                {
+                  ...authorization,
+                  providerAccountId: connection.providerAccountId,
+                },
+                transaction
+              );
+            }
+          });
+          input.signal?.throwIfAborted();
+        }
+      : undefined;
   let token = await getAuthorizedConnectorToken(authorization);
   try {
-    return await run(token.accessToken, input.signal);
+    return await run(token.accessToken, input.signal, beforeEffect);
   } catch (error) {
     if (!(error instanceof ConnectorHttpError) || error.status !== 401) {
       throw error;
@@ -323,7 +407,7 @@ export const runAuthorizedConnector = async <Result>(
         token.accessToken
       );
       try {
-        return await run(token.accessToken, input.signal);
+        return await run(token.accessToken, input.signal, beforeEffect);
       } catch (retryError) {
         if (
           !(retryError instanceof ConnectorHttpError) ||

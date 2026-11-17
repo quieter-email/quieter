@@ -13,7 +13,7 @@ type AutoLabelOutcome =
       status: "retry";
     }
   | {
-      reason: "disabled" | "no_owner" | "not_entitled";
+      reason: "disabled" | "no_owner" | "not_entitled" | "policy";
       status: "skipped";
     };
 

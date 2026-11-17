@@ -70,6 +70,12 @@ import {
 import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
+import {
+  aiOperationOriginSchema,
+  assertAiAuthority,
+  captureAiOrigin,
+} from "./ai-authority";
+import type { AiOrigin } from "./ai-authority";
 import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
@@ -743,6 +749,7 @@ class AiMemoryRecallRequiredError extends ORPCError<"CONFLICT", undefined> {
 
 const applyAiMemoryPlanOnce = async ({
   actorUserId,
+  origin,
   allowDirectUserFactUpdates = false,
   changeSetSource,
   executor,
@@ -758,6 +765,7 @@ const applyAiMemoryPlanOnce = async ({
   sourceEventMailboxId,
 }: {
   actorUserId: string;
+  origin?: AiOrigin;
   allowDirectUserFactUpdates?: boolean;
   changeSetSource: "chat" | "feedback" | "settings" | "system";
   executor?: DatabaseExecutor;
@@ -796,6 +804,13 @@ const applyAiMemoryPlanOnce = async ({
       };
     });
   const appliedChangeSet = await (executor ?? db).transaction(async (tx) => {
+    if (origin !== undefined) {
+      await assertAiAuthority(
+        { effect: "write", origin, userId: actorUserId },
+        tx,
+        { lock: true }
+      );
+    }
     const config = await lockAiMemoryScope(tx, scope);
     if (config.revision !== expectedRevision) {
       throw new ORPCError("CONFLICT", {
@@ -1407,6 +1422,11 @@ export const requestAiMemoryUpdate = async ({
     });
   }
   const billingMailbox = await assertAccessibleMailbox({ mailboxId, userId });
+  const origin = await captureAiOrigin({
+    mailboxId,
+    mode: "interactive",
+    userId,
+  });
   const prepared = await planRequestedAiMemoryUpdate({
     allowMutations,
     billingOrganizationId: billingMailbox.organizationId,
@@ -1417,16 +1437,22 @@ export const requestAiMemoryUpdate = async ({
     userId,
     userMessage,
   });
+  if (prepared.plan.operations.length === 0) {
+    await assertAiAuthority({ effect: "read", origin });
+    return { answer: prepared.plan.answer, summary: prepared.plan.summary };
+  }
   const changeSet = await applyAiMemoryPlan({
     ...prepared,
     actorUserId: userId,
     changeSetSource,
+    origin,
     source: "explicit",
   });
-  return changeSet;
+  return { answer: changeSet.answer, summary: changeSet.summary };
 };
 
 export const recordAiMemoryEvent = async (input: {
+  origin?: AiOrigin;
   eventKey?: string;
   kind: UserAiContextEventKind;
   mailboxId: string;
@@ -1437,7 +1463,36 @@ export const recordAiMemoryEvent = async (input: {
     mailboxId: input.mailboxId,
     userId: input.userId,
   });
+  const origin =
+    input.origin ??
+    (await captureAiOrigin({
+      mailboxId: input.mailboxId,
+      mode: "automation",
+      userId: input.userId,
+    }));
   return await db.transaction(async (tx) => {
+    try {
+      await assertAiAuthority(
+        {
+          effect: "write",
+          mailboxId: input.mailboxId,
+          origin,
+          userId: input.userId,
+        },
+        tx,
+        { lock: true }
+      );
+    } catch (error) {
+      if (
+        error instanceof ORPCError &&
+        typeof error.data === "object" &&
+        error.data !== null &&
+        "aiAuthorityReason" in error.data
+      ) {
+        return null;
+      }
+      throw error;
+    }
     const scope = userScope(input.userId);
     await tx
       .select({ id: memoryUser.id })
@@ -1500,7 +1555,12 @@ export const recordAiMemoryEvent = async (input: {
           : randomUUID(),
         kind: input.kind,
         mailboxId: input.mailboxId,
-        metadata: { ...sanitizeMetadata(input.metadata), memoryScope: "user" },
+        metadata: {
+          ...sanitizeMetadata(input.metadata),
+          aiAuthorityMode: origin.mode,
+          aiAuthorityVersion: origin.policyVersion,
+          memoryScope: "user",
+        },
         organizationId: selectedMailbox.organizationId,
         updatedAt: now,
         userId: input.userId,
@@ -1512,6 +1572,7 @@ export const recordAiMemoryEvent = async (input: {
 };
 
 export const learnAiMemoryFromFeedback = async (input: {
+  origin?: AiOrigin;
   eventKey?: string;
   kind: UserAiContextEventKind;
   mailboxId: string;
@@ -1547,6 +1608,7 @@ const canRunMemoryModel = async (input: {
 };
 
 const forgetSensitiveAiMemory = async (input: {
+  origin: AiOrigin;
   mailboxId: string;
   messageId: string;
   text: string;
@@ -1600,6 +1662,16 @@ const forgetSensitiveAiMemory = async (input: {
     return { status: "skipped" as const };
   }
   await db.transaction(async (tx) => {
+    await assertAiAuthority(
+      {
+        effect: "write",
+        mailboxId: input.mailboxId,
+        origin: input.origin,
+        userId: input.userId,
+      },
+      tx,
+      { lock: true }
+    );
     await lockAiMemoryScope(tx, scope);
     const locked = await tx
       .select(memoryColumns)
@@ -1726,6 +1798,7 @@ const planExistingAiMemoryFromChatMessage = async (input: {
 };
 
 const learnPersonalAiMemoryFromChatMessage = async (input: {
+  origin: AiOrigin;
   bodyText: string;
   mailboxId: string;
   messageId: string;
@@ -1746,6 +1819,7 @@ const learnPersonalAiMemoryFromChatMessage = async (input: {
         ambient: true,
         userMessage: text.slice(0, AI_MEMORY_USER_MESSAGE_MAX_LENGTH),
       },
+      origin: { ...input.origin, mode: "automation" },
       userId: input.userId,
     });
     if (
@@ -1775,6 +1849,24 @@ export const learnAiMemoryFromChatMessage = async (
   const text = input.bodyText.trim();
   if (!text) {
     return { explicit: false, status: "skipped" as const };
+  }
+  try {
+    await assertAiAuthority({
+      effect: "write",
+      mailboxId: input.mailboxId,
+      origin: input.origin,
+      userId: input.userId,
+    });
+  } catch (error) {
+    if (
+      error instanceof ORPCError &&
+      typeof error.data === "object" &&
+      error.data !== null &&
+      "aiAuthorityReason" in error.data
+    ) {
+      return { explicit: false, status: "skipped" as const };
+    }
+    throw error;
   }
   const accessibleMailbox = await assertAccessibleMailbox({
     mailboxId: input.mailboxId,
@@ -1813,6 +1905,7 @@ export const learnAiMemoryFromChatMessage = async (
     const result = await forgetSensitiveAiMemory({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
+      origin: input.origin,
       text,
       userId: input.userId,
     });
@@ -1853,6 +1946,7 @@ export const learnAiMemoryFromChatMessage = async (
     actorUserId: input.userId,
     changeSetSource: "chat",
     existingEditsOnly: editIntent !== "add",
+    origin: input.origin,
     source: "explicit",
   });
   return {
@@ -1930,6 +2024,46 @@ export const refreshAiMemoryFromEvent = async ({
       );
     return { status: "skipped" as const };
   }
+  const stamped = aiOperationOriginSchema.safeParse({
+    kind: "ai",
+    mailboxId: candidate.mailboxId,
+    mode: candidate.metadata.aiAuthorityMode,
+    policyVersion: candidate.metadata.aiAuthorityVersion,
+    userId: candidate.userId,
+  });
+  try {
+    if (!stamped.success || stamped.data.kind !== "ai") {
+      throw new ORPCError("FORBIDDEN", {
+        message: "This learning request has expired.",
+      });
+    }
+    await assertAiAuthority({ effect: "write", origin: stamped.data });
+  } catch (error) {
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      throw error;
+    }
+    await db
+      .update(userAiContextEvent)
+      .set({
+        lastError: null,
+        metadata: {},
+        processingAt: null,
+        skippedAt: new Date(),
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(userAiContextEvent.id, candidate.id),
+          isNull(userAiContextEvent.mergedAt),
+          isNull(userAiContextEvent.skippedAt)
+        )
+      );
+    return { status: "skipped" as const };
+  }
+  if (!stamped.success || stamped.data.kind !== "ai") {
+    return { status: "skipped" as const };
+  }
+  const origin = stamped.data;
   const claimedAt = new Date();
   const [event] = await db
     .update(userAiContextEvent)
@@ -2071,6 +2205,14 @@ export const refreshAiMemoryFromEvent = async ({
         eq(userAiContextEvent.mailboxId, event.mailboxId),
         eq(userAiContextEvent.kind, event.kind),
         eq(sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
+        eq(
+          sql<string>`${userAiContextEvent.metadata}->>'aiAuthorityVersion'`,
+          String(origin.policyVersion)
+        ),
+        eq(
+          sql<string>`${userAiContextEvent.metadata}->>'aiAuthorityMode'`,
+          origin.mode
+        ),
         isNull(userAiContextEvent.mergedAt),
         isNull(userAiContextEvent.skippedAt),
         or(
@@ -2125,6 +2267,7 @@ export const refreshAiMemoryFromEvent = async ({
       const hydrated = await hydrateMailMemoryEvent({
         mailboxId: claimed.mailboxId,
         messageId: claimed.metadata.messageId,
+        origin,
         userId: claimed.userId,
       });
       if (hydrated === null) {
@@ -2210,7 +2353,12 @@ export const refreshAiMemoryFromEvent = async ({
           : kind,
       metadata: {
         ...Object.fromEntries(
-          Object.entries(metadata).filter(([key]) => key !== "userMessage")
+          Object.entries(metadata).filter(
+            ([key]) =>
+              key !== "userMessage" &&
+              key !== "aiAuthorityVersion" &&
+              key !== "aiAuthorityMode"
+          )
         ),
         observedAt: createdAt.toISOString(),
         previouslyProcessed: false,
@@ -2244,13 +2392,15 @@ export const refreshAiMemoryFromEvent = async ({
         }
       }
       planningAttempt += 1;
+      const billing = await createMailboxAiBillingContext({
+        externalId: `ai-memory-event:${event.id}:plan:${planningAttempt}`,
+        mailboxId: event.mailboxId,
+        usageKind: "aiMemory",
+        userId: event.userId,
+      });
+      await assertAiAuthority({ effect: "execute", origin });
       const plan = await planAiMemoryUpdate({
-        billing: await createMailboxAiBillingContext({
-          externalId: `ai-memory-event:${event.id}:plan:${planningAttempt}`,
-          mailboxId: event.mailboxId,
-          usageKind: "aiMemory",
-          userId: event.userId,
-        }),
+        billing,
         currentMemories: current.map(toEditorMemory),
         learningGuidance: config.learningPrompt,
 
@@ -2280,6 +2430,7 @@ export const refreshAiMemoryFromEvent = async ({
       changeSetSource: resolveChangeSetSource(event.kind),
       expectedRevision: config.revision,
       ...prepared,
+      origin,
       recallAndReplan,
       scope,
       source: memorySource,
@@ -2424,6 +2575,7 @@ export const processPendingAiMemoryEvents = async ({
 };
 
 export const learnAiMemoryFromMailAction = async ({
+  origin,
   action,
   eventKey,
   mailboxId,
@@ -2432,6 +2584,7 @@ export const learnAiMemoryFromMailAction = async ({
   targetCount,
   userId,
 }: {
+  origin?: AiOrigin;
   action: string;
   eventKey?: string;
   mailboxId: string;
@@ -2444,6 +2597,9 @@ export const learnAiMemoryFromMailAction = async ({
     return { status: "skipped" as const };
   }
   await assertAccessibleMailbox({ mailboxId, userId });
+  const capturedOrigin =
+    origin ??
+    (await captureAiOrigin({ mailboxId, mode: "automation", userId }));
   const config = await getPersonalAiMemoryScopeConfig(userId);
   if (!config.activeLearningEnabled) {
     return { status: "skipped" as const };
@@ -2468,6 +2624,7 @@ export const learnAiMemoryFromMailAction = async ({
         observationKind: "mail_action",
         targetCount,
       },
+      origin: { ...capturedOrigin, mode: "automation" },
       userId,
     });
     event ??= recorded;
@@ -2478,12 +2635,14 @@ export const learnAiMemoryFromMailAction = async ({
 };
 
 export const replaceAiMemoryFeedback = async ({
+  origin: providedOrigin,
   agent,
   expectedRevision,
   memories,
   mailboxId,
   userId,
 }: {
+  origin?: AiOrigin;
   agent: "auto_label";
   expectedRevision: number;
   memories: {
@@ -2500,6 +2659,9 @@ export const replaceAiMemoryFeedback = async ({
   mailboxId: string;
   userId: string;
 }) => {
+  const origin =
+    providedOrigin ??
+    (await captureAiOrigin({ mailboxId, mode: "automation", userId }));
   const prefix = `feedback:${agent}:${createHash("sha256").update(mailboxId).digest("hex")}:`;
   const feedbackMemories = memories.map((memory) => ({
     ...memory,
@@ -2515,6 +2677,11 @@ export const replaceAiMemoryFeedback = async ({
   }
   const now = new Date();
   const changes = await db.transaction(async (tx) => {
+    await assertAiAuthority(
+      { effect: "write", mailboxId, origin, userId },
+      tx,
+      { lock: true }
+    );
     const latestConfig = await lockAiMemoryScope(tx, scope);
     if (
       !latestConfig.activeLearningEnabled ||

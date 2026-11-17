@@ -32,6 +32,12 @@ vi.mock(import("@quieter/ai/ai-memory"), async (original) => ({
   planAiMemoryUpdate: mocks.plan,
 }));
 
+vi.mock(import("../src/ai-authority"), async (original) => ({
+  ...(await original()),
+  captureAiOrigin: async (input) =>
+    await Promise.resolve({ ...input, kind: "ai", policyVersion: 0 }),
+}));
+
 const request = {
   mailboxId: "billing-mailbox",
   request: "Remember that I prefer short replies.",

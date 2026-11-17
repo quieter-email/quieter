@@ -45,6 +45,25 @@ export const replaceChatParts = async (input: {
   return updated !== undefined;
 };
 
+export const mergePendingChatResolutions = (input: {
+  persistedParts: readonly ChatMessagePart[];
+  resolvedParts: readonly ChatMessagePart[];
+}) =>
+  input.persistedParts.map((part) => {
+    if (
+      !part.type.startsWith("tool-") ||
+      typeof part.toolCallId !== "string" ||
+      (part.state !== "approval-requested" && part.state !== "input-available")
+    ) {
+      return part;
+    }
+    const resolved = input.resolvedParts.find(
+      (candidate) =>
+        candidate.toolCallId === part.toolCallId && candidate.type === part.type
+    );
+    return resolved === undefined ? part : { ...part, ...resolved };
+  });
+
 /**
  * Pending tool calls cannot be resumed after a foreground exchange ends. Keep
  * a terminal model-visible result for each one so future transcript conversion
@@ -99,6 +118,8 @@ export const interruptedChatParts = (input: {
   )
     .filter(
       (part) =>
+        part.type !== "data-ai-authority" &&
+        part.type !== "data-ai-private-context" &&
         part.type !== "data-foreground" &&
         part.type !== "data-foreground-failed" &&
         part.type !== "data-chat-interruption"
@@ -135,6 +156,11 @@ export const interruptedChatParts = (input: {
     ...(input.retryable && !hasResult
       ? [{ type: "data-foreground-failed" }]
       : cancelPendingChatParts(durableParts)),
+    ...input.persistedParts.filter(
+      (part) =>
+        part.type === "data-ai-authority" ||
+        part.type === "data-ai-private-context"
+    ),
     { data: input.errorText, type: "data-chat-interruption" },
   ];
 };

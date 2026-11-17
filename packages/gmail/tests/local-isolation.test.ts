@@ -108,4 +108,77 @@ describe("local Gmail isolation", () => {
       expect.objectContaining({ method: "POST" })
     );
   });
+
+  test("checks write authority after the awaited development account lookup", async () => {
+    vi.stubEnv("QUIETER_DEPLOYMENT_ENV", "local");
+    vi.stubEnv("QUIETER_LOCAL_PROVIDER_MODE", "write");
+    vi.stubEnv("QUIETER_LOCAL_GMAIL_WRITE_ACCOUNTS", "dedicated@example.com");
+    let allowed = true;
+    const fetchMock = vi.fn<typeof fetch>().mockImplementation(async (url) => {
+      const path = url instanceof Request ? url.url : String(url);
+      if (path.endsWith("/profile")) {
+        await Promise.resolve();
+        allowed = false;
+        return Response.json({ emailAddress: "dedicated@example.com" });
+      }
+      return Response.json({ id: "sent", threadId: "thread" });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    const { sendRawMessage } = await import("../src/service");
+    const sending = sendRawMessage(
+      "test-token",
+      "dGVzdA==",
+      undefined,
+      undefined,
+      async () => {
+        if (!allowed) {
+          throw new Error("Authority revoked during preparation");
+        }
+        await Promise.resolve();
+      }
+    );
+    await expect(sending).rejects.toThrow(/revoked/u);
+    expect(
+      fetchMock.mock.calls.some(
+        ([url, options]) =>
+          (url instanceof Request ? url.url : String(url)).includes(
+            "/messages/send"
+          ) && options?.method === "POST"
+      )
+    ).toBeFalsy();
+  });
+
+  test("rechecks authority on each metadata write", async () => {
+    vi.stubEnv("QUIETER_DEPLOYMENT_ENV", "production");
+    const fetchMock = vi
+      .fn<typeof fetch>()
+      .mockResolvedValue(Response.json({}));
+    vi.stubGlobal("fetch", fetchMock);
+    const { batchModifyMessages } = await import("../src/service");
+    let allowed = true;
+    const beforeEffect = async () => {
+      if (!allowed) {
+        throw new Error("Authority changed before the next batch");
+      }
+      await Promise.resolve();
+    };
+    await batchModifyMessages(
+      "test-token",
+      ["first"],
+      { addLabelIds: ["STARRED"] },
+      undefined,
+      beforeEffect
+    );
+    allowed = false;
+    await expect(
+      batchModifyMessages(
+        "test-token",
+        ["second"],
+        { addLabelIds: ["STARRED"] },
+        undefined,
+        beforeEffect
+      )
+    ).rejects.toThrow(/Authority changed/u);
+    expect(fetchMock).toHaveBeenCalledOnce();
+  });
 });

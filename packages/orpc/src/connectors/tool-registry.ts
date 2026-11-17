@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
 
+import type { MailEffectAssertion } from "../gmail-request";
 import { CLICKUP_TOOLS, callClickUpTool } from "./clickup";
 import type { ConnectorProvider } from "./contracts";
 import { ONEDRIVE_TOOLS, callOneDriveTool } from "./microsoft-onedrive";
@@ -8,7 +9,9 @@ import { TODOIST_TOOLS, callTodoistTool } from "./todoist";
 
 type ConnectorToolCall = {
   arguments: Record<string, unknown>;
+  beforeEffect?: MailEffectAssertion;
   connectionId: string;
+  prepareEffect?: () => Promise<void>;
   signal?: AbortSignal;
   toolName: string;
   userId: string;

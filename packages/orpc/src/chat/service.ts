@@ -32,6 +32,7 @@ import {
   openInlineComposeOutputSchema,
   saveComposeDraftOutputSchema,
   sendMailOutputSchema,
+  heldSendStatusOutputSchema,
 } from "@quieter/ai/chat-tools";
 import type { ForegroundSnapshot } from "@quieter/ai/chat-tools";
 import { toCanonicalTranscript } from "@quieter/ai/chat-transcript";
@@ -50,6 +51,7 @@ import {
   chat as chatTable,
   chatMessage,
   gmailCapturedMessage,
+  mailbox,
 } from "@quieter/database/schema";
 import type { ChatMessagePart } from "@quieter/database/schema";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
@@ -76,6 +78,12 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
+import {
+  aiOperationOriginSchema,
+  assertAiAuthority,
+  captureAiOrigin,
+} from "../ai-authority";
+import type { AiOrigin } from "../ai-authority";
 import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import {
   learnAiMemoryFromChatMessage,
@@ -94,6 +102,8 @@ import {
   readGmailThreadForUser,
   searchGmailForUser,
 } from "../gmail-chat-search";
+import type { MailEffectAssertion } from "../gmail-request";
+import { assertAgentMailboxAccess } from "../mail-agent/access";
 import { composeMailOperations } from "../mail/compose";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
@@ -103,6 +113,11 @@ import {
   getReminder,
 } from "../reminders/service";
 import { hashRequest } from "../request-hash";
+import {
+  createHeldSend,
+  getHeldSend,
+  undoHeldSend,
+} from "../scheduled-send/service";
 import { createCalendarToolsContext } from "./calendar-tools";
 import {
   connectorToolsPrompt,
@@ -112,6 +127,7 @@ import {
   FOREGROUND_LEASE_MS,
   interruptedChatParts,
   matchesForegroundLease,
+  mergePendingChatResolutions,
   replaceChatParts,
 } from "./continuation";
 import { loadChatEditHistory } from "./edit-history";
@@ -122,6 +138,7 @@ import {
   mailReadToolsPrompt,
   semanticMailToolsPrompt,
 } from "./mail-tools";
+import { hasPrivateChatContext } from "./private-context";
 import {
   chatReplyInterruption,
   filterChatToolInputDrafts,
@@ -141,6 +158,28 @@ const MUTATING_CHAT_TOOLS = new Set<string>([
   ...mutatingChatToolNames,
   "create_reminder",
   "change_reminder",
+  "undo_send",
+]);
+const PRIVATE_CONTEXT_TOOLS = new Set([
+  "read_personal_context",
+  "create_reminder",
+  "change_reminder",
+  "get_reminder",
+  "list_reminders",
+  "connector_list_tools",
+  "connector_read",
+  "connector_write",
+  "linear_list_tools",
+  "linear_read",
+  "linear_write",
+  "list_calendars",
+  "list_calendar_availability",
+  "list_calendar_events",
+  "get_calendar_event",
+  "create_calendar_event",
+  "update_calendar_event",
+  "delete_calendar_event",
+  "respond_to_calendar_event",
 ]);
 const CHAT_CREATION_RECEIPTS = new Set([
   "connector_write",
@@ -198,6 +237,38 @@ export const resolveChatStreamErrorMessage = (error: unknown): string => {
   return isTransientAiProviderError(error)
     ? "The assistant is busy. Retry shortly."
     : "The answer could not be completed.";
+};
+
+export const executeClaimedChatTool = async (input: {
+  beforeExecution: () => Promise<void>;
+  execute: () => Promise<unknown>;
+  persistFailure: (failure: {
+    attempted: boolean;
+    errorText: string;
+  }) => Promise<void>;
+}) => {
+  let attempted = false;
+  try {
+    await input.beforeExecution();
+    attempted = true;
+    const output: unknown = await input.execute();
+    return output;
+  } catch (error) {
+    const expected = findExpectedChatError(error);
+    let errorText =
+      expected?.message ?? "The action could not be started. Try again.";
+    if (attempted) {
+      errorText =
+        expected === null || expected.message === UNCERTAIN_ACTION_ERROR
+          ? UNCERTAIN_ACTION_ERROR
+          : `${expected.message} ${UNCERTAIN_ACTION_ERROR}`;
+    }
+    await input.persistFailure({ attempted, errorText });
+    if (attempted && expected !== null) {
+      throw new ChatRequestError(expected.status, errorText, { cause: error });
+    }
+    throw error;
+  }
 };
 
 /**
@@ -515,6 +586,9 @@ export const toForegroundComposeMessage = (
 });
 
 const createGmailToolsContext = (input: {
+  beforeEffect: MailEffectAssertion;
+  privateContextState: { used: boolean };
+  origin: AiOrigin;
   category: MailboxCategory;
   mailboxId: string;
   userId: string;
@@ -525,8 +599,11 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await getMailboxOverviewForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           userId: input.userId,
         })
@@ -536,8 +613,11 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await listGmailLabelsForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           userId: input.userId,
         })
@@ -548,9 +628,12 @@ const createGmailToolsContext = (input: {
       async (runSignal) =>
         await modifyMailForUser({
           action,
+          beforeEffect: input.beforeEffect,
           category: input.category,
           id,
           mailboxId: input.mailboxId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           target,
           userId: input.userId,
@@ -562,9 +645,12 @@ const createGmailToolsContext = (input: {
       async (runSignal) =>
         await modifyMailBatchForUser({
           action,
+          beforeEffect: input.beforeEffect,
           category: input.category,
           ids,
           mailboxId: input.mailboxId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           target,
           userId: input.userId,
@@ -577,9 +663,12 @@ const createGmailToolsContext = (input: {
       async (runSignal) =>
         await readGmailAttachmentForUser({
           attachmentId,
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
           messageId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           userId: input.userId,
         })
@@ -589,9 +678,12 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await readGmailMessageForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
           messageId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           userId: input.userId,
         })
@@ -601,9 +693,12 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await readGmailMessagesForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
           messageIds,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           userId: input.userId,
         })
@@ -613,8 +708,11 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await readGmailThreadForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
+          origin: input.origin,
+          privateContext: input.privateContextState.used,
           signal: runSignal,
           threadId,
           userId: input.userId,
@@ -625,10 +723,13 @@ const createGmailToolsContext = (input: {
       signal,
       async (runSignal) =>
         await searchGmailForUser({
+          beforeEffect: input.beforeEffect,
           category: input.category,
           mailboxId: input.mailboxId,
           maxResults,
+          origin: input.origin,
           pageToken,
+          privateContext: input.privateContextState.used,
           query,
           scope,
           signal: runSignal,
@@ -685,36 +786,44 @@ const stampForegroundLease = (
       : part
   );
 
-const assertForegroundExchangeActive = async (input: {
-  assistantMessageId: string;
-  chatId: string;
-  userId: string;
-}) => {
-  const [messageRows, userRows] = await Promise.all([
-    db
-      .select({ parts: chatMessage.parts })
-      .from(chatMessage)
-      .where(
-        and(
-          eq(chatMessage.id, input.assistantMessageId),
-          eq(chatMessage.chatId, input.chatId),
-          eq(chatMessage.userId, input.userId)
-        )
+const assertForegroundExchangeActive = async (
+  input: {
+    assistantMessageId: string;
+    chatId: string;
+    userId: string;
+  },
+  database: Pick<typeof db, "select"> = db,
+  options?: { lock?: boolean }
+) => {
+  const messageQuery = database
+    .select({ parts: chatMessage.parts })
+    .from(chatMessage)
+    .where(
+      and(
+        eq(chatMessage.id, input.assistantMessageId),
+        eq(chatMessage.chatId, input.chatId),
+        eq(chatMessage.userId, input.userId)
       )
-      .limit(1),
-    db
-      .select({ parts: chatMessage.parts })
-      .from(chatMessage)
-      .where(
-        and(
-          eq(chatMessage.chatId, input.chatId),
-          eq(chatMessage.userId, input.userId),
-          eq(chatMessage.role, "user")
-        )
+    )
+    .limit(1);
+  const messageRows = await (options?.lock === true
+    ? messageQuery.for("update")
+    : messageQuery);
+  const userQuery = database
+    .select({ parts: chatMessage.parts })
+    .from(chatMessage)
+    .where(
+      and(
+        eq(chatMessage.chatId, input.chatId),
+        eq(chatMessage.userId, input.userId),
+        eq(chatMessage.role, "user")
       )
-      .orderBy(desc(chatMessage.position))
-      .limit(1),
-  ]);
+    )
+    .orderBy(desc(chatMessage.position))
+    .limit(1);
+  const userRows = await (options?.lock === true
+    ? userQuery.for("update")
+    : userQuery);
   const message = messageRows.at(0);
   const lastUserMessage = userRows.at(0);
   if (
@@ -966,6 +1075,13 @@ const prepareChatContext = async (input: {
   signal: AbortSignal;
   workspace: ForegroundSnapshot["workspace"];
 }) => {
+  const access = await assertAgentMailboxAccess({
+    mailboxId: input.mailboxId,
+    userId: input.userId,
+  });
+  if (access.shared) {
+    return { mailboxContext: input.context, serializedAiContext: null };
+  }
   let participants = "";
   const selectedThreadId =
     input.context.threadId ??
@@ -1151,8 +1267,89 @@ const createAiChatResponseInRequest = async (
     throw new ChatRequestError(409, "This workspace action was cancelled.");
   }
   const lastRow = rows.at(-1);
+  const privateContextState = {
+    used: rows.some(
+      (row) =>
+        (row.role === "assistant" ||
+          row.parts.some((part) => part.type === "data-ai-private-context")) &&
+        hasPrivateChatContext(row.parts)
+    ),
+  };
+  let storedAuthorityParts: ChatMessagePart[] | undefined;
+  if (validated.kind === "continue") {
+    storedAuthorityParts = lastRow?.parts;
+  } else if (
+    (lastRow?.role === "assistant" &&
+      lastRow.parts[0]?.type === "data-foreground-failed" &&
+      rows.at(-2)?.id === validated.userMessage.id) ||
+    (lastRow?.role === "user" &&
+      lastRow.id === validated.userMessage.id &&
+      getStoredMessageText(lastRow.parts) === validated.userMessage.text)
+  ) {
+    storedAuthorityParts = lastRow.parts;
+  }
+  let origin: AiOrigin;
+  if (storedAuthorityParts === undefined) {
+    if (validated.kind === "continue") {
+      throw new ChatRequestError(409, "This assistant request has expired.");
+    }
+    origin = await captureAiOrigin({
+      mailboxId,
+      mode: "interactive",
+      userId: input.userId,
+    });
+  } else {
+    const stored = aiOperationOriginSchema.safeParse(
+      storedAuthorityParts.find((part) => part.type === "data-ai-authority")
+        ?.origin
+    );
+    if (
+      !stored.success ||
+      stored.data.kind !== "ai" ||
+      stored.data.mode !== "interactive" ||
+      stored.data.mailboxId !== mailboxId ||
+      stored.data.userId !== input.userId
+    ) {
+      throw new ChatRequestError(
+        409,
+        "This assistant request has expired. Start a new request to continue."
+      );
+    }
+    origin = stored.data;
+    privateContextState.used ||= hasPrivateChatContext(storedAuthorityParts);
+  }
   let transcript: UIMessage[];
   let assistantMessageId: string;
+  const beforeEffect: MailEffectAssertion = async (database) => {
+    exchangeSignal.throwIfAborted();
+    const reader = database ?? db;
+    if (database !== undefined) {
+      await reader
+        .select({ id: mailbox.id })
+        .from(mailbox)
+        .where(eq(mailbox.id, mailboxId))
+        .for("update");
+    }
+    await assertForegroundExchangeActive(
+      {
+        assistantMessageId,
+        chatId: threadId,
+        userId: input.userId,
+      },
+      reader,
+      { lock: database !== undefined }
+    );
+    await assertAiAuthority(
+      {
+        effect: "write",
+        mailboxId,
+        origin,
+        userId: input.userId,
+      },
+      reader
+    );
+    exchangeSignal.throwIfAborted();
+  };
   let persistedAssistantParts: ChatMessagePart[] | null = null;
   let shouldGenerateTitle = false;
   let titlePrompt = "";
@@ -1162,13 +1359,37 @@ const createAiChatResponseInRequest = async (
 
   if (validated.kind === "message") {
     assistantMessageId = validated.foreground.exchangeId;
+    const editHistory =
+      validated.editSource === undefined
+        ? undefined
+        : await loadChatEditHistory({
+            ...validated.editSource,
+            mailboxId,
+            userId: input.userId,
+          });
+    if (editHistory === null) {
+      throw new ChatRequestError(404, "Message not found.");
+    }
+    privateContextState.used ||=
+      editHistory?.messages.some(
+        (message) =>
+          (message.role === "assistant" ||
+            message.parts.some(
+              (part) => part.type === "data-ai-private-context"
+            )) &&
+          hasPrivateChatContext(message.parts)
+      ) === true;
     const reservationParts: ChatMessagePart[] = [
       { foreground: validated.foreground, type: "data-foreground" },
+      { origin, type: "data-ai-authority" },
+      { type: "data-ai-private-context", used: privateContextState.used },
     ];
     persistedAssistantParts = reservationParts;
     const userParts: ChatMessagePart[] = [
       { text: validated.userMessage.text, type: "text" },
       { foreground: validated.foreground, type: "data-foreground" },
+      { origin, type: "data-ai-authority" },
+      { type: "data-ai-private-context", used: privateContextState.used },
     ];
     const updateChatMemory = async () => {
       try {
@@ -1177,6 +1398,7 @@ const createAiChatResponseInRequest = async (
           deferBackgroundTask: input.deferBackgroundTask,
           mailboxId,
           messageId: validated.userMessage.id,
+          origin,
           userId: input.userId,
         });
       } catch (error) {
@@ -1278,17 +1500,6 @@ const createAiChatResponseInRequest = async (
           409,
           "This chat message has already been submitted."
         );
-      }
-      const editHistory =
-        validated.editSource === undefined
-          ? undefined
-          : await loadChatEditHistory({
-              ...validated.editSource,
-              mailboxId,
-              userId: input.userId,
-            });
-      if (editHistory === null) {
-        throw new ChatRequestError(404, "Message not found.");
       }
       memoryUpdateResult = await updateChatMemory();
       const now = new Date();
@@ -1548,9 +1759,15 @@ const createAiChatResponseInRequest = async (
     }),
     convertToModelMessages(transcript),
   ]);
+  privateContextState.used ||=
+    preparedContext.serializedAiContext !== null ||
+    memoryUpdateResult?.explicit === true;
   const gmailToolsContext = createGmailToolsContext({
+    beforeEffect,
     category: validated.category,
     mailboxId,
+    origin,
+    privateContextState,
     userId: input.userId,
   });
 
@@ -1566,7 +1783,10 @@ const createAiChatResponseInRequest = async (
         });
         return await changeReminder({
           ...value,
+          beforeEffect,
           mailboxId,
+          origin,
+          signal: exchangeSignal,
           userId: input.userId,
         });
       },
@@ -1587,8 +1807,11 @@ const createAiChatResponseInRequest = async (
         const requestId = `${identity.slice(0, 8)}-${identity.slice(8, 12)}-4${identity.slice(13, 16)}-a${identity.slice(17, 20)}-${identity.slice(20, 32)}`;
         return await createReminder({
           ...value,
+          beforeEffect,
           mailboxId,
+          origin,
           requestId,
+          signal: exchangeSignal,
           userId: input.userId,
         });
       },
@@ -1603,6 +1826,20 @@ const createAiChatResponseInRequest = async (
         await getReminder({ ...value, mailboxId, userId: input.userId }),
       inputSchema: z.strictObject({ reminderId: z.uuid() }),
     }),
+    get_send_status: tool({
+      description:
+        "Read the current status of a held email in this inbox using its permanent sendOperationId. Only accepted confirms sending. Failed or uncertain results require checking delivery before another attempt.",
+      execute: async ({ sendOperationId }) => {
+        await assertAiAuthority({ effect: "read", origin });
+        return await getHeldSend({
+          mailboxId,
+          sendOperationId,
+          userId: input.userId,
+        });
+      },
+      inputSchema: z.strictObject({ sendOperationId: z.string().min(1) }),
+      outputSchema: heldSendStatusOutputSchema.nullable(),
+    }),
     list_reminders: tool({
       description:
         "List the user's personal reminders in the current mailbox. Read the reminder and its current version before editing it.",
@@ -1611,6 +1848,26 @@ const createAiChatResponseInRequest = async (
       inputSchema: z.strictObject({
         cursor: z.string().optional(),
         view: z.enum(["active", "history"]),
+      }),
+    }),
+    undo_send: tool({
+      description:
+        "Cancel a held email while its Undo window is open and restore its draft. Use the original sendOperationId from send_mail. This cannot recall a message already sent.",
+      execute: async ({ sendOperationId }) => {
+        await beforeEffect();
+        return await undoHeldSend({
+          beforeEffect,
+          mailboxId,
+          origin,
+          privateContext: privateContextState.used,
+          sendOperationId,
+          userId: input.userId,
+        });
+      },
+      inputSchema: z.strictObject({ sendOperationId: z.string().min(1) }),
+      outputSchema: z.strictObject({
+        draftId: z.string().nullable(),
+        status: z.enum(["abandoned", "canceled"]),
       }),
     }),
     ...createChatSuggestionTool(),
@@ -1643,7 +1900,13 @@ const createAiChatResponseInRequest = async (
           signal,
           async (runSignal) =>
             await composeMailOperations.saveDraft({
-              context: { signal: runSignal, userId: input.userId },
+              context: {
+                beforeEffect,
+                origin,
+                privateContext: privateContextState.used,
+                signal: runSignal,
+                userId: input.userId,
+              },
               input: {
                 draft: toForegroundComposeMessage(
                   reviewedDraft,
@@ -1651,6 +1914,7 @@ const createAiChatResponseInRequest = async (
                 ),
                 mailboxId,
               },
+              privateContext: privateContextState.used,
             })
         );
         return saveComposeDraftOutputSchema.parse({
@@ -1678,26 +1942,32 @@ const createAiChatResponseInRequest = async (
           mailboxId,
           transcript,
         });
-        const sent = await runMailTool(
-          signal,
-          async (runSignal) =>
-            await composeMailOperations.sendMessage({
-              context: { signal: runSignal, userId: input.userId },
-              input: {
-                mailboxId,
-                message: toForegroundComposeMessage(
-                  reviewedDraft,
-                  reviewedDraft.draftId
-                ),
-              },
-            })
-        );
+        const held = await runMailTool(signal, async (runSignal) => {
+          const beforeHeldEffect: MailEffectAssertion = async (database) => {
+            runSignal.throwIfAborted();
+            await beforeEffect(database);
+            runSignal.throwIfAborted();
+          };
+          await beforeHeldEffect();
+          return await createHeldSend({
+            beforeEffect: beforeHeldEffect,
+            mailboxId,
+            message: toForegroundComposeMessage(
+              reviewedDraft,
+              reviewedDraft.draftId
+            ),
+            origin,
+            privateContext: privateContextState.used,
+            signal: runSignal,
+            userId: input.userId,
+          });
+        });
         return sendMailOutputSchema.parse({
+          ...held,
           draftId: draft.draftId,
           draftRevision: draft.draftRevision,
-          id: sent.id,
-          status: "sent" as const,
-          ...(sent.threadId === undefined ? {} : { threadId: sent.threadId }),
+          restoredDraftId: held.draftId,
+          undoUntil: held.undoUntil,
         });
       },
     }),
@@ -1728,12 +1998,19 @@ const createAiChatResponseInRequest = async (
         })),
     ...createSemanticMailChatTools({ mailboxId, userId: input.userId }),
     ...createLinearChatTools({
+      beforeEffect,
       latestUserRequest,
       userId: input.userId,
     }),
-    ...createConnectorChatTools({ latestUserRequest, userId: input.userId }),
+    ...createConnectorChatTools({
+      beforeEffect,
+      latestUserRequest,
+      userId: input.userId,
+    }),
     ...createCalendarChatTools(
       createCalendarToolsContext({
+        authorityMailboxId: mailboxId,
+        beforeEffect,
         foreground: validated.foreground,
         transcript,
         userId: input.userId,
@@ -1774,8 +2051,10 @@ const createAiChatResponseInRequest = async (
       if (expectedParts === null) {
         throw new ChatRequestError(409, "This chat exchange is invalid.");
       }
-      const existingPart = expectedParts.find(
-        (part) => part.toolCallId === outcome.toolCallId
+      const existingPart = expectedParts.find((part) =>
+        outcome.toolCallId === undefined
+          ? part.type === outcome.type
+          : part.toolCallId === outcome.toolCallId
       );
       if (
         claimWrite &&
@@ -1798,7 +2077,10 @@ const createAiChatResponseInRequest = async (
           proposedPart: outcome,
         });
       }
-      const merged = { ...existingPart, ...outcome };
+      const merged =
+        outcome.toolCallId === undefined
+          ? outcome
+          : { ...existingPart, ...outcome };
       const parts = existingPart
         ? expectedParts.map((part) => (part === existingPart ? merged : part))
         : [...expectedParts, merged];
@@ -1827,12 +2109,33 @@ const createAiChatResponseInRequest = async (
     if (!definition.execute) {
       continue;
     }
-    const { execute } = definition;
+    const { execute: executeTool } = definition;
+    const execute = async (
+      toolInput: unknown,
+      options: Parameters<NonNullable<typeof definition.execute>>[1]
+    ) => {
+      const output: unknown = await executeTool(toolInput, options);
+      if (
+        PRIVATE_CONTEXT_TOOLS.has(toolName) &&
+        output !== null &&
+        output !== undefined &&
+        !(
+          typeof output === "object" &&
+          "status" in output &&
+          output.status === "error"
+        )
+      ) {
+        privateContextState.used = true;
+        await persistToolPart({ type: "data-ai-private-context", used: true });
+      }
+      return output;
+    };
     if (
       toolName === "linear_list_tools" ||
       toolName === "connector_list_tools"
     ) {
       definition.execute = async (toolInput: unknown, options) => {
+        await assertAiAuthority({ effect: "read", origin });
         const output: unknown = await execute(toolInput, options);
         connectedAccountTranscript.push({
           id: assistantMessageId,
@@ -1852,6 +2155,11 @@ const createAiChatResponseInRequest = async (
       continue;
     }
     if (!MUTATING_CHAT_TOOLS.has(toolName)) {
+      definition.execute = async (toolInput: unknown, options) => {
+        await assertAiAuthority({ effect: "read", origin });
+        const output: unknown = await execute(toolInput, options);
+        return output;
+      };
       continue;
     }
     definition.execute = async (toolInput: unknown, options) => {
@@ -1875,6 +2183,12 @@ const createAiChatResponseInRequest = async (
           "Read the connected account and available actions before continuing."
         );
       }
+      await assertAiAuthority({
+        effect: "write",
+        mailboxId,
+        origin,
+        userId: input.userId,
+      });
       const action = hashRequest({ input: toolInput, toolName });
       if (creationReceipts.has(action)) {
         return creationReceipts.get(action);
@@ -1898,8 +2212,22 @@ const createAiChatResponseInRequest = async (
         unconfirmedWrites.delete(action);
         throw error;
       }
-      options.abortSignal?.throwIfAborted();
-      const output: unknown = await execute(toolInput, options);
+      const output: unknown = await executeClaimedChatTool({
+        beforeExecution: async () => {
+          options.abortSignal?.throwIfAborted();
+          await beforeEffect();
+        },
+        execute: async () => {
+          const result: unknown = await execute(toolInput, options);
+          return result;
+        },
+        persistFailure: async (failure) => {
+          await persistToolPart({ ...part, ...failure, state: "output-error" });
+          if (!failure.attempted) {
+            unconfirmedWrites.delete(action);
+          }
+        },
+      });
       await persistToolPart({ ...part, output, state: "output-available" });
       if (
         typeof output !== "object" ||
@@ -1914,6 +2242,11 @@ const createAiChatResponseInRequest = async (
       return output;
     };
   }
+
+  await persistToolPart({
+    type: "data-ai-private-context",
+    used: privateContextState.used,
+  });
 
   const systemPrompt = [
     AI_PROMPT_SECURITY_POLICY,
@@ -1947,7 +2280,12 @@ const createAiChatResponseInRequest = async (
   });
   exchangeSignal.throwIfAborted();
   if (validated.kind === "continue" && persistedAssistantParts !== null) {
-    const resolvedParts: ChatMessagePart[] = transcript.at(-1)?.parts ?? [];
+    const resolvedTranscriptParts: ChatMessagePart[] =
+      transcript.at(-1)?.parts ?? [];
+    const resolvedParts = mergePendingChatResolutions({
+      persistedParts: persistedAssistantParts,
+      resolvedParts: resolvedTranscriptParts,
+    });
     const claimed = await replaceChatParts({
       chatId: threadId,
       expectedParts: persistedAssistantParts,
@@ -2070,6 +2408,15 @@ const createAiChatResponseInRequest = async (
             ? { ...part, foreground: previous.foreground }
             : part;
         });
+        parts = [
+          ...parts.filter(
+            (part) =>
+              part.type !== "data-ai-authority" &&
+              part.type !== "data-ai-private-context"
+          ),
+          { origin, type: "data-ai-authority" },
+          { type: "data-ai-private-context", used: privateContextState.used },
+        ];
         for (const part of previousParts) {
           if (
             MUTATING_CHAT_TOOLS.has(part.type.slice("tool-".length)) &&

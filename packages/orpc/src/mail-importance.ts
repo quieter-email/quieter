@@ -56,12 +56,24 @@ import {
 import { z } from "zod";
 
 import {
+  assertAiAuthority,
+  captureAiOrigin,
+  captureMailboxAutomationOrigin,
+} from "./ai-authority";
+import type {
+  AiOperationOrigin,
+  AiOrigin,
+  MailboxAutomationOrigin,
+} from "./ai-authority";
+import {
   buildMailMemoryQuery,
   learnAiMemoryFromMailAction,
   loadAiAgentContext,
   serializeAiAgentContext,
 } from "./ai-memory";
 import { getMailboxMemoryActor } from "./ai-memory-capture";
+import type { MailEffectAssertion } from "./gmail-request";
+import { assertAgentMailboxAccess } from "./mail-agent/access";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
 import { publishMailUpdate } from "./mail-updates";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -149,7 +161,33 @@ export const ensureMailImportanceWork = async (
   database: DatabaseExecutor,
   input: ImportanceSource
 ) => {
-  const values = importanceWorkValues(input);
+  const [owner] = await database
+    .select({ provider: mailbox.provider, userId: mailbox.ownerUserId })
+    .from(mailbox)
+    .where(eq(mailbox.id, input.mailboxId));
+  let origin: AiOrigin | MailboxAutomationOrigin | null = null;
+  if (owner?.provider === "managed") {
+    origin = await captureMailboxAutomationOrigin(
+      { mailboxId: input.mailboxId },
+      database
+    );
+  } else if (owner?.userId) {
+    origin = await captureAiOrigin(
+      {
+        mailboxId: input.mailboxId,
+        mode: "automation",
+        userId: owner.userId,
+      },
+      database
+    );
+  }
+  if (origin === null) {
+    throw new ORPCError("NOT_FOUND", { message: "Inbox owner not found." });
+  }
+  const values = {
+    ...importanceWorkValues(input),
+    authorityVersion: origin.policyVersion,
+  };
   const { contentHash, updatedAt: now } = values;
   await database
     .insert(mailMessageImportance)
@@ -158,6 +196,7 @@ export const ensureMailImportanceWork = async (
       set: {
         aiImportant: null,
         attemptCount: 0,
+        authorityVersion: origin.policyVersion,
         classifierVersion: CLASSIFIER_VERSION,
         contentHash,
         lastError: null,
@@ -361,6 +400,8 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
 
 export const setMailImportance = async (input: {
   actorUserId: string;
+  beforeEffect?: MailEffectAssertion;
+  origin?: AiOperationOrigin;
   mailboxId: string;
   targets: MailMutationTarget[];
   important: boolean;
@@ -375,6 +416,29 @@ export const setMailImportance = async (input: {
     });
   }
   const result = await db.transaction(async (tx) => {
+    await tx
+      .select({ id: mailbox.id })
+      .from(mailbox)
+      .where(eq(mailbox.id, input.mailboxId))
+      .for("update");
+    await assertAiAuthority(
+      {
+        effect: "write",
+        mailboxId: input.mailboxId,
+        origin: input.origin ?? { kind: "human" },
+        userId: input.actorUserId,
+      },
+      tx
+    );
+    await input.beforeEffect?.(tx);
+    await assertAgentMailboxAccess(
+      {
+        mailboxId: input.mailboxId,
+        saveDraft: true,
+        userId: input.actorUserId,
+      },
+      tx
+    );
     const sources = await loadImportanceSources(
       tx,
       input.mailboxId,
@@ -558,11 +622,17 @@ export const setMailImportance = async (input: {
         action: input.important ? "mark_important" : "mark_not_important",
         mailboxId: input.mailboxId,
         messageIds: result.sources.map(({ message }) => message.id),
+        origin: input.origin?.kind === "ai" ? input.origin : undefined,
         targetCount: appliedThreadIds.length,
         userId: input.actorUserId,
       });
     } catch (error) {
-      reportError(error, { operation: "mail-importance:learning" });
+      if (
+        !(error instanceof ORPCError) ||
+        (error.code !== "FORBIDDEN" && error.code !== "NOT_FOUND")
+      ) {
+        reportError(error, { operation: "mail-importance:learning" });
+      }
     }
   }
   return {
@@ -783,6 +853,8 @@ export const processPendingMailImportance = async (
       const [owner] = await db
         .select({
           organizationId: mailbox.organizationId,
+          ownerUserId: mailbox.ownerUserId,
+          provider: mailbox.provider,
           userId: organization.billingOwnerUserId,
         })
         .from(mailbox)
@@ -791,6 +863,29 @@ export const processPendingMailImportance = async (
       if (!owner?.userId) {
         throw new Error("Mailbox billing owner unavailable.");
       }
+      let origin: AiOrigin | MailboxAutomationOrigin;
+      if (owner.provider === "managed") {
+        origin = await captureMailboxAutomationOrigin({
+          mailboxId: job.mailboxId,
+        });
+      } else if (owner.ownerUserId) {
+        origin = await captureAiOrigin({
+          mailboxId: job.mailboxId,
+          mode: "automation",
+          userId: owner.ownerUserId,
+        });
+      } else {
+        throw new ORPCError("NOT_FOUND", { message: "Inbox owner not found." });
+      }
+      if (job.authorityVersion === null) {
+        throw new ORPCError("FORBIDDEN", {
+          data: { aiAuthorityReason: "policy_changed" },
+          message:
+            "This earlier assistant action needs a new request before it can continue.",
+        });
+      }
+      origin = { ...origin, policyVersion: job.authorityVersion };
+      await assertAiAuthority({ effect: "write", origin });
       const budget = await getMailAutomationAiBudgetStatus({
         organizationId: owner.organizationId,
         userId: owner.userId,
@@ -811,6 +906,7 @@ export const processPendingMailImportance = async (
       const memoryActor = await getMailboxMemoryActor({
         mailboxId: job.mailboxId,
       });
+      await assertAiAuthority({ effect: "write", origin });
       const context =
         memoryActor === null
           ? null
@@ -821,6 +917,29 @@ export const processPendingMailImportance = async (
               semantic: { billingMailboxId: job.mailboxId },
               userId: memoryActor.userId,
             });
+      const serializedContext =
+        context === null ? null : serializeAiAgentContext(context);
+      const assertImportanceAuthority = async ({
+        database = db,
+        lock = false,
+      }: { database?: Pick<typeof db, "select">; lock?: boolean } = {}) => {
+        await assertAiAuthority({ effect: "write", origin }, database, {
+          lock,
+        });
+        if (serializedContext !== null && memoryActor !== null) {
+          const access = await assertAgentMailboxAccess(
+            { mailboxId: job.mailboxId, userId: memoryActor.userId },
+            database
+          );
+          if (access.shared) {
+            throw new ORPCError("FORBIDDEN", {
+              data: { aiAuthorityReason: "private_context_changed" },
+              message:
+                "This inbox became shared while personal context was in use.",
+            });
+          }
+        }
+      };
       attemptId = randomUUID();
       await db.insert(mailImportanceAttempt).values({
         createdAt: new Date(),
@@ -831,14 +950,16 @@ export const processPendingMailImportance = async (
         organizationId: owner.organizationId,
         userId: owner.userId,
       });
+      const billing = await createMailboxAiBillingContext({
+        externalId: `importance:${attemptId}`,
+        mailboxId: job.mailboxId,
+        usageKind: "importance",
+        userId: owner.userId,
+      });
+      await assertImportanceAuthority();
       const decision = await classifyMailImportance({
-        billing: await createMailboxAiBillingContext({
-          externalId: `importance:${attemptId}`,
-          mailboxId: job.mailboxId,
-          usageKind: "importance",
-          userId: owner.userId,
-        }),
-        context: context === null ? null : serializeAiAgentContext(context),
+        billing,
+        context: serializedContext,
         message: source.message,
         onUsage: (report) => {
           usage = report;
@@ -849,6 +970,7 @@ export const processPendingMailImportance = async (
         .set({ ...(usage ? { usage } : {}), completedAt: new Date() })
         .where(eq(mailImportanceAttempt.id, attemptId));
       const changed = await db.transaction(async (tx) => {
+        await assertImportanceAuthority({ database: tx, lock: true });
         const rows = await tx
           .update(mailMessageImportance)
           .set({
@@ -881,21 +1003,27 @@ export const processPendingMailImportance = async (
         });
       }
     } catch (error) {
-      if (!isAiCreditAdmissionBusy(error)) {
+      const expected =
+        error instanceof ORPCError &&
+        (error.code === "NOT_FOUND" ||
+          (typeof error.data === "object" &&
+            error.data !== null &&
+            "aiAuthorityReason" in error.data));
+      if (!expected && !isAiCreditAdmissionBusy(error)) {
         reportError(error, { operation: "mail-importance:classification" });
       }
       await db
         .update(mailMessageImportance)
         .set({
-          attemptCount: job.attemptCount + 1,
-          lastError: "Classification failed.",
+          attemptCount: job.attemptCount + (expected ? 0 : 1),
+          lastError: expected ? error.message : "Classification failed.",
           leaseExpiresAt: null,
           leaseId: null,
           nextAttemptAt: new Date(
             Date.now() +
               Math.min(3_600_000, 60_000 * 2 ** Math.min(job.attemptCount, 6))
           ),
-          state: "error",
+          state: expected ? "paused" : "error",
           updatedAt: new Date(),
         })
         .where(claim);

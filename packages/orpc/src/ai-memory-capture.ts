@@ -37,6 +37,8 @@ import {
 import { convert } from "html-to-text";
 import { z } from "zod";
 
+import { assertAiAuthority, captureAiOrigin } from "./ai-authority";
+import type { AiOrigin } from "./ai-authority";
 import {
   extractAuthoredMailText,
   isAiGeneratedMailBody,
@@ -46,7 +48,7 @@ import {
   recordAiMemoryEvent,
 } from "./ai-memory";
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
-import { getAuthorizedManagedMailbox } from "./mailbox/access";
+import { assertAgentMailboxAccess } from "./mail-agent/access";
 
 export { extractAuthoredMailText } from "./ai-mail-authorship";
 
@@ -107,6 +109,7 @@ const resolveMemoryActor = async (
   selected: MemoryMailbox,
   actorUserId?: string
 ) => {
+  let userId = actorUserId;
   if (selected.provider === "gmail") {
     if (
       !selected.ownerUserId ||
@@ -114,24 +117,29 @@ const resolveMemoryActor = async (
     ) {
       return null;
     }
-    return { userId: selected.ownerUserId };
+    userId = selected.ownerUserId;
+  } else {
+    if (
+      selected.accessMode === "private" &&
+      actorUserId !== undefined &&
+      actorUserId !== selected.managedOwnerUserId
+    ) {
+      return null;
+    }
+    userId ??=
+      selected.accessMode === "private"
+        ? (selected.managedOwnerUserId ?? undefined)
+        : undefined;
   }
-  if (
-    selected.accessMode === "private" &&
-    actorUserId !== undefined &&
-    actorUserId !== selected.managedOwnerUserId
-  ) {
-    return null;
-  }
-  const userId =
-    actorUserId ??
-    (selected.accessMode === "private" ? selected.managedOwnerUserId : null);
   if (!userId) {
     return null;
   }
   try {
-    await getAuthorizedManagedMailbox({ mailboxId: selected.id, userId });
-    return { userId };
+    const access = await assertAgentMailboxAccess({
+      mailboxId: selected.id,
+      userId,
+    });
+    return access.shared ? null : { userId };
   } catch (error) {
     if (error instanceof ORPCError && error.code === "NOT_FOUND") {
       return null;
@@ -236,6 +244,7 @@ const buildMailMemoryEvidence = async ({
 };
 
 export const captureMailboxMessageMemory = async (input: {
+  origin?: AiOrigin;
   actorUserId?: string;
   bootstrapLease?: string;
   failureMode?: "retry";
@@ -252,6 +261,15 @@ export const captureMailboxMessageMemory = async (input: {
     if (actor === null) {
       return null;
     }
+    const origin =
+      input.origin ??
+      (await captureAiOrigin({
+        mailboxId: input.mailboxId,
+        mode: "automation",
+        userId: actor.userId,
+      }));
+    const learningOrigin = { ...origin, mode: "automation" as const };
+    await assertAiAuthority({ effect: "write", origin: learningOrigin });
     const metadata = await buildMailMemoryEvidence({
       message: input.message,
       selected,
@@ -283,6 +301,7 @@ export const captureMailboxMessageMemory = async (input: {
         ...metadata,
         bootstrapLease: input.bootstrapLease ?? null,
       },
+      origin: learningOrigin,
       userId: actor.userId,
     });
     if (input.source !== "open" && input.source !== "ai_read") {
@@ -299,10 +318,14 @@ export const captureMailboxMessageMemory = async (input: {
         observationKind: "mail_action",
         targetCount: 1,
       },
+      origin: learningOrigin,
       userId: actor.userId,
     });
     return event ?? engagement;
   } catch (error) {
+    if (error instanceof ORPCError && error.status < 500) {
+      return null;
+    }
     reportError(new Error("Mail context could not be recorded."), {
       operation: "ai-memory:capture-mail",
     });
@@ -317,23 +340,34 @@ export const captureMailboxMessageMemory = async (input: {
 };
 
 export const queueMailboxMessageMemory = async (input: {
+  origin?: AiOrigin;
   mailboxId: string;
   messageIds: string[];
   userId: string;
 }) => {
   let actor: Awaited<ReturnType<typeof getMailboxMemoryActor>>;
+  let origin: AiOrigin;
   try {
     actor = await getMailboxMemoryActor({
       actorUserId: input.userId,
       mailboxId: input.mailboxId,
     });
-  } catch {
-    reportError(new Error("Mail action context could not be queued."), {
-      operation: "ai-memory:queue-mail",
-    });
-    return;
-  }
-  if (actor === null) {
+    if (actor === null) {
+      return;
+    }
+    origin =
+      input.origin ??
+      (await captureAiOrigin({
+        mailboxId: input.mailboxId,
+        mode: "automation",
+        userId: actor.userId,
+      }));
+  } catch (error) {
+    if (!(error instanceof ORPCError) || error.status >= 500) {
+      reportError(new Error("Mail action context could not be queued."), {
+        operation: "ai-memory:queue-mail",
+      });
+    }
     return;
   }
   for (const messageId of new Set(input.messageIds)) {
@@ -348,17 +382,21 @@ export const queueMailboxMessageMemory = async (input: {
           observationKind: "mail_capture",
           source: "action",
         },
+        origin: { ...origin, mode: "automation" },
         userId: actor.userId,
       });
-    } catch {
-      reportError(new Error("Mail action context could not be queued."), {
-        operation: "ai-memory:queue-mail",
-      });
+    } catch (error) {
+      if (!(error instanceof ORPCError) || error.status >= 500) {
+        reportError(new Error("Mail action context could not be queued."), {
+          operation: "ai-memory:queue-mail",
+        });
+      }
     }
   }
 };
 
 export const captureMailboxDraftMemory = async (input: {
+  origin?: AiOrigin;
   draft: Pick<
     z.infer<typeof composeDraftInputSchema>,
     "bodyHtml" | "bodyText" | "recipients" | "subject" | "replyContext"
@@ -381,6 +419,7 @@ export const captureMailboxDraftMemory = async (input: {
       threadId: input.draft.replyContext?.threadId ?? input.draftId,
       to: input.draft.recipients.to,
     },
+    origin: input.origin,
     source: "draft",
   });
 
@@ -420,6 +459,7 @@ const loadManagedMemoryMessage = async (input: {
 };
 
 export const captureManagedMessageMemory = async (input: {
+  origin?: AiOrigin;
   actorUserId?: string;
   bootstrapLease?: string;
   failureMode?: "retry";
@@ -427,13 +467,29 @@ export const captureManagedMessageMemory = async (input: {
   messageId: string;
   source: MailMemorySource;
 }) => {
+  let { origin } = input;
+  if (origin === undefined) {
+    const actor = await getMailboxMemoryActor({
+      actorUserId: input.actorUserId,
+      mailboxId: input.mailboxId,
+    });
+    if (actor === null) {
+      return null;
+    }
+    origin = await captureAiOrigin({
+      mailboxId: input.mailboxId,
+      mode: "automation",
+      userId: actor.userId,
+    });
+  }
   const message = await loadManagedMemoryMessage(input);
   return message === null
     ? null
-    : await captureMailboxMessageMemory({ ...input, message });
+    : await captureMailboxMessageMemory({ ...input, message, origin });
 };
 
 export const hydrateMailMemoryEvent = async (input: {
+  origin?: AiOrigin;
   mailboxId: string;
   messageId: string;
   userId: string;
@@ -470,6 +526,7 @@ export const hydrateMailMemoryEvent = async (input: {
   await enrichMailAutoLabelFeedbackSource({
     from: message.from,
     mailboxId: input.mailboxId,
+    origin: input.origin,
     providerMessageId: message.id,
     userId: input.userId,
   });
@@ -497,8 +554,8 @@ const assertPrivateMemoryMailbox = async (input: {
   ) {
     throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
   }
-  if (selected.provider === "managed") {
-    await getAuthorizedManagedMailbox(input);
+  if ((await resolveMemoryActor(selected, input.userId)) === null) {
+    throw new ORPCError("NOT_FOUND", { message: "Mailbox not found." });
   }
   return selected;
 };

@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import type { MailEffectAssertion } from "../gmail-request";
 import { ConnectorHttpError, runAuthorizedConnector } from "./runtime";
 
 const NOTION_API_URL = "https://api.notion.com/v1";
@@ -243,6 +244,7 @@ const toWriteBlock = (block: z.infer<typeof writeBlockSchema>) => ({
 
 const notionRequest = async (input: {
   accessToken: string;
+  beforeEffect?: () => Promise<void>;
   path: string;
   method: "GET" | "POST" | "PATCH";
   body?: unknown;
@@ -252,6 +254,7 @@ const notionRequest = async (input: {
   if (input.signal) {
     signals.push(input.signal);
   }
+  await input.beforeEffect?.();
   const response = await fetch(`${NOTION_API_URL}${input.path}`, {
     ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) }),
     headers: {
@@ -329,6 +332,8 @@ export const callNotionTool = async (input: {
   connectionId: string;
   toolName: string;
   arguments: Record<string, unknown>;
+  beforeEffect?: MailEffectAssertion;
+  prepareEffect?: () => Promise<void>;
   signal?: AbortSignal;
 }) => {
   const tool = NOTION_TOOLS.find(
@@ -342,13 +347,15 @@ export const callNotionTool = async (input: {
   }
   return await runAuthorizedConnector(
     {
+      beforeEffect: input.beforeEffect,
       connectionId: input.connectionId,
       mutates: tool.effect === "write",
+      prepareEffect: input.prepareEffect,
       provider: "notion",
       signal: input.signal,
       userId: input.userId,
     },
-    async (accessToken, signal) => {
+    async (accessToken, signal, beforeEffect) => {
       switch (input.toolName) {
         case "notion_search": {
           const args = toolInputs.notion_search.parse(input.arguments);
@@ -364,6 +371,7 @@ export const callNotionTool = async (input: {
           const list = listSchema.parse(
             await notionRequest({
               accessToken,
+              beforeEffect,
               body,
               method: "POST",
               path: "/search",
@@ -395,6 +403,7 @@ export const callNotionTool = async (input: {
           const page = pageSchema.parse(
             await notionRequest({
               accessToken,
+              beforeEffect,
               method: "GET",
               path: `/pages/${args.pageId}`,
               signal,
@@ -424,6 +433,7 @@ export const callNotionTool = async (input: {
           const page = pageSchema.parse(
             await notionRequest({
               accessToken,
+              beforeEffect,
               body: {
                 parent: { page_id: args.parentPageId, type: "page_id" },
                 properties: {
@@ -448,6 +458,7 @@ export const callNotionTool = async (input: {
           const list = listSchema.parse(
             await notionRequest({
               accessToken,
+              beforeEffect,
               body: { children: args.blocks.map(toWriteBlock) },
               method: "PATCH",
               path: `/blocks/${args.blockId}/children`,

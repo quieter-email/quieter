@@ -1,10 +1,17 @@
 import { createMCPClient } from "@ai-sdk/mcp";
 import type { MCPClient } from "@ai-sdk/mcp";
+import { db } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
+import type { MailEffectAssertion } from "../gmail-request";
 import { linearReadTools } from "./contracts";
-import { getLinearAccessTokenForUser, LINEAR_MCP_URL } from "./runtime";
+import {
+  assertConnectorWriteAccess,
+  getConnectorConnectionForUser,
+  getLinearAccessTokenForUser,
+  LINEAR_MCP_URL,
+} from "./runtime";
 
 const MCP_REQUEST_TIMEOUT_MS = 20_000;
 const DEFAULT_MAX_CALLS = 4;
@@ -115,6 +122,7 @@ const truncateToolOutput = (output: unknown, maxOutputBytes: number) => {
 };
 
 const callTool = async (input: {
+  beforeEffect?: () => Promise<void>;
   call: LinearMcpToolCallInput;
   client: MCPClient;
   maxOutputBytes: number;
@@ -135,6 +143,9 @@ const callTool = async (input: {
       throw new Error(
         "This development environment can read connected accounts, but cannot change them."
       );
+    }
+    if (isMutatingLinearMcpTool({ name: input.call.toolName })) {
+      await input.beforeEffect?.();
     }
     const output: unknown = await input.client.callTool({
       arguments: input.call.arguments ?? {},
@@ -206,14 +217,29 @@ export const listLinearMcpToolsForUser = async (input: {
 };
 
 export const runLinearMcpToolCallsForUser = async (input: {
+  beforeEffect?: MailEffectAssertion;
   calls: LinearMcpToolCallInput[];
   connectionId?: string;
   maxCalls?: number;
   maxOutputBytes?: number;
+  prepareEffect?: () => Promise<void>;
   signal?: AbortSignal;
   userId: string;
 }): Promise<LinearMcpToolCallResult[]> => {
-  const accessToken = await getLinearAccessTokenForUser(input);
+  const connection = await getConnectorConnectionForUser({
+    ...input,
+    provider: "linear",
+  });
+  const authorization = {
+    connectionId: connection.connectionId,
+    provider: "linear" as const,
+    providerAccountId: connection.providerAccountId,
+    userId: input.userId,
+  };
+  const accessToken = await getLinearAccessTokenForUser({
+    ...input,
+    connectionId: connection.connectionId,
+  });
   return await withLinearMcpClient(
     { ...input, accessToken },
     async (client) => {
@@ -235,6 +261,16 @@ export const runLinearMcpToolCallsForUser = async (input: {
         schema.parse(call.arguments ?? {});
         // oxlint-disable-next-line eslint/no-await-in-loop -- Tool calls may depend on earlier results or mutate the same workspace.
         const result = await callTool({
+          beforeEffect: async () => {
+            input.signal?.throwIfAborted();
+            await input.prepareEffect?.();
+            input.signal?.throwIfAborted();
+            await db.transaction(async (transaction) => {
+              await input.beforeEffect?.(transaction);
+              await assertConnectorWriteAccess(authorization, transaction);
+            });
+            input.signal?.throwIfAborted();
+          },
           call,
           client,
           maxOutputBytes: input.maxOutputBytes ?? DEFAULT_MAX_OUTPUT_BYTES,
