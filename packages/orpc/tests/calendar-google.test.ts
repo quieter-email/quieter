@@ -111,6 +111,7 @@ describe("calendar provider boundary", () => {
       endDate: "2026-10-25",
       kind: "all-day",
       startDate: "2026-10-23",
+      timeZone: "Europe/Berlin",
     });
     expect(mapped[1]).toMatchObject({
       eventId: "occurrence-2",

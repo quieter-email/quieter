@@ -306,6 +306,12 @@ export const listGoogleEvents = async (
   const seenPages = new Set<string>();
   let pageToken: string | undefined;
   do {
+    if (seenPages.size >= 20) {
+      throw new ORPCError("BAD_REQUEST", {
+        message:
+          "There are too many calendar results. Choose a shorter date range.",
+      });
+    }
     const parameters = new URLSearchParams({
       maxResults: "2500",
       showDeleted: "false",
@@ -384,6 +390,7 @@ export const toCalendarEvent = (input: {
       endDate: event.end.date,
       kind: "all-day",
       startDate: event.start.date,
+      timeZone: calendar.timeZone,
     });
   } else {
     time = calendarEventTimeSchema.parse({
