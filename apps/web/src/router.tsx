@@ -8,6 +8,10 @@ import { createRouter, defaultStringifySearch } from "@tanstack/react-router";
 
 import { RootErrorComponent } from "./components/root/root-error-component";
 import { RootNotFoundComponent } from "./components/root/root-not-found-component";
+import {
+  sanitizeControlReviewEvent,
+  sanitizeControlReviewSpan,
+} from "./lib/control-review-url-sanitizer";
 import { handleDeploymentPreloadError } from "./lib/stale-deployment";
 import { routeTree } from "./routeTree.gen";
 
@@ -42,7 +46,10 @@ export const getRouter = () => {
   if (!router.isServer && isSentryEnabled) {
     Sentry.init({
       beforeSend: (event, hint) =>
-        shouldDiscardClientError(event, hint.originalException) ? null : event,
+        shouldDiscardClientError(event, hint.originalException)
+          ? null
+          : sanitizeControlReviewEvent(event),
+      beforeSendSpan: sanitizeControlReviewSpan,
       dsn: clientEnv.VITE_SENTRY_DSN,
       environment: import.meta.env.MODE,
       tracesSampleRate: 0.05,

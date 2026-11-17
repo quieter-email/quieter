@@ -2,7 +2,7 @@
 
 The management API controls the signed-in user's Quieter application resources. It is separate from transactional sending. A transactional organization API key proves permission to send from a verified domain. It does not identify an acting user or grant inbox, calendar, organization administration, or personal-context access.
 
-This document records the authority contract, shared wire contracts, initial read HTTP adapter, and application capability inventory. They live in `packages/orpc/src/control/`. External credential issuance, management MCP, approved mutations, and the management SDK are separate deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
+This document records the authority contract, shared wire contracts, read HTTP adapter, approved local settings changes, and application capability inventory. They live in `packages/orpc/src/control/`. External credential issuance, management MCP, and the management SDK are separate deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
 
 ## Credentials and scope
 
@@ -99,7 +99,7 @@ The pure contract leaves can be bundled into a separately named standalone manag
 
 `createControlReadRuntime` is the shared application boundary for the initial read surface. Its default services call the existing protected application routers through oRPC's server caller. Mailbox ordering/default selection, mail source dispatch and enrichment, and calendar ownership remain in those application paths. The HTTP mount consumes this runtime through `@quieter/orpc/control/http`; an in-app caller can consume the package-owned runtime without importing application code.
 
-The default adapter implements these operations:
+The read runtime implements these operations:
 
 | Operation | Explicit input scope |
 | --- | --- |
@@ -113,7 +113,7 @@ The default adapter implements these operations:
 
 Synthetic API mailboxes use their existing organization-membership path and read-only API capabilities. Gmail and managed mailboxes keep their existing ownership and grant checks. Every page and thread request reauthorizes its explicit target. Read discovery never grants a write operation.
 
-`POST /api/control/capabilities` accepts the strict target object from the shared contract. For example, `{"kind":"user"}` discovers user-level operations. A mailbox target includes its organization and mailbox IDs. `GET /api/control/openapi` returns only the adapter's implemented, scope-enabled contract paths. Both require a current application session and the management version header. Unknown operations and all mutations remain unavailable in this milestone.
+`POST /api/control/capabilities` accepts the strict target object from the shared contract. For example, `{"kind":"user"}` discovers user-level operations. A mailbox target includes its organization and mailbox IDs. `GET /api/control/openapi` returns only the adapter's implemented, scope-enabled contract paths. Both require a current application session and the management version header. Unknown operations remain unavailable. The default HTTP adapter also implements the local settings change described below. An explicitly supplied read runtime remains read-only.
 
 Use the existing local development startup and a development session cookie jar stored outside Git. For example:
 
@@ -127,10 +127,43 @@ curl --cookie /path/to/development-cookie-jar \
 
 Send operation parameters as JSON to `/api/control/{operation}` with the same headers and session. The adapter rejects transactional/API-key headers even if a valid cookie is also present. It limits request bodies, rejects unsupported content types and client identity claims, forwards cancellation, and returns private, uncached responses. Expected denials use safe named errors; unexpected failures are reported without forwarding private request details to the caller or telemetry.
 
-The HTTP adapter does not issue management credentials, prepare or approve writes, or persist cursor bindings. In this milestone, callers must continue pages with the same target, category, and query. Existing provider pagination and fresh resource authorization remain authoritative. Durable approval/replay/audit execution and trusted review UX remain open QUIETER-127 acceptance.
+The HTTP adapter does not issue management credentials or persist cursor bindings. Callers must continue pages with the same target, category, and query. Existing provider pagination and fresh resource authorization remain authoritative.
+
+## Approved local settings changes
+
+`createControlApplicationRuntime` composes the read runtime with `createControlMutationService`. Its only implemented mutation is `organization.settings.update` for the organization's `openTrackingEnabled` and `allowPerSendOverride` settings. Organization discovery requires current owner or admin authority. Mail, calendar, automation, and provider mutations remain unavailable.
+
+The existing web development startup mounts these routes through `/api/control/$`. No additional service, secret, or background process is required. The coordinator-owned management journal migration must already be applied through the approved database workflow. Do not push the schema to a shared database to enable this feature.
+
+To request a change:
+
+1. Send JSON to `POST /api/control/mutations/prepare` with an explicit `organizationId`, a fresh `idempotencyKey`, and at least one of the two boolean settings. Use the same session and version headers as read operations. Omit settings that must remain unchanged. Preparation stores the exact request and has no settings effect.
+2. Open the returned `reviewPath` in the signed-in browser using that same session. The static `/control/review` page reads the approval ID from its query string. It shows the organization, requested values, expiry, and current state. The page never approves or executes on load.
+3. Choose **Approve change** to record approval, or **Cancel change** to cancel a pending request. Approval alone does not execute the change. Approvals expire ten minutes after preparation and cannot be extended by replay.
+4. Send the original settings, organization, and idempotency key plus the returned row ID as `approvalId` to `POST /api/control/organization.settings.update`. A successful response contains the stored receipt and both resulting boolean values.
+
+`POST /api/control/mutations/review` and `POST /api/control/mutations/cancel` accept only `{ "id": "<approval UUID>" }`. The browser sends approval to `POST /api/control/reviews/approve` with the same strict body. That endpoint requires an exact same-origin `Origin`, `Sec-Fetch-Site: same-origin`, JSON content, and `X-Quieter-Review: approve`. Approval is excluded from the operation registry and OpenAPI discovery. A supplied `confirmed` flag never grants approval. These browser checks prevent cross-origin approval requests. They do not attest physical human presence or constrain a client that already controls the user's session.
+
+The review ID stays out of pathname analytics. Before sending Sentry errors or streamed spans, the web router removes private review URL query and fragment values, including encoded sign-in return URLs, referrers, and navigation breadcrumbs. The filter preserves unexpected error reporting and unrelated URLs. Installed-SDK transport tests cover the automatic URL collection paths.
+
+Every command revalidates the authenticated session against its current database row and requires current organization authority. Requests belong to one actor and session. A replacement session cannot consume an older approval. The service pins current session and membership rows with nonblocking locks, bounds other lock waits, and retries only transactions known to have rolled back for lock or serialization conflicts. Session revocation, role changes, cancellation, and organization deletion cannot silently bypass those checks.
+
+The canonical settings setter, successful journal receipt, and executed audit event commit in one transaction. Time and cancellation are checked again after writes and lock waits. An abort observed before the final commit decision rolls the transaction back. A connection loss during or after commit can hide a successful result. Recover by repeating the same request with its original key and approval ID. Never use a new key to guess whether execution completed. A successful replay returns its original result before checking approval expiry and never reapplies the settings, even if another change has since modified them. Current session and role checks still apply to replay.
+
+The request fingerprint uses `v1:` followed by the lowercase SHA-256 digest of the normalized API version, operation, explicit organization, and exact patch. Omission differs from an explicit `false`. Reusing a key with another patch or organization conflicts. Terminal requests cannot return to pending states, and cancellation cannot undo a successful change. Safe denied or failed attempts are audited outside a rolled-back command without copying unvalidated target IDs or arbitrary request metadata.
+
+For focused native verification, use Docker and run:
+
+```bash
+vp run @quieter/env#build
+vp run @quieter/observability#build
+vp test packages/orpc/tests/control-mutations.native.test.ts --mode control-native --maxWorkers=1
+```
+
+The test owns one temporary loopback PostgreSQL fixture with a 512 MiB memory limit and at most three connections. It requires at least 3 GiB available memory, records its resource IDs under the system temporary directory, and stops its own resources. It exports the relevant schema and existing lifecycle triggers into that disposable fixture. It never applies a shared migration. The dedicated management mutation workflow runs the same checks in CI. The default test mode skips this Docker fixture.
 
 ## Evidence boundaries
 
 Focused security tests exercise the authority boundary with synthetic authenticated sessions and resource-service responses. They verify denial, narrowing, target binding, current-grant revalidation, and transactional credential separation. Existing mailbox-access services remain the source of grant semantics.
 
-No production OAuth approval, external management-token issuance, supported-client MCP connection, live Gmail mutation, durable approval consumption, or durable mutation replay is implied by this contract. Those acceptance gates belong to their implementation units and remain open until verified.
+Native settings tests exercise the real setter, transaction, journal, audit events, and current database session and membership rows. A production-handler loopback test drops a successful HTTP response and verifies that replay returns the stored receipt without applying the settings again. Authentication resolution is synthetic in these tests. Browser approval, real development-session acceptance, provider writes, external credential issuance, and MCP mutation acceptance require their own evidence. The separate management MCP read runtime gains no mutation from this HTTP composition.
