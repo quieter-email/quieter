@@ -834,10 +834,14 @@ export const MessageList = (props: MessageListProps) => {
       />
 
       {props.headerAddon !== undefined && props.headerAddon !== null && (
-        <div className="px-2 pb-2 @sm:px-4">{props.headerAddon}</div>
+        <div className="px-2 pb-2 empty:hidden @sm:px-4">
+          {props.headerAddon}
+        </div>
       )}
       {props.listNotices !== undefined && props.listNotices !== null && (
-        <div className="px-2 pb-2 @sm:px-4">{props.listNotices}</div>
+        <div className="px-2 pb-2 empty:hidden @sm:px-4">
+          {props.listNotices}
+        </div>
       )}
 
       <m.div
