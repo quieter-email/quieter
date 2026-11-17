@@ -146,6 +146,7 @@ export const MailListRowMetadata = ({
 };
 
 type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
+  actions?: ReactNode;
   active?: boolean;
   badge?: ReactNode;
   metadata?: ReactNode;
@@ -159,6 +160,7 @@ type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
 };
 
 export const MailListRowDetails = ({
+  actions,
   active = false,
   badge,
   layout = "stacked",
@@ -234,18 +236,36 @@ export const MailListRowDetails = ({
           >
             {metadata}
           </div>
-          <span
-            className={cn("shrink-0 text-caption tabular-nums", {
-              "@3xl:col-start-5 @3xl:row-start-1 @3xl:text-right":
-                layout === "adaptive",
-              "font-semibold text-fg/90": unread,
-              "text-fg/75": active && !unread,
-              "text-muted-fg": !unread,
-            })}
-            suppressHydrationWarning
+          <div
+            className={cn(
+              "relative flex min-w-6 shrink-0 items-center justify-end",
+              {
+                "@3xl:col-start-5 @3xl:row-start-1": layout === "adaptive",
+              }
+            )}
           >
-            {timestamp}
-          </span>
+            <span
+              className={cn(
+                "text-caption tabular-nums transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) motion-reduce:transition-none",
+                {
+                  "@3xl:text-right": layout === "adaptive",
+                  "font-semibold text-fg/90": unread,
+                  "group-focus-within/row:opacity-0 group-hover/row:opacity-0":
+                    actions !== undefined && actions !== null,
+                  "text-fg/75": active && !unread,
+                  "text-muted-fg": !unread,
+                }
+              )}
+              suppressHydrationWarning
+            >
+              {timestamp}
+            </span>
+            {actions !== undefined && actions !== null && (
+              <span className="pointer-events-none absolute top-1/2 right-0 flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100 motion-reduce:transition-none">
+                {actions}
+              </span>
+            )}
+          </div>
         </div>
       </div>
 

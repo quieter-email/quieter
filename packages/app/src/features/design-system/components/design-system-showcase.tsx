@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CheckmarkCircle02Icon,
   Delete02Icon,
   FileAttachmentIcon,
   LayoutRightIcon,
@@ -1007,6 +1008,18 @@ export const DesignSystemShowcase = () => {
               })}
             >
               <MailListRowDetails
+                actions={
+                  <IconButtonTooltip label="Mark conversation Done">
+                    <Button
+                      aria-label="Mark conversation Done"
+                      size="icon-xs"
+                      type="button"
+                      variant="ghost"
+                    >
+                      <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+                    </Button>
+                  </IconButtonTooltip>
+                }
                 active
                 metadata={
                   <MailListRowMetadata
