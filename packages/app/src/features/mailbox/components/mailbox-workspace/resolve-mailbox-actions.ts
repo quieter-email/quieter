@@ -3,6 +3,7 @@ import type { MailboxActions } from "@quieter/app/features/mailbox/components/ma
 import { createDemoMailboxActions } from "@quieter/app/lib/gmail/demo-mail";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { createManagedDemoMailboxActions } from "@quieter/app/lib/managed-mail/demo-managed-mail";
+import type { MailboxProvider } from "@quieter/mail/search";
 import type { QueryClient } from "@tanstack/react-query";
 
 const noopMailboxAction = async (): Promise<void> => {
@@ -67,7 +68,7 @@ export const resolveMailboxActions = ({
   isMessageActionPending: (messageId: string | null | undefined) => boolean;
   isThreadActionPending: (threadId: string | null | undefined) => boolean;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   normalizedSearchQuery: string;
   queryClient: QueryClient;
   refreshSearchResultsIfNeeded: () => Promise<void>;
@@ -77,7 +78,7 @@ export const resolveMailboxActions = ({
   setThreadActionsPending: (ids: string[], pending: boolean) => void;
   unsubscribeFromMessage: (targetMessageId: string) => Promise<boolean>;
 }): MailboxActions => {
-  if (mailboxProvider === "api") {
+  if (mailboxProvider === "api" || mailboxProvider === "outlook") {
     return createReadOnlyMailboxActions();
   }
 

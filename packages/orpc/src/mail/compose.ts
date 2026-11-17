@@ -40,6 +40,7 @@ import {
 import { withMailComposeLock } from "./compose-lock";
 import { learnAiMemoryFromMailAction } from "./feedback";
 import type { MailInputs } from "./inputs";
+import { assertMailWriteProvider } from "./provider";
 
 const parseListUnsubscribeMailto = (value: string) => {
   let url: URL;
@@ -99,6 +100,7 @@ export const composeMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await deleteManagedDraft({
         ...input,
@@ -133,6 +135,7 @@ export const composeMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider !== "managed") {
       return await callGmail(
         context,
@@ -200,6 +203,7 @@ export const composeMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (!selectedMailbox.capabilities.canSend) {
       throw new ORPCError("FORBIDDEN", {
         message: "You do not have permission to send from this mailbox.",
@@ -303,6 +307,7 @@ export const composeMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (!selectedMailbox.capabilities.canSend) {
       throw new ORPCError("FORBIDDEN", {
         message: "You do not have permission to send from this mailbox.",
@@ -376,68 +381,79 @@ export const composeMailOperations = {
   }: {
     context: MailRequestContext;
     input: MailInputs["unsubscribeFromMessage"];
-  }) =>
-    await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-      const message = await getGmailMessageMetadata(
-        accessToken,
-        input.messageId,
-        signal
-      );
-      const unsubscribeMailto = extractListUnsubscribeTargets(
-        message.payload?.headers?.find(
-          (header) => header.name.toLowerCase() === "list-unsubscribe"
-        )?.value
-      ).mailto;
+  }) => {
+    const selectedMailbox = await assertAccessibleMailbox({
+      mailboxId: input.mailboxId,
+      userId: context.userId,
+    });
+    assertMailWriteProvider(selectedMailbox.provider);
+    return await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken, signal) => {
+        const message = await getGmailMessageMetadata(
+          accessToken,
+          input.messageId,
+          signal
+        );
+        const unsubscribeMailto = extractListUnsubscribeTargets(
+          message.payload?.headers?.find(
+            (header) => header.name.toLowerCase() === "list-unsubscribe"
+          )?.value
+        ).mailto;
 
-      if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not expose a valid unsubscribe address.",
-        });
-      }
-
-      const key = getUnsubscribeKey(message.payload?.headers ?? []);
-      if (key === undefined) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not identify a mailing list or sender.",
-        });
-      }
-      const result = await sendGmailUnsubscribe(
-        accessToken,
-        input.mailboxId,
-        {
-          key,
-          message: parseListUnsubscribeMailto(unsubscribeMailto),
-        },
-        signal
-      );
-
-      if (!result.idempotent) {
-        await learnAiMemoryFromMailAction({
-          action: "unsubscribe",
-          mailboxId: input.mailboxId,
-          metadata: {
-            senderDomain:
-              message.payload?.headers
-                ?.find((header) => header.name.toLowerCase() === "from")
-                ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
-                ?.groups?.domain?.toLowerCase() ?? null,
-            subject:
-              message.payload?.headers?.find(
-                (header) => header.name.toLowerCase() === "subject"
-              )?.value ?? null,
-          },
-          targetCount: 1,
-          userId: context.userId,
-        }).catch((error: unknown) => {
-          reportError(error, {
-            operation: "Could not record unsubscribe learning.",
+        if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
+          throw new ORPCError("BAD_REQUEST", {
+            message:
+              "This message does not expose a valid unsubscribe address.",
           });
-        });
+        }
+
+        const key = getUnsubscribeKey(message.payload?.headers ?? []);
+        if (key === undefined) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "This message does not identify a mailing list or sender.",
+          });
+        }
+        const result = await sendGmailUnsubscribe(
+          accessToken,
+          input.mailboxId,
+          {
+            key,
+            message: parseListUnsubscribeMailto(unsubscribeMailto),
+          },
+          signal
+        );
+
+        if (!result.idempotent) {
+          await learnAiMemoryFromMailAction({
+            action: "unsubscribe",
+            mailboxId: input.mailboxId,
+            metadata: {
+              senderDomain:
+                message.payload?.headers
+                  ?.find((header) => header.name.toLowerCase() === "from")
+                  ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
+                  ?.groups?.domain?.toLowerCase() ?? null,
+              subject:
+                message.payload?.headers?.find(
+                  (header) => header.name.toLowerCase() === "subject"
+                )?.value ?? null,
+            },
+            targetCount: 1,
+            userId: context.userId,
+          }).catch((error: unknown) => {
+            reportError(error, {
+              operation: "Could not record unsubscribe learning.",
+            });
+          });
+        }
+        return {
+          key,
+          newlyRequested: !result.idempotent,
+          status: "requested" as const,
+        };
       }
-      return {
-        key,
-        newlyRequested: !result.idempotent,
-        status: "requested" as const,
-      };
-    }),
+    );
+  },
 };

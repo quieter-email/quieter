@@ -41,6 +41,7 @@ import type {
   MailboxLabel,
   MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
+import type { MailboxProvider } from "@quieter/mail/search";
 import {
   AlertDialog,
   AlertDialogBody,
@@ -89,7 +90,7 @@ import { getLabelUpdates } from "./label-update-mutation";
 type LabelsWorkspacePanelProps = {
   canManage: boolean;
   mailboxId: string | null;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: Exclude<MailboxProvider, "api">;
   onClose: () => void;
   onOpenSidebar: () => void;
 };

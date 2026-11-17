@@ -16,6 +16,7 @@ import {
   updateManagedLabel,
 } from "../managed-mail/labels/service";
 import type { MailInputs } from "./inputs";
+import { assertMailWriteProvider } from "./provider";
 
 export const labelsMailOperations = {
   createLabel: async ({
@@ -29,6 +30,7 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await createManagedLabel({
         autoLabel: input.autoLabel,
@@ -74,6 +76,7 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await deleteManagedLabel({
         labelId: input.labelId,
@@ -103,6 +106,7 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await listManagedLabels({
         mailboxId: input.mailboxId,
@@ -140,6 +144,7 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await updateManagedLabel({
         color: input.color,
@@ -183,6 +188,7 @@ export const labelsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    assertMailWriteProvider(selectedMailbox.provider);
     if (selectedMailbox.provider === "managed") {
       return await updateManagedLabel({
         autoLabel: input.autoLabel,

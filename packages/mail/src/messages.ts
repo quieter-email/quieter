@@ -27,6 +27,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  source?: { kind: "external"; url: string };
   otpToken?: OtpToken;
   isImportant?: boolean;
   threadIsImportant?: boolean;
@@ -100,6 +101,11 @@ export type MessageInspectorResult = {
 };
 
 export type ListMessagesPageResult = {
+  coverage?: {
+    complete: boolean;
+    limited?: boolean;
+    scope: "mailbox" | "search";
+  };
   messages: MessageListItem[];
   nextPageToken?: string;
   resultSizeEstimate?: number;

@@ -22,6 +22,7 @@ import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
@@ -37,7 +38,7 @@ type SidebarLabelNavProps = {
   canManage: boolean;
   embedded: boolean;
   mailboxId: string | null;
-  mailboxProvider: "gmail" | "managed";
+  mailboxProvider: Exclude<MailboxProvider, "api">;
   onManageLabels: () => void;
   onRequestClose?: () => void;
   onSearch: (query: string) => void;

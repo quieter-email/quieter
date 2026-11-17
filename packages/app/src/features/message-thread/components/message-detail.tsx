@@ -14,6 +14,7 @@ import {
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Icon } from "@quieter/ui/icon";
 import { m, useReducedMotion } from "motion/react";
 import { Suspense, useLayoutEffect, useRef } from "react";
@@ -33,7 +34,7 @@ type MessageDetailProps = {
   isPending?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   onConversationOpened?: MessageViewProps["onConversationOpened"];
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;

@@ -1,0 +1,8 @@
+{
+  "extends": "@quieter/config/tsconfig/base.json",
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "../mail/src/css-tree.d.ts"]
+}

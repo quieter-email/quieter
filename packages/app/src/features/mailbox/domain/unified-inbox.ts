@@ -1,13 +1,14 @@
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { useMemo, useSyncExternalStore } from "react";
 
 export type UnifiedInboxMailbox = {
   id: string;
   emailAddress: string;
   displayName: string | null;
-  provider: "api" | "gmail" | "managed";
+  provider: MailboxProvider;
   connectionStatus: "connected" | "needs_reconnect";
   grantRole?: string | null;
   signatureHtml?: string | null;

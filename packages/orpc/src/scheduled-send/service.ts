@@ -19,6 +19,7 @@ import type { z } from "zod";
 import { publishMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { withMailComposeLock } from "../mail/compose-lock";
+import { assertMailWriteProvider } from "../mail/provider";
 import { queriesMailOperations } from "../mail/queries";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { readRawMailObject } from "../managed-mail/messages/raw-object";
@@ -85,6 +86,7 @@ const assertCanSchedule = async (scope: {
   mailboxId: string;
 }) => {
   const selected = await assertAccessibleMailbox(scope);
+  assertMailWriteProvider(selected.provider);
   if (!selected.capabilities.canSend) {
     throw new ORPCError("FORBIDDEN", {
       message: "You do not have permission to send from this mailbox.",
@@ -541,7 +543,8 @@ export const recoverScheduledSendAttempt = async (scope: {
   userId: string;
   sendOperationId: string;
 }) => {
-  await assertAccessibleMailbox(scope);
+  const selected = await assertAccessibleMailbox(scope);
+  assertMailWriteProvider(selected.provider);
   return await withScheduledSendAttemptLock(scope, async (database) => {
     const [scheduled] = await database
       .select()
