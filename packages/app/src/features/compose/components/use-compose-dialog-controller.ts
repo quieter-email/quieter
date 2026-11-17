@@ -256,6 +256,7 @@ export const useComposeDialogController = ({
   const saveConflictRef = useRef(false);
   const scheduleRequestRef = useRef<ScheduledSendTime | null>(null);
   const heldTaskRef = useRef<HeldTask | null>(null);
+  const snippetReadinessActionRef = useRef<ComposeActionToken | null>(null);
   const currentMailboxIdRef = useRef(mailboxId);
   useLayoutEffect(() => {
     currentMailboxIdRef.current = mailboxId;
@@ -343,6 +344,7 @@ export const useComposeDialogController = ({
       return;
     }
     finishingActionRef.current = null;
+    snippetReadinessActionRef.current = null;
     finishingRef.current = false;
     if (mountedRef.current) {
       setState((current) => ({ ...current, isFinishing: false }));
@@ -545,7 +547,59 @@ export const useComposeDialogController = ({
       return;
     }
 
-    const unresolvedFields = getUnresolvedSnippetFields(values);
+    let unresolvedFields = getUnresolvedSnippetFields(values);
+    if (
+      unresolvedFields.length > 0 &&
+      activeDraftRef.current.draftAnchor &&
+      !demoMode &&
+      !managedDemoMode
+    ) {
+      const readinessAction = captureComposeAction();
+      const snapshot = cloneComposeDraft(buildDraftFromForm(values));
+      snippetReadinessActionRef.current = readinessAction;
+      let result: { fields: string[] } | { error: unknown };
+      try {
+        const readiness = await rpc.mail.getComposeSendReadiness({
+          bodyHtml: snapshot.bodyHtml,
+          bodyText: snapshot.bodyText,
+          draftAnchor: snapshot.draftAnchor,
+          inlineImages: snapshot.inlineImages,
+          mailboxId,
+        });
+        result = { fields: readiness.unresolvedSnippetFields };
+      } catch (error) {
+        result = { error };
+      }
+      const { current } = activeDraftRef;
+      const isCurrent =
+        snippetReadinessActionRef.current === readinessAction &&
+        isCurrentComposeAction(readinessAction) &&
+        !finishingRef.current &&
+        heldTaskRef.current === null &&
+        current.holdAttempt !== true &&
+        current.scheduleAttempt === undefined &&
+        current.saveStatus !== "sending" &&
+        !haveComposeDraftPersistedFieldsChanged(
+          snapshot,
+          // oxlint-disable-next-line no-use-before-define -- Submission runs after the form initializes.
+          buildDraftFromForm(form.state.values),
+          { ignoreProviderAssetIds: true }
+        );
+      if (snippetReadinessActionRef.current === readinessAction) {
+        snippetReadinessActionRef.current = null;
+      }
+      if (!isCurrent) {
+        return;
+      }
+      if ("error" in result) {
+        toastError(result.error, {
+          boundary: "compose-send-readiness",
+          fallback: "Could not check this message. Please try again.",
+        });
+        return;
+      }
+      unresolvedFields = result.fields;
+    }
     if (unresolvedFields.length > 0) {
       onUnresolvedSnippetFields(unresolvedFields);
       return;
@@ -676,11 +730,13 @@ export const useComposeDialogController = ({
     clearComposeDraftRuntimeFiles(message);
   };
 
+  const submitMeta: { schedule?: ScheduledSendTime } = {};
   const form = useForm({
     defaultValues,
-    onSubmit: async ({ value }) => {
-      await submitComposeForm(value, scheduleRequestRef.current);
+    onSubmit: async ({ value, meta }) => {
+      await submitComposeForm(value, meta.schedule ?? null);
     },
+    onSubmitMeta: submitMeta,
     validationLogic: revalidateLogic(),
     validators: {
       onDynamic: composeDraftFormValuesSchema,
@@ -694,7 +750,7 @@ export const useComposeDialogController = ({
     }
     scheduleRequestRef.current = schedule;
     try {
-      await form.handleSubmit();
+      await form.handleSubmit({ schedule });
     } finally {
       scheduleRequestRef.current = null;
     }
@@ -2473,6 +2529,7 @@ export const useComposeDialogController = ({
       ) {
         return;
       }
+      snippetReadinessActionRef.current = null;
       await persistCurrentDraft(false, false, true);
     },
     saveDraftCopy,

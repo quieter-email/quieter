@@ -5,6 +5,7 @@ import {
   composeMessageEnvelopeSchema,
   composeMessageInputSchema,
   composeSendDraftInputSchema,
+  getUnresolvedSnippetFields,
 } from "../src/compose/schema";
 import { createScheduledSendSchema } from "../src/scheduled-send";
 
@@ -26,27 +27,30 @@ const schedule = {
 };
 
 describe("snippet send admission", () => {
-  test("drafts retain incomplete fields while send admission rejects either unresolved alternative", () => {
+  test("public inputs preserve incomplete alternatives for authenticated contextual admission", () => {
     for (const content of [
       { bodyHtml: "<p>{{?<strong>project</strong>}}</p>", bodyText: "Ready" },
       { bodyHtml: "<p>Ready</p>", bodyText: "{{@unknown.context}}" },
     ]) {
       const incomplete = { ...draft, ...content };
       expect(
+        getUnresolvedSnippetFields(composeMessageInputSchema.parse(incomplete))
+      ).not.toHaveLength(0);
+      expect(
         composeDraftInputSchema.safeParse(incomplete).success
       ).toBeTruthy();
       expect(
         composeMessageInputSchema.safeParse(incomplete).success
-      ).toBeFalsy();
+      ).toBeTruthy();
       expect(
         composeSendDraftInputSchema.safeParse(incomplete).success
-      ).toBeFalsy();
+      ).toBeTruthy();
       expect(
         createScheduledSendSchema.safeParse({
           ...schedule,
           message: incomplete,
         }).success
-      ).toBeFalsy();
+      ).toBeTruthy();
       expect(
         composeMessageEnvelopeSchema.safeParse(incomplete).success
       ).toBeTruthy();
@@ -96,15 +100,23 @@ describe("snippet send admission", () => {
       ],
     },
   ])(
-    "retains envelope validation for literal incoming content %#",
+    "retains complete public envelope validation before contextual admission %#",
     (invalid) => {
+      const message = {
+        ...draft,
+        ...invalid,
+        bodyHtml: "<p>{{?received}}</p>",
+        bodyText: "{{?received}}",
+      };
+      for (const schema of [
+        composeMessageEnvelopeSchema,
+        composeMessageInputSchema,
+        composeSendDraftInputSchema,
+      ]) {
+        expect(schema.safeParse(message).success).toBeFalsy();
+      }
       expect(
-        composeMessageEnvelopeSchema.safeParse({
-          ...draft,
-          ...invalid,
-          bodyHtml: "<p>{{?received}}</p>",
-          bodyText: "{{?received}}",
-        }).success
+        createScheduledSendSchema.safeParse({ ...schedule, message }).success
       ).toBeFalsy();
     }
   );
