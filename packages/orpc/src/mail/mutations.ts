@@ -97,6 +97,7 @@ const recordMetadataAction = async (
           }),
       ...labelFeedback,
     },
+    origin: context.origin?.kind === "ai" ? context.origin : undefined,
     targetCount: messageIds.length,
     userId: context.userId,
   };
@@ -137,7 +138,7 @@ const mutateMessage = async (
     });
   }
   if (selectedMailbox.provider === "managed") {
-    const authorizedInput = { ...input, userId: context.userId };
+    const authorizedInput = { ...input, context, userId: context.userId };
     if (operation === "read" || operation === "unread") {
       const result = await setManagedMessageReadState({
         ...authorizedInput,
@@ -159,6 +160,7 @@ const mutateMessage = async (
       ...operation,
     });
     const labelFeedback = await recordLabelFeedback({
+      origin: context.origin?.kind === "ai" ? context.origin : undefined,
       ...operation,
       mailboxId: input.mailboxId,
       providerMessageIds: [result.id],
@@ -169,41 +171,49 @@ const mutateMessage = async (
     ]);
     return result;
   }
-  return await callGmail(context, input.mailboxId, async (accessToken) => {
-    let change: GmailMetadataChange;
-    if (operation === "read") {
-      change = { removeLabelIds: ["UNREAD"] };
-    } else if (operation === "unread") {
-      change = { addLabelIds: ["UNREAD"] };
-    } else {
-      change = operation;
+  return await callGmail(
+    context,
+    input.mailboxId,
+    async (accessToken, signal, beforeEffect) => {
+      let change: GmailMetadataChange;
+      if (operation === "read") {
+        change = { removeLabelIds: ["UNREAD"] };
+      } else if (operation === "unread") {
+        change = { addLabelIds: ["UNREAD"] };
+      } else {
+        change = operation;
+      }
+      const result = await mutateGmailMessage(
+        accessToken,
+        input.messageId,
+        change,
+        signal,
+        beforeEffect
+      );
+      await refreshGmailCapturedMessageMetadata({
+        accessToken,
+        mailboxId: input.mailboxId,
+        messageIds: [result.id],
+      });
+      const labelFeedback =
+        typeof operation === "string"
+          ? undefined
+          : await recordLabelFeedback({
+              origin:
+                context.origin?.kind === "ai" ? context.origin : undefined,
+              ...operation,
+              mailboxId: input.mailboxId,
+              providerMessageIds: [result.id],
+              userId: context.userId,
+            });
+      await recordMetadataAction(
+        { accessToken, context, input, labelFeedback },
+        operation,
+        [result.id]
+      );
+      return result;
     }
-    const result = await mutateGmailMessage(
-      accessToken,
-      input.messageId,
-      change
-    );
-    await refreshGmailCapturedMessageMetadata({
-      accessToken,
-      mailboxId: input.mailboxId,
-      messageIds: [result.id],
-    });
-    const labelFeedback =
-      typeof operation === "string"
-        ? undefined
-        : await recordLabelFeedback({
-            ...operation,
-            mailboxId: input.mailboxId,
-            providerMessageIds: [result.id],
-            userId: context.userId,
-          });
-    await recordMetadataAction(
-      { accessToken, context, input, labelFeedback },
-      operation,
-      [result.id]
-    );
-    return result;
-  });
+  );
 };
 
 type ThreadMutationArgs = {
@@ -235,7 +245,7 @@ const mutateThread = async (
     });
   }
   if (selectedMailbox.provider === "managed") {
-    const authorizedInput = { ...input, userId: context.userId };
+    const authorizedInput = { ...input, context, userId: context.userId };
     if (operation === "read" || operation === "unread") {
       const result = await setManagedThreadReadState({
         ...authorizedInput,
@@ -265,6 +275,7 @@ const mutateThread = async (
       ...operation,
     });
     const labelFeedback = await recordLabelFeedback({
+      origin: context.origin?.kind === "ai" ? context.origin : undefined,
       ...operation,
       mailboxId: input.mailboxId,
       providerMessageIds: result.messages.map((message) => message.id),
@@ -277,37 +288,49 @@ const mutateThread = async (
     );
     return result;
   }
-  return await callGmail(context, input.mailboxId, async (accessToken) => {
-    let change: GmailMetadataChange;
-    if (operation === "read") {
-      change = { removeLabelIds: ["UNREAD"] };
-    } else if (operation === "unread") {
-      change = { addLabelIds: ["UNREAD"] };
-    } else {
-      change = operation;
+  return await callGmail(
+    context,
+    input.mailboxId,
+    async (accessToken, signal, beforeEffect) => {
+      let change: GmailMetadataChange;
+      if (operation === "read") {
+        change = { removeLabelIds: ["UNREAD"] };
+      } else if (operation === "unread") {
+        change = { addLabelIds: ["UNREAD"] };
+      } else {
+        change = operation;
+      }
+      const result = await mutateGmailThread(
+        accessToken,
+        input.threadId,
+        change,
+        signal,
+        beforeEffect
+      );
+      await refreshGmailCapturedMessageMetadata({
+        accessToken,
+        mailboxId: input.mailboxId,
+        messageIds: result.messages.map((message) => message.id),
+      });
+      const labelFeedback =
+        typeof operation === "string"
+          ? undefined
+          : await recordLabelFeedback({
+              origin:
+                context.origin?.kind === "ai" ? context.origin : undefined,
+              ...operation,
+              mailboxId: input.mailboxId,
+              providerMessageIds: result.messages.map((message) => message.id),
+              userId: context.userId,
+            });
+      await recordMetadataAction(
+        { accessToken, context, input, labelFeedback },
+        operation,
+        result.messages.map((message) => message.id)
+      );
+      return result;
     }
-    const result = await mutateGmailThread(accessToken, input.threadId, change);
-    await refreshGmailCapturedMessageMetadata({
-      accessToken,
-      mailboxId: input.mailboxId,
-      messageIds: result.messages.map((message) => message.id),
-    });
-    const labelFeedback =
-      typeof operation === "string"
-        ? undefined
-        : await recordLabelFeedback({
-            ...operation,
-            mailboxId: input.mailboxId,
-            providerMessageIds: result.messages.map((message) => message.id),
-            userId: context.userId,
-          });
-    await recordMetadataAction(
-      { accessToken, context, input, labelFeedback },
-      operation,
-      result.messages.map((message) => message.id)
-    );
-    return result;
-  });
+  );
 };
 
 export const mutationsMailOperations = {
@@ -405,8 +428,10 @@ export const mutationsMailOperations = {
       }
       return await setMailImportance({
         actorUserId: context.userId,
+        beforeEffect: context.beforeEffect,
         important: input.command.important,
         mailboxId: input.mailboxId,
+        origin: context.origin,
         targets,
       });
     }
@@ -414,6 +439,7 @@ export const mutationsMailOperations = {
       const result = await applyManagedMessageChanges({
         ...input,
         command: input.command,
+        context,
         userId: context.userId,
       });
       const messageIds = [
@@ -427,6 +453,7 @@ export const mutationsMailOperations = {
         const labelFeedback = await recordLabelFeedback({
           addLabelIds: input.command.addIds,
           mailboxId: input.mailboxId,
+          origin: context.origin?.kind === "ai" ? context.origin : undefined,
           providerMessageIds: messageIds,
           removeLabelIds: input.command.removeIds,
           userId: context.userId,
@@ -462,7 +489,7 @@ export const mutationsMailOperations = {
     return await callGmail(
       context,
       input.mailboxId,
-      async (accessToken, signal) => {
+      async (accessToken, signal, beforeEffect) => {
         const requestedMessageIds = [
           ...new Set(input.targets.flatMap((target) => target.messageIds)),
         ];
@@ -509,7 +536,8 @@ export const mutationsMailOperations = {
             input.command.read
               ? { removeLabelIds: ["UNREAD"] }
               : { addLabelIds: ["UNREAD"] },
-            signal
+            signal,
+            beforeEffect
           );
           await refreshGmailCapturedMessageMetadata({
             accessToken,
@@ -529,7 +557,8 @@ export const mutationsMailOperations = {
               addLabelIds: input.command.addIds,
               removeLabelIds: input.command.removeIds,
             },
-            signal
+            signal,
+            beforeEffect
           );
           await refreshGmailCapturedMessageMetadata({
             accessToken,
@@ -539,6 +568,7 @@ export const mutationsMailOperations = {
           const labelFeedback = await recordLabelFeedback({
             addLabelIds: input.command.addIds,
             mailboxId: input.mailboxId,
+            origin: context.origin?.kind === "ai" ? context.origin : undefined,
             providerMessageIds: messageIds,
             removeLabelIds: input.command.removeIds,
             userId: context.userId,
@@ -561,7 +591,13 @@ export const mutationsMailOperations = {
           const results = await Promise.allSettled(
             messageIds.map(
               async (messageId) =>
-                await mutateGmailMessage(accessToken, messageId, change, signal)
+                await mutateGmailMessage(
+                  accessToken,
+                  messageId,
+                  change,
+                  signal,
+                  beforeEffect
+                )
             )
           );
           appliedMessageIds = results.flatMap((result) =>
@@ -579,7 +615,8 @@ export const mutationsMailOperations = {
                 accessToken,
                 appliedMessageIds,
                 { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
-                signal
+                signal,
+                beforeEffect
               );
             } catch (error) {
               await refreshGmailCapturedMessageMetadata({
@@ -600,7 +637,8 @@ export const mutationsMailOperations = {
             accessToken,
             messageIds,
             { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
-            signal
+            signal,
+            beforeEffect
           );
         }
         if (input.command.kind === "move" && appliedMessageIds.length > 0) {
@@ -614,6 +652,7 @@ export const mutationsMailOperations = {
             action: `move:${input.command.destination}`,
             mailboxId: input.mailboxId,
             messageIds: appliedMessageIds,
+            origin: context.origin?.kind === "ai" ? context.origin : undefined,
             targetCount: appliedMessageIds.length,
             userId: context.userId,
           });

@@ -17,10 +17,11 @@ vi.mock(import("../src/gmail-mailbox-access"), async (original) => {
   const actual = await original();
   return {
     ...actual,
-    runAuthorizedGmailMailbox: (async (_scope, run) =>
-      await run(
-        "synthetic-token"
-      )) satisfies typeof actual.runAuthorizedGmailMailbox,
+    runAuthorizedGmailMailbox: (async (scope, run) =>
+      await run("synthetic-token", {
+        googleSubject: "synthetic-subject",
+        mailboxId: scope.mailboxId,
+      })) satisfies typeof actual.runAuthorizedGmailMailbox,
   };
 });
 vi.mock(import("../src/mail-capture"), () => ({

@@ -114,12 +114,12 @@ describe("snippet admission for inherited message quotes", () => {
     });
     expect(getUnresolvedSnippetFields(quote)).toHaveLength(0);
     expect(
-      composeMessageInputSchema.safeParse({
+      getUnresolvedSnippetFields({
         ...quote,
         bodyHtml: `<p>{{?authored}}</p>${quote.bodyHtml}`,
         bodyText: `{{?authored}}\n${quote.bodyText}`,
-      }).success
-    ).toBeFalsy();
+      })
+    ).toContain("authored");
   });
 
   test("keeps modified quotes and new fields inside quotes under ordinary validation", () => {

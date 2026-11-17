@@ -24,6 +24,12 @@ import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import { convert } from "html-to-text";
 
 import { assertCanUseAi } from "../ai-access";
+import {
+  aiOriginSchema,
+  assertAiAuthority,
+  captureAiOrigin,
+} from "../ai-authority";
+import type { AiOrigin } from "../ai-authority";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { queriesMailOperations } from "../mail/queries";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -163,7 +169,8 @@ const reportSuggestionUsage = async () => {
 
 const createSuggestedReminder = async (
   row: SuggestionRow,
-  automatic: boolean
+  automatic: boolean,
+  origin?: AiOrigin
 ) => {
   if (!row.result) {
     throw new ORPCError("CONFLICT", {
@@ -173,6 +180,7 @@ const createSuggestedReminder = async (
   const reminder = await createReminder({
     dueAt: row.result.dueAt,
     mailboxId: row.mailboxId,
+    origin,
     requestId: row.id,
     source: {
       kind: automatic ? "automatic" : "suggestion",
@@ -214,6 +222,22 @@ const processSuggestion = async (
   );
   let usage: AiUsageReport | undefined;
   try {
+    const parsedOrigin = aiOriginSchema.safeParse({
+      kind: "ai",
+      mailboxId: row.mailboxId,
+      mode: row.automatic ? "automation" : "interactive",
+      policyVersion: row.authorityVersion,
+      userId: row.userId,
+    });
+    if (!parsedOrigin.success) {
+      await db
+        .update(mailReminderSuggestion)
+        .set({ status: "none" })
+        .where(lease);
+      return;
+    }
+    const origin = parsedOrigin.data;
+    await assertAiAuthority({ effect: "write", origin });
     const access = await assertAccessibleMailbox(row);
     const preferences = await getReminderPreferences(row);
     if (row.automatic ? !preferences.automatic : !preferences.suggestions) {
@@ -315,13 +339,15 @@ const processSuggestion = async (
       if (submission === undefined) {
         return;
       }
+      const billing = await createMailboxAiBillingContext({
+        externalId: `reminder-suggestion:${row.id}`,
+        mailboxId: row.mailboxId,
+        usageKind: "mailAction",
+        userId: row.userId,
+      });
+      await assertAiAuthority({ effect: "write", origin });
       const extracted = await extractReminderSuggestion({
-        billing: await createMailboxAiBillingContext({
-          externalId: `reminder-suggestion:${row.id}`,
-          mailboxId: row.mailboxId,
-          usageKind: "mailAction",
-          userId: row.userId,
-        }),
+        billing,
         message: evidence,
         now: new Date().toISOString(),
         onUsage: (report) => {
@@ -351,33 +377,56 @@ const processSuggestion = async (
           title: decision.title,
         };
       }
-      const saved = await db
-        .update(mailReminderSuggestion)
-        .set({
-          result,
-          status: result ? "pending" : "none",
-          usage: usage ?? null,
-          usageModel: usage ? resolveBackgroundModel() : null,
-        })
-        .where(lease)
-        .returning();
+      const saved = await db.transaction(async (tx) => {
+        await assertAiAuthority({ effect: "write", origin }, tx, {
+          lock: true,
+        });
+        return await tx
+          .update(mailReminderSuggestion)
+          .set({
+            result,
+            status: result ? "pending" : "none",
+            usage: usage ?? null,
+            usageModel: usage ? resolveBackgroundModel() : null,
+          })
+          .where(lease)
+          .returning();
+      });
       if (saved.length === 0 || !result) {
         return;
       }
     }
     await assertAccessibleMailbox(row);
-    const current = await getReminderPreferences(row);
-    const [ready] = await db
-      .update(mailReminderSuggestion)
-      .set({
-        status: sql`case when ${mailReminderSuggestion.automatic}
-          and ${current.automatic} and ${result.automaticEligible}
-          then 'pending' else ${current.suggestions ? "suggested" : "none"} end`,
-      })
-      .where(lease)
-      .returning();
-    if (ready?.automatic && current.automatic && result.automaticEligible) {
-      await createSuggestedReminder({ ...ready, result }, true);
+    const { automatic, ready } = await db.transaction(async (tx) => {
+      await assertAiAuthority({ effect: "write", origin }, tx, { lock: true });
+      const [current] = await tx
+        .select()
+        .from(mailReminderPreference)
+        .where(
+          and(
+            eq(mailReminderPreference.userId, row.userId),
+            eq(mailReminderPreference.mailboxId, row.mailboxId)
+          )
+        )
+        .limit(1)
+        .for("update");
+      const automaticEnabled = current?.automatic ?? false;
+      const [saved] = await tx
+        .update(mailReminderSuggestion)
+        .set({
+          status: sql`case when ${mailReminderSuggestion.automatic}
+            and ${automaticEnabled} and ${result.automaticEligible}
+            then 'pending' else ${(current?.suggestions ?? true) ? "suggested" : "none"} end`,
+        })
+        .where(lease)
+        .returning();
+      return { automatic: automaticEnabled, ready: saved };
+    });
+    if (ready?.automatic && automatic && result.automaticEligible) {
+      await createSuggestedReminder({ ...ready, result }, true, {
+        ...origin,
+        mode: "automation",
+      });
     }
   } catch (error) {
     const admissionBusy = usage === undefined && isAiCreditAdmissionBusy(error);
@@ -420,11 +469,38 @@ export const getReminderSuggestion = async (
   if (!preferences.suggestions) {
     return { status: "none", suggestion: null };
   }
-  const row = await enqueueReminderSuggestion({
-    ...value,
-    automatic: false,
-    userId: input.userId,
-  });
+  const [existing] = await db
+    .select()
+    .from(mailReminderSuggestion)
+    .where(
+      and(
+        eq(mailReminderSuggestion.userId, input.userId),
+        eq(mailReminderSuggestion.mailboxId, input.mailboxId),
+        eq(mailReminderSuggestion.messageId, input.messageId)
+      )
+    )
+    .limit(1);
+  let row = existing;
+  if (row === undefined || row.status === "pending") {
+    try {
+      const origin = await captureAiOrigin({
+        mailboxId: input.mailboxId,
+        mode: "interactive",
+        userId: input.userId,
+      });
+      row = await enqueueReminderSuggestion({
+        ...value,
+        automatic: false,
+        origin,
+        userId: input.userId,
+      });
+    } catch (error) {
+      if (error instanceof ORPCError && error.status < 500) {
+        return { status: "none", suggestion: null };
+      }
+      throw error;
+    }
+  }
   if (row.threadId !== input.threadId) {
     return { status: "none", suggestion: null };
   }

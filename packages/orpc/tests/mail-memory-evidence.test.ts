@@ -1,5 +1,10 @@
 import { ORPCError } from "@orpc/server";
-import type { mailbox } from "@quieter/database/schema";
+import {
+  mailbox,
+  mailboxGrant,
+  mailboxDivisionGrant,
+  member,
+} from "@quieter/database/schema";
 /* oxlint-disable eslint/require-await -- The database mock resolves local fixtures without I/O. */
 import type {
   getMessageWithDetails,
@@ -19,6 +24,7 @@ import {
   hydrateMailMemoryEvent,
   queueMailboxMessageMemory,
 } from "../src/ai-memory-capture";
+import type { PreparedGmailMailboxIdentity } from "../src/gmail-mailbox-access";
 import type { enrichMailAutoLabelFeedbackSource } from "../src/mail-automation/memory";
 import type { getAuthorizedManagedMailbox } from "../src/mailbox/access";
 
@@ -33,6 +39,8 @@ type MailboxFixture = Pick<
 >;
 const state = vi.hoisted(() => ({
   authorizeManaged: vi.fn<typeof getAuthorizedManagedMailbox>(),
+  directGrant: false,
+  divisionGrant: false,
   getMessage: vi.fn<typeof getMessageWithDetails>(),
   isGenerated: vi.fn<typeof isAiGeneratedMailBody>(),
   lookup: vi.fn<() => Promise<MailboxFixture[]>>(),
@@ -45,9 +53,23 @@ const state = vi.hoisted(() => ({
 vi.mock("@quieter/database/client", () => ({
   db: {
     select: () => ({
-      from: () => ({
+      from: (table: unknown) => ({
         where: () => ({
-          limit: state.lookup,
+          limit: async () => {
+            if (table === mailbox) {
+              return await state.lookup();
+            }
+            if (table === member) {
+              return [{ id: "fixture-member" }];
+            }
+            if (
+              (table === mailboxGrant && state.directGrant) ||
+              (table === mailboxDivisionGrant && state.divisionGrant)
+            ) {
+              return [{ id: "other-grant" }];
+            }
+            return [];
+          },
         }),
       }),
     }),
@@ -71,8 +93,15 @@ vi.mock(import("../src/ai-mail-authorship"), async (original) => ({
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
   runAuthorizedGmailMailbox: async <TValue>(
     _input: { mailboxId: string; userId: string },
-    request: (token: string) => Promise<TValue>
-  ): Promise<TValue> => await request("test-token"),
+    request: (
+      token: string,
+      identity: PreparedGmailMailboxIdentity
+    ) => Promise<TValue>
+  ): Promise<TValue> =>
+    await request("test-token", {
+      googleSubject: "fixture-subject",
+      mailboxId: _input.mailboxId,
+    }),
 }));
 vi.mock(import("@quieter/gmail"), async (original) => ({
   ...(await original()),
@@ -103,6 +132,8 @@ describe("mail evidence capture", () => {
       ownerUserId: "owner-1",
       provider: "gmail",
     };
+    state.directGrant = false;
+    state.divisionGrant = false;
     state.record.mockReset().mockResolvedValue(null);
     state.lookup
       .mockReset()
@@ -217,7 +248,7 @@ describe("mail evidence capture", () => {
     expect(state.record).not.toHaveBeenCalled();
   });
 
-  test("captures a shared mailbox only for an explicit authorized actor", async () => {
+  test("shared mailboxes do not enter personal learning even for an authorized actor", async () => {
     state.selected = {
       ...state.selected,
       accessMode: "shared",
@@ -249,20 +280,54 @@ describe("mail evidence capture", () => {
       message,
       source: "open",
     });
-    expect(state.record.mock.calls.at(0)?.[0]).toMatchObject({
-      mailboxId: "mailbox-1",
-      userId: "reader-1",
-    });
-    state.record.mockClear();
+    expect(state.record).not.toHaveBeenCalled();
     await queueMailboxMessageMemory({
       mailboxId: "mailbox-1",
       messageIds: [message.id],
       userId: "reader-1",
     });
-    expect(state.record.mock.calls.at(0)?.[0].userId).toBe("reader-1");
+    expect(state.record).not.toHaveBeenCalled();
   });
 
-  test("does not attribute shared outbound writing to the reader", async () => {
+  test.each(["direct", "division"])(
+    "a private-mode inbox with another %s grant stops before personal evidence preparation",
+    async (grant) => {
+      state.selected = {
+        ...state.selected,
+        accessMode: "private",
+        emailAddress: "managed@example.test",
+        id: "mailbox-1",
+        managedOwnerUserId: "owner-1",
+        ownerUserId: null,
+        provider: "managed",
+      };
+      state.directGrant = grant === "direct";
+      state.divisionGrant = grant === "division";
+      state.authorizeManaged.mockResolvedValue({
+        contentRevision: 0,
+        displayName: null,
+        emailAddress: "managed@example.test",
+        id: "mailbox-1",
+        organizationId: "organization-1",
+        ownerUserId: "owner-1",
+        provider: "managed",
+        role: "manager",
+      });
+
+      await expect(
+        captureMailboxMessageMemory({
+          actorUserId: "owner-1",
+          mailboxId: "mailbox-1",
+          message: { ...message, labelIds: ["SENT"] },
+          source: "received",
+        })
+      ).resolves.toBeNull();
+      expect(state.record).not.toHaveBeenCalled();
+      expect(state.isGenerated).not.toHaveBeenCalled();
+    }
+  );
+
+  test("shared outbound writing does not enter personal learning", async () => {
     state.selected = {
       accessMode: "shared",
       emailAddress: "team@example.test",
@@ -287,10 +352,7 @@ describe("mail evidence capture", () => {
       message: { ...message, labelIds: ["SENT"] },
       source: "ai_read",
     });
-    expect(state.record.mock.calls.at(0)?.[0].metadata).toMatchObject({
-      authorship: "unattributed_outbound",
-      userAuthored: false,
-    });
+    expect(state.record).not.toHaveBeenCalled();
   });
 });
 

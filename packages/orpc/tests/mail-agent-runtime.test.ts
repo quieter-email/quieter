@@ -598,6 +598,142 @@ describe("durable background action execution", () => {
     });
   });
 
+  test("shared pause stops an automatic run before loading private mail or starting a model", async () => {
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: true,
+        mailboxId: "mailbox",
+        readOnly: false,
+        version: 1,
+      },
+    ]);
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.read).not.toHaveBeenCalled();
+    expect(state.model).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(runRow()).toMatchObject({ status: "needs_attention" });
+  });
+
+  test("shared pause leaves a fresh manual AI Action available", async () => {
+    runRow().triggerKind = "manual";
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: true,
+        mailboxId: "mailbox",
+        readOnly: false,
+        version: 1,
+      },
+    ]);
+    state.model.mockReturnValue(modelWithDrafts(["Reply for review"]));
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.save).toHaveBeenCalledOnce();
+    expect(runRow()).toMatchObject({ status: "succeeded" });
+  });
+
+  test("a manual AI Action can still read and summarize under read-only without effects", async () => {
+    runRow().triggerKind = "manual";
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: false,
+        mailboxId: "mailbox",
+        readOnly: true,
+        version: 1,
+      },
+    ]);
+    state.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doGenerate: generation([
+          {
+            text: JSON.stringify({
+              matched: true,
+              summary: "Read the current thread.",
+            }),
+            type: "text",
+          },
+        ]),
+      })
+    );
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.read).toHaveBeenCalledOnce();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(state.tables.get("mailboxAgentEffect") ?? []).toHaveLength(0);
+    expect(runRow()).toMatchObject({ status: "succeeded" });
+  });
+
+  test("read-only blocks a manual AI Action draft before effect admission", async () => {
+    runRow().triggerKind = "manual";
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: false,
+        mailboxId: "mailbox",
+        readOnly: true,
+        version: 1,
+      },
+    ]);
+    state.model.mockReturnValue(modelWithDrafts(["Reply for review"]));
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.save).not.toHaveBeenCalled();
+    expect(state.tables.get("mailboxAgentEffect") ?? []).toHaveLength(0);
+    expect(runRow()).toMatchObject({ status: "needs_attention" });
+  });
+
+  test("resuming policy does not revive a run whose native admission was revoked", async () => {
+    const setting = state.tables.get("mailboxPersonalAgentSetting")?.[0];
+    if (setting === undefined) {
+      throw new Error("Expected the personal admission fixture.");
+    }
+    setting.activationVersion = 3;
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: false,
+        mailboxId: "mailbox",
+        readOnly: false,
+        version: 2,
+      },
+    ]);
+    await drainMailAgentRuns({ limit: 1 });
+    expect(state.read).not.toHaveBeenCalled();
+    expect(state.model).not.toHaveBeenCalled();
+    expect(state.save).not.toHaveBeenCalled();
+    expect(runRow()).toMatchObject({
+      settingVersion: 1,
+      status: "needs_attention",
+    });
+    expect(setting).toMatchObject({
+      activeRevisionId: "revision",
+      enabled: true,
+    });
+  });
+
+  test("rechecks shared policy after draft preparation while retaining accounting and the reserved receipt", async () => {
+    let dispatched = 0;
+    state.model.mockReturnValue(modelWithDrafts(["Reply for review"]));
+    state.save.mockImplementation(async ({ context }) => {
+      state.tables.set("mailboxAiAuthority", [
+        {
+          automationPaused: true,
+          mailboxId: "mailbox",
+          readOnly: false,
+          version: 1,
+        },
+      ]);
+      await context.beforeEffect?.();
+      dispatched += 1;
+      return {
+        baseRevision: "revision-1",
+        draftId: "draft",
+        messageId: "draft-message",
+      };
+    });
+    await drainMailAgentRuns({ limit: 1 });
+    expect(dispatched).toBe(0);
+    expect(state.tables.get("mailboxAgentEffect")).toMatchObject([
+      { status: "uncertain" },
+    ]);
+    expect(runRow()).toMatchObject({ status: "needs_attention" });
+    expect(runRow()).toHaveProperty("usage.0.promptTokens");
+  });
+
   test("propagates a fenced claim before loading mail or starting a provider", async () => {
     state.blockedMutation = "claim";
     await expect(drainMailAgentRuns({ limit: 1 })).rejects.toThrow("fenced");

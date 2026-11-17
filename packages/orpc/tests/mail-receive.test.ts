@@ -4,6 +4,7 @@ import type { classifyMailMessage } from "@quieter/ai/classify-gmail-message";
 import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import type { hasUserBillingFeature } from "@quieter/billing/entitlements";
+import type { getMessageWithDetails, mutateGmailMessage } from "@quieter/gmail";
 import type * as Drizzle from "drizzle-orm";
 import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 
@@ -11,9 +12,12 @@ import type {
   loadAiAgentContext,
   loadAiAgentMemoryCandidates,
 } from "../src/ai-memory";
+import { REQUIRED_GMAIL_SCOPES } from "../src/gmail-mailbox-access";
+import { processGmailMessage } from "../src/gmail-sync/message";
 import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-budget";
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
 import { deferAutoLabelAutomation } from "../src/mail-automation/auto-label-events";
+import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
 import { runReceiveStage } from "../src/mail-receive";
 import type { ReceiveStageOutcome } from "../src/mail-receive";
 import { processManagedMailAutomation } from "../src/managed-mail/automation";
@@ -25,7 +29,15 @@ const state = vi.hoisted(() => ({
   budget: vi.fn<typeof getMailAutomationAiBudgetStatus>(),
   classify: vi.fn<typeof classifyMailMessage>(),
   entitlement: vi.fn<typeof hasUserBillingFeature>(),
+  gmailDispatched: [] as string[],
+  gmailMessage: vi.fn<typeof getMessageWithDetails>(),
+  gmailPrepare: vi.fn<() => Promise<void>>(),
+  gmailWrite: vi.fn<typeof mutateGmailMessage>(),
+  history: vi.fn<typeof loadMailAutoLabelHistory>(),
   labels: vi.fn<typeof updateManagedMessageLabelAssignments>(),
+  memoryContext: vi.fn<typeof loadAiAgentContext>(),
+  memoryUserId: null as string | null,
+  shared: false,
   tables: new Map<string, Row[]>(),
 }));
 
@@ -38,6 +50,8 @@ vi.mock("drizzle-orm", async (original) => ({
       predicates.every((predicate) => predicate?.(row) ?? true),
   eq: (column: { name: string }, value: unknown) => (row: Row) =>
     row[column.name] === value,
+  inArray: (column: { name: string }, values: unknown[]) => (row: Row) =>
+    values.includes(row[column.name]),
   isNotNull: (column: { name: string }) => (row: Row) =>
     row[column.name] !== null,
   isNull: (column: { name: string }) => (row: Row) => row[column.name] === null,
@@ -66,7 +80,9 @@ vi.mock("@quieter/database/client", async () => {
     let limit = Number.POSITIVE_INFINITY;
     let projection = fields;
     const query = {
+      for: () => query,
       innerJoin: () => query,
+      leftJoin: () => query,
       limit: (next: number) => {
         limit = next;
         return query;
@@ -94,9 +110,12 @@ vi.mock("@quieter/database/client", async () => {
           rows.push({
             appliedAt: null,
             attemptCount: 0,
+            authorityVersion: null,
             labelIds: null,
             lastError: null,
+            model: null,
             nextAttemptAt: null,
+            privateContextUserId: null,
             usageReportedAt: null,
             ...values,
           });
@@ -166,20 +185,25 @@ vi.mock("../src/ai-memory", async () => {
     await import("../src/ai-memory-context");
   return {
     buildMailMemoryQuery,
-    loadAiAgentContext: vi.fn<typeof loadAiAgentContext>(),
-    loadAiAgentMemoryCandidates: vi.fn<typeof loadAiAgentMemoryCandidates>(),
+    loadAiAgentContext: state.memoryContext,
+    loadAiAgentMemoryCandidates: async (
+      input: Parameters<typeof loadAiAgentMemoryCandidates>[0]
+    ) => ({ mailboxId: input.mailboxId, userId: input.userId }),
     loadAiConfiguration: () => ({ autoLabelModel: AUTO_LABEL_MODEL }),
     serializeAiAgentContext,
   };
 });
 vi.mock(import("../src/ai-memory-capture"), () => ({
-  getMailboxMemoryActor: async () => null,
+  captureMailboxMessageMemory: async () => null,
+  getMailboxMemoryActor: async () =>
+    state.memoryUserId === null ? null : { userId: state.memoryUserId },
 }));
 vi.mock(import("../src/mail-automation/ai-budget"), async (original) => ({
   ...(await original()),
   getMailAutomationAiBudgetStatus: state.budget,
 }));
 vi.mock(import("../src/mail-automation/history"), () => ({
+  loadMailAutoLabelHistory: state.history,
   loadManagedAutomationLabelHistory: async () => null,
 }));
 vi.mock(import("../src/mail-automation/usage"), () => ({
@@ -191,6 +215,21 @@ vi.mock(import("../src/managed-mail/labels/repository"), () => ({
 vi.mock(import("@quieter/observability"), async (original) => ({
   ...(await original()),
   reportError: () => {},
+}));
+
+vi.mock(import("@quieter/gmail"), async (original) => ({
+  ...(await original()),
+  getMessageWithDetails: state.gmailMessage,
+  mutateGmailMessage: state.gmailWrite,
+}));
+vi.mock(import("../src/mail-agent/access"), () => ({
+  assertAgentMailboxAccess: async () => ({
+    canSaveDraft: true,
+    memberId: "member",
+    organizationId: "team",
+    provider: "gmail" as const,
+    shared: state.shared,
+  }),
 }));
 
 const identity = { mailboxId: "private-mailbox", messageId: "private-message" };
@@ -275,11 +314,14 @@ describe("managed per-message receive outcomes", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     state.tables.clear();
+    state.memoryUserId = null;
+    state.shared = false;
     state.tables.set("mailbox", [
       {
         billingOwnerUserId: "actor",
         id: "private-mailbox",
         organizationId: "team",
+        provider: "managed",
       },
     ]);
     state.tables.set("mailboxAutomationSettings", [
@@ -352,6 +394,153 @@ describe("managed per-message receive outcomes", () => {
     expect(state.classify).not.toHaveBeenCalled();
   });
 
+  test.each(["automationPaused", "readOnly"] as const)(
+    "%s fences AI labels while deterministic rules remain available",
+    async (flag) => {
+      state.tables.set("mailboxAiAuthority", [
+        {
+          automationPaused: flag === "automationPaused",
+          mailboxId: identity.mailboxId,
+          readOnly: flag === "readOnly",
+          version: 1,
+        },
+      ]);
+      state.tables.get("managedMailLabel")?.push({
+        autoLabel: {
+          domains: [],
+          enabled: true,
+          keywordScope: "anywhere",
+          keywords: [],
+          matchMode: "all",
+          prompt: "",
+          senders: ["sender@example.test"],
+        },
+        id: "sender-rule",
+        mailboxId: identity.mailboxId,
+        name: "Known sender",
+      });
+      await expect(
+        processManagedMailAutomation(identity)
+      ).resolves.toMatchObject({ reason: "policy", status: "skipped" });
+      expect(state.classify).not.toHaveBeenCalled();
+      expect(state.labels).toHaveBeenCalledWith(
+        expect.objectContaining({ addLabelIds: ["sender-rule"] })
+      );
+      expect(state.tables.get("mailboxAutomationSettings")).toMatchObject([
+        { autoLabelEnabled: true },
+      ]);
+      expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.labelIds).toBeNull();
+    }
+  );
+
+  test("cached labels derived from personal context cannot be applied after the inbox becomes shared", async () => {
+    state.memoryUserId = "memory-owner";
+    state.memoryContext.mockResolvedValue({
+      instructions: null,
+      memory: "A private preference.",
+    });
+    state.labels.mockRejectedValueOnce(new Error("Application interrupted."));
+    await expect(processManagedMailAutomation(identity)).resolves.toMatchObject(
+      { status: "retry" }
+    );
+    const cached = state.tables.get("gmailAutoLabelEvent")?.[0];
+    if (cached === undefined) {
+      throw new Error("Expected the pending classification.");
+    }
+    state.shared = true;
+    state.memoryUserId = null;
+    cached.nextAttemptAt = new Date(Date.now() - 1);
+    state.labels.mockClear();
+    await expect(processManagedMailAutomation(identity)).resolves.toMatchObject(
+      { reason: "policy", status: "skipped" }
+    );
+    expect(state.labels).not.toHaveBeenCalled();
+    expect(cached.appliedAt).toBeNull();
+  });
+
+  test.each([null, 0])(
+    "cached AI labels retain their admission epoch %s after policy is restored",
+    async (authorityVersion) => {
+      state.tables.set("gmailAutoLabelEvent", [
+        {
+          appliedAt: null,
+          attemptCount: 0,
+          authorityVersion,
+          gmailMessageId: identity.messageId,
+          id: "earlier-event",
+          labelIds: ["label"],
+          lastError: null,
+          mailboxId: identity.mailboxId,
+          model: AUTO_LABEL_MODEL,
+          nextAttemptAt: null,
+          privateContextUserId: null,
+          usageReportedAt: new Date(),
+        },
+      ]);
+      state.tables.set("mailboxAiAuthority", [
+        {
+          automationPaused: false,
+          mailboxId: identity.mailboxId,
+          readOnly: false,
+          version: 2,
+        },
+      ]);
+      await expect(
+        processManagedMailAutomation(identity)
+      ).resolves.toMatchObject({ reason: "policy", status: "skipped" });
+      expect(state.labels).not.toHaveBeenCalled();
+      expect(state.classify).not.toHaveBeenCalled();
+      expect(
+        state.tables.get("gmailAutoLabelEvent")?.[0]?.authorityVersion
+      ).toBe(authorityVersion);
+    }
+  );
+
+  test("a label disabled while classification runs cannot be applied from cached context", async () => {
+    state.classify.mockImplementation(async () => {
+      const label = state.tables.get("managedMailLabel")?.[0];
+      if (label === undefined) {
+        throw new Error("Expected the label fixture.");
+      }
+      label.autoLabel = { enabled: false };
+      return ["label"];
+    });
+    await expect(processManagedMailAutomation(identity)).resolves.toMatchObject(
+      { reason: "policy", status: "skipped" }
+    );
+    expect(state.labels).not.toHaveBeenCalled();
+    expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.labelIds).toBeNull();
+  });
+
+  test("a policy change while classification runs prevents result storage and label application", async () => {
+    state.classify.mockImplementation(async ({ onUsage }) => {
+      onUsage?.({
+        cacheWriteTokens: 0,
+        cachedTokens: 0,
+        completionTokens: 1,
+        costUsd: 0.001,
+        promptTokens: 20,
+      });
+      state.tables.set("mailboxAiAuthority", [
+        {
+          automationPaused: true,
+          mailboxId: identity.mailboxId,
+          readOnly: false,
+          version: 1,
+        },
+      ]);
+      return ["label"];
+    });
+    await expect(processManagedMailAutomation(identity)).resolves.toMatchObject(
+      { reason: "policy", status: "skipped" }
+    );
+    expect(state.labels).not.toHaveBeenCalled();
+    const event = state.tables.get("gmailAutoLabelEvent")?.[0];
+    expect(event?.labelIds).toBeNull();
+    expect(event?.appliedAt).toBeNull();
+    expect(event?.promptTokens).toBeGreaterThan(0);
+  });
+
   test("retains a saved failure retry on duplicate arrival without another classification", async () => {
     state.classify.mockRejectedValueOnce(new Error("Temporary model failure"));
     const failed = await processManagedMailAutomation(identity);
@@ -417,12 +606,15 @@ describe("managed per-message receive outcomes", () => {
       {
         appliedAt: null,
         attemptCount: 1,
+        authorityVersion: 0,
         gmailMessageId: "backlog",
         id: "backlog-event",
         labelIds: null,
         lastError: "Temporary failure",
         mailboxId: identity.mailboxId,
+        model: null,
         nextAttemptAt: retryAt,
+        privateContextUserId: null,
         usageReportedAt: null,
       },
     ]);
@@ -455,5 +647,282 @@ describe("managed per-message receive outcomes", () => {
     await expect(
       deferAutoLabelAutomation("missing-event", "Budget unavailable")
     ).rejects.toThrow("not saved");
+  });
+});
+
+const gmailReceiveInput = {
+  accessToken: "fixture",
+  autoLabelEnabled: true,
+  automationRuntime: {
+    getAutoLabelContext: async () => ({
+      availableLabelIds: new Set(["label"]),
+      historyLabels: [],
+      labels: [
+        {
+          autoLabel: null,
+          description: null,
+          id: "label",
+          inclusionCriteria: null,
+          name: "Follow up",
+        },
+      ],
+      memoryCandidates: null,
+      model: AUTO_LABEL_MODEL,
+    }),
+    getBudgetStatus: async () => ({ allowed: true, reason: "allowed" }),
+  },
+  extractCodes: false,
+  gmailMessageId: "message",
+  identity: { googleSubject: "fixture-subject", mailboxId: "gmail" },
+  mailboxId: "gmail",
+  organizationId: "team",
+  userId: "owner",
+} satisfies Parameters<typeof processGmailMessage>[0];
+
+describe("Gmail receive AI authority", () => {
+  beforeEach(() => {
+    state.tables.clear();
+    state.memoryUserId = null;
+    state.shared = false;
+    state.tables.set("mailboxAutomationSettings", [
+      { autoLabelEnabled: true, mailboxId: "gmail" },
+    ]);
+    state.classify.mockReset().mockResolvedValue(["label"]);
+    state.history.mockReset().mockResolvedValue(null);
+    state.memoryContext.mockReset();
+    state.tables.set("mailbox", [
+      {
+        googleSubject: "fixture-subject",
+        id: "gmail",
+        provider: "gmail",
+        scopes: REQUIRED_GMAIL_SCOPES.join(" "),
+        status: "connected",
+      },
+    ]);
+    state.tables.set("gmailLabel", [
+      { autoLabel: null, labelId: "label", mailboxId: "gmail" },
+    ]);
+    state.tables.set("gmailCredential", [
+      {
+        googleSubject: "fixture-subject",
+        mailboxId: "gmail",
+        scopes: REQUIRED_GMAIL_SCOPES.join(" "),
+      },
+    ]);
+    state.gmailDispatched.length = 0;
+    state.gmailMessage.mockReset().mockImplementation(async (_token, id) => ({
+      from: "sender@example.test",
+      id,
+      internalDate: String(Date.now()),
+      labelIds: ["INBOX"],
+      threadId: "thread",
+    }));
+    state.gmailPrepare.mockReset().mockResolvedValue();
+    state.gmailWrite
+      .mockReset()
+      .mockImplementation(
+        async (_token, messageId, _change, _signal, beforeEffect) => {
+          await state.gmailPrepare();
+          await beforeEffect?.();
+          state.gmailDispatched.push(messageId);
+          return { id: messageId, isUnread: false, labelIds: ["label"] };
+        }
+      );
+  });
+
+  test("shared pause avoids classification and provider label changes", async () => {
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: true,
+        mailboxId: "gmail",
+        readOnly: false,
+        version: 1,
+      },
+    ]);
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      {
+        autoLabel: { reason: "policy", status: "skipped" },
+      }
+    );
+    expect(state.classify).not.toHaveBeenCalled();
+    expect(state.gmailDispatched).toHaveLength(0);
+  });
+
+  test("shared pause preserves matching deterministic rules in a mixed Gmail configuration", async () => {
+    const autoLabel = {
+      domains: [],
+      enabled: true,
+      keywordScope: "anywhere" as const,
+      keywords: [],
+      matchMode: "all" as const,
+      prompt: "",
+      senders: ["sender@example.test"],
+    };
+    state.tables
+      .get("gmailLabel")
+      ?.push({ autoLabel, labelId: "sender-rule", mailboxId: "gmail" });
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: true,
+        mailboxId: "gmail",
+        readOnly: false,
+        version: 1,
+      },
+    ]);
+    await expect(
+      processGmailMessage({
+        ...gmailReceiveInput,
+        automationRuntime: {
+          ...gmailReceiveInput.automationRuntime,
+          getAutoLabelContext: async () => {
+            const context =
+              await gmailReceiveInput.automationRuntime.getAutoLabelContext();
+            return {
+              ...context,
+              availableLabelIds: new Set(["label", "sender-rule"]),
+              labels: [
+                ...context.labels,
+                {
+                  autoLabel,
+                  description: null,
+                  id: "sender-rule",
+                  inclusionCriteria: null,
+                  name: "Known sender",
+                },
+              ],
+            };
+          },
+        },
+      })
+    ).resolves.toMatchObject({
+      autoLabel: { reason: "policy", status: "skipped" },
+    });
+    const applied = state.gmailWrite.mock.calls.flatMap((call) =>
+      typeof call[2] === "string" ? [] : (call[2].addLabelIds ?? [])
+    );
+    expect(applied).toContain("sender-rule");
+    expect(applied).not.toContain("label");
+    expect(state.classify).not.toHaveBeenCalled();
+    expect(state.memoryContext).not.toHaveBeenCalled();
+    expect(state.history).not.toHaveBeenCalled();
+  });
+
+  test("read-only applied during provider preparation prevents Gmail dispatch", async () => {
+    state.gmailPrepare.mockImplementation(async () => {
+      state.tables.set("mailboxAiAuthority", [
+        {
+          automationPaused: false,
+          mailboxId: "gmail",
+          readOnly: true,
+          version: 1,
+        },
+      ]);
+    });
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      {
+        autoLabel: { reason: "policy", status: "skipped" },
+      }
+    );
+    expect(state.classify).toHaveBeenCalledOnce();
+    expect(state.gmailDispatched).toHaveLength(0);
+    expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.appliedAt).toBeNull();
+  });
+
+  test("a label disabled during provider preparation cannot be applied from cached context", async () => {
+    state.gmailPrepare.mockImplementation(async () => {
+      const label = state.tables.get("gmailLabel")?.[0];
+      if (label === undefined) {
+        throw new Error("Expected the label fixture.");
+      }
+      label.autoLabel = { enabled: false };
+    });
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      { autoLabel: { reason: "policy", status: "skipped" } }
+    );
+    expect(state.gmailDispatched).toHaveLength(0);
+    expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.appliedAt).toBeNull();
+  });
+
+  test("pause during history loading prevents starting automatic semantic context", async () => {
+    const enteredHistory = Promise.withResolvers<boolean>();
+    const history =
+      Promise.withResolvers<
+        Awaited<ReturnType<typeof loadMailAutoLabelHistory>>
+      >();
+    state.history.mockImplementation(async () => {
+      enteredHistory.resolve(true);
+      return await history.promise;
+    });
+    const processing = processGmailMessage({
+      ...gmailReceiveInput,
+      automationRuntime: {
+        ...gmailReceiveInput.automationRuntime,
+        getAutoLabelContext: async () => {
+          const context =
+            await gmailReceiveInput.automationRuntime.getAutoLabelContext();
+          return {
+            ...context,
+            memoryCandidates: { mailboxId: "gmail", userId: "owner" },
+          };
+        },
+      },
+    });
+    await enteredHistory.promise;
+    state.tables.set("mailboxAiAuthority", [
+      {
+        automationPaused: true,
+        mailboxId: "gmail",
+        readOnly: false,
+        version: 1,
+      },
+    ]);
+    history.resolve(null);
+    await expect(processing).resolves.toMatchObject({
+      autoLabel: { reason: "policy", status: "skipped" },
+    });
+    expect(state.memoryContext).not.toHaveBeenCalled();
+    expect(state.classify).not.toHaveBeenCalled();
+    expect(state.gmailDispatched).toHaveLength(0);
+  });
+
+  test("disconnect during classification prevents a write with the earlier token", async () => {
+    state.classify.mockImplementation(async () => {
+      const account = state.tables.get("mailbox")?.[0];
+      if (account === undefined) {
+        throw new Error("Expected the mailbox fixture.");
+      }
+      account.status = "disconnected";
+      return ["label"];
+    });
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      { autoLabel: { reason: "policy", status: "skipped" } }
+    );
+    expect(state.gmailDispatched).toHaveLength(0);
+    expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.appliedAt).toBeNull();
+  });
+
+  test("account rebinding during classification cannot reuse the earlier token identity", async () => {
+    state.classify.mockImplementation(async () => {
+      const account = state.tables.get("gmailCredential")?.[0];
+      if (account === undefined) {
+        throw new Error("Expected the mailbox fixture.");
+      }
+      account.googleSubject = "replacement-subject";
+      return ["label"];
+    });
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      { autoLabel: { reason: "policy", status: "skipped" } }
+    );
+    expect(state.gmailDispatched).toHaveLength(0);
+    expect(state.tables.get("gmailAutoLabelEvent")?.[0]?.appliedAt).toBeNull();
+  });
+
+  test("an allowed classification reaches the existing Gmail mutation", async () => {
+    await expect(processGmailMessage(gmailReceiveInput)).resolves.toMatchObject(
+      {
+        autoLabel: { status: "complete" },
+      }
+    );
+    expect(state.gmailDispatched).toContain("message");
   });
 });

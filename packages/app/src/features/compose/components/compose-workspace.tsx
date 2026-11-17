@@ -124,6 +124,7 @@ import { Text } from "@quieter/ui/text";
 import { ToolbarButton } from "@quieter/ui/toolbar";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useSelector } from "@tanstack/react-store";
 import {
   AnimatePresence,
   domAnimation,
@@ -436,6 +437,10 @@ const ReadyComposeSurface = ({
     form,
     toggleRecipientVisibility,
   } = compose;
+  const submitting = useSelector(
+    form.store,
+    (formState) => formState.isSubmitting
+  );
   const audioRecorder = useAudioRecorder();
   const audioSessionRef = useRef<AbortController | null>(null);
   const transcribeAudioMutation = useMutation({
@@ -486,7 +491,8 @@ const ReadyComposeSurface = ({
         !state.isFinishing &&
         !switchingSender &&
         !!mailboxId)) &&
-    !audioBusy;
+    !audioBusy &&
+    !submitting;
   const holding =
     state.draft.holdAttempt === true && state.draft.sendUncertain === true;
   const canRestoreHeld =
@@ -1515,10 +1521,13 @@ const ReadyComposeSurface = ({
                             disabled={
                               !canEditBody ||
                               (senderUnavailable ?? false) ||
-                              audioBusy
+                              audioBusy ||
+                              submitting
                             }
                             onSchedule={compose.handleScheduleMessage}
-                            pending={state.draft.saveStatus === "sending"}
+                            pending={
+                              submitting || state.draft.saveStatus === "sending"
+                            }
                             preview={demoMode || managedDemoMode}
                           />
                         </div>

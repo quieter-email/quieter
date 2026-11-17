@@ -10,6 +10,10 @@ import {
 import type { CreateReminder, ReminderSource } from "@quieter/mail/reminders";
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
+import type { AiOperationOrigin } from "../ai-authority";
+import type { MailEffectAssertion } from "../gmail-request";
+
 export type ReminderRow = typeof mailReminder.$inferSelect;
 export const enqueueReminderJob = async (
   database: DatabaseExecutor,
@@ -18,10 +22,34 @@ export const enqueueReminderJob = async (
   key: string,
   availableAt = new Date()
 ) => {
+  let authorityVersion: number | null = null;
+  if (kind === "evaluate") {
+    if (row.status !== "active") {
+      return;
+    }
+    try {
+      const origin = await captureAiOrigin(
+        {
+          mailboxId: row.mailboxId,
+          mode: "automation",
+          userId: row.userId,
+        },
+        database
+      );
+      await assertAiAuthority({ effect: "write", origin }, database);
+      authorityVersion = origin.policyVersion;
+    } catch (error) {
+      if (error instanceof ORPCError && error.status < 500) {
+        return;
+      }
+      throw error;
+    }
+  }
   await database
     .insert(mailReminderJob)
     .values({
       attempts: 0,
+      authorityVersion,
       availableAt,
       createdAt: new Date(),
       eventId: crypto.randomUUID(),
@@ -107,6 +135,9 @@ export const finishReminderJob = async (input: {
 
 export const createReminderRecord = async (
   input: CreateReminder & {
+    beforeEffect?: MailEffectAssertion;
+    origin?: AiOperationOrigin;
+    signal?: AbortSignal;
     userId: string;
     suspended?: boolean;
     source?: ReminderSource;
@@ -114,6 +145,19 @@ export const createReminderRecord = async (
   }
 ) =>
   await db.transaction(async (tx) => {
+    await input.beforeEffect?.(tx);
+    if (input.origin !== undefined) {
+      await assertAiAuthority(
+        {
+          effect: "write",
+          mailboxId: input.mailboxId,
+          origin: input.origin,
+          userId: input.userId,
+        },
+        tx,
+        { lock: true }
+      );
+    }
     if (input.source?.kind === "automatic") {
       const [preference] = await tx
         .select()
@@ -158,10 +202,17 @@ export const createReminderRecord = async (
       }
     }
     const now = new Date();
+    const {
+      beforeEffect: _beforeEffect,
+      origin: _origin,
+      signal: _signal,
+      ...recordInput
+    } = input;
+    input.signal?.throwIfAborted();
     const [created] = await tx
       .insert(mailReminder)
       .values({
-        ...input,
+        ...recordInput,
         createdAt: now,
         dueAt: new Date(input.dueAt),
         evaluationStatus:

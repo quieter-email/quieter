@@ -26,6 +26,7 @@ import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { convert } from "html-to-text";
 import { z } from "zod";
 
+import { assertAiAuthority, captureAiOrigin } from "../ai-authority";
 import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import {
   buildMailMemoryQuery,
@@ -244,16 +245,18 @@ const executeRun = async (
   run: ClaimedRun
 ): Promise<ReceiveStageOutcome<"personal_action">> => {
   const signal = AbortSignal.timeout(80_000);
-  const context: MailRequestContext = {
-    retryUnauthorized: false,
-    signal,
-    userId: run.actorUserId,
-  };
   let providerStarted = false;
   let mutationUncertain = false;
+  let rejectedWrite: Error | undefined;
   let writes = 0;
   const usage: MailboxAgentUsage[] = run.usage ?? [];
   try {
+    const origin = await captureAiOrigin({
+      mailboxId: run.mailboxId,
+      mode: run.triggerKind === "mail_received" ? "automation" : "interactive",
+      userId: run.actorUserId,
+    });
+    await assertAiAuthority({ effect: "execute", origin });
     const authorized = await assertMailAgentRunAuthority(run);
     const budget = await getMailAutomationAiBudgetStatus({
       organizationId: authorized.organizationId,
@@ -322,8 +325,17 @@ const executeRun = async (
       compiled.tools
     );
     let personalContextUsed = false;
-    const assertContextAuthority = async () => {
-      const access = await assertMailAgentRunAuthority(run);
+    const assertContextAuthority = async ({
+      database = db,
+      effect = "execute",
+      lock = false,
+    }: {
+      database?: Pick<typeof db, "select">;
+      effect?: "execute" | "write";
+      lock?: boolean;
+    } = {}) => {
+      const access = await assertMailAgentRunAuthority(run, database, lock);
+      await assertAiAuthority({ effect, origin }, database);
       if (
         access.shared &&
         specification.connectors.length > 0 &&
@@ -341,6 +353,39 @@ const executeRun = async (
         });
       }
       return access;
+    };
+    const beforeMailEffect = async (database?: Pick<typeof db, "select">) => {
+      const reader = database ?? db;
+      await assertContextAuthority({
+        database: reader,
+        effect: "write",
+        lock: database !== undefined,
+      });
+    };
+    const prepareEffect = async () => {
+      const liveCatalog = await loadAgentCatalog({
+        connectionIds: specification.connectors.map(
+          (connection) => connection.connectionId
+        ),
+        signal,
+        userId: run.actorUserId,
+      });
+      if (
+        compileAgentManifest(specification, liveCatalog).digest !==
+        revision.manifestDigest
+      ) {
+        throw new ORPCError("FORBIDDEN", {
+          message: "The connected tools changed while the action was running.",
+        });
+      }
+    };
+    const context: MailRequestContext = {
+      beforeEffect: beforeMailEffect,
+      origin,
+      privateContext: specification.connectors.length > 0,
+      retryUnauthorized: false,
+      signal,
+      userId: run.actorUserId,
     };
     const getThread = async () => {
       await assertContextAuthority();
@@ -482,6 +527,9 @@ const executeRun = async (
       toolCallId: string
     ) => {
       signal.throwIfAborted();
+      if (rejectedWrite !== undefined) {
+        throw rejectedWrite;
+      }
       if (mutationUncertain) {
         throw new ORPCError("CONFLICT", {
           message:
@@ -690,6 +738,14 @@ const executeRun = async (
           sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
         );
         const admitted = await assertMailAgentRunAuthority(run, tx, true);
+        try {
+          await assertAiAuthority({ effect: "write", origin }, tx);
+        } catch (error) {
+          if (error instanceof ORPCError) {
+            rejectedWrite = error;
+          }
+          throw error;
+        }
         if (tool.toolId === "mail.save_draft") {
           await assertAgentMailboxAccess(
             {
@@ -747,14 +803,17 @@ const executeRun = async (
         let result: unknown;
         if (tool.toolId === "mail.save_draft") {
           const draft = mailDraftSchema.parse(effectiveArgs);
+          await beforeMailEffect();
           await recordAiGeneratedMailBody({
             bodyText: draft.bodyText,
             mailboxId: run.mailboxId,
             userId: run.actorUserId,
           });
           await assertContextAuthority();
+          const privateContext =
+            specification.connectors.length > 0 || personalContextUsed;
           const saved = await composeMailOperations.saveDraft({
-            context,
+            context: { ...context, privateContext },
             input: {
               draft: {
                 ...draftRevision,
@@ -775,8 +834,7 @@ const executeRun = async (
               },
               mailboxId: run.mailboxId,
             },
-            privateContext:
-              specification.connectors.length > 0 || personalContextUsed,
+            privateContext,
           });
           draftRevision = {
             baseRevision: saved.baseRevision,
@@ -803,8 +861,11 @@ const executeRun = async (
           });
           result = await createCalendarEventForUser({
             ...calendar,
+            authorityMailboxId: run.mailboxId,
+            beforeEffect: beforeMailEffect,
             event: { ...calendar.event, addMeeting: false, attendees: [] },
             operationId: randomUUID(),
+            prepareEffect,
             retryUnauthorized: false,
             signal,
             userId: run.actorUserId,
@@ -815,6 +876,7 @@ const executeRun = async (
           tool.connectionId
         ) {
           const [called] = await runLinearMcpToolCallsForUser({
+            beforeEffect: beforeMailEffect,
             calls: [
               {
                 arguments: z
@@ -826,6 +888,7 @@ const executeRun = async (
             connectionId: tool.connectionId,
             maxCalls: 1,
             maxOutputBytes: Number.POSITIVE_INFINITY,
+            prepareEffect,
             signal,
             userId: run.actorUserId,
           });
@@ -844,8 +907,10 @@ const executeRun = async (
         ) {
           result = await callRegisteredConnectorTool({
             arguments: z.record(z.string(), z.unknown()).parse(effectiveArgs),
+            beforeEffect: beforeMailEffect,
             connectionId: tool.connectionId,
             effect: "write",
+            prepareEffect,
             provider: tool.provider,
             signal,
             toolName: tool.providerToolName,
@@ -996,6 +1061,9 @@ const executeRun = async (
     });
     if (mutationUncertain) {
       throw new Error("An external change needs review.");
+    }
+    if (rejectedWrite !== undefined) {
+      throw rejectedWrite;
     }
     if (result.output.matched) {
       for (const [index, effect] of connectorEffects.entries()) {

@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { followUpReminderIntentSchema } from "../reminders";
-import { getUnresolvedSnippetFields } from "./snippet-variables";
 
 export {
   getUnresolvedSnippetFields,
@@ -325,15 +324,6 @@ export const composeMessageEnvelopeSchema = composeDraftInputSchema.superRefine(
   }
 );
 
-export const composeMessageInputSchema =
-  composeMessageEnvelopeSchema.superRefine((value, ctx) => {
-    if (getUnresolvedSnippetFields(value).length > 0) {
-      ctx.addIssue({
-        code: "custom",
-        message: "Complete the marked snippet fields before sending.",
-        path: ["bodyHtml"],
-      });
-    }
-  });
+export const composeMessageInputSchema = composeMessageEnvelopeSchema;
 
 export const composeSendDraftInputSchema = composeMessageInputSchema;

@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/server";
 /* oxlint-disable eslint/require-await -- Fetch and SQL test doubles preserve asynchronous transport contracts. */
 import { calendarEventDraftSchema } from "@quieter/calendar";
 import type * as DatabaseClientModule from "@quieter/database/client";
@@ -43,7 +44,15 @@ const fixtures = vi.hoisted(() => ({
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { ...actual, db: drizzle(fixtures.query) };
+  const database = drizzle(fixtures.query);
+  return {
+    ...actual,
+    db: Object.assign(database, {
+      transaction: async <Result>(
+        run: (reader: typeof database) => Promise<Result>
+      ) => await run(database),
+    }),
+  };
 });
 
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
@@ -150,7 +159,19 @@ describe("connector account authority", () => {
               record.emailAddress,
               record.encryptedAccessToken,
               record.encryptedRefreshToken,
+              record.googleSubject,
               record.id,
+              record.scopes,
+              record.status,
+            ]),
+        };
+      }
+      if (query.includes('select "gmailCredential"."googleSubject"')) {
+        return {
+          rows: owned
+            .filter((record) => params.includes(record.id))
+            .map((record) => [
+              record.googleSubject,
               record.scopes,
               record.status,
             ]),
@@ -311,5 +332,85 @@ describe("connector account authority", () => {
     expect(refreshes).toBe(1);
     expect(mutations).toBe(1);
     expect(mutationTokens).toStrictEqual(["Bearer renewed-selected"]);
+  });
+
+  test("a policy changed after an unauthorized attempt prevents the refreshed retry", async () => {
+    let blocked = false;
+    let mutations = 0;
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url, init) => {
+        if (url === "https://oauth2.googleapis.com/token") {
+          return Response.json({
+            access_token: "renewed-selected",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+        if (init?.method !== "POST") {
+          return Response.json(calendar);
+        }
+        mutations += 1;
+        blocked = true;
+        return new Response(null, { status: 401 });
+      });
+    vi.stubGlobal("fetch", request);
+    await expect(
+      createCalendarEventForUser({
+        authorityMailboxId: "assistant-inbox",
+        beforeEffect: async () => {
+          if (blocked) {
+            throw new ORPCError("FORBIDDEN");
+          }
+        },
+        calendarId: "primary",
+        connectionId: "selected",
+        event,
+        operationId: "da1bc703-f81e-4b6e-9e4c-428123b4d2a1",
+        userId: "owner",
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(mutations).toBe(1);
+  });
+
+  test("replacing a Gmail identity cannot authorize a rebuilt calendar write", async () => {
+    let mutations = 0;
+    const request = vi
+      .fn<typeof fetch>()
+      .mockImplementation(async (url, init) => {
+        if (url === "https://oauth2.googleapis.com/token") {
+          return Response.json({
+            access_token: "renewed-replacement",
+            expires_in: 3600,
+            token_type: "Bearer",
+          });
+        }
+        if (init?.method !== "POST") {
+          return Response.json(calendar);
+        }
+        mutations += 1;
+        fixtures.credentials = fixtures.credentials.map((record) =>
+          record.id === "mailbox-selected"
+            ? {
+                ...record,
+                encryptedAccessToken: "replacement-access",
+                encryptedRefreshToken: "replacement-refresh",
+                googleSubject: "replacement-subject",
+              }
+            : record
+        );
+        return new Response(null, { status: 401 });
+      });
+    vi.stubGlobal("fetch", request);
+    await expect(
+      createCalendarEventForUser({
+        calendarId: "primary",
+        connectionId: "mailbox-selected",
+        event,
+        operationId: "da1bc703-f81e-4b6e-9e4c-428123b4d2a1",
+        userId: "owner",
+      })
+    ).rejects.toMatchObject({ code: "UNAUTHORIZED" });
+    expect(mutations).toBe(1);
   });
 });

@@ -26,6 +26,7 @@ import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
 
 import { captureManagedMessageMemory } from "./ai-memory-capture";
 import { assertLocalMailSend } from "./local-managed-mail";
+import { readMailSendIntentAuthority } from "./mail/intent-authority";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
 import { readRawMailObject } from "./managed-mail/messages/raw-object";
 import { storeRawMailObject } from "./managed-mail/messages/raw-object-lifecycle";
@@ -120,24 +121,39 @@ const completeMailSend = async (operation: MailSend) => {
     snapshot.mailboxId &&
     snapshot.actorUserId
   ) {
-    if (snapshot.followUpReminder) {
+    const authority = readMailSendIntentAuthority(snapshot.origin, {
+      mailboxId: snapshot.mailboxId,
+      userId: snapshot.actorUserId,
+    });
+    if (snapshot.followUpReminder && authority !== null) {
       await materializeSentReminder({
         intent: snapshot.followUpReminder,
         mailboxId: snapshot.mailboxId,
         messageId: operation.id,
+        origin: authority.operation,
         threadId: snapshot.threadId ?? operation.id,
         userId: snapshot.actorUserId,
       });
     }
-    await captureManagedMessageMemory({
-      actorUserId: snapshot.actorUserId,
-      failureMode: "retry",
-      mailboxId: snapshot.mailboxId,
-      messageId: operation.id,
-      source: "sent",
-    });
+    if (authority?.learning) {
+      await captureManagedMessageMemory({
+        actorUserId: snapshot.actorUserId,
+        failureMode: "retry",
+        mailboxId: snapshot.mailboxId,
+        messageId: operation.id,
+        origin: authority.learning,
+        source: "sent",
+      });
+    }
   }
   await db.transaction(async (tx) => {
+    if (snapshot.mailboxId !== undefined) {
+      await tx
+        .select({ id: mailbox.id })
+        .from(mailbox)
+        .where(eq(mailbox.id, snapshot.mailboxId))
+        .for("update");
+    }
     if (
       snapshot.mailboxId !== undefined &&
       snapshot.draftId !== undefined &&
@@ -177,6 +193,7 @@ const completeMailSend = async (operation: MailSend) => {
 };
 
 export const sendPreparedMail = async (input: {
+  beforeEffect?: () => Promise<void>;
   id: string;
   idempotencyKey: string;
   messageHeaderId: string;
@@ -198,6 +215,41 @@ export const sendPreparedMail = async (input: {
       )
     )
     .limit(1);
+  let sendSnapshot = input.snapshot;
+  if (
+    operation !== undefined &&
+    (operation.status === "prepared" || operation.status === "rejected") &&
+    operation.snapshot?.kind === "mailbox" &&
+    input.snapshot.kind === "mailbox"
+  ) {
+    const stored = operation.snapshot;
+    const previous = readMailSendIntentAuthority(stored.origin, {
+      mailboxId: stored.mailboxId ?? "",
+      userId: stored.actorUserId ?? "",
+    });
+    const current = readMailSendIntentAuthority(input.snapshot.origin, {
+      mailboxId: input.snapshot.mailboxId ?? "",
+      userId: input.snapshot.actorUserId ?? "",
+    });
+    if (
+      stored.mailboxId !== input.snapshot.mailboxId ||
+      stored.actorUserId !== input.snapshot.actorUserId ||
+      (stored.origin !== undefined && previous === null) ||
+      (input.snapshot.origin !== undefined && current === null) ||
+      (previous?.operation.kind ?? "human") !==
+        (current?.operation.kind ?? "human") ||
+      (previous?.operation.kind === "ai" &&
+        current?.operation.kind === "ai" &&
+        (previous.operation.mode !== current.operation.mode ||
+          previous.operation.policyVersion !== current.operation.policyVersion))
+    ) {
+      throw new ORPCError("CONFLICT", {
+        data: { sendNotStarted: true },
+        message: "This message already belongs to a different send request.",
+      });
+    }
+    sendSnapshot = { ...input.snapshot, origin: stored.origin };
+  }
   const retryContentChanged =
     (operation?.status === "rejected" || operation?.status === "prepared") &&
     operation.requestHash !== input.requestHash &&
@@ -232,6 +284,7 @@ export const sendPreparedMail = async (input: {
         ...input.snapshot.bcc,
       ],
     });
+    await input.beforeEffect?.();
     const rawObject =
       !retryContentChanged &&
       operation !== undefined &&
@@ -253,7 +306,7 @@ export const sendPreparedMail = async (input: {
           rawObjectKey: rawObject.key,
           rawObjectProvider: rawObject.provider,
           requestHash: input.requestHash,
-          snapshot: input.snapshot,
+          snapshot: sendSnapshot,
           updatedAt: new Date(),
         })
         .where(
@@ -274,7 +327,11 @@ export const sendPreparedMail = async (input: {
         });
       }
     }
-    operation = await reserveOrganizationMailSend({ ...input, rawObject });
+    operation = await reserveOrganizationMailSend({
+      ...input,
+      rawObject,
+      snapshot: sendSnapshot,
+    });
   }
   if (operation.idempotencyKey !== input.idempotencyKey) {
     throw new ORPCError("CONFLICT", {
@@ -379,6 +436,20 @@ export const sendPreparedMail = async (input: {
       });
     }
     const { snapshot } = claimed;
+    try {
+      await input.beforeEffect?.();
+    } catch (error) {
+      await db
+        .update(organizationMailSendIdempotency)
+        .set({ attemptedAt: null, status: "prepared", updatedAt: new Date() })
+        .where(
+          and(
+            eq(organizationMailSendIdempotency.id, claimed.id),
+            eq(organizationMailSendIdempotency.status, "submitting")
+          )
+        );
+      throw error;
+    }
     let messageId: string | undefined;
     try {
       const response = await sesClient.send(
