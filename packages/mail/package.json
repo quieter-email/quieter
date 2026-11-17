@@ -5,6 +5,7 @@
   "type": "module",
   "exports": {
     "./collaboration": "./src/collaboration.ts",
+    "./collaboration-notes": "./src/collaboration-notes.ts",
     "./reminders": "./src/reminders.ts",
     "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",

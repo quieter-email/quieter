@@ -16,6 +16,7 @@ import {
 import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
+import { ThreadNotes } from "@quieter/app/features/collaboration-notes/thread-notes";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -117,6 +118,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     isActionPending,
     isBodyRefreshPending,
     isSingleMessageThread,
+    isSharedManagedMailbox = false,
     mailboxActions,
     mailboxId,
     mailboxProvider,
@@ -570,6 +572,18 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 verificationCodes={verificationCodes}
               />
             )}
+
+            {isSharedManagedMailbox &&
+            mailboxProvider === "managed" &&
+            composeDemoMode !== true &&
+            composeManagedDemoMode !== true ? (
+              <div className="p-4 @sm:p-5">
+                <ThreadNotes
+                  mailboxId={mailboxId}
+                  threadId={message.threadId}
+                />
+              </div>
+            ) : null}
 
             {showInlineCompose ? (
               <div className="px-4 py-4 @sm:px-5 @sm:py-5">
