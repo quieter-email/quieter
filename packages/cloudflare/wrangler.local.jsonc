@@ -66,6 +66,7 @@
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
       { "name": "ScheduledSend", "class_name": "ScheduledSend" },
+      { "name": "MailSnooze", "class_name": "MailSnooze" },
       {
         "name": "GmailLiveSyncMailboxV2",
         "class_name": "GmailLiveSyncMailboxV2",
@@ -82,5 +83,6 @@
         "GmailLiveSyncMailboxV2",
       ],
     },
+    { "tag": "mail-snooze-v1", "new_sqlite_classes": ["MailSnooze"] },
   ],
 }

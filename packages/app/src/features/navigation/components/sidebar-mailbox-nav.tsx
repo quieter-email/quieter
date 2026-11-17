@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CheckmarkCircle02Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -27,6 +28,8 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
 }[] = [
   { icon: Flag01Icon, id: "important", label: "Important" },
   { icon: InboxIcon, id: "inbox", label: "Inbox", shortcutId: "go-inbox" },
+  { icon: CheckmarkCircle02Icon, id: "done", label: "Done" },
+  { icon: Clock01Icon, id: "later", label: "Later" },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
   { icon: Clock01Icon, id: "scheduled", label: "Scheduled" },

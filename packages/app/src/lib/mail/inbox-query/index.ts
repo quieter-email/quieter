@@ -13,6 +13,7 @@ export {
 
 export {
   applyBulkChangesInMailbox,
+  applySnoozeInMailbox,
   updateMessageInMailbox,
   updateThreadInMailbox,
   deleteDraftInMailbox,

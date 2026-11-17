@@ -1,8 +1,12 @@
 import {
   createDemoActions,
   createDemoComposeActions,
+  reconcileDemoSnoozes,
 } from "@quieter/app/lib/demo-mail/actions";
-import type { DemoMessageStore } from "@quieter/app/lib/demo-mail/actions";
+import type {
+  DemoSnoozeSchedule,
+  DemoSnoozeStore,
+} from "@quieter/app/lib/demo-mail/actions";
 import { createDemoMessage as createMessage } from "@quieter/app/lib/demo-mail/fixtures";
 import {
   getDemoMailThread,
@@ -32,6 +36,7 @@ const DEMO_MAIL_STORAGE_KEY = "quieter:demo-mail-state";
 const DEMO_MAIL_STATE_VERSION = 6;
 
 type DemoMailState = {
+  snoozes?: Partial<Record<string, DemoSnoozeSchedule>>;
   version: number;
   messages: MessageListItem[];
 };
@@ -609,11 +614,21 @@ export const getDemoMessageInspector = (
   };
 };
 
-const createDemoStore = (mailboxId: string): DemoMessageStore => ({
+const createDemoStore = (mailboxId: string): DemoSnoozeStore => ({
+  mailboxId,
   updateMessages: (update) => {
     updateSandboxState(mailboxId, (state) => ({
       ...state,
-      messages: update(state.messages),
+      ...reconcileDemoSnoozes({
+        messages: update(state.messages),
+        snoozes: state.snoozes ?? {},
+      }),
+    }));
+  },
+  updateSnoozes: (update) => {
+    updateSandboxState(mailboxId, (state) => ({
+      ...state,
+      ...update({ messages: state.messages, snoozes: state.snoozes ?? {} }),
     }));
   },
 });
@@ -622,9 +637,13 @@ export const createDemoMailboxActions = (
   queryClient: QueryClient,
   mailboxId = DEMO_MAILBOX_ID
 ) =>
-  createDemoActions(createDemoStore(mailboxId), async () => {
-    await invalidateSandboxMail(queryClient, mailboxId);
-  });
+  createDemoActions(
+    createDemoStore(mailboxId),
+    async () => {
+      await invalidateSandboxMail(queryClient, mailboxId);
+    },
+    "personal"
+  );
 
 const composeActions = createDemoComposeActions({
   ...createDemoStore(DEMO_MAILBOX_ID),

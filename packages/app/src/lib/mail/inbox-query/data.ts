@@ -79,10 +79,14 @@ export const mergeMessagePreservingLoadedDetails = (
   isImportant: syncedMessage.isImportant ?? currentMessage.isImportant,
   senderAvatarUrls:
     syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
+  snooze: syncedMessage.snooze ?? currentMessage.snooze,
   threadAttachmentCount:
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
   threadAttachmentNames:
     syncedMessage.threadAttachmentNames ?? currentMessage.threadAttachmentNames,
+  threadInboxIncomingMessageIds:
+    syncedMessage.threadInboxIncomingMessageIds ??
+    currentMessage.threadInboxIncomingMessageIds,
   threadIsImportant:
     syncedMessage.threadIsImportant ?? currentMessage.threadIsImportant,
   threadMessageCount:
@@ -572,6 +576,39 @@ export const getMailCommandUpdater =
         return message;
       }
       return { ...message, isImportant: command.important };
+    }
+    if (command.kind === "set-placement") {
+      if (
+        message.labelIds === undefined ||
+        message.labelIds.some(
+          (id) =>
+            id === MAILBOX_LABELS.sent ||
+            id === MAILBOX_LABELS.drafts ||
+            id === MAILBOX_LABELS.spam ||
+            id === MAILBOX_LABELS.trash
+        )
+      ) {
+        return message;
+      }
+      const next = applyMessageLabelChangesLocally(message, {
+        addLabelIds:
+          command.placement === "inbox" ? [MAILBOX_LABELS.inbox] : [],
+        removeLabelIds:
+          command.placement === "done" ? [MAILBOX_LABELS.inbox] : [],
+      });
+      return {
+        ...next,
+        labelIds: next.labelIds ?? [],
+        threadLabelIds:
+          command.placement === "inbox"
+            ? [
+                ...new Set([
+                  ...(message.threadLabelIds ?? []),
+                  MAILBOX_LABELS.inbox,
+                ]),
+              ]
+            : message.threadLabelIds,
+      };
     }
     if (command.kind === "set-read") {
       return command.read

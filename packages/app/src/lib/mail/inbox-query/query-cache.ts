@@ -39,6 +39,8 @@ type CachedMessagesQuery = {
 
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
   value === "inbox" ||
+  value === "done" ||
+  value === "later" ||
   value === "important" ||
   value === "unread" ||
   value === "spam" ||
@@ -198,6 +200,15 @@ const reconcileMessageInCachedMailboxQuery = (
     cachedQuery.data,
     nextMessage.id
   );
+  if (
+    cachedQuery.mailbox === "done" &&
+    nextMessage.threadLabelIds?.includes("INBOX") === true
+  ) {
+    return removeMessagesFromQueryData(
+      cachedQuery.data,
+      (message) => message.threadId === nextMessage.threadId
+    );
+  }
 
   if (currentMessage) {
     if (!isMessageInMailbox(nextMessage, cachedQuery.mailbox)) {
@@ -218,6 +229,8 @@ const reconcileMessageInCachedMailboxQuery = (
     (cachedQuery.searchQuery !== null &&
       cachedQuery.searchQuery !== undefined &&
       cachedQuery.searchQuery !== "") ||
+    ((cachedQuery.mailbox === "done" || cachedQuery.mailbox === "later") &&
+      isMessageInMailbox(nextMessage, "later")) ||
     !isMessageInMailbox(nextMessage, cachedQuery.mailbox)
   ) {
     return cachedQuery.data;

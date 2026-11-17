@@ -4,6 +4,7 @@ import type {
   listGmailAddedMessageHistoryPage,
   listGmailMessageIds,
 } from "@quieter/gmail";
+import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import {
   afterEach,
   beforeEach,
@@ -18,7 +19,9 @@ import { processGmailMessage } from "../src/gmail-sync/message";
 import { processGmailPubSubNotification } from "../src/gmail-sync/service";
 import type { enqueueGmailMessageWork } from "../src/gmail-sync/work-store";
 import type { enqueueMailAgentMessage } from "../src/mail-agent/inbox";
+import type { writeGmailCapturedMessage } from "../src/mail-capture";
 import type { observeReminderMail } from "../src/reminders/service";
+import type { handleSnoozeInbound } from "../src/snooze/service";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 const fixtures = vi.hoisted(() => ({
@@ -28,6 +31,7 @@ const fixtures = vi.hoisted(() => ({
   list: vi.fn<typeof listGmailMessageIds>(),
   message: vi.fn<typeof getMessageWithDetails>(),
   processCode: vi.fn<typeof processMailVerificationCode>(),
+  snooze: vi.fn<typeof handleSnoozeInbound>(),
   state: {
     historyId: "before-receive",
     historyPageToken: null,
@@ -37,6 +41,7 @@ const fixtures = vi.hoisted(() => ({
     recoveryBefore: null as Date | null,
     recoveryPageToken: null,
   },
+  writeCapture: vi.fn<typeof writeGmailCapturedMessage>(),
 }));
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake maintains the single mailbox cursor used by these receive tests.
@@ -107,6 +112,10 @@ vi.mock(import("../src/mail-capture"), () => ({
     busy: false,
     needsContinuation: false,
   }),
+  writeGmailCapturedMessage: fixtures.writeCapture,
+}));
+vi.mock(import("../src/snooze/service"), () => ({
+  handleSnoozeInbound: fixtures.snooze,
 }));
 vi.mock(import("../src/reminders/service"), () => ({
   observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
@@ -160,6 +169,8 @@ describe("Gmail action receive acknowledgement", () => {
         threadId: "thread",
       }));
     fixtures.processCode.mockReset().mockResolvedValue({ status: "complete" });
+    fixtures.snooze.mockReset().mockResolvedValue();
+    fixtures.writeCapture.mockReset().mockResolvedValue();
   });
 
   afterEach(() => vi.restoreAllMocks());
@@ -241,4 +252,89 @@ describe("Gmail action receive acknowledgement", () => {
     ).toBeTruthy();
     expect(fixtures.enqueue).not.toHaveBeenCalled();
   });
+
+  test.each([true, false])(
+    "requires successful canonical capture before observing Snooze when capture succeeds: %s",
+    async (succeeds) => {
+      const snapshot: CapturedMailSnapshot = {
+        attachments: [],
+        bodyHtml: null,
+        bodyText: "New reply",
+        headers: [],
+        id: "inbound",
+        internalDate: String(Date.now()),
+        labelIds: ["INBOX"],
+        providerRevision: "2",
+        threadId: "thread",
+        truncation: {
+          attachments: false,
+          bodyHtml: false,
+          bodyText: false,
+          headers: false,
+        },
+      };
+      fixtures.message.mockImplementation(
+        async (_token, _messageId, _options, capture) => {
+          await capture?.(snapshot);
+          return {
+            id: snapshot.id,
+            internalDate: snapshot.internalDate ?? undefined,
+            labelIds: snapshot.labelIds,
+            threadId: snapshot.threadId,
+          };
+        }
+      );
+      const started = Promise.withResolvers<boolean>();
+      const persistence = Promise.withResolvers<boolean>();
+      let persisted = false;
+      fixtures.writeCapture.mockImplementation(async () => {
+        started.resolve(true);
+        await persistence.promise;
+        persisted = true;
+      });
+      const observed: string[] = [];
+      fixtures.snooze.mockImplementation(async ({ messageId }) => {
+        if (!persisted) {
+          throw new Error("Snooze observed before persistence.");
+        }
+        observed.push(messageId);
+      });
+
+      const processing = processGmailMessage({
+        accessToken: "mail-token",
+        autoLabelEnabled: false,
+        automationRuntime: {
+          getAutoLabelContext: async () => ({
+            availableLabelIds: new Set<string>(),
+            historyLabels: [],
+            labels: [],
+            memoryCandidates: null,
+            model: "unused",
+          }),
+          getBudgetStatus: async () => {
+            throw new Error("AI credits are unavailable.");
+          },
+        },
+        extractCodes: false,
+        gmailMessageId: snapshot.id,
+        mailboxId: "mailbox",
+        organizationId: null,
+        triggerActions: false,
+        userId: "owner",
+      });
+      await started.promise;
+      expect(observed).toHaveLength(0);
+      if (succeeds) {
+        persistence.resolve(true);
+      } else {
+        persistence.reject(new Error("Capture unavailable"));
+      }
+      const result = await processing.then(
+        () => "success",
+        () => "capture-failed"
+      );
+      expect(result).toBe(succeeds ? "success" : "capture-failed");
+      expect(observed).toHaveLength(succeeds ? 1 : 0);
+    }
+  );
 });

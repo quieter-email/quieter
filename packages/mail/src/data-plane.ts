@@ -1,7 +1,11 @@
 import { z } from "zod";
 
+import type { MailSnoozeState } from "./snooze";
+
 export const mailCategorySchema = z.enum([
   "inbox",
+  "done",
+  "later",
   "important",
   "unread",
   "sent",
@@ -21,6 +25,7 @@ export type MailMessageSummary = {
 };
 
 export type MailThreadSummary = {
+  snooze?: MailSnoozeState;
   id: string;
   messageIds: string[];
   messages: MailMessageSummary[];
@@ -55,6 +60,7 @@ export type MailboxCapabilities = {
   canManageLabels: boolean;
   canMarkRead: boolean;
   canSetImportance: boolean;
+  canSetPlacement: boolean;
   canMoveToInbox: boolean;
   canMoveToSpam: boolean;
   canMoveToTrash: boolean;
@@ -65,6 +71,7 @@ export type MailboxCapabilities = {
 export type MailCommand =
   | { kind: "set-read"; read: boolean }
   | { kind: "set-importance"; important: boolean }
+  | { kind: "set-placement"; placement: "done" | "inbox" }
   | { kind: "move"; destination: "inbox" | "spam" | "trash" }
   | { kind: "delete-permanently" }
   | { kind: "set-labels"; addIds: string[]; removeIds: string[] };
@@ -80,6 +87,9 @@ export type MailMutationTargetResult = {
   code?: string;
   message?: string;
   summary?: MailThreadSummary;
+  operationId?: string;
+  replayed?: boolean;
+  messageIds?: string[];
 };
 
 export type MailMutationResult = {
@@ -117,6 +127,7 @@ export const getMailboxCapabilities = (input: {
       canMoveToTrash: false,
       canSend: false,
       canSetImportance: false,
+      canSetPlacement: false,
       canSetSenderName: false,
       categories: ["sent"],
     };
@@ -136,9 +147,12 @@ export const getMailboxCapabilities = (input: {
     canMoveToTrash: canRespond,
     canSend: canRespond,
     canSetImportance: canRespond,
+    canSetPlacement: canRespond,
     canSetSenderName: input.provider === "managed" && canRespond,
     categories: [
       "inbox",
+      "done",
+      "later",
       "important",
       "unread",
       "sent",
