@@ -3,6 +3,7 @@ import { contextBridge, ipcRenderer } from "electron";
 
 import {
   DESKTOP_APP_ORIGIN,
+  newMailNotificationPreferenceStatus,
   reminderNotificationEvent,
   reminderNotificationResult,
   reminderNotificationStatus,
@@ -40,6 +41,22 @@ contextBridge.exposeInMainWorld("quieterDesktop", {
       nativeMailIntentSchema
         .nullable()
         .parse(await ipcRenderer.invoke("quieter:native-link-read", input)),
+  },
+  newMailNotificationPreferences: {
+    getStatus: async (scope) =>
+      newMailNotificationPreferenceStatus.parse(
+        await ipcRenderer.invoke("quieter:new-mail-notification-preferences", {
+          ...scope,
+          kind: "get-status",
+        })
+      ),
+    setEnabled: async (input) =>
+      newMailNotificationPreferenceStatus.parse(
+        await ipcRenderer.invoke("quieter:new-mail-notification-preferences", {
+          ...input,
+          kind: "set-enabled",
+        })
+      ),
   },
   onSignOutCleanup: (listener) => {
     const receive = async (

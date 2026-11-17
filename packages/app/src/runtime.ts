@@ -1,3 +1,50 @@
+export type NewMailNotificationScope = Readonly<{
+  userId: string;
+  mailboxId: string;
+}>;
+
+export type NewMailNotificationPreferenceStatus =
+  | Readonly<{ kind: "ready"; enabled: boolean; supported: boolean }>
+  | Readonly<{ kind: "inactive" }>;
+
+export type NewMailNotificationPreferences = Readonly<{
+  getStatus: (
+    scope: NewMailNotificationScope
+  ) => Promise<NewMailNotificationPreferenceStatus>;
+  setEnabled: (
+    input: NewMailNotificationScope & { enabled: boolean }
+  ) => Promise<NewMailNotificationPreferenceStatus>;
+}>;
+
+export type NewMailNotificationContext =
+  | Readonly<{ kind: "enabled"; contextId: string }>
+  | Readonly<{ kind: "inactive" | "disabled" | "unsupported" | "blocked" }>;
+
+export type NewMailNotificationDelivery = Readonly<{
+  contextId: string;
+  mailboxId: string;
+  messageId: string;
+  receivedAt: string;
+  threadId: string;
+}>;
+
+export type NewMailNotificationResult =
+  | "shown"
+  | "duplicate"
+  | "quiet"
+  | "inactive"
+  | "stale"
+  | "blocked";
+
+export type NewMailNotifications = Readonly<{
+  capture: (
+    scope: NewMailNotificationScope
+  ) => Promise<NewMailNotificationContext>;
+  show: (
+    input: NewMailNotificationDelivery
+  ) => Promise<NewMailNotificationResult>;
+}>;
+
 export type ReminderNotificationEvent = Readonly<{
   id: string;
   mailboxId: string;
@@ -32,6 +79,8 @@ type AppRuntime = {
   openExternal?: (url: string) => void | Promise<void>;
   platform?: "desktop" | "web";
   reminderNotifications?: ReminderNotifications;
+  newMailNotificationPreferences?: NewMailNotificationPreferences;
+  newMailNotifications?: NewMailNotifications;
 };
 
 export const appRuntime: AppRuntime = {};
@@ -40,6 +89,8 @@ export const configureAppRuntime = (options: AppRuntime) => {
   Object.assign(appRuntime, {
     apiBaseURL: options.apiBaseURL,
     fetch: options.fetch,
+    newMailNotificationPreferences: options.newMailNotificationPreferences,
+    newMailNotifications: options.newMailNotifications,
     openExternal: options.openExternal,
     platform: options.platform,
     reminderNotifications: options.reminderNotifications,

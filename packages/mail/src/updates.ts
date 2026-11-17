@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const mailUpdateSchema = z.object({
+const mailHintUpdateSchema = z.object({
   eventId: z.uuid(),
   mailboxId: z.string().min(1),
   reminderId: z.uuid().optional(),
@@ -14,6 +14,21 @@ export const mailUpdateSchema = z.object({
     "reminders.changed",
   ]),
 });
+
+export const mailUpdateSchema = z.union([
+  mailHintUpdateSchema,
+  z.strictObject({
+    eventId: z.uuid(),
+    mailboxId: z.string().min(1),
+    messageId: z.string().min(1),
+    receivedAt: z.iso.datetime({ precision: 3 }).refine((value) => {
+      const date = new Date(value);
+      return !Number.isNaN(date.getTime()) && date.toISOString() === value;
+    }),
+    threadIds: z.tuple([z.string().min(1)]),
+    type: z.literal("mail.received"),
+  }),
+]);
 export type MailUpdate = z.infer<typeof mailUpdateSchema>;
 
 export const mailConnectionSchema = z.object({

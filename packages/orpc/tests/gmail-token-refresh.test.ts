@@ -24,13 +24,20 @@ const fixtures = vi.hoisted(() => ({
     >(),
   scopes: "",
   status: "connected",
+  writtenScopes: undefined as string | undefined,
 }));
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The pg proxy verifies the real credential update sent to the database.
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { ...actual, db: drizzle(fixtures.query) };
+  const database = drizzle(fixtures.query);
+  Object.defineProperty(database, "transaction", {
+    value: async <Result>(
+      run: (transaction: typeof database) => Promise<Result>
+    ) => await run(database),
+  });
+  return { ...actual, db: database };
 });
 vi.mock(import("@quieter/env/server"), async (importOriginal) => {
   const actual = await importOriginal();
@@ -52,6 +59,7 @@ describe("Gmail token refresh grants", () => {
     fixtures.scopes =
       "openid https://mail.google.com/ https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly existing-extra-grant";
     fixtures.status = "connected";
+    fixtures.writtenScopes = undefined;
     // oxlint-disable-next-line eslint/require-await -- The pg proxy returns fixture rows without I/O.
     fixtures.query.mockReset().mockImplementation(async (query, params) => {
       if (query.startsWith("select")) {
@@ -59,10 +67,13 @@ describe("Gmail token refresh grants", () => {
           rows: [
             [
               fixtures.expiresAt,
+              new Date(0),
               "owned@example.com",
               encryptSecret("previous-access"),
               encryptSecret("owned-refresh"),
+              "owned-google-subject",
               mailboxInput.mailboxId,
+              new Date(0),
               fixtures.scopes,
               fixtures.status,
             ],
@@ -70,6 +81,13 @@ describe("Gmail token refresh grants", () => {
         };
       }
       if (query.startsWith('update "gmailCredential"')) {
+        const assignment = /"scopes" = \$(?<position>\d+)/u.exec(
+          query.split(" where ")[0] ?? ""
+        );
+        const scopeValue = params[Number(assignment?.groups?.position) - 1];
+        if (typeof scopeValue === "string") {
+          fixtures.writtenScopes = scopeValue;
+        }
         return { rows: [[mailboxInput.mailboxId]] };
       }
       if (query.startsWith('update "mailbox"')) {
@@ -110,6 +128,14 @@ describe("Gmail token refresh grants", () => {
     }
   );
 
+  test("preserves successful forced repair for a same-account record initially needing reconnect", async () => {
+    fixtures.status = "needs_reconnect";
+    await expect(refreshAuthorizedGmailAccessToken(mailboxInput)).resolves.toBe(
+      "renewed-access"
+    );
+    expect(fixtures.status).toBe("connected");
+  });
+
   test("does not invent calendar grants for a mail-only refresh", async () => {
     fixtures.scopes = "openid https://mail.google.com/";
     const result = await getAuthorizedGmailMailbox(mailboxInput);
@@ -133,11 +159,7 @@ describe("Gmail token refresh grants", () => {
       )
     );
     await refreshAuthorizedGmailAccessToken(mailboxInput);
-    const credentialUpdate = fixtures.query.mock.calls.find(([query]) =>
-      query.startsWith('update "gmailCredential"')
-    );
-    expect(credentialUpdate?.[1]).toContain("openid https://mail.google.com/");
-    expect(credentialUpdate?.[1]).not.toContain(fixtures.scopes);
+    expect(fixtures.writtenScopes).toBe("openid https://mail.google.com/");
   });
 
   test("retries an authorized service using its own authentication error", async () => {
