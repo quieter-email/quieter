@@ -1,5 +1,6 @@
 "use client";
 
+import { ORPCError } from "@orpc/client";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
@@ -7,6 +8,7 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { MailboxIdleState } from "@quieter/app/features/mailbox/components/mailbox-idle-state";
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import {
+  applyMailboxSearchPatch,
   useMailboxMessageId,
   useMailboxSearchActions,
   useMailboxThreadId,
@@ -14,15 +16,18 @@ import {
 import { useRecordRecentConversation } from "@quieter/app/features/mailbox/components/recent-conversations-provider";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
 import { MessageDetail } from "@quieter/app/features/message-thread/components/message-detail";
+import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import { ReminderDueStrip } from "@quieter/app/features/reminders/reminder-due-strip";
 import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
+import { useRouter } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
 
 type MailboxMessagesPanelProps = {
@@ -71,6 +76,7 @@ export const MailboxMessagesPanel = ({
   const messageId = useMailboxMessageId() ?? null;
   const threadId = useMailboxThreadId() ?? null;
   const setMailboxSearch = useMailboxSearchActions();
+  const router = useRouter();
   const normalizedSearchQuery = searchQuery.trim();
   const isMessageRouteOpen =
     activeMailbox !== "drafts" && (messageId?.trim() ?? "") !== "";
@@ -170,6 +176,56 @@ export const MailboxMessagesPanel = ({
       { messageId: nextMessageId, threadId: nextThreadId ?? null },
       { replace: !shouldPushHistory }
     );
+  };
+
+  const openConversation: NonNullable<
+    MessageViewProps["onOpenConversation"]
+  > = async (target, { signal }) => {
+    const currentLocation = router.state.location;
+    const patch = {
+      calendarConnectionId: null,
+      calendarDate: null,
+      calendarEventId: null,
+      calendarId: null,
+      calendarTimeZone: null,
+      calendarView: null,
+      chatId: null,
+      compose: null,
+      mailboxId: target.mailboxId,
+      mailto: null,
+      messageId: target.messageId,
+      query: null,
+      reminderId: null,
+      threadId: target.threadId,
+      workspace: null,
+    };
+    const expectedSearch = applyMailboxSearchPatch(
+      mailboxSearchSchema.parse(currentLocation.search),
+      patch
+    );
+    await setMailboxSearch(patch, { signal });
+    signal.throwIfAborted();
+    const settledLocation = router.state.location;
+    const settledSearch = mailboxSearchSchema.parse(settledLocation.search);
+    const fields = new Set([
+      ...Object.keys(expectedSearch),
+      ...Object.keys(settledSearch),
+    ]);
+    if (
+      settledLocation.pathname !== currentLocation.pathname ||
+      [...fields].some(
+        (field) =>
+          Reflect.get(expectedSearch, field) !==
+          Reflect.get(settledSearch, field)
+      )
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "The conversation did not open. Finish your draft or try again.",
+      });
+    }
+    activateListMessage(target.messageId);
+    setShouldFocusMessageView(true);
   };
 
   const applySearch = (nextQuery: string) => {
@@ -278,6 +334,7 @@ export const MailboxMessagesPanel = ({
         {isMessageRouteOpen && !threadLoadFailed ? (
           <MessageDetail
             onConversationOpened={recordOpened}
+            onOpenConversation={openConversation}
             showDesktopBack={onePanelDesktop}
             activeMailbox={activeMailbox}
             detailOnly={detailOnly}
