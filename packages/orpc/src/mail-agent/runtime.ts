@@ -44,6 +44,8 @@ import {
 } from "../connectors/tool-registry";
 import type { MailRequestContext } from "../gmail-request";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
+import { runReceiveStage } from "../mail-receive";
+import type { ReceiveStageOutcome } from "../mail-receive";
 import { publishMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { queriesMailOperations } from "../mail/queries";
@@ -238,7 +240,9 @@ const reportRunUsage = async (run: typeof mailboxAgentRun.$inferSelect) => {
     .where(eq(mailboxAgentRun.id, run.id));
 };
 
-const executeRun = async (run: ClaimedRun) => {
+const executeRun = async (
+  run: ClaimedRun
+): Promise<ReceiveStageOutcome<"personal_action">> => {
   const signal = AbortSignal.timeout(80_000);
   const context: MailRequestContext = {
     retryUnauthorized: false,
@@ -392,7 +396,7 @@ const executeRun = async (run: ClaimedRun) => {
       specification.eligibility &&
       !matchesAgentEligibility(specification.eligibility, target)
     ) {
-      await db
+      const [skipped] = await db
         .update(mailboxAgentRun)
         .set({
           errorMessage: null,
@@ -409,8 +413,9 @@ const executeRun = async (run: ClaimedRun) => {
             eq(mailboxAgentRun.id, run.id),
             eq(mailboxAgentRun.leaseToken, run.leaseToken)
           )
-        );
-      return;
+        )
+        .returning({ id: mailboxAgentRun.id });
+      return { status: skipped === undefined ? "lost_ownership" : "skipped" };
     }
     const memoryQuery = target
       ? buildMailMemoryQuery({
@@ -998,7 +1003,7 @@ const executeRun = async (run: ClaimedRun) => {
       }
     }
     await assertContextAuthority();
-    await db
+    const [finished] = await db
       .update(mailboxAgentRun)
       .set({
         errorMessage: null,
@@ -1018,7 +1023,12 @@ const executeRun = async (run: ClaimedRun) => {
           eq(mailboxAgentRun.id, run.id),
           eq(mailboxAgentRun.leaseToken, run.leaseToken)
         )
-      );
+      )
+      .returning({ id: mailboxAgentRun.id });
+    if (finished === undefined) {
+      return { status: "lost_ownership" };
+    }
+    return { status: result.output.matched ? "complete" : "skipped" };
   } catch (error) {
     const cutoverError = getPersonalActionCutoverError(error);
     if (
@@ -1027,7 +1037,7 @@ const executeRun = async (run: ClaimedRun) => {
       !mutationUncertain &&
       usage.length === 0
     ) {
-      await db
+      const [queued] = await db
         .update(mailboxAgentRun)
         .set({
           attempts: sql`${mailboxAgentRun.attempts} - 1`,
@@ -1046,8 +1056,16 @@ const executeRun = async (run: ClaimedRun) => {
             gt(mailboxAgentRun.leaseExpiresAt, new Date()),
             sql`not exists (select 1 from ${mailboxAgentEffect} where ${mailboxAgentEffect.runId} = ${mailboxAgentRun.id})`
           )
-        );
-      return;
+        )
+        .returning({ retryAt: mailboxAgentRun.leaseExpiresAt });
+      if (!queued?.retryAt) {
+        return { status: "lost_ownership" };
+      }
+      return {
+        reason: "admission_busy",
+        retryAt: queued.retryAt,
+        status: "retry",
+      };
     }
     if (
       !(error instanceof ORPCError) &&
@@ -1066,7 +1084,7 @@ const executeRun = async (run: ClaimedRun) => {
       failure instanceof ORPCError
         ? failure.message
         : "This action could not finish. Please try again after reviewing any partial results.";
-    await db
+    const [failed] = await db
       .update(mailboxAgentRun)
       .set({
         errorMessage: mutationUncertain
@@ -1084,7 +1102,11 @@ const executeRun = async (run: ClaimedRun) => {
           eq(mailboxAgentRun.id, run.id),
           eq(mailboxAgentRun.leaseToken, run.leaseToken)
         )
-      );
+      )
+      .returning({ id: mailboxAgentRun.id });
+    return {
+      status: failed === undefined ? "lost_ownership" : "needs_attention",
+    };
   } finally {
     const [finished] = await db
       .select()
@@ -1111,6 +1133,16 @@ const executeRun = async (run: ClaimedRun) => {
 
 export const drainMailAgentRuns = async (input: { limit?: number } = {}) => {
   let processed = 0;
+  const outcomes: Record<
+    ReceiveStageOutcome<"personal_action">["status"],
+    number
+  > = {
+    complete: 0,
+    lost_ownership: 0,
+    needs_attention: 0,
+    retry: 0,
+    skipped: 0,
+  };
   for (
     let index = 0;
     index < Math.min(3, Math.max(1, input.limit ?? 2));
@@ -1120,7 +1152,20 @@ export const drainMailAgentRuns = async (input: { limit?: number } = {}) => {
     if (run === null) {
       break;
     }
-    await executeRun(run);
+    const outcome =
+      run.triggerKind === "mail_received" && run.messageId !== null
+        ? await runReceiveStage({
+            execute: async () => await executeRun(run),
+            identity: {
+              actorUserId: run.actorUserId,
+              mailboxId: run.mailboxId,
+              messageId: run.messageId,
+              runId: run.id,
+            },
+            stage: "personal_action",
+          })
+        : await executeRun(run);
+    outcomes[outcome.status] += 1;
     processed += 1;
   }
   const pendingUsage = await db
@@ -1172,5 +1217,5 @@ export const drainMailAgentRuns = async (input: { limit?: number } = {}) => {
       }
     }
   }
-  return { processed };
+  return { outcomes, processed };
 };

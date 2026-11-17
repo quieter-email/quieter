@@ -35,6 +35,7 @@ import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
 import { saveDraftReminderIntent } from "../reminders/draft-state";
 import {
   assertComposeNotScheduled,
+  assertComposeSendAttemptActive,
   resolveComposeSourceDraftId,
 } from "../scheduled-send/reservation";
 import { withMailComposeLock } from "./compose-lock";
@@ -317,6 +318,13 @@ export const composeMailOperations = {
       input.mailboxId,
       `source:${sourceDraftId ?? input.message.localId}`,
       async () => {
+        await assertComposeSendAttemptActive({
+          mailboxId: input.mailboxId,
+          scheduledSendId,
+          sendOperationId:
+            input.message.sendOperationId ?? input.message.localId,
+          userId: context.userId,
+        });
         await assertComposeNotScheduled({
           ...input.message,
           draftId: sourceDraftId,

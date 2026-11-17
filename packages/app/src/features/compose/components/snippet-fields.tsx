@@ -1,4 +1,4 @@
-import { Field, FieldLabel } from "@quieter/ui/field";
+import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Input } from "@quieter/ui/input";
 import { Textarea } from "@quieter/ui/textarea";
 import { useId } from "react";
@@ -45,6 +45,13 @@ export const SnippetFields = ({
           value={bodyText}
           variant="composer"
         />
+        <FieldDescription>
+          Use {"{{@sender.name}}"}, {"{{@sender.email}}"},{" "}
+          {"{{@recipient.name}}"} or {"{{@recipient.email}}"} for the current
+          sender and a single To recipient. Use {"{{?field}}"} for a value to
+          fill before sending. Missing values stay marked. Prefix a marker with
+          a backslash to keep it literal; the backslash stays in the message.
+        </FieldDescription>
       </Field>
     </>
   );

@@ -20,6 +20,7 @@ type ComposeCommandOptions = {
   snippets: readonly { id: string; name: string; bodyText: string }[];
   onInsertLink: (range: Range) => void;
   onInsertImage: () => void;
+  onInsertSnippet: (editor: Editor, range: Range, source: string) => void;
   onCreateSnippet?: (text: string) => void;
   onManageSnippets?: () => void;
 };
@@ -30,6 +31,7 @@ export const buildComposeCommands = ({
   snippets,
   onInsertLink,
   onInsertImage,
+  onInsertSnippet,
   onCreateSnippet,
   onManageSnippets,
 }: ComposeCommandOptions): SlashCommand[] => {
@@ -167,20 +169,7 @@ export const buildComposeCommands = ({
       id: `snippet-${snippet.id}`,
       label: snippet.name,
       run: (targetEditor: Editor, range: Range) => {
-        targetEditor
-          .chain()
-          .focus()
-          .deleteRange(range)
-          .insertContent(
-            snippet.bodyText
-              .replaceAll(/\r\n?/gu, "\n")
-              .split("\n")
-              .flatMap((line, index) => [
-                ...(index === 0 ? [] : [{ type: "hardBreak" }]),
-                ...(line.length === 0 ? [] : [{ text: line, type: "text" }]),
-              ])
-          )
-          .run();
+        onInsertSnippet(targetEditor, range, snippet.bodyText);
       },
     }))
   );
@@ -216,4 +205,25 @@ export const buildComposeCommands = ({
       .replaceAll(/\s+/gu, "")
       .includes(search)
   );
+};
+
+export const insertComposeSnippet = (
+  editor: Editor,
+  range: Range,
+  text: string
+) => {
+  editor
+    .chain()
+    .focus()
+    .deleteRange(range)
+    .insertContent(
+      text
+        .replaceAll(/\r\n?/gu, "\n")
+        .split("\n")
+        .flatMap((line, index) => [
+          ...(index === 0 ? [] : [{ type: "hardBreak" }]),
+          ...(line.length === 0 ? [] : [{ text: line, type: "text" }]),
+        ])
+    )
+    .run();
 };
