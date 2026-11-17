@@ -2,7 +2,7 @@
 
 The management API controls the signed-in user's Quieter application resources. It is separate from transactional sending. A transactional organization API key proves permission to send from a verified domain. It does not identify an acting user or grant inbox, calendar, organization administration, or personal-context access.
 
-This document records the authority contract, shared wire contracts, and application capability inventory. The runtime contracts live in `packages/orpc/src/control/`. HTTP adapters, external credential issuance, management MCP, and the management SDK are subsequent deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
+This document records the authority contract, shared wire contracts, initial read HTTP adapter, and application capability inventory. They live in `packages/orpc/src/control/`. External credential issuance, management MCP, approved mutations, and the management SDK are separate deliverables. A registry entry describes an application operation. It does not prove that a public adapter implements it.
 
 ## Credentials and scope
 
@@ -94,6 +94,40 @@ Errors use a named code and safe message, with optional request and retry metada
 Settings, organization, and automation schemas define representative broader contracts. They remain unadvertised until an adapter implements and verifies the corresponding application path. Streaming is unsupported. OpenAPI describes the shared JSON shapes; runtime validation remains authoritative for cross-field calendar constraints that JSON Schema cannot express.
 
 The pure contract leaves can be bundled into a separately named standalone management SDK, following the existing workspace contract-bundling pattern. A client distribution must not import server authority, database, environment, or provider modules. The SDK's built artifact and external-client acceptance still require verification in their own units.
+
+## Initial read HTTP adapter
+
+`createControlReadRuntime` is the shared application boundary for the initial read surface. Its default services call the existing protected application routers through oRPC's server caller. Mailbox ordering/default selection, mail source dispatch and enrichment, and calendar ownership remain in those application paths. The HTTP mount consumes this runtime through `@quieter/orpc/control/http`; an in-app caller can consume the package-owned runtime without importing application code.
+
+The default adapter implements these operations:
+
+| Operation | Explicit input scope |
+| --- | --- |
+| `mailboxes.list` | Current authenticated user. |
+| `mail.search` | Organization and mailbox, category, optional query and page token. |
+| `mail.read_thread` | Organization, mailbox, and thread. |
+| `calendar.accounts` | Current authenticated user. |
+| `calendar.list` | Owned calendar connection. |
+| `calendar.events` | Owned connection, calendar, bounded time range, and time zone. |
+| `calendar.event` | Owned connection, calendar, and event. |
+
+Synthetic API mailboxes use their existing organization-membership path and read-only API capabilities. Gmail and managed mailboxes keep their existing ownership and grant checks. Every page and thread request reauthorizes its explicit target. Read discovery never grants a write operation.
+
+`POST /api/control/capabilities` accepts the strict target object from the shared contract. For example, `{"kind":"user"}` discovers user-level operations. A mailbox target includes its organization and mailbox IDs. `GET /api/control/openapi` returns only the adapter's implemented, scope-enabled contract paths. Both require a current application session and the management version header. Unknown operations and all mutations remain unavailable in this milestone.
+
+Use the existing local development startup and a development session cookie jar stored outside Git. For example:
+
+```bash
+curl --cookie /path/to/development-cookie-jar \
+  --header 'Quieter-Control-Version: 2026-11' \
+  --header 'Content-Type: application/json' \
+  --data '{"kind":"user"}' \
+  http://127.0.0.1:3000/api/control/capabilities
+```
+
+Send operation parameters as JSON to `/api/control/{operation}` with the same headers and session. The adapter rejects transactional/API-key headers even if a valid cookie is also present. It limits request bodies, rejects unsupported content types and client identity claims, forwards cancellation, and returns private, uncached responses. Expected denials use safe named errors; unexpected failures are reported without forwarding private request details to the caller or telemetry.
+
+The HTTP adapter does not issue management credentials, prepare or approve writes, or persist cursor bindings. In this milestone, callers must continue pages with the same target, category, and query. Existing provider pagination and fresh resource authorization remain authoritative. Durable approval/replay/audit execution and trusted review UX remain open QUIETER-127 acceptance.
 
 ## Evidence boundaries
 
