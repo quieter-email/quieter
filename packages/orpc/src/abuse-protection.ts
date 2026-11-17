@@ -22,10 +22,16 @@ export const cleanupRateLimitBuckets = async () => {
 };
 
 export const consumeRateLimit = async (input: {
+  cost?: number;
   key: string;
   limit: number;
   windowMs: number;
 }) => {
+  const cost = input.cost ?? 1;
+  if (!Number.isSafeInteger(cost) || cost < 1) {
+    throw new RangeError("Rate limit cost must be a positive integer.");
+  }
+  const chargedCost = Math.min(cost, input.limit + 1);
   const now = new Date();
   const expiresAt = new Date(now.getTime() + input.windowMs);
   const nowValue = now.toISOString();
@@ -34,14 +40,14 @@ export const consumeRateLimit = async (input: {
   const [bucket] = await db
     .insert(rateLimitBucket)
     .values({
-      count: 1,
+      count: chargedCost,
       expiresAt,
       key: input.key,
       windowStart: now,
     })
     .onConflictDoUpdate({
       set: {
-        count: sql`case when ${isExpired} then 1 else ${rateLimitBucket.count} + 1 end`,
+        count: sql`case when ${isExpired} then ${chargedCost} else least(${rateLimitBucket.count}::bigint + ${chargedCost}, ${input.limit + 1}) end`,
         expiresAt: sql`case when ${isExpired} then ${expiresAtValue} else ${rateLimitBucket.expiresAt} end`,
         windowStart: sql`case when ${isExpired} then ${nowValue} else ${rateLimitBucket.windowStart} end`,
       },

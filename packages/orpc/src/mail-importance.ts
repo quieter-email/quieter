@@ -251,7 +251,8 @@ const loadImportanceSources = async (
       }
       return {
         eligible:
-          message.direction === "inbound" && message.mailboxState === "active",
+          message.direction === "inbound" &&
+          ["active", "done"].includes(message.mailboxState),
         incoming: message.direction === "inbound",
         message: {
           ...message,
@@ -321,7 +322,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
           eq(managedMailMessage.mailboxId, mailboxId),
           inArray(managedMailMessage.id, messageIds),
           eq(managedMailMessage.direction, "inbound"),
-          eq(managedMailMessage.mailboxState, "active")
+          inArray(managedMailMessage.mailboxState, ["active", "done"])
         )
       ),
   ]);

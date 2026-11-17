@@ -622,9 +622,13 @@ export const createDemoMailboxActions = (
   queryClient: QueryClient,
   mailboxId = DEMO_MAILBOX_ID
 ) =>
-  createDemoActions(createDemoStore(mailboxId), async () => {
-    await invalidateSandboxMail(queryClient, mailboxId);
-  });
+  createDemoActions(
+    createDemoStore(mailboxId),
+    async () => {
+      await invalidateSandboxMail(queryClient, mailboxId);
+    },
+    "personal"
+  );
 
 const composeActions = createDemoComposeActions({
   ...createDemoStore(DEMO_MAILBOX_ID),

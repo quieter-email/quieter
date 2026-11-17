@@ -17,6 +17,8 @@ type MessageAction =
   | "unsubscribeFromMessage"
   | "untrashMessage";
 type ThreadAction =
+  | "markThreadDone"
+  | "returnThreadToInbox"
   | "markThreadAsRead"
   | "markThreadAsSpam"
   | "markThreadAsUnread"
@@ -24,6 +26,8 @@ type ThreadAction =
   | "unmarkThreadAsSpam"
   | "untrashThread";
 type BulkAction =
+  | "markThreadsDone"
+  | "returnThreadsToInbox"
   | "deleteDrafts"
   | "markThreadsAsRead"
   | "markThreadsAsSpam"
@@ -93,6 +97,12 @@ export const createUnifiedInboxActions = ({
       ) {
         throw new Error("You cannot change read status in a selected inbox.");
       }
+      if (
+        (action === "markThreadsDone" || action === "returnThreadsToInbox") &&
+        !context.mailboxActions.canSetPlacement
+      ) {
+        throw new Error("You cannot change placement in a selected inbox.");
+      }
       const group = groups.get(context.mailboxId) ?? { context, threads: [] };
       group.threads.push(thread);
       groups.set(context.mailboxId, group);
@@ -120,6 +130,11 @@ export const createUnifiedInboxActions = ({
     get canSetImportance() {
       return [...contextsByThreadId.values()].some(
         (context) => context.mailboxActions.canSetImportance
+      );
+    },
+    get canSetPlacement() {
+      return [...contextsByThreadId.values()].some(
+        (context) => context.mailboxActions.canSetPlacement
       );
     },
     deleteDraft: async (message) => {
@@ -153,6 +168,9 @@ export const createUnifiedInboxActions = ({
     markThreadAsUnread: async (id) => {
       await runThreadAction("markThreadAsUnread", id);
     },
+    markThreadDone: async (id) => {
+      await runThreadAction("markThreadDone", id);
+    },
     markThreadsAsRead: async (threads) => {
       await runBulkAction("markThreadsAsRead", threads);
     },
@@ -162,6 +180,9 @@ export const createUnifiedInboxActions = ({
     markThreadsAsUnread: async (threads) => {
       await runBulkAction("markThreadsAsUnread", threads);
     },
+    markThreadsDone: async (threads) => {
+      await runBulkAction("markThreadsDone", threads);
+    },
     moveMessageToTrash: async (id) => {
       await runMessageAction("moveMessageToTrash", id);
     },
@@ -170,6 +191,19 @@ export const createUnifiedInboxActions = ({
     },
     moveThreadsToTrash: async (threads) => {
       await runBulkAction("moveThreadsToTrash", threads);
+    },
+    get placementScope() {
+      return [...contextsByThreadId.values()].some(
+        (context) => context.mailboxActions.placementScope === "shared"
+      )
+        ? "shared"
+        : "personal";
+    },
+    returnThreadToInbox: async (id) => {
+      await runThreadAction("returnThreadToInbox", id);
+    },
+    returnThreadsToInbox: async (threads) => {
+      await runBulkAction("returnThreadsToInbox", threads);
     },
     setThreadImportance: async (id, important) => {
       const context = contextsByThreadId.get(id);
@@ -326,6 +360,12 @@ export const createUnifiedInboxActions = ({
         },
         get canSetImportance() {
           return context.mailboxActions.canSetImportance;
+        },
+        get canSetPlacement() {
+          return context.mailboxActions.canSetPlacement;
+        },
+        get placementScope() {
+          return context.mailboxActions.placementScope;
         },
       },
       pendingActions,
