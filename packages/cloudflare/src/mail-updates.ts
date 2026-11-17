@@ -127,7 +127,7 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
 export const broadcastGmailUpdate = async (
   env: Pick<Env, "MailLiveUser">,
   emailAddress: string,
-  type: MailUpdate["type"],
+  type: Exclude<MailUpdate["type"], "mail.received">,
   revision?: string
 ) => {
   try {

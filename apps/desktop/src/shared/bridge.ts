@@ -1,4 +1,10 @@
-import type { ReminderNotifications } from "@quieter/app/runtime";
+import type {
+  NewMailNotificationContext,
+  NewMailNotificationPreferences,
+  NewMailNotificationResult,
+  NewMailNotifications,
+  ReminderNotifications,
+} from "@quieter/app/runtime";
 import { z } from "zod";
 
 import type { NativeLinkReadInput, NativeMailIntent } from "./native-links";
@@ -28,6 +34,67 @@ export const reminderNotificationResult = z.enum([
   "blocked",
 ]);
 
+const newMailNotificationScope = z.strictObject({
+  mailboxId: z.string().min(1).max(500),
+  userId: z.string().min(1).max(500),
+});
+
+export const newMailNotificationPreferenceRequest = z.discriminatedUnion(
+  "kind",
+  [
+    newMailNotificationScope.extend({ kind: z.literal("get-status") }),
+    newMailNotificationScope.extend({
+      enabled: z.boolean(),
+      kind: z.literal("set-enabled"),
+    }),
+  ]
+);
+
+export const newMailNotificationPreferenceStatus = z.discriminatedUnion(
+  "kind",
+  [
+    z.strictObject({
+      enabled: z.boolean(),
+      kind: z.literal("ready"),
+      supported: z.boolean(),
+    }),
+    z.strictObject({ kind: z.literal("inactive") }),
+  ]
+);
+
+export const newMailNotificationCapture = newMailNotificationScope;
+
+export const newMailNotificationDelivery = z.strictObject({
+  contextId: z.uuid(),
+  mailboxId: z.string().min(1).max(500),
+  messageId: z.string().min(1).max(500),
+  receivedAt: z.iso.datetime({ precision: 3 }).refine((value) => {
+    const date = new Date(value);
+    return !Number.isNaN(date.getTime()) && date.toISOString() === value;
+  }),
+  threadId: z.string().min(1).max(500),
+});
+
+export const newMailNotificationContext = z.discriminatedUnion("kind", [
+  z.strictObject({ contextId: z.uuid(), kind: z.literal("enabled") }),
+  z.strictObject({
+    kind: z.enum(["inactive", "disabled", "unsupported", "blocked"]),
+  }),
+]) satisfies z.ZodType<NewMailNotificationContext>;
+
+export const newMailNotificationResult = z.enum([
+  "shown",
+  "duplicate",
+  "quiet",
+  "inactive",
+  "stale",
+  "blocked",
+]) satisfies z.ZodType<NewMailNotificationResult>;
+
+export type NewMailNotificationPreferenceRequest = z.infer<
+  typeof newMailNotificationPreferenceRequest
+>;
+
 export const signOutCleanupCommand = z.object({
   phase: z.enum(["capture", "cleanup", "release"]),
   requestId: z.uuid(),
@@ -55,6 +122,8 @@ export type DesktopBridge = Readonly<{
   ) => () => void;
   platform: string;
   reminderNotifications: ReminderNotifications;
+  newMailNotificationPreferences: NewMailNotificationPreferences;
+  newMailNotifications?: NewMailNotifications;
   setReminderNotificationUser: (userId: string | null) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   setTitleBarColors: (colors: {

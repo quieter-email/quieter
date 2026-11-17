@@ -138,7 +138,9 @@ describe("Gmail action receive acknowledgement", () => {
       recoveryBefore: null,
       recoveryPageToken: null,
     });
-    fixtures.enqueue.mockReset().mockResolvedValue();
+    fixtures.enqueue
+      .mockReset()
+      .mockResolvedValue({ admitted: 1, status: "handed_off" });
     fixtures.enqueueWork.mockReset().mockResolvedValue();
     fixtures.history.mockReset().mockResolvedValue({
       hasMore: false,

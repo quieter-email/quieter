@@ -176,7 +176,9 @@ const toMessageListItem = async (
   to: record.to ?? undefined,
 });
 
-const getCategoryCondition = (category: MailboxCategory) => {
+export const getManagedMessageCategoryCondition = (
+  category: MailboxCategory
+) => {
   if (category === "important") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
@@ -272,7 +274,7 @@ export const listManagedMessages = async (input: {
     userId: input.userId,
   });
 
-  const categoryCondition = getCategoryCondition(input.category);
+  const categoryCondition = getManagedMessageCategoryCondition(input.category);
   if (!categoryCondition) {
     return { messages: [], resultSizeEstimate: 0 };
   }

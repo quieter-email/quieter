@@ -29,7 +29,13 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@quieter/database/client", async (importOriginal) => {
   const actual = await importOriginal<typeof DatabaseClientModule>();
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { ...actual, db: drizzle(mocks.query) };
+  const database = drizzle(mocks.query);
+  Object.defineProperty(database, "transaction", {
+    value: async <Result>(
+      run: (transaction: typeof database) => Promise<Result>
+    ) => await run(database),
+  });
+  return { ...actual, db: database };
 });
 vi.mock(import("../src/gmail-credential-crypto"), () => ({
   decryptGmailCredentialSecret: mocks.decrypt,
@@ -79,10 +85,13 @@ describe("Gmail calendar account authorization", () => {
           rows: [
             [
               new Date("2099-01-01T00:00:00Z"),
+              new Date("2026-01-02T00:00:00Z"),
               "current@example.test",
               "gmail-access",
               "gmail-refresh",
+              "same-google-subject",
               "mailbox-1",
+              new Date("2026-01-01T00:00:00Z"),
               mocks.scopes,
               "connected",
             ],

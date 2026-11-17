@@ -97,3 +97,11 @@ Installed Windows and macOS checks also dispatch a synthetic content URI through
 Both checks require the actual native event, one restored window, the same primary PID and private profile, and signed-out refusal to expose the link. The full content identity contains only synthetic mailbox, thread and message IDs. Directly launched tools receive the loopback fixture environment. The Windows OS-dispatched secondary must reach the same profile and exit through the singleton path before guarded app startup. This does not rely on a shell broker forwarding environment variables. The probe never requests a default-mail change. Linux keeps the existing installed-DEB and direct secondary-process checks.
 
 Windows CI can run a Server edition. Its recorded OS caption and product type do not establish Windows client support. The macOS copy does not establish Gatekeeper or notarization acceptance. A passing OS-dispatch case proves only the recorded signed-out installed candidate and its private profile. Default-app choice, real sign-in, notifications, signing, notarization, performance budgets and updates remain separate release gates.
+
+## New-mail notification preparation
+
+The desktop adapter provides account-bound, per-mailbox device preferences, off by default. These preferences are stored locally as hashes scoped to the backend, signed-in account and mailbox. A failed write does not enable the preference in memory. Account replacement, sign-out and a replaced window invalidate pending changes.
+
+The isolated `MailboxNewMailNotificationRow` uses the shared settings row and switch. Its parent mount remains a checked integration dependency. The control keeps saved opt-in separate from native notification support and always permits opting out. Native support does not prove operating-system permission. System settings may still block alerts.
+
+This preparation adds no popup delivery, receive-event producer or click navigation. New-mail delivery still requires the reviewed authoritative receive publisher, passive exact eligibility check, native delivery implementation and authorized settings mount. Those pieces must be joined and exercised before claiming notifications work.

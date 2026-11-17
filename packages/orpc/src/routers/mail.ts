@@ -4,6 +4,11 @@ import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
+import {
+  getNewMailNotificationEligibility,
+  newMailNotificationEligibilityInputSchema,
+  newMailNotificationEligibilityOutputSchema,
+} from "../mail/notification-eligibility";
 import { queriesMailOperations } from "../mail/queries";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
@@ -55,6 +60,11 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getMessageInspector)
     .handler(queriesMailOperations.getMessageInspector),
+  getNewMailNotificationEligibility: protectedProcedure
+    .route({ method: "GET" })
+    .input(newMailNotificationEligibilityInputSchema)
+    .output(newMailNotificationEligibilityOutputSchema)
+    .handler(getNewMailNotificationEligibility),
   getThread: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getThread)
