@@ -41,6 +41,14 @@ export const KEYBOARD_SHORTCUT_CATEGORIES = [
 export const KEYBOARD_SHORTCUTS = [
   {
     category: "Global",
+    description: "Available while typing. Mail search keeps its own shortcut.",
+    id: "show-command-palette",
+    keys: ["Mod+Shift+K"],
+    label: "Show commands",
+    scope: "global",
+  },
+  {
+    category: "Global",
     id: "show-keyboard-shortcuts",
     keys: [{ key: "/", shift: true }],
     label: "Show keyboard shortcuts",

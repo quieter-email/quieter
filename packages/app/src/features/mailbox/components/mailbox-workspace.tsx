@@ -44,6 +44,8 @@ import { useLocation } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import { useMailboxCommands } from "./use-mailbox-commands";
+
 type MailboxWorkspaceProps = {
   user: {
     id?: string | null;
@@ -975,12 +977,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
     writableMailboxes[0]?.id ??
     null;
+  const canComposeNew =
+    view === "all-inboxes"
+      ? writableMailboxes.length > 0
+      : newComposeMailboxId !== null &&
+        newComposeMailboxId === selectedMailboxId;
   const composeWorkspace = useMailboxWorkspaceCompose({
-    canComposeNew:
-      view === "all-inboxes"
-        ? writableMailboxes.length > 0
-        : newComposeMailboxId !== null &&
-          newComposeMailboxId === selectedMailboxId,
+    canComposeNew,
     isComposeMailbox,
     newComposeMailboxId,
     selectedMailboxId,
@@ -1034,6 +1037,36 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     isWorkspaceReady: isWorkspaceReady && workspace !== "calendar",
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
     selectMailboxFromHotkey: workspaceActions.selectMailboxFromHotkey,
+    selectedMailboxId,
+    selectedMailboxProvider,
+  });
+
+  useMailboxCommands({
+    canCompose: canComposeNew,
+    isComposeMailbox,
+    isMailList:
+      workspace !== "calendar" &&
+      !isComposeMailbox &&
+      !isSnippetMailbox &&
+      !(isScheduledMailbox && selectedMailboxProvider !== "api") &&
+      (view === "all-inboxes" ||
+        (!selectedMailboxNeedsReconnect &&
+          view !== "labels" &&
+          !(view === "rules" && selectedMailboxProvider === "managed"))),
+    isMailWorkspace: workspace !== "calendar",
+    isWorkspaceReady,
+    mailboxes,
+    onCompose: workspaceActions.createComposeDraft,
+    onManageSnippets: workspaceActions.manageSnippets,
+    onOpenCalendar: async () => {
+      await setMailboxSearch({ workspace: "calendar" });
+    },
+    onOpenMail: async () => {
+      await setMailboxSearch({ workspace: null });
+    },
+    onSelectMailbox: workspaceActions.selectMailboxFromHotkey,
+    onSelectMailboxId: workspaceActions.selectMailboxId,
+    onSelectView: workspaceActions.selectView,
     selectedMailboxId,
     selectedMailboxProvider,
   });
