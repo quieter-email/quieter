@@ -2,6 +2,8 @@
 
 `@quieter/ai/action-specification` defines the version 1 JSON document used by mailbox Actions. The contract imports only Zod and validates documents without an AI credential, database, connector, or background worker. The editor and runtime in `packages/orpc/src/mail-agent` resolve accounts, review capabilities, and execute incoming-mail or manual runs.
 
+[Mail receive execution](mail-receive-execution.md) describes the shared incoming-mail stage contract and its existing durable owners.
+
 The old graph editor and runtime remain retired. Their retained action tables are rollback data. Settings show legacy action names as requiring review; they never become active specifications automatically.
 
 ## Persisted document

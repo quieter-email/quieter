@@ -34,6 +34,7 @@ import {
   ensureMailImportanceWork,
   processPendingMailImportance,
 } from "../../mail-importance";
+import { runReceiveStage } from "../../mail-receive";
 import { publishMailUpdate } from "../../mail-updates";
 import { observeReminderMail } from "../../reminders/service";
 import {
@@ -93,26 +94,36 @@ const resolveManagedThreadId = async (
 const processManagedVerificationCode = async (input: {
   mailboxId: string;
   messageId: string;
-}) => {
-  const owner = await getManagedAutomationOwner(input.mailboxId);
-  if (!owner) {
-    return;
-  }
-  await processMailVerificationCode({
-    loadMessage: async () =>
-      await loadManagedAutomationMessage(input.mailboxId, input.messageId, {
-        includeNonInbox: true,
-      }),
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    organizationId: owner.organizationId,
-    userId: owner.userId,
+}) =>
+  await runReceiveStage({
+    execute: async (identity) => {
+      const owner = await getManagedAutomationOwner(identity.mailboxId);
+      if (!owner) {
+        return { reason: "no_owner", status: "skipped" };
+      }
+      const outcome = await processMailVerificationCode({
+        loadMessage: async () =>
+          await loadManagedAutomationMessage(
+            identity.mailboxId,
+            identity.messageId,
+            {
+              includeNonInbox: true,
+            }
+          ),
+        mailboxId: identity.mailboxId,
+        messageId: identity.messageId,
+        organizationId: owner.organizationId,
+        userId: owner.userId,
+      });
+      await reportPendingMailboxVerificationCodeUsage(
+        identity.mailboxId,
+        owner.userId
+      );
+      return outcome;
+    },
+    identity: input,
+    stage: "verification_code",
   });
-  await reportPendingMailboxVerificationCodeUsage(
-    input.mailboxId,
-    owner.userId
-  );
-};
 
 const runPostIngestionProcessing = async (input: {
   mailboxId: string;
@@ -126,9 +137,18 @@ const runPostIngestionProcessing = async (input: {
       messageId: input.messageId,
       threadId: input.threadId,
     });
-    const rules = await applyManagedRulesToMessage({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
+    const rules = await runReceiveStage({
+      execute: async (identity) => {
+        const result = await applyManagedRulesToMessage({
+          mailboxId: identity.mailboxId,
+          messageId: identity.messageId,
+        });
+        return result.error === null
+          ? { ...result, status: "complete" }
+          : { ...result, status: "needs_attention" };
+      },
+      identity: { mailboxId: input.mailboxId, messageId: input.messageId },
+      stage: "managed_rules",
     });
     if (rules.error !== null) {
       throw new Error(rules.error);
@@ -228,11 +248,16 @@ const finishIngestion = async (input: {
   receivedAt: Date;
   threadId: string;
 }) => {
-  await enqueueMailAgentMessage({
-    mailboxId: input.mailboxId,
-    messageId: input.messageId,
-    receivedAt: input.receivedAt,
-    threadId: input.threadId,
+  await runReceiveStage({
+    execute: async (identity) =>
+      await enqueueMailAgentMessage({
+        mailboxId: identity.mailboxId,
+        messageId: identity.messageId,
+        receivedAt: input.receivedAt,
+        threadId: input.threadId,
+      }),
+    identity: { mailboxId: input.mailboxId, messageId: input.messageId },
+    stage: "personal_actions",
   });
   const results = await Promise.allSettled([
     observeReminderMail(input),
