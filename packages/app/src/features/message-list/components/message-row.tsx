@@ -487,9 +487,10 @@ const MessageRowSurface = ({
     (returnsToInbox
       ? threadActions.onReturnToInbox !== undefined
       : threadActions.onMarkDone !== undefined) ? (
-      <IconButtonTooltip label={placementLabel}>
+      <IconButtonTooltip label={placementLabel} triggerClassName="w-full">
         <Button
           aria-label={placementLabel}
+          className="grow"
           onClick={() => {
             void (
               returnsToInbox
@@ -498,8 +499,7 @@ const MessageRowSurface = ({
             )?.(thread.threadId);
           }}
           pending={isActionPending}
-          size="icon-xs"
-          variant="ghost"
+          variant="pill"
         >
           <Icon
             aria-hidden

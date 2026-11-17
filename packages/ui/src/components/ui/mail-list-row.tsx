@@ -261,7 +261,7 @@ export const MailListRowDetails = ({
               {timestamp}
             </span>
             {actions !== undefined && actions !== null && (
-              <span className="pointer-events-none absolute top-1/2 right-0 flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100 motion-reduce:transition-none">
+              <span className="pointer-events-none absolute inset-x-0 top-1/2 flex -translate-y-1/2 items-center opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-focus-within/row:pointer-events-auto group-focus-within/row:opacity-100 group-hover/row:pointer-events-auto group-hover/row:opacity-100 motion-reduce:transition-none">
                 {actions}
               </span>
             )}

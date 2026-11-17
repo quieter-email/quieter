@@ -1009,12 +1009,15 @@ export const DesignSystemShowcase = () => {
             >
               <MailListRowDetails
                 actions={
-                  <IconButtonTooltip label="Mark conversation Done">
+                  <IconButtonTooltip
+                    label="Mark conversation Done"
+                    triggerClassName="w-full"
+                  >
                     <Button
                       aria-label="Mark conversation Done"
-                      size="icon-xs"
+                      className="grow"
                       type="button"
-                      variant="ghost"
+                      variant="pill"
                     >
                       <Icon aria-hidden icon={CheckmarkCircle02Icon} />
                     </Button>
@@ -1103,6 +1106,9 @@ export const DesignSystemShowcase = () => {
             </Button>
             <Button type="button" variant="ghost">
               Ghost
+            </Button>
+            <Button type="button" variant="pill">
+              Pill
             </Button>
             <Button type="button" variant="destructive">
               Destructive
