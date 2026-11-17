@@ -1,6 +1,7 @@
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import type { MessageListItem } from "@quieter/app/lib/mail";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
+import type { MailboxProvider } from "@quieter/mail/search";
 
 export const supportsMessageDelivery = ({
   mailboxId,
@@ -8,10 +9,14 @@ export const supportsMessageDelivery = ({
   message,
 }: {
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   message: MessageListItem;
 }) => {
-  if (mailboxId === "" || isSandboxMailboxId(mailboxId)) {
+  if (
+    mailboxId === "" ||
+    isSandboxMailboxId(mailboxId) ||
+    mailboxProvider === "outlook"
+  ) {
     return false;
   }
   if (mailboxProvider === "api") {

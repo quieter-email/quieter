@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { MailboxProvider } from "./search";
+
 export const mailCategorySchema = z.enum([
   "inbox",
   "done",
@@ -109,10 +111,10 @@ export type MailError = {
 };
 
 export const getMailboxCapabilities = (input: {
-  provider: "api" | "gmail" | "managed";
+  provider: MailboxProvider;
   role?: "manager" | "reader" | "responder" | null;
 }): MailboxCapabilities => {
-  if (input.provider === "api") {
+  if (input.provider === "api" || input.provider === "outlook") {
     return {
       canDeletePermanently: false,
       canManageKnowledge: false,
@@ -125,7 +127,8 @@ export const getMailboxCapabilities = (input: {
       canSetImportance: false,
       canSetPlacement: false,
       canSetSenderName: false,
-      categories: ["sent"],
+      categories:
+        input.provider === "api" ? ["sent"] : mailCategorySchema.options,
     };
   }
 

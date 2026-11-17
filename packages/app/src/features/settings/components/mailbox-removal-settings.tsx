@@ -6,6 +6,7 @@ import {
   SettingsRow,
   SettingsSection,
 } from "@quieter/app/features/settings/components/settings-layout";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -28,11 +29,26 @@ export const MailboxRemovalSettings = ({
 }: {
   emailAddress: string;
   isPending: boolean;
-  kind: "gmail" | "managed";
+  kind: Exclude<MailboxProvider, "api">;
   onRemove: () => void;
 }) => {
   const [open, setOpen] = useState(false);
   const isManaged = kind === "managed";
+  const externalRemoval =
+    kind === "outlook"
+      ? {
+          description: "Remove this account's mail access from quieter.",
+          explanation:
+            "quieter will remove its saved mail credentials and mailbox data. Your Microsoft account, messages, identity and calendar access stay unchanged.",
+          title: "Disconnect Outlook",
+        }
+      : {
+          description:
+            "Remove this account's mail and calendar access from quieter.",
+          explanation:
+            "quieter will remove its saved credentials, mailbox data, and calendar access. Your Google account, messages in Gmail, and events in Google Calendar stay unchanged.",
+          title: "Disconnect Gmail",
+        };
 
   return (
     <>
@@ -54,12 +70,14 @@ export const MailboxRemovalSettings = ({
               </Button>
             }
             title={
-              isManaged ? "Permanently delete this mailbox" : "Disconnect Gmail"
+              isManaged
+                ? "Permanently delete this mailbox"
+                : externalRemoval.title
             }
           >
             {isManaged
               ? "Delete this mailbox and its saved mail for everyone with access."
-              : "Remove this account's mail and calendar access from quieter."}
+              : externalRemoval.description}
           </SettingsRow>
         </SettingsCard>
       </SettingsSection>
@@ -97,9 +115,7 @@ export const MailboxRemovalSettings = ({
               </>
             ) : (
               <p className="text-body text-muted-fg">
-                quieter will remove its saved credentials, mailbox data, and
-                calendar access. Your Google account, messages in Gmail, and
-                events in Google Calendar stay unchanged.
+                {externalRemoval.explanation}
               </p>
             )}
           </DialogBody>

@@ -28,6 +28,7 @@ import {
   getPersonalAiMemoryScopeConfig,
   replaceAiMemoryFeedback,
 } from "../ai-memory";
+import { assertMailWriteProvider } from "../mail/provider";
 import { assertAccessibleMailbox } from "../mailbox/service";
 
 const SYSTEM_LABEL_IDS = new Set<string>(Object.values(MAILBOX_LABELS));
@@ -57,6 +58,7 @@ const listLabelNames = async (
   provider: PersistedMailboxProvider,
   labelIds: string[]
 ) => {
+  assertMailWriteProvider(provider);
   const uniqueLabelIds = [...new Set(labelIds)];
   if (uniqueLabelIds.length === 0) {
     return new Map<string, string | null>();

@@ -6,7 +6,6 @@ import type {
   MailboxAccessMode,
   MailboxConnectionStatus,
   MailboxGrantRole,
-  PersistedMailboxProvider,
 } from "@quieter/database/schema";
 import {
   gmailCaptureState,
@@ -514,13 +513,17 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
     includeApiSentMessages: boolean | null;
     organizationId: string;
     ownerUserId: string | null;
-    provider: PersistedMailboxProvider;
+    provider: typeof MAILBOX_PROVIDER_MANAGED;
     status: MailboxConnectionStatus;
   };
   const managedMailboxRecords = new Map<string, ManagedMailboxRecord>();
 
   for (const record of directManagedMailboxes) {
-    managedMailboxRecords.set(record.id, { ...record, divisionGrantRoles: [] });
+    managedMailboxRecords.set(record.id, {
+      ...record,
+      divisionGrantRoles: [],
+      provider: MAILBOX_PROVIDER_MANAGED,
+    });
   }
 
   for (const record of divisionManagedMailboxes) {
@@ -529,6 +532,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       divisionName: record.divisionId
         ? (divisionNamesById.get(record.divisionId) ?? null)
         : null,
+      provider: MAILBOX_PROVIDER_MANAGED,
     };
     const divisionGrant = {
       divisionId: normalizedRecord.accessDivisionId,
@@ -570,6 +574,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
       directGrantRole: null,
       divisionGrantRoles: [],
       grantRole: "manager",
+      provider: MAILBOX_PROVIDER_MANAGED,
     });
   }
 
@@ -591,6 +596,7 @@ export const listAccessibleMailboxState = async (input: { userId: string }) => {
             ...record,
             directGrantRole: null,
             grantRole: null,
+            provider: MAILBOX_PROVIDER_GMAIL,
             unreadNonSpamCount: 0,
           },
           group
@@ -702,8 +708,9 @@ export const assertAccessibleMailbox = async (input: {
     return {
       ...ownedGmailMailbox,
       capabilities: getMailboxCapabilities({
-        provider: ownedGmailMailbox.provider,
+        provider: MAILBOX_PROVIDER_GMAIL,
       }),
+      provider: MAILBOX_PROVIDER_GMAIL,
     };
   }
 
@@ -711,13 +718,13 @@ export const assertAccessibleMailbox = async (input: {
     const grantedManagedMailbox = await getAuthorizedManagedMailbox(input);
     return {
       capabilities: getMailboxCapabilities({
-        provider: grantedManagedMailbox.provider,
+        provider: MAILBOX_PROVIDER_MANAGED,
         role: grantedManagedMailbox.role,
       }),
       contentRevision: grantedManagedMailbox.contentRevision,
       id: grantedManagedMailbox.id,
       organizationId: grantedManagedMailbox.organizationId,
-      provider: grantedManagedMailbox.provider,
+      provider: MAILBOX_PROVIDER_MANAGED,
     };
   } catch (error) {
     if (!(error instanceof ORPCError)) {

@@ -12,6 +12,7 @@ import type {
   MailboxCategory,
   MessageListItem,
 } from "@quieter/app/lib/mail";
+import type { MailboxProvider } from "@quieter/mail/search";
 import type { ReactNode } from "react";
 
 export type ThreadPressGesture = {
@@ -25,7 +26,7 @@ export type MessageListMailboxContext = {
   displayName?: string | null;
   mailboxActions: MailboxActions;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   originalMessageIds: ReadonlyMap<string, string>;
   originalThreadId: string;
   pendingActions: MailboxPendingActions;
@@ -36,7 +37,7 @@ export type MessageListProps = {
   activeMailbox: MailboxCategory;
   activeMessageId?: string | null;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   error: unknown;
   hasNextPage: boolean;
   headerAddon?: ReactNode;
@@ -61,7 +62,7 @@ export type MessageListProps = {
   searchQuery: string;
   searchMailboxes?: readonly {
     mailboxId: string;
-    mailboxProvider: "gmail" | "managed";
+    mailboxProvider: Exclude<MailboxProvider, "api">;
   }[];
   selectionScopeKey?: string;
 };

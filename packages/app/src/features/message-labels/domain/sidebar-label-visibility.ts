@@ -1,4 +1,5 @@
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { MailboxProvider } from "@quieter/mail/search";
 
 export const MAX_VISIBLE_SIDEBAR_LABELS = 10;
 
@@ -6,7 +7,7 @@ export const SIDEBAR_LABEL_VISIBILITY_EVENT =
   "quieter:sidebar-label-visibility-change";
 
 export const computeEffectiveHiddenLabelIds = (
-  mailboxProvider: "gmail" | "managed",
+  mailboxProvider: Exclude<MailboxProvider, "api">,
   userLabels: MailboxLabel[],
   hiddenLabelIds: Set<string>
 ) => {

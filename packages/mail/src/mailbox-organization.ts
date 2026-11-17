@@ -33,7 +33,7 @@ export const mailboxLabelSchema = z.object({
   inclusionCriteria: z.string().nullable(),
   name: z.string(),
   position: z.number(),
-  provider: z.enum(["gmail", "managed"]),
+  provider: z.enum(["gmail", "managed", "outlook"]),
   type: z.enum(["system", "user"]),
   visible: z.boolean(),
 });

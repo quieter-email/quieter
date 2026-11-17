@@ -35,6 +35,7 @@ import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
+import type { MailboxProvider as NeutralMailboxProvider } from "@quieter/mail/search";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Text } from "@quieter/ui/text";
@@ -53,7 +54,7 @@ type MailboxWorkspaceProps = {
 };
 
 const isMailboxSupportedByProvider = (
-  provider: "api" | "gmail" | "managed" | null,
+  provider: NeutralMailboxProvider | null,
   mailbox: MailboxCategory
 ) => {
   if (provider === "api") {
@@ -142,7 +143,7 @@ const useChatActions = ({
 type SetMailboxSearch = ReturnType<
   typeof useMailWorkspaceRouteSearch
 >["setMailboxSearch"];
-type MailboxProvider = "api" | "gmail" | "managed" | null;
+type MailboxProvider = NeutralMailboxProvider | null;
 
 const useMailboxWorkspaceCompose = ({
   canComposeNew,

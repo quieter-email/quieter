@@ -16,6 +16,9 @@ const allowed = new Set([
   "VITE_LOGO_DEV_PUBLISHABLE_KEY",
 ]);
 allowed.delete("DATABASE_MIGRATION_URL");
+allowed.delete("OUTLOOK_MAIL_CLIENT_ID");
+allowed.delete("OUTLOOK_MAIL_CLIENT_SECRET");
+allowed.delete("OUTLOOK_MAIL_TOKEN_ENCRYPTION_KEY");
 const bindings = Object.fromEntries(
   [...values].filter(([key]) => allowed.has(key))
 );

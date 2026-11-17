@@ -67,6 +67,7 @@
     "@quieter/gmail": "workspace:*",
     "@quieter/mail": "workspace:*",
     "@quieter/observability": "workspace:*",
+    "@quieter/outlook": "workspace:*",
     "ai": "catalog:",
     "html-to-text": "10.0.1",
     "ical.js": "^2.2.1"

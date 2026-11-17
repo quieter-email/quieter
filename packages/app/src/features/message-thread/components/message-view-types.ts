@@ -7,6 +7,7 @@ import type {
   MailboxPendingActions,
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type { MailboxProvider } from "@quieter/mail/search";
 
 export type MessageViewProps = {
   activeMailbox: MailboxCategory;
@@ -21,7 +22,7 @@ export type MessageViewProps = {
   currentUserEmail?: string | null;
   navigationScope?: ConversationNavigationScope;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   mailboxActions: MailboxActions;
   message: MessageListItem;
   onConversationOpened?: (visit: {
