@@ -18,7 +18,8 @@ export type DemoMessageStore = {
 
 export const createDemoActions = (
   store: DemoMessageStore,
-  invalidate: () => Promise<void>
+  invalidate: () => Promise<void>,
+  placementScope: MailboxActions["placementScope"] = "personal"
 ): MailboxActions => {
   const apply = async (
     ids: string[],
@@ -57,6 +58,7 @@ export const createDemoActions = (
   return {
     canMarkRead: true,
     canSetImportance: true,
+    canSetPlacement: true,
     deleteDraft: async (message) => {
       await apply([message.id], "message", { kind: "delete-permanently" });
     },
@@ -85,6 +87,9 @@ export const createDemoActions = (
     markThreadAsUnread: async (id) => {
       await apply([id], "thread", { kind: "set-read", read: false });
     },
+    markThreadDone: async (id) => {
+      await apply([id], "thread", { kind: "set-placement", placement: "done" });
+    },
     markThreadsAsRead: async (threads) => {
       await apply(
         threads.map((thread) => thread.threadId),
@@ -106,6 +111,13 @@ export const createDemoActions = (
         { kind: "set-read", read: false }
       );
     },
+    markThreadsDone: async (threads) => {
+      await apply(
+        threads.map((thread) => thread.threadId),
+        "thread",
+        { kind: "set-placement", placement: "done" }
+      );
+    },
     moveMessageToTrash: async (id) => {
       await apply([id], "message", { destination: "trash", kind: "move" });
     },
@@ -117,6 +129,20 @@ export const createDemoActions = (
         threads.map((thread) => thread.threadId),
         "thread",
         { destination: "trash", kind: "move" }
+      );
+    },
+    placementScope,
+    returnThreadToInbox: async (id) => {
+      await apply([id], "thread", {
+        kind: "set-placement",
+        placement: "inbox",
+      });
+    },
+    returnThreadsToInbox: async (threads) => {
+      await apply(
+        threads.map((thread) => thread.threadId),
+        "thread",
+        { kind: "set-placement", placement: "inbox" }
       );
     },
     setThreadImportance: async (id, important) => {

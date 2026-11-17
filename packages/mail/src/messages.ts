@@ -5,6 +5,7 @@ import type { OtpToken } from "./otp-token";
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
 export const MAILBOX_LABELS = {
+  done: "DONE",
   drafts: "DRAFT",
   inbox: "INBOX",
   sent: "SENT",
@@ -128,7 +129,7 @@ export type MailboxSyncDelta = {
 const normalizeLabelIds = (
   labelIds: readonly string[] | undefined
 ): string[] | undefined => {
-  if (labelIds === undefined || labelIds.length === 0) {
+  if (labelIds === undefined) {
     return undefined;
   }
 
@@ -140,7 +141,7 @@ const normalizeLabelIds = (
       })
     ),
   ];
-  return normalized.length > 0 ? normalized : undefined;
+  return normalized;
 };
 
 export const removeUnreadLabel = (
@@ -201,6 +202,14 @@ export const isMessageInMailbox = (
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "done") {
+    return (
+      labelIds !== undefined &&
+      !labelIds.some((label) =>
+        ["INBOX", "SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      )
+    );
+  }
   if (mailbox === "important") {
     return (
       (message.threadIsImportant ?? message.isImportant ?? false) &&

@@ -95,6 +95,9 @@ const getManagedPrimarySystemLabelId = (message: {
   if (message.mailboxState === "spam") {
     return MAILBOX_LABELS.spam;
   }
+  if (message.direction === "inbound" && message.mailboxState === "done") {
+    return MAILBOX_LABELS.done;
+  }
   return message.direction === "inbound"
     ? MAILBOX_LABELS.inbox
     : MAILBOX_LABELS.sent;
@@ -177,8 +180,15 @@ const getCategoryCondition = (category: MailboxCategory) => {
   if (category === "important") {
     return and(
       eq(managedMailMessage.direction, "inbound"),
-      eq(managedMailMessage.mailboxState, "active"),
-      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" = 'active')`
+      inArray(managedMailMessage.mailboxState, ["active", "done"]),
+      sql`exists (select 1 from ${mailMessageImportance} i inner join ${managedMailMessage} m on m."mailboxId" = i."mailboxId" and m.id = i."messageId" where i."mailboxId" = ${managedMailMessage.mailboxId} and i."threadId" = ${managedMailMessage.threadId} and coalesce(i."manualImportant", i."aiImportant", false) and m.direction = 'inbound' and m."mailboxState" in ('active', 'done'))`
+    );
+  }
+  if (category === "done") {
+    return and(
+      eq(managedMailMessage.direction, "inbound"),
+      eq(managedMailMessage.mailboxState, "done"),
+      sql`not exists (select 1 from ${managedMailMessage} incoming where incoming."mailboxId" = ${managedMailMessage.mailboxId} and incoming."threadId" = ${managedMailMessage.threadId} and incoming.direction = 'inbound' and incoming."mailboxState" = 'active')`
     );
   }
   if (category === "inbox") {
@@ -191,7 +201,7 @@ const getCategoryCondition = (category: MailboxCategory) => {
     return and(
       eq(managedMailMessage.direction, "inbound"),
       eq(managedMailMessage.isRead, false),
-      eq(managedMailMessage.mailboxState, "active")
+      inArray(managedMailMessage.mailboxState, ["active", "done"])
     );
   }
   if (category === "sent") {
@@ -671,7 +681,7 @@ const updateManagedMessageState = async (input: {
 };
 
 export const applyManagedMessageChanges = async (input: {
-  command: Exclude<MailCommand, { kind: "set-importance" }>;
+  command: Exclude<MailCommand, { kind: "set-importance" | "set-placement" }>;
   mailboxId: string;
   targets: MailMutationTarget[];
   userId: string;

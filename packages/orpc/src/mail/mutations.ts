@@ -36,6 +36,7 @@ import {
   recordLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
+import { applyMailPlacement, supersedePendingMailPlacement } from "./placement";
 
 type MetadataOperation =
   | "read"
@@ -120,6 +121,21 @@ const mutateMessage = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
+  if (
+    operation === "trash" ||
+    operation === "untrash" ||
+    (typeof operation === "object" &&
+      [
+        ...(operation.addLabelIds ?? []),
+        ...(operation.removeLabelIds ?? []),
+      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)))
+  ) {
+    await supersedePendingMailPlacement({
+      context,
+      mailboxId: input.mailboxId,
+      messageId: input.messageId,
+    });
+  }
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -203,6 +219,21 @@ const mutateThread = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
+  if (
+    operation === "trash" ||
+    operation === "untrash" ||
+    (typeof operation === "object" &&
+      [
+        ...(operation.addLabelIds ?? []),
+        ...(operation.removeLabelIds ?? []),
+      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)))
+  ) {
+    await supersedePendingMailPlacement({
+      context,
+      mailboxId: input.mailboxId,
+      threadIds: [input.threadId],
+    });
+  }
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -291,6 +322,25 @@ export const mutationsMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
+    if (input.command.kind === "set-placement") {
+      return await applyMailPlacement({
+        context,
+        input: { ...input, command: input.command },
+      });
+    }
+    if (
+      input.command.kind === "move" ||
+      (input.command.kind === "set-labels" &&
+        [...input.command.addIds, ...input.command.removeIds].some((label) =>
+          ["INBOX", "SPAM", "TRASH"].includes(label)
+        ))
+    ) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        threadIds: input.targets.map((target) => target.threadId),
+      });
+    }
     if (input.command.kind === "set-importance") {
       let { targets } = input;
       if (selectedMailbox.provider === "gmail") {
