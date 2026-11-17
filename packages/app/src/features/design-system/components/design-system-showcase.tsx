@@ -1008,29 +1008,25 @@ export const DesignSystemShowcase = () => {
               })}
             >
               <MailListRowDetails
-                actions={
-                  <IconButtonTooltip
-                    label="Mark conversation Done"
-                    triggerClassName="w-full"
-                  >
-                    <Button
-                      aria-label="Mark conversation Done"
-                      className="grow"
-                      type="button"
-                      variant="pill"
-                    >
-                      <Icon aria-hidden icon={CheckmarkCircle02Icon} />
-                    </Button>
-                  </IconButtonTooltip>
-                }
                 active
                 metadata={
-                  <MailListRowMetadata
-                    attachmentCount={2}
-                    attachmentNames={["Project brief.pdf", "Budget.xlsx"]}
-                    layout="adaptive"
-                    messageCount={4}
-                  />
+                  <>
+                    <MailListRowMetadata
+                      attachmentCount={2}
+                      attachmentNames={["Project brief.pdf", "Budget.xlsx"]}
+                      layout="adaptive"
+                      messageCount={4}
+                    />
+                    <IconButtonTooltip label="Mark conversation Done">
+                      <Button
+                        aria-label="Mark conversation Done"
+                        type="button"
+                        variant="pill"
+                      >
+                        <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+                      </Button>
+                    </IconButtonTooltip>
+                  </>
                 }
                 badge={
                   <Pill size="xs" tone="purple">

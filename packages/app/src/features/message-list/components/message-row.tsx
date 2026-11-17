@@ -277,7 +277,7 @@ const MessageRowSelectionButton = ({
 
 const MessageRowDetails = ({
   wideCompactRows,
-  actions,
+  action,
   badge,
   date,
   deliveryStatus,
@@ -291,7 +291,7 @@ const MessageRowDetails = ({
   unread,
   verificationCode,
 }: {
-  actions?: ReactNode;
+  action?: ReactNode;
   badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -307,7 +307,6 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
-    actions={actions}
     active={isActive}
     badge={badge}
     layout={wideCompactRows === true ? "adaptive" : "stacked"}
@@ -327,6 +326,7 @@ const MessageRowDetails = ({
           messageCount={thread.messageCount}
           title={getMessageRowCountsTitle(thread)}
         />
+        {action}
       </>
     }
     sender={senderLabel}
@@ -478,19 +478,18 @@ const MessageRowSurface = ({
     supportsUnsubscribe: mailboxProvider === "gmail",
   });
   const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
-  const canChangePlacement =
-    !["drafts", "spam", "trash", "sent"].includes(activeMailbox) &&
-    !showSelectionControl;
+  const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
+    activeMailbox
+  );
   const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${mailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
   const placementAction =
     canChangePlacement &&
     (returnsToInbox
       ? threadActions.onReturnToInbox !== undefined
       : threadActions.onMarkDone !== undefined) ? (
-      <IconButtonTooltip label={placementLabel} triggerClassName="w-full">
+      <IconButtonTooltip label={placementLabel}>
         <Button
           aria-label={placementLabel}
-          className="grow"
           onClick={() => {
             void (
               returnsToInbox
@@ -605,7 +604,7 @@ const MessageRowSurface = ({
           />
           <MessageRowDetails
             wideCompactRows={wideCompactRows}
-            actions={placementAction}
+            action={placementAction}
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}
