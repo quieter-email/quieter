@@ -490,6 +490,7 @@ const MessageRowSurface = ({
       <IconButtonTooltip label={placementLabel}>
         <Button
           aria-label={placementLabel}
+          className="pointer-events-auto"
           onClick={() => {
             void (
               returnsToInbox
