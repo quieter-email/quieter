@@ -36,6 +36,7 @@ import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as AppDesktopAuthRouteImport } from './routes/_app/desktop.auth'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
+import { Route as ApiControlSplatRouteImport } from './routes/api/control.$'
 import { Route as ApiDesktopSessionRouteImport } from './routes/api/desktop.session'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
@@ -183,6 +184,11 @@ const ApiConnectorsCallbackRoute = ApiConnectorsCallbackRouteImport.update({
   path: '/api/connectors/callback',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiControlSplatRoute = ApiControlSplatRouteImport.update({
+  id: '/api/control/$',
+  path: '/api/control/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiDesktopSessionRoute = ApiDesktopSessionRouteImport.update({
   id: '/api/desktop/session',
   path: '/api/desktop/session',
@@ -259,6 +265,7 @@ export interface FileRoutesByFullPath {
   '/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/$': typeof ApiControlSplatRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
@@ -295,6 +302,7 @@ export interface FileRoutesByTo {
   '/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/$': typeof ApiControlSplatRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
@@ -334,6 +342,7 @@ export interface FileRoutesById {
   '/_app/desktop/auth': typeof AppDesktopAuthRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
+  '/api/control/$': typeof ApiControlSplatRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
@@ -372,6 +381,7 @@ export interface FileRouteTypes {
     | '/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/$'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
@@ -408,6 +418,7 @@ export interface FileRouteTypes {
     | '/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/$'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
@@ -446,6 +457,7 @@ export interface FileRouteTypes {
     | '/_app/desktop/auth'
     | '/api/auth/$'
     | '/api/connectors/callback'
+    | '/api/control/$'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
@@ -470,6 +482,7 @@ export interface RootRouteChildren {
   ApiWaitlistRoute: typeof ApiWaitlistRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiConnectorsCallbackRoute: typeof ApiConnectorsCallbackRoute
+  ApiControlSplatRoute: typeof ApiControlSplatRoute
   ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
@@ -672,6 +685,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiConnectorsCallbackRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/control/$': {
+      id: '/api/control/$'
+      path: '/api/control/$'
+      fullPath: '/api/control/$'
+      preLoaderRoute: typeof ApiControlSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/desktop/session': {
       id: '/api/desktop/session'
       path: '/api/desktop/session'
@@ -798,6 +818,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiWaitlistRoute: ApiWaitlistRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiConnectorsCallbackRoute: ApiConnectorsCallbackRoute,
+  ApiControlSplatRoute: ApiControlSplatRoute,
   ApiDesktopSessionRoute: ApiDesktopSessionRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
