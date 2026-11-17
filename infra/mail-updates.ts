@@ -23,6 +23,9 @@ export const createMailUpdateResources = (
   const scheduledSends = new sst.cloudflare.DurableObject("ScheduledSend", {
     className: "ScheduledSend",
   });
+  const snoozes = new sst.cloudflare.DurableObject("MailSnooze", {
+    className: "MailSnooze",
+  });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
@@ -37,6 +40,7 @@ export const createMailUpdateResources = (
       user,
       reminders,
       scheduledSends,
+      snoozes,
       appDatabase,
       requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
       requireSecretBinding(secretBindings, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
@@ -49,6 +53,7 @@ export const createMailUpdateResources = (
         newSqliteClasses: [scheduledSends.className],
         tag: "scheduled-send-v1",
       },
+      { newSqliteClasses: [snoozes.className], tag: "mail-snooze-v1" },
     ],
     transform: {
       worker(args) {
@@ -66,6 +71,7 @@ export const createMailUpdateResources = (
   return {
     reminders,
     scheduledSends,
+    snoozes,
     url: worker.url.apply(() => `wss://${domain}/mail/live`),
     user,
     worker,

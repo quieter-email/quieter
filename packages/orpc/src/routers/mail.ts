@@ -1,3 +1,5 @@
+import { mailSnoozeApplySchema } from "@quieter/mail/snooze";
+
 import { getMailCaptureStatus } from "../mail-capture";
 import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
@@ -5,6 +7,7 @@ import { mailInputSchemas } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
+import { applyMailSnooze } from "../snooze/service";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
@@ -15,6 +18,9 @@ export const mailRouter = {
   applyChanges: protectedProcedure
     .input(mailInputSchemas.applyChanges)
     .handler(withMailUpdate(mutationsMailOperations.applyChanges)),
+  applySnooze: protectedProcedure
+    .input(mailSnoozeApplySchema)
+    .handler(withMailUpdate(applyMailSnooze)),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
     .handler(

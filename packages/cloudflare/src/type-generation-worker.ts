@@ -2,6 +2,7 @@ export {
   default,
   GmailLiveSyncMailboxV2,
   MailLiveUser,
+  MailSnooze,
   ReminderMailbox,
   ScheduledSend,
   signaturesMatch,

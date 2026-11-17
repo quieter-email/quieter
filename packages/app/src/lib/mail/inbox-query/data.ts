@@ -79,10 +79,14 @@ export const mergeMessagePreservingLoadedDetails = (
   isImportant: syncedMessage.isImportant ?? currentMessage.isImportant,
   senderAvatarUrls:
     syncedMessage.senderAvatarUrls ?? currentMessage.senderAvatarUrls,
+  snooze: syncedMessage.snooze ?? currentMessage.snooze,
   threadAttachmentCount:
     syncedMessage.threadAttachmentCount ?? currentMessage.threadAttachmentCount,
   threadAttachmentNames:
     syncedMessage.threadAttachmentNames ?? currentMessage.threadAttachmentNames,
+  threadInboxIncomingMessageIds:
+    syncedMessage.threadInboxIncomingMessageIds ??
+    currentMessage.threadInboxIncomingMessageIds,
   threadIsImportant:
     syncedMessage.threadIsImportant ?? currentMessage.threadIsImportant,
   threadMessageCount:

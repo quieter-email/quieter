@@ -122,6 +122,80 @@ export const createUnifiedInboxActions = ({
     }
   };
   const mailboxActions: MailboxActions = {
+    applyThreadSnooze: async (id, command, expectedVersion) => {
+      const context = contextsByThreadId.get(id);
+      const thread = originalThreadById.get(id);
+      if (!context || !thread) {
+        throw new Error(
+          "This conversation is no longer available. Refresh your inboxes."
+        );
+      }
+      await context.mailboxActions.applyThreadSnooze(
+        thread.threadId,
+        command,
+        expectedVersion
+      );
+    },
+    applyThreadsSnooze: async (threads, command) => {
+      const groups = new Map<
+        string,
+        { context: MessageListMailboxContext; threads: ThreadListEntry[] }
+      >();
+      for (const selected of threads) {
+        const context = contextsByThreadId.get(selected.threadId);
+        if (
+          !context ||
+          !originalThreadById.has(selected.threadId) ||
+          !context.mailboxActions.canSetPlacement
+        ) {
+          throw new Error(
+            "A selected conversation cannot be updated. Refresh your inboxes."
+          );
+        }
+        const messages = new Map<string, MessageListItem>();
+        for (const message of selected.messages) {
+          const id = context.originalMessageIds.get(message.id);
+          if (id === undefined) {
+            throw new Error(
+              "A selected message is no longer available. Refresh your inboxes."
+            );
+          }
+          messages.set(message.id, {
+            ...message,
+            id,
+            threadId: context.originalThreadId,
+          });
+        }
+        const anchorMessage = messages.get(selected.anchorMessage.id);
+        if (anchorMessage === undefined) {
+          throw new Error(
+            "A selected conversation is no longer available. Refresh your inboxes."
+          );
+        }
+        const group = groups.get(context.mailboxId) ?? { context, threads: [] };
+        group.threads.push({
+          ...selected,
+          anchorMessage,
+          messages: [...messages.values()],
+          threadId: context.originalThreadId,
+        });
+        groups.set(context.mailboxId, group);
+      }
+      const results = await Promise.allSettled(
+        [...groups.values()].map(
+          async ({ context, threads: sourceThreads }) => {
+            await context.mailboxActions.applyThreadsSnooze(
+              sourceThreads,
+              command
+            );
+          }
+        )
+      );
+      const failure = results.find((result) => result.status === "rejected");
+      if (failure?.status === "rejected") {
+        throw failure.reason;
+      }
+    },
     get canMarkRead() {
       return [...contextsByThreadId.values()].some(
         (context) => context.mailboxActions.canMarkRead
