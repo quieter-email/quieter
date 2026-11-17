@@ -21,6 +21,7 @@ import {
   ipcMain,
   Menu,
   net,
+  Notification,
   protocol,
   session,
   shell,
@@ -30,6 +31,7 @@ import type { IpcMainInvokeEvent, MenuItemConstructorOptions } from "electron";
 import {
   DESKTOP_APP_ORIGIN,
   DESKTOP_TITLE_BAR_HEIGHT,
+  newMailNotificationPreferenceRequest,
   reminderNotificationEvent,
   reminderNotificationsEnabled,
   reminderNotificationUser,
@@ -40,6 +42,7 @@ import {
 } from "../shared/native-links";
 import { createAuthStorage } from "./auth-storage";
 import { NativeLinkInbox } from "./native-links";
+import { NewMailNotificationPreferenceService } from "./new-mail-notification-preferences";
 import { ReminderNotificationService } from "./reminder-notifications";
 import {
   getAuthCallbackToken,
@@ -188,6 +191,28 @@ const nativeLinks = new NativeLinkInbox({
   },
 });
 
+const newMailNotificationPreferences = new NewMailNotificationPreferenceService(
+  {
+    filename: () =>
+      path.join(app.getPath("userData"), "new-mail-notifications.json"),
+    getSession: async (signal) => {
+      const result = await authClient.getSession({ fetchOptions: { signal } });
+      signal.throwIfAborted();
+      if (result.error) {
+        if (result.error.status === 401 || result.error.status === 403) {
+          return null;
+        }
+        throw new Error("Your account could not be verified.");
+      }
+      return result.data
+        ? { sessionId: result.data.session.id, userId: result.data.user.id }
+        : null;
+    },
+    isSupported: () => Notification.isSupported(),
+    origin: new URL(env.DESKTOP_SERVER_URL).origin,
+  }
+);
+
 const assertTrustedSender = (event: IpcMainInvokeEvent): void => {
   if (
     !mainWindow ||
@@ -220,6 +245,37 @@ ipcMain.handle("quieter:native-link-read", async (event, rawInput: unknown) => {
     input,
   });
 });
+
+ipcMain.handle(
+  "quieter:new-mail-notification-preferences",
+  async (event, rawInput: unknown) => {
+    assertTrustedSender(event);
+    const input = newMailNotificationPreferenceRequest.parse(rawInput);
+    const frame = event.senderFrame;
+    try {
+      return await newMailNotificationPreferences.execute(
+        input,
+        () =>
+          !quitting &&
+          !reminderSignOut &&
+          !event.sender.isDestroyed() &&
+          mainWindow !== null &&
+          event.sender === mainWindow.webContents &&
+          event.senderFrame === frame &&
+          frame === mainWindow.webContents.mainFrame &&
+          isTrustedRendererURL(frame.url, developmentURL)
+      );
+    } catch (error) {
+      Sentry.captureException(error, {
+        tags: { boundary: "desktop-new-mail-preferences" },
+      });
+      throw new Error(
+        "New-mail preferences could not be saved. Please try again.",
+        { cause: error }
+      );
+    }
+  }
+);
 
 ipcMain.handle(
   "quieter:reminder-notification-user",
@@ -284,6 +340,7 @@ ipcMain.handle("better-auth:authenticate", async (event, data: unknown) => {
   }
   nativeLinks.beginAuthentication();
   reminderNotifications.clearSession();
+  newMailNotificationPreferences.invalidate();
   const result = await authClient.authenticate({ token: data.token });
   if (result.error) {
     throw new Error(
@@ -305,6 +362,7 @@ ipcMain.handle("better-auth:signOut", async (event) => {
   reminderSignOut = true;
   nativeLinks.clear();
   reminderNotifications.clearSession();
+  newMailNotificationPreferences.invalidate();
   const frame = event.senderFrame;
   let signedOut = false;
   try {
@@ -320,6 +378,7 @@ ipcMain.handle("better-auth:signOut", async (event) => {
       onSignedOut: () => {
         nativeLinks.clear();
         reminderNotifications.clearSession();
+        newMailNotificationPreferences.invalidate();
         if (!event.sender.isDestroyed() && event.sender.mainFrame === frame) {
           event.sender.send("better-auth:user-updated", null);
         }
@@ -396,6 +455,7 @@ const completeAuthentication = async (token: string): Promise<void> => {
   }
   nativeLinks.beginAuthentication();
   reminderNotifications.clearSession();
+  newMailNotificationPreferences.invalidate();
   try {
     const result = await authClient.authenticate({ token });
     if (result.error) {
@@ -598,6 +658,7 @@ const createWindow = async (): Promise<void> => {
         }
         signOutCleanup.cancel();
         reminderNotifications.clearSession();
+        newMailNotificationPreferences.invalidate();
       }
     }
   );
@@ -605,11 +666,13 @@ const createWindow = async (): Promise<void> => {
     nativeLinks.clear();
     signOutCleanup.cancel();
     reminderNotifications.clearSession();
+    newMailNotificationPreferences.invalidate();
   });
   window.on("closed", () => {
     nativeLinks.clear();
     signOutCleanup.cancel();
     reminderNotifications.clearSession();
+    newMailNotificationPreferences.invalidate();
     if (mainWindow === window) {
       mainWindow = null;
     }
@@ -916,8 +979,10 @@ const flushCredentialsAndQuit = async (): Promise<void> => {
   try {
     nativeLinks.clear();
     reminderNotifications.clearSession();
+    newMailNotificationPreferences.invalidate();
     await credentials.flush();
     await reminderNotifications.flush();
+    await newMailNotificationPreferences.stop();
   } catch {
     dialog.showErrorBox(
       "Sign-in could not be saved",

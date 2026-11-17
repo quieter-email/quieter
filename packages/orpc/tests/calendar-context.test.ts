@@ -75,10 +75,13 @@ describe("live calendar context", () => {
           rows: [
             [
               new Date("2099-01-01T00:00:00Z"),
+              new Date("2026-01-02T00:00:00Z"),
               "owner@example.test",
               "owner-credential",
               null,
+              "owned-subject",
               range.connectionId,
+              new Date("2026-01-01T00:00:00Z"),
               CALENDAR_SCOPES.join(" "),
               "connected",
             ],

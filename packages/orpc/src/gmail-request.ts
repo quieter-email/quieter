@@ -15,7 +15,13 @@ export type MailRequestContext = Pick<
 export const callGmail = async <T>(
   context: MailRequestContext,
   mailboxId: string,
-  operation: (accessToken: string, signal?: AbortSignal) => Promise<T>,
+  operation: (
+    accessToken: string,
+    signal?: AbortSignal,
+    authorizedMailbox?: Parameters<
+      Parameters<typeof runAuthorizedGmailMailbox>[1]
+    >[1]
+  ) => Promise<T>,
   options?: { kind: "send" }
 ): Promise<T> => {
   let operationStarted = false;
@@ -27,7 +33,7 @@ export const callGmail = async <T>(
         retryUnauthorized: context.retryUnauthorized,
         userId: context.userId,
       },
-      async (token) => {
+      async (token, authorizedMailbox) => {
         if (!operationStarted) {
           context.resHeaders?.append(
             "Server-Timing",
@@ -37,7 +43,7 @@ export const callGmail = async <T>(
         operationStarted = true;
         const providerStartedAt = performance.now();
         try {
-          return await operation(token, context.signal);
+          return await operation(token, context.signal, authorizedMailbox);
         } finally {
           context.resHeaders?.append(
             "Server-Timing",
