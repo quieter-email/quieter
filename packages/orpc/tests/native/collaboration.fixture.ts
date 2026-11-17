@@ -3,6 +3,8 @@ import { randomUUID } from "node:crypto";
 import { setTimeout as pause } from "node:timers/promises";
 
 import { createRouterClient } from "@orpc/server";
+import type { CollaborationState } from "@quieter/mail/collaboration";
+import type { CollaborationNoteCommand } from "@quieter/mail/collaboration-notes";
 import { sql } from "drizzle-orm";
 import type postgres from "postgres";
 import {
@@ -1290,5 +1292,1110 @@ describe("controlled PostgreSQL interleavings", () => {
       ]);
       await cleanupClient.end({ timeout: 3 });
     }
+  });
+});
+
+const noteCursor = (snapshot: CollaborationState) => {
+  if (snapshot.state.kind !== "prepared") {
+    throw new Error("The note operation needs a prepared generation.");
+  }
+  return snapshot.state.cursor;
+};
+
+const createCurrentNote = async (mentionMemberIds: string[] = []) => {
+  const client = rpcFor(current.actorId);
+  const prepared = await client.prepare(current.scope);
+  const noteId = randomUUID();
+  const body = `synthetic-team-note-${randomUUID()}\nsecond line`;
+  const result = await client.notes.mutate({
+    ...current.scope,
+    body,
+    expected: noteCursor(prepared),
+    kind: "create",
+    mentionMemberIds,
+    noteId,
+  });
+  if (result.note === null) {
+    throw new Error("Creation must return the stored note.");
+  }
+  return { body, note: result.note, snapshot: result.snapshot };
+};
+
+describe("actual internal notes and current grants", () => {
+  test("an unprepared reader view creates nothing and cannot write", async () => {
+    const client = rpcFor(current.readerId);
+    const page = await client.notes.list(current.scope);
+    expect(page.notes).toHaveLength(0);
+    expect(page.snapshot.state.kind).toBe("unprepared");
+    expect(await contextCounts()).toMatchObject({ contexts: 0, events: 0 });
+    const prepared = await rpcFor(current.actorId).prepare(current.scope);
+    await expect(
+      client.notes.mutate({
+        ...current.scope,
+        body: "reader cannot post",
+        expected: noteCursor(prepared),
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: randomUUID(),
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    expect(await contextCounts()).toMatchObject({ contexts: 1, events: 1 });
+    const notes =
+      await fixture.client`select id from "managedThreadNote" where "contextId" = ${noteCursor(prepared).contextId}`;
+    expect(notes).toHaveLength(0);
+  });
+
+  test("team text stays separate from email, personal context and audit metadata", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const responder = await rpcFor(current.actorId).notes.list(current.scope);
+    const reader = await rpcFor(current.readerId).notes.list(current.scope);
+    const manager = await rpcFor(current.ownerId).notes.list(current.scope);
+    expect(responder.notes).toHaveLength(1);
+    expect(responder.notes[0]).toMatchObject({
+      actions: { edit: true, remove: true },
+      author: { kind: "member", memberId: current.actorMemberId },
+      body: created.body,
+      id: created.note.id,
+    });
+    expect(reader.notes[0]).toMatchObject({
+      actions: { edit: false, remove: false },
+    });
+    expect(manager.notes[0]).toMatchObject({
+      actions: { edit: false, remove: true },
+    });
+    expect(JSON.stringify(responder)).not.toContain(current.privateBody);
+    expect(JSON.stringify(responder)).not.toContain(current.privateMemory);
+    const mail = await fixture.client<{ bodyText: string }[]>`
+      select "bodyText" from "managedMailMessage" where "mailboxId" = ${current.mailboxId}
+    `;
+    expect(mail).toHaveLength(1);
+    expect(mail[0]?.bodyText).toBe(current.privateBody);
+    const memory = await fixture.client<{ markdown: string }[]>`
+      select markdown from "userAiContext" where "userId" = ${current.actorId}
+    `;
+    expect(memory[0]?.markdown).toBe(current.privateMemory);
+    const events = await fixture.client`
+      select * from "managedThreadCollaborationEvent" where "contextId" = ${noteCursor(created.snapshot).contextId}
+    `;
+    expect(JSON.stringify(events)).not.toContain(created.body);
+    expect(events).toHaveLength(2);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  test("competing writes, stale edits and repeated attempts do not overwrite or duplicate", async () => {
+    const client = rpcFor(current.actorId);
+    const prepared = await client.prepare(current.scope);
+    const expected = noteCursor(prepared);
+    const firstId = randomUUID();
+    const secondId = randomUUID();
+    const attempts = await Promise.allSettled([
+      client.notes.mutate({
+        ...current.scope,
+        body: "first competing note",
+        expected,
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: firstId,
+      }),
+      rpcFor(current.ownerId).notes.mutate({
+        ...current.scope,
+        body: "second competing note",
+        expected,
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: secondId,
+      }),
+    ]);
+    expect(
+      attempts.filter((result) => result.status === "fulfilled")
+    ).toHaveLength(1);
+    expect(
+      attempts.filter((result) => result.status === "rejected")
+    ).toHaveLength(1);
+    const page = await client.notes.list(current.scope);
+    expect(page.notes).toHaveLength(1);
+    expect(await contextCounts()).toMatchObject({ contexts: 1, events: 2 });
+    await expect(
+      client.notes.mutate({
+        ...current.scope,
+        body: "first competing note",
+        expected,
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: firstId,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const [stored] = page.notes;
+    if (stored === undefined) {
+      throw new Error("One competing write must leave its note.");
+    }
+    await expect(
+      client.notes.mutate({
+        ...current.scope,
+        body: "stale replacement",
+        expected,
+        kind: "edit",
+        mentionMemberIds: [],
+        noteId: stored.id,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const again = await client.notes.list(current.scope);
+    expect(again.notes).toHaveLength(1);
+    expect(again.notes[0]?.body).toBe(page.notes[0]?.body);
+    expect(await contextCounts()).toMatchObject({ contexts: 1, events: 2 });
+  });
+
+  test("a stable create identity reconciles a surviving result without a second write", async () => {
+    const client = rpcFor(current.actorId);
+    const prepared = await client.prepare(current.scope);
+    const expected = noteCursor(prepared);
+    const noteId = randomUUID();
+    const command = {
+      ...current.scope,
+      body: "synthetic uncertain attempt",
+      expected,
+      kind: "create",
+      mentionMemberIds: [],
+      noteId,
+    } satisfies CollaborationNoteCommand;
+    await client.notes.mutate(command);
+    await expect(client.notes.mutate(command)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    const recovered = await client.notes.get({
+      ...current.scope,
+      contextId: expected.contextId,
+      noteId,
+    });
+    expect(recovered.note).toMatchObject({ body: command.body, id: noteId });
+    const removed = await client.notes.mutate({
+      ...current.scope,
+      expected: noteCursor(recovered.snapshot),
+      kind: "remove",
+      noteId,
+    });
+    expect(removed.note).toBeNull();
+    await expect(client.notes.mutate(command)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    const absent = await client.notes.get({
+      ...current.scope,
+      contextId: expected.contextId,
+      noteId,
+    });
+    expect(absent.note).toBeNull();
+  });
+
+  test("a foreign-organization membership cannot substitute for this user's current member", async () => {
+    const otherTeam = randomUUID();
+    const otherMember = randomUUID();
+    ownedOrganizations.add(otherTeam);
+    await fixture.client`
+      insert into organization (id, name, slug, "createdAt", "updatedAt")
+      values (${otherTeam}, 'Other synthetic organization', ${otherTeam}, now(), now())
+    `;
+    await fixture.client`
+      insert into member (id, "organizationId", "userId", role, "createdAt")
+      values (${otherMember}, ${otherTeam}, ${current.readerId}, 'member', now())
+    `;
+    const prepared = await rpcFor(current.actorId).prepare(current.scope);
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "must not bind another member epoch",
+        expected: noteCursor(prepared),
+        kind: "create",
+        mentionMemberIds: [otherMember],
+        noteId: randomUUID(),
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    expect(await contextCounts()).toMatchObject({ contexts: 1, events: 1 });
+    const page = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(page.notes).toHaveLength(0);
+  });
+
+  test("organization configurator status cannot read an empty mailbox feed without a grant", async () => {
+    await fixture.client`delete from "mailboxGrant" where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.ownerMemberId}`;
+    await expect(
+      rpcFor(current.ownerId).notes.list(current.scope)
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.ownerId).notes.participants(current.scope)
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.ownerId).mentions.list({ mailboxId: current.mailboxId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    expect(await contextCounts()).toMatchObject({ contexts: 0, events: 0 });
+  });
+
+  test("retained mentions preserve read state, removal deletes facts and re-add may notify", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const client = rpcFor(current.actorId);
+    const reader = rpcFor(current.readerId);
+    const notices = await reader.mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(notices.mentions.map((notice) => notice.noteId)).toContain(
+      created.note.id
+    );
+    expect(JSON.stringify(notices)).not.toContain(created.body);
+    expect(JSON.stringify(notices)).not.toContain(current.actorMemberId);
+    const [notification] = notices.mentions;
+    if (notification === undefined) {
+      throw new Error("The selected recipient must have a notification.");
+    }
+    const link = new URL(notification.href, "https://example.test");
+    expect(link.searchParams.get("mailboxId")).toBe(current.mailboxId);
+    expect(link.searchParams.get("threadId")).toBe(current.threadId);
+    const { contextId } = noteCursor(created.snapshot);
+    const beforeAck = await rpcFor(current.actorId).get(current.scope);
+    const acknowledgement = await reader.mentions.acknowledge({
+      ...current.scope,
+      contextId,
+      noteId: created.note.id,
+    });
+    expect(acknowledgement.acknowledged).toBe(true);
+    const firstRead = await fixture.client<
+      { createdAt: Date; readAt: Date | null }[]
+    >`
+      select "createdAt", "readAt" from "managedThreadNoteMention"
+      where "noteId" = ${created.note.id} and "recipientMemberId" = ${current.readerMemberId}
+    `;
+    await reader.mentions.acknowledge({
+      ...current.scope,
+      contextId,
+      noteId: created.note.id,
+    });
+    const retained = await client.notes.mutate({
+      ...current.scope,
+      body: "edited internal note",
+      expected: noteCursor(beforeAck),
+      kind: "edit",
+      mentionMemberIds: [current.readerMemberId],
+      noteId: created.note.id,
+    });
+    const afterEdit = await fixture.client<
+      { createdAt: Date; readAt: Date | null }[]
+    >`
+      select "createdAt", "readAt" from "managedThreadNoteMention"
+      where "noteId" = ${created.note.id} and "recipientMemberId" = ${current.readerMemberId}
+    `;
+    expect(afterEdit[0]).toMatchObject({
+      createdAt: firstRead[0]?.createdAt,
+      readAt: firstRead[0]?.readAt,
+    });
+    const readNotices = await reader.mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(readNotices.mentions).toHaveLength(0);
+    const removed = await client.notes.mutate({
+      ...current.scope,
+      body: "no longer mentions anyone",
+      expected: noteCursor(retained.snapshot),
+      kind: "edit",
+      mentionMemberIds: [],
+      noteId: created.note.id,
+    });
+    const facts =
+      await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" = ${created.note.id}`;
+    expect(facts).toHaveLength(0);
+    await client.notes.mutate({
+      ...current.scope,
+      body: "mentions the teammate again",
+      expected: noteCursor(removed.snapshot),
+      kind: "edit",
+      mentionMemberIds: [current.readerMemberId],
+      noteId: created.note.id,
+    });
+    const readded = await reader.mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(readded.mentions.map((notice) => notice.noteId)).toContain(
+      created.note.id
+    );
+  });
+
+  test("acknowledgement is recipient-private and changes no team cursor or audit", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const { contextId } = noteCursor(created.snapshot);
+    const before = await contextCounts();
+    const unrelated = await rpcFor(current.ownerId).mentions.acknowledge({
+      ...current.scope,
+      contextId,
+      noteId: created.note.id,
+    });
+    expect(unrelated.acknowledged).toBe(false);
+    const stillUnread = await rpcFor(current.readerId).mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(stillUnread.mentions).toHaveLength(1);
+    await rpcFor(current.readerId).mentions.acknowledge({
+      ...current.scope,
+      contextId,
+      noteId: created.note.id,
+    });
+    expect(await contextCounts()).toMatchObject(before);
+    const after = await rpcFor(current.actorId).get(current.scope);
+    expect(after.state).toMatchObject(created.snapshot.state);
+    const teamView = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(JSON.stringify(teamView)).not.toContain("readAt");
+  });
+});
+
+describe("note membership epochs and private mode", () => {
+  test("departure keeps team text but rejoining cannot reclaim author or recipient epoch", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const { contextId } = noteCursor(created.snapshot);
+    await fixture.client`delete from member where id = ${current.actorMemberId}`;
+    const manager = await rpcFor(current.ownerId).notes.list(current.scope);
+    expect(manager.notes[0]).toMatchObject({
+      actions: { edit: false, remove: true },
+      author: { kind: "former-member" },
+      body: created.body,
+    });
+    const newAuthorMember = randomUUID();
+    await fixture.client`
+      insert into member (id, "organizationId", "userId", role, "createdAt")
+      values (${newAuthorMember}, ${current.teamId}, ${current.actorId}, 'member', now())
+    `;
+    await fixture.client`
+      insert into "mailboxGrant" (id, "mailboxId", "memberId", "userId", role, "createdAt", "updatedAt")
+      values (${randomUUID()}, ${current.mailboxId}, ${newAuthorMember}, ${current.actorId}, 'responder', now(), now())
+    `;
+    const rejoined = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(rejoined.notes[0]).toMatchObject({
+      actions: { edit: false, remove: false },
+      author: { kind: "former-member" },
+    });
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "old author may not rewrite",
+        expected: noteCursor(rejoined.snapshot),
+        kind: "edit",
+        mentionMemberIds: [],
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await fixture.client`delete from member where id = ${current.readerMemberId}`;
+    const facts =
+      await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" = ${created.note.id}`;
+    expect(facts).toHaveLength(0);
+    const newRecipientMember = randomUUID();
+    await fixture.client`
+      insert into member (id, "organizationId", "userId", role, "createdAt")
+      values (${newRecipientMember}, ${current.teamId}, ${current.readerId}, 'member', now())
+    `;
+    await fixture.client`
+      insert into "mailboxGrant" (id, "mailboxId", "memberId", "userId", role, "createdAt", "updatedAt")
+      values (${randomUUID()}, ${current.mailboxId}, ${newRecipientMember}, ${current.readerId}, 'reader', now(), now())
+    `;
+    const notifications = await rpcFor(current.readerId).mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(notifications.mentions).toHaveLength(0);
+    const lookup = await rpcFor(current.readerId).notes.get({
+      ...current.scope,
+      contextId,
+      noteId: created.note.id,
+    });
+    expect(lookup.note?.body).toBe(created.body);
+    await expect(
+      rpcFor(current.ownerId).notes.mutate({
+        ...current.scope,
+        body: "manager must not rewrite",
+        expected: noteCursor(lookup.snapshot),
+        kind: "edit",
+        mentionMemberIds: [],
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    const removed = await rpcFor(current.ownerId).notes.mutate({
+      ...current.scope,
+      expected: noteCursor(lookup.snapshot),
+      kind: "remove",
+      noteId: created.note.id,
+    });
+    expect(removed.note).toBeNull();
+  });
+
+  test("current role and grants apply even with an unchanged team revision", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const cursor = noteCursor(created.snapshot);
+    await fixture.client`update "mailboxGrant" set role = 'reader' where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.actorMemberId}`;
+    const downgraded = await rpcFor(current.actorId).notes.list({
+      ...current.scope,
+      at: cursor,
+    });
+    expect(downgraded.snapshot).toMatchObject({
+      role: "reader",
+      state: created.snapshot.state,
+    });
+    expect(downgraded.notes[0]).toMatchObject({
+      actions: { edit: false, remove: false },
+    });
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        expected: cursor,
+        kind: "remove",
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
+    await fixture.client`delete from "mailboxGrant" where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.readerMemberId}`;
+    await expect(
+      rpcFor(current.readerId).mentions.list({ mailboxId: current.mailboxId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.readerId).notes.get({
+        ...current.scope,
+        contextId: cursor.contextId,
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await fixture.client`update "mailboxGrant" set role = 'responder' where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.actorMemberId}`;
+    const currentPage = await rpcFor(current.ownerId).notes.list(current.scope);
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "stale recipient",
+        expected: noteCursor(currentPage.snapshot),
+        kind: "edit",
+        mentionMemberIds: [current.readerMemberId],
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    await rpcFor(current.actorId).notes.mutate({
+      ...current.scope,
+      body: "removed unavailable recipient",
+      expected: noteCursor(currentPage.snapshot),
+      kind: "edit",
+      mentionMemberIds: [],
+      noteId: created.note.id,
+    });
+    const missingRecipient = await rpcFor(current.ownerId).notes.participants(
+      current.scope
+    );
+    expect(
+      missingRecipient.participants.map((participant) => participant.memberId)
+    ).not.toContain(current.readerMemberId);
+  });
+
+  test("shared-private-shared changes preserve storage while private owner and grantees are denied", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const cursor = noteCursor(created.snapshot);
+    await fixture.client`update mailbox set "managedOwnerUserId" = ${current.actorId}, "accessMode" = 'private' where id = ${current.mailboxId}`;
+    const ordinary = await getAuthorizedManagedMailbox(
+      { mailboxId: current.mailboxId, userId: current.actorId },
+      fixture.database
+    );
+    expect(ordinary.ownerUserId).toBe(current.actorId);
+    for (const userId of [current.actorId, current.readerId]) {
+      const client = rpcFor(userId);
+      await expect(client.notes.list(current.scope)).rejects.toMatchObject({
+        code: "NOT_FOUND",
+      });
+      await expect(
+        client.notes.get({
+          ...current.scope,
+          contextId: cursor.contextId,
+          noteId: created.note.id,
+        })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(
+        client.notes.participants(current.scope)
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(
+        client.mentions.list({ mailboxId: current.mailboxId })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+      await expect(
+        client.mentions.acknowledge({
+          ...current.scope,
+          contextId: cursor.contextId,
+          noteId: created.note.id,
+        })
+      ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    }
+    const retained =
+      await fixture.client`select id from "managedThreadNote" where id = ${created.note.id}`;
+    expect(retained).toHaveLength(1);
+    await fixture.client`update mailbox set "managedOwnerUserId" = null, "accessMode" = 'shared' where id = ${current.mailboxId}`;
+    const restored = await rpcFor(current.readerId).notes.list(current.scope);
+    expect(restored.notes[0]).toMatchObject({
+      body: created.body,
+      id: created.note.id,
+    });
+    expect(restored.snapshot.state).toMatchObject(created.snapshot.state);
+    const gmailId = randomUUID();
+    await fixture.client`
+      insert into mailbox (id, "organizationId", provider, "ownerUserId", "emailAddress", "createdAt", "updatedAt")
+      values (${gmailId}, ${current.teamId}, 'gmail', ${current.actorId}, ${`${gmailId}@example.test`}, now(), now())
+    `;
+    await expect(
+      rpcFor(current.actorId).notes.list({
+        mailboxId: gmailId,
+        threadId: current.threadId,
+      })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.actorId).mentions.list({ mailboxId: gmailId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+  });
+
+  test("source lifetime deletes notes and mentions, and an old generation cannot recreate them", async () => {
+    const created = await createCurrentNote([current.readerMemberId]);
+    const oldCursor = noteCursor(created.snapshot);
+    const survivor = await extraMessage();
+    await fixture.client`update "managedMailMessage" set "mailboxState" = 'trash' where id = ${current.messageId}`;
+    const inTrash = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(inTrash.notes[0]?.id).toBe(created.note.id);
+    await fixture.client`delete from "managedMailMessage" where id = ${current.messageId}`;
+    const oneRemaining = await rpcFor(current.readerId).notes.list(
+      current.scope
+    );
+    expect(oneRemaining.notes[0]?.id).toBe(created.note.id);
+    const destination = `note-move-${randomUUID()}`;
+    await fixture.client`update "managedMailMessage" set "threadId" = ${destination} where id = ${survivor}`;
+    const removedNotes =
+      await fixture.client`select id from "managedThreadNote" where "contextId" = ${oldCursor.contextId}`;
+    const removedFacts =
+      await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" = ${created.note.id}`;
+    expect(removedNotes).toHaveLength(0);
+    expect(removedFacts).toHaveLength(0);
+    await expect(
+      rpcFor(current.actorId).notes.list(current.scope)
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    const moved = await rpcFor(current.actorId).notes.list({
+      mailboxId: current.mailboxId,
+      threadId: destination,
+    });
+    expect(moved.notes).toHaveLength(0);
+    await extraMessage();
+    const prepared = await rpcFor(current.actorId).prepare(current.scope);
+    expect(noteCursor(prepared).contextId).not.toBe(oldCursor.contextId);
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: created.body,
+        expected: oldCursor,
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const replacement = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(replacement.notes).toHaveLength(0);
+  });
+});
+
+describe("note division and mailbox scope", () => {
+  test("division-only recipients disappear immediately when that current membership is removed", async () => {
+    const divisionId = randomUUID();
+    await fixture.client`delete from "mailboxGrant" where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.readerMemberId}`;
+    await fixture.client`
+      insert into "organizationDivision" (id, "organizationId", name, "normalizedName", "createdAt", "updatedAt")
+      values (${divisionId}, ${current.teamId}, 'Notes recipient division', ${divisionId}, now(), now())
+    `;
+    await fixture.client`
+      insert into "organizationDivisionMember" (id, "divisionId", "memberId", "createdAt")
+      values (${randomUUID()}, ${divisionId}, ${current.readerMemberId}, now())
+    `;
+    await fixture.client`
+      insert into "mailboxDivisionGrant" (id, "mailboxId", "divisionId", role, "createdAt", "updatedAt")
+      values (${randomUUID()}, ${current.mailboxId}, ${divisionId}, 'reader', now(), now())
+    `;
+    const created = await createCurrentNote([current.readerMemberId]);
+    const recipients = await rpcFor(current.actorId).notes.participants(
+      current.scope
+    );
+    expect(
+      recipients.participants.map((participant) => participant.memberId)
+    ).toContain(current.readerMemberId);
+    const before = await rpcFor(current.readerId).mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    expect(before.mentions.map((notice) => notice.noteId)).toContain(
+      created.note.id
+    );
+    await fixture.client`delete from "organizationDivisionMember" where "divisionId" = ${divisionId} and "memberId" = ${current.readerMemberId}`;
+    await expect(
+      rpcFor(current.readerId).notes.list(current.scope)
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.readerId).mentions.list({ mailboxId: current.mailboxId })
+    ).rejects.toMatchObject({ code: "NOT_FOUND" });
+    await expect(
+      rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "must recheck retained division recipient",
+        expected: noteCursor(created.snapshot),
+        kind: "edit",
+        mentionMemberIds: [current.readerMemberId],
+        noteId: created.note.id,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const unchanged = await rpcFor(current.actorId).notes.get({
+      ...current.scope,
+      contextId: noteCursor(created.snapshot).contextId,
+      noteId: created.note.id,
+    });
+    expect(unchanged.note?.body).toBe(created.body);
+    expect(unchanged.snapshot.state).toMatchObject(created.snapshot.state);
+  });
+
+  test("simultaneous same-thread mailboxes and cleanup keep note bodies and notices scoped", async () => {
+    const otherMailboxId = randomUUID();
+    const otherMessageId = randomUUID();
+    const otherScope = {
+      mailboxId: otherMailboxId,
+      threadId: current.threadId,
+    };
+    await fixture.client`
+      insert into mailbox (id, "organizationId", provider, "accessMode", "emailAddress", "createdAt", "updatedAt")
+      values (${otherMailboxId}, ${current.teamId}, 'managed', 'shared', ${`${otherMailboxId}@example.test`}, now(), now())
+    `;
+    for (const grant of [
+      {
+        memberId: current.actorMemberId,
+        role: "responder",
+        userId: current.actorId,
+      },
+      {
+        memberId: current.readerMemberId,
+        role: "reader",
+        userId: current.readerId,
+      },
+      {
+        memberId: current.ownerMemberId,
+        role: "manager",
+        userId: current.ownerId,
+      },
+    ]) {
+      await fixture.client`
+        insert into "mailboxGrant" (id, "mailboxId", "memberId", "userId", role, "createdAt", "updatedAt")
+        values (${randomUUID()}, ${otherMailboxId}, ${grant.memberId}, ${grant.userId}, ${grant.role}, now(), now())
+      `;
+    }
+    await fixture.client`
+      insert into "managedMailMessage" (id, "mailboxId", "providerMessageId", "threadId", direction, "from", "createdAt", "updatedAt", "sentAt")
+      values (${otherMessageId}, ${otherMailboxId}, ${otherMessageId}, ${current.threadId}, 'inbound', 'sender@example.test', now(), now(), now())
+    `;
+    const actor = rpcFor(current.actorId);
+    const [primaryPrepared, otherPrepared] = await Promise.all([
+      actor.prepare(current.scope),
+      actor.prepare(otherScope),
+    ]);
+    const primaryId = randomUUID();
+    const otherId = randomUUID();
+    const [primary, other] = await Promise.all([
+      actor.notes.mutate({
+        ...current.scope,
+        body: "first mailbox internal body",
+        expected: noteCursor(primaryPrepared),
+        kind: "create",
+        mentionMemberIds: [current.readerMemberId],
+        noteId: primaryId,
+      }),
+      actor.notes.mutate({
+        ...otherScope,
+        body: "other mailbox internal body",
+        expected: noteCursor(otherPrepared),
+        kind: "create",
+        mentionMemberIds: [current.readerMemberId],
+        noteId: otherId,
+      }),
+    ]);
+    const firstView = await actor.notes.list(current.scope);
+    const otherView = await actor.notes.list(otherScope);
+    expect(firstView.notes.map((note) => note.id)).toContain(primaryId);
+    expect(firstView.notes.map((note) => note.id)).not.toContain(otherId);
+    expect(otherView.notes.map((note) => note.id)).toContain(otherId);
+    expect(JSON.stringify(otherView)).not.toContain(
+      "first mailbox internal body"
+    );
+    const foreign = await actor.notes.get({
+      ...otherScope,
+      contextId: noteCursor(primary.snapshot).contextId,
+      noteId: primaryId,
+    });
+    expect(foreign.note).toBeNull();
+    await expect(
+      actor.notes.mutate({
+        ...otherScope,
+        body: "cannot overwrite foreign identity",
+        expected: noteCursor(other.snapshot),
+        kind: "create",
+        mentionMemberIds: [],
+        noteId: primaryId,
+      })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+    const firstNotices = await rpcFor(current.readerId).mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    const otherNotices = await rpcFor(current.readerId).mentions.list({
+      mailboxId: otherMailboxId,
+    });
+    expect(firstNotices.mentions.map((notice) => notice.noteId)).not.toContain(
+      otherId
+    );
+    expect(otherNotices.mentions.map((notice) => notice.noteId)).not.toContain(
+      primaryId
+    );
+    await deleteManagedMailbox({
+      mailboxId: current.mailboxId,
+      userId: current.ownerId,
+    });
+    const survivors = await actor.notes.list(otherScope);
+    expect(survivors.notes.map((note) => note.id)).toContain(otherId);
+    const deleted =
+      await fixture.client`select id from "managedThreadNote" where id = ${primaryId}`;
+    expect(deleted).toHaveLength(0);
+    await fixture.client`delete from organization where id = ${current.teamId}`;
+    const afterOrganization =
+      await fixture.client`select id from "managedThreadNote" where id in (${primaryId}, ${otherId})`;
+    const afterMentions =
+      await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" in (${primaryId}, ${otherId})`;
+    expect(afterOrganization).toHaveLength(0);
+    expect(afterMentions).toHaveLength(0);
+    await expect(actor.notes.list(otherScope)).rejects.toMatchObject({
+      code: "NOT_FOUND",
+    });
+  });
+});
+
+describe("actual note transaction interleavings", () => {
+  test("a selected recipient NOWAIT pin releases the real funding delete without a cycle", async () => {
+    const prepared = await rpcFor(current.actorId).prepare(current.scope);
+    const expected = noteCursor(prepared);
+    const noteId = randomUUID();
+    const held = Promise.withResolvers<number>();
+    const inspect = Promise.withResolvers<{
+      writerPid: number;
+      deletingPid: number;
+    } | null>();
+    const observed = Promise.withResolvers<null>();
+    const release = Promise.withResolvers<null>();
+    const deletionStarted = Promise.withResolvers<number>();
+    const deleter = fixture.createPostgres(fixture.urlText, {
+      max: 1,
+      onnotice: vi.fn<(notice: postgres.Notice) => void>(),
+    });
+    const blocker = fixture.client.begin(async (transaction) => {
+      await transaction`set local statement_timeout = '8s'`;
+      const [backend] = await transaction<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      await transaction`lock table "managedThreadCollaboration" in access exclusive mode`;
+      held.resolve(backend.pid);
+      const schedule = await inspect.promise;
+      if (schedule === null) {
+        return;
+      }
+      await waitForBlocking(
+        transaction,
+        schedule.deletingPid,
+        schedule.writerPid
+      );
+      observed.resolve(null);
+      await release.promise;
+    });
+    void blocker.catch(held.reject);
+    let writer: Promise<unknown> | undefined;
+    let deletion: Promise<unknown> | undefined;
+    let rejection: Promise<unknown> | undefined;
+    try {
+      const blockingPid = await held.promise;
+      writer = rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "must not outlive a selected member epoch",
+        expected,
+        kind: "create",
+        mentionMemberIds: [current.readerMemberId],
+        noteId,
+      });
+      rejection = expect(writer).rejects.toMatchObject({ code: "CONFLICT" });
+      const deadline = Date.now() + 8000;
+      let writerPid: number | undefined;
+      while (Date.now() < deadline) {
+        const rows = await deleter<{ pid: number }[]>`
+          select pid from pg_stat_activity where application_name = ${fixture.label}
+            and pid <> ${blockingPid} and wait_event_type = 'Lock'
+            and ${blockingPid}::integer = any(pg_blocking_pids(pid))
+        `;
+        writerPid = rows[0]?.pid;
+        if (writerPid !== undefined) {
+          break;
+        }
+        await pause(10);
+      }
+      if (writerPid === undefined) {
+        throw new Error(
+          "Notes writer did not reach the observed context-table wait."
+        );
+      }
+      deletion = deleter.begin(async (transaction) => {
+        await transaction`set local statement_timeout = '8s'`;
+        const [backend] = await transaction<
+          { pid: number }[]
+        >`select pg_backend_pid() as pid`;
+        deletionStarted.resolve(backend.pid);
+        await transaction`delete from member where id = ${current.readerMemberId}`;
+      });
+      void deletion.catch(deletionStarted.reject);
+      inspect.resolve({
+        deletingPid: await deletionStarted.promise,
+        writerPid,
+      });
+      await Promise.race([observed.promise, blocker]);
+      release.resolve(null);
+      await Promise.all([blocker, deletion, rejection]);
+      const notes =
+        await fixture.client`select id from "managedThreadNote" where id = ${noteId}`;
+      const mentions =
+        await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" = ${noteId}`;
+      expect(notes).toHaveLength(0);
+      expect(mentions).toHaveLength(0);
+      expect(await contextCounts()).toMatchObject({ contexts: 1, events: 1 });
+      const unchanged = await rpcFor(current.actorId).get(current.scope);
+      expect(unchanged.state).toMatchObject(prepared.state);
+    } finally {
+      inspect.resolve(null);
+      release.resolve(null);
+      await Promise.allSettled([
+        blocker,
+        ...(writer ? [writer] : []),
+        ...(deletion ? [deletion] : []),
+        ...(rejection ? [rejection] : []),
+      ]);
+      await deleter.end({ timeout: 3 });
+    }
+  });
+
+  test("revoking a selected grant at the final check rolls back note, mention, audit and revision", async () => {
+    const prepared = await rpcFor(current.actorId).prepare(current.scope);
+    const expected = noteCursor(prepared);
+    const noteId = randomUUID();
+    const held = Promise.withResolvers<number>();
+    const release = Promise.withResolvers<null>();
+    const revoker = fixture.createPostgres(fixture.urlText, {
+      max: 1,
+      onnotice: vi.fn<(notice: postgres.Notice) => void>(),
+    });
+    const blocker = fixture.client.begin(async (transaction) => {
+      await transaction`set local statement_timeout = '8s'`;
+      const [backend] = await transaction<
+        { pid: number }[]
+      >`select pg_backend_pid() as pid`;
+      await transaction`lock table "managedThreadCollaborationEvent" in share mode`;
+      held.resolve(backend.pid);
+      await release.promise;
+    });
+    void blocker.catch(held.reject);
+    let writer: Promise<unknown> | undefined;
+    let rejection: Promise<unknown> | undefined;
+    try {
+      const blockingPid = await held.promise;
+      writer = rpcFor(current.actorId).notes.mutate({
+        ...current.scope,
+        body: "must not commit for a revoked recipient",
+        expected,
+        kind: "create",
+        mentionMemberIds: [current.readerMemberId],
+        noteId,
+      });
+      rejection = expect(writer).rejects.toMatchObject({ code: "CONFLICT" });
+      const deadline = Date.now() + 8000;
+      let writerPid: number | undefined;
+      while (Date.now() < deadline) {
+        const rows = await revoker<{ pid: number }[]>`
+          select pid from pg_stat_activity where application_name = ${fixture.label}
+            and pid <> ${blockingPid} and wait_event_type = 'Lock'
+            and ${blockingPid}::integer = any(pg_blocking_pids(pid))
+        `;
+        writerPid = rows[0]?.pid;
+        if (writerPid !== undefined) {
+          break;
+        }
+        await pause(10);
+      }
+      if (writerPid === undefined) {
+        throw new Error(
+          "Notes writer did not reach the observed audit insertion wait."
+        );
+      }
+      await waitForBlocking(revoker, writerPid, blockingPid);
+      await revoker`delete from "mailboxGrant" where "mailboxId" = ${current.mailboxId} and "memberId" = ${current.readerMemberId}`;
+      release.resolve(null);
+      await Promise.all([blocker, rejection]);
+      const notes =
+        await fixture.client`select id from "managedThreadNote" where id = ${noteId}`;
+      const mentions =
+        await fixture.client`select "noteId" from "managedThreadNoteMention" where "noteId" = ${noteId}`;
+      expect(notes).toHaveLength(0);
+      expect(mentions).toHaveLength(0);
+      expect(await contextCounts()).toMatchObject({ contexts: 1, events: 1 });
+      const unchanged = await rpcFor(current.actorId).get(current.scope);
+      expect(unchanged.state).toMatchObject(prepared.state);
+    } finally {
+      release.resolve(null);
+      await Promise.allSettled([
+        blocker,
+        ...(writer ? [writer] : []),
+        ...(rejection ? [rejection] : []),
+      ]);
+      await revoker.end({ timeout: 3 });
+    }
+  });
+});
+
+describe("note paging and metadata retention", () => {
+  test("tied note and recipient pages are complete and stale note pages cannot mix revisions", async () => {
+    const actor = rpcFor(current.actorId);
+    let snapshot = await actor.prepare(current.scope);
+    const noteIds: string[] = [];
+    for (let index = 0; index < 60; index += 1) {
+      const noteId = randomUUID();
+      const result = await actor.notes.mutate({
+        ...current.scope,
+        body: `synthetic paged note ${index}`,
+        expected: noteCursor(snapshot),
+        kind: "create",
+        mentionMemberIds: [current.readerMemberId],
+        noteId,
+      });
+      ({ snapshot } = result);
+      noteIds.push(noteId);
+    }
+    const cursor = noteCursor(snapshot);
+    await fixture.client`
+      update "managedThreadNote" set "createdAt" = (select min("createdAt") from "managedThreadNote" where "contextId" = ${cursor.contextId})
+      where "contextId" = ${cursor.contextId}
+    `;
+    await fixture.client`
+      update "managedThreadNoteMention" set "createdAt" = (
+        select min(m."createdAt") from "managedThreadNoteMention" m
+        join "managedThreadNote" n on n.id = m."noteId" where n."contextId" = ${cursor.contextId}
+      ) where "noteId" in (select id from "managedThreadNote" where "contextId" = ${cursor.contextId})
+    `;
+    const first = await actor.notes.list({ ...current.scope, at: cursor });
+    const seen: string[] = [];
+    let page = first;
+    while (true) {
+      seen.push(...page.notes.map((note) => note.id));
+      if (page.next === null) {
+        break;
+      }
+      page = await actor.notes.list({
+        ...current.scope,
+        after: page.next,
+        at: cursor,
+      });
+    }
+    expect(seen).toHaveLength(noteIds.length);
+    expect(new Set(seen).size).toBe(noteIds.length);
+    for (const noteId of noteIds) {
+      expect(seen).toContain(noteId);
+    }
+    const reader = rpcFor(current.readerId);
+    let noticePage = await reader.mentions.list({
+      mailboxId: current.mailboxId,
+    });
+    const seenNotices: string[] = [];
+    while (true) {
+      seenNotices.push(...noticePage.mentions.map((notice) => notice.noteId));
+      if (noticePage.next === null) {
+        break;
+      }
+      noticePage = await reader.mentions.list({
+        after: noticePage.next,
+        mailboxId: current.mailboxId,
+      });
+    }
+    expect(seenNotices).toHaveLength(noteIds.length);
+    expect(new Set(seenNotices).size).toBe(noteIds.length);
+    for (const noteId of noteIds) {
+      expect(seenNotices).toContain(noteId);
+    }
+    if (first.next === null) {
+      throw new Error(
+        "The owned history must span multiple pages for this probe."
+      );
+    }
+    await actor.notes.mutate({
+      ...current.scope,
+      body: "later revision",
+      expected: cursor,
+      kind: "create",
+      mentionMemberIds: [],
+      noteId: randomUUID(),
+    });
+    await expect(
+      actor.notes.list({ ...current.scope, after: first.next, at: cursor })
+    ).rejects.toMatchObject({ code: "CONFLICT" });
+  });
+
+  test("a real mutation prunes expired context metadata while preserving recent and foreign-scope audit", async () => {
+    const created = await createCurrentNote();
+    const original = noteCursor(created.snapshot);
+    const [oldest] = await fixture.client<{ revision: string }[]>`
+      select revision::text as revision from "managedThreadCollaborationEvent"
+      where "contextId" = ${original.contextId} order by revision limit 1
+    `;
+    if (oldest === undefined) {
+      throw new Error("Preparation must have an audit receipt.");
+    }
+    const otherThread = `retention-other-${randomUUID()}`;
+    await extraMessage(otherThread);
+    const other = await rpcFor(current.actorId).prepare({
+      mailboxId: current.mailboxId,
+      threadId: otherThread,
+    });
+    const otherCursor = noteCursor(other);
+    await fixture.client`
+      insert into "managedThreadCollaborationEvent" ("contextId", revision, kind, "noteId", "actorMemberId", "createdAt")
+      select ${original.contextId}, ${original.revision}::bigint + n, 'note_edited', ${created.note.id}, ${current.actorMemberId}, now()
+      from generate_series(1, 650) as n
+    `;
+    await fixture.client`
+      update "managedThreadCollaboration" set revision = (
+        select max(revision) from "managedThreadCollaborationEvent" where "contextId" = ${original.contextId}
+      ) where id = ${original.contextId}
+    `;
+    const currentState = await rpcFor(current.actorId).get(current.scope);
+    const edited = await rpcFor(current.actorId).notes.mutate({
+      ...current.scope,
+      body: "current retained note body",
+      expected: noteCursor(currentState),
+      kind: "edit",
+      mentionMemberIds: [],
+      noteId: created.note.id,
+    });
+    const events = await fixture.client<
+      { contextId: string; revision: string }[]
+    >`
+      select "contextId", revision::text as revision from "managedThreadCollaborationEvent"
+      where "contextId" in (${original.contextId}, ${otherCursor.contextId})
+    `;
+    expect(
+      events
+        .filter((event) => event.contextId === original.contextId)
+        .map((event) => event.revision)
+    ).not.toContain(oldest.revision);
+    expect(
+      events
+        .filter((event) => event.contextId === original.contextId)
+        .map((event) => event.revision)
+    ).toContain(noteCursor(edited.snapshot).revision);
+    expect(
+      events
+        .filter((event) => event.contextId === otherCursor.contextId)
+        .map((event) => event.revision)
+    ).toContain(otherCursor.revision);
+    expect(JSON.stringify(events)).not.toContain("current retained note body");
+    const live = await rpcFor(current.actorId).notes.list(current.scope);
+    expect(live.notes[0]).toMatchObject({
+      body: "current retained note body",
+      id: created.note.id,
+    });
   });
 });

@@ -18,6 +18,7 @@ export type MessageViewProps = {
   composeSenderMailbox?: ComposeSenderMailbox;
   composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
+  isSharedManagedMailbox?: boolean;
   currentUserEmail?: string | null;
   navigationScope?: ConversationNavigationScope;
   mailboxId: string;

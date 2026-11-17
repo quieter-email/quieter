@@ -63,7 +63,8 @@ const getSignatureText = (mailbox: MailboxRecord) =>
 
 const toMailboxGroup = (
   group: MailboxGroup,
-  unreadCounts: ReadonlyMap<string, number>
+  unreadCounts: ReadonlyMap<string, number>,
+  isSandboxMode: boolean
 ) => ({
   id: group.id,
   kind: group.kind,
@@ -76,6 +77,11 @@ const toMailboxGroup = (
     grantRole: mailbox.grantRole,
     groupName: mailbox.groupName,
     id: mailbox.id,
+    isSharedManagedMailbox:
+      !isSandboxMode &&
+      mailbox.provider === "managed" &&
+      "ownerUserId" in mailbox &&
+      mailbox.ownerUserId === null,
     provider: mailbox.provider,
     signatureHtml: getSignatureHtml(mailbox),
     signatureText: getSignatureText(mailbox),
@@ -195,7 +201,7 @@ export const useMailboxSelection = ({
   );
   const defaultMailboxId = mailboxesData?.defaultMailboxId ?? null;
   const mailboxGroups = (mailboxesData?.groups ?? []).map((group) =>
-    toMailboxGroup(group, gmailUnreadCountsByMailboxId)
+    toMailboxGroup(group, gmailUnreadCountsByMailboxId, isSandboxMode)
   );
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const selectedMailbox =

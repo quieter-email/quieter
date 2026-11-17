@@ -12,6 +12,10 @@ import { and, eq, isNull, sql } from "drizzle-orm";
 import { getAuthorizedManagedMailbox } from "../access";
 
 export type CollaborationActorScope = CollaborationScope & { userId: string };
+export type CollaborationMailboxActor = Pick<
+  CollaborationActorScope,
+  "mailboxId" | "userId"
+>;
 
 const throwCollaborationLockError = (error: unknown): never => {
   const cause =
@@ -27,8 +31,8 @@ const throwCollaborationLockError = (error: unknown): never => {
   throw error;
 };
 
-export const authorizeCollaborationThread = async (
-  input: CollaborationActorScope,
+export const authorizeCollaborationMailbox = async (
+  input: CollaborationMailboxActor,
   database: Pick<DatabaseTransaction, "select">
 ) => {
   const authorized = await getAuthorizedManagedMailbox(input, database).catch(
@@ -48,6 +52,14 @@ export const authorizeCollaborationThread = async (
       message: "Conversation is not available.",
     });
   }
+  return { ...authorized, organizationId: authorized.organizationId };
+};
+
+export const authorizeCollaborationThread = async (
+  input: CollaborationActorScope,
+  database: Pick<DatabaseTransaction, "select">
+) => {
+  const authorized = await authorizeCollaborationMailbox(input, database);
   const [message] = await database
     .select({ id: managedMailMessage.id })
     .from(managedMailMessage)
@@ -66,11 +78,11 @@ export const authorizeCollaborationThread = async (
   return { ...authorized, organizationId: authorized.organizationId };
 };
 
-export const lockCollaborationThread = async (
-  input: CollaborationActorScope,
+const pinCollaborationMailbox = async (
+  input: CollaborationMailboxActor,
+  initial: Awaited<ReturnType<typeof authorizeCollaborationMailbox>>,
   transaction: DatabaseTransaction
 ) => {
-  const initial = await authorizeCollaborationThread(input, transaction);
   const [team] = await transaction
     .select({ id: organization.id })
     .from(organization)
@@ -118,17 +130,85 @@ export const lockCollaborationThread = async (
       message: "Conversation is not available.",
     });
   }
+  return { actorMemberId: actor.id, organizationId: team.id };
+};
+
+export const lockCollaborationMailbox = async (
+  input: CollaborationMailboxActor,
+  transaction: DatabaseTransaction
+) => {
+  const initial = await authorizeCollaborationMailbox(input, transaction);
+  const pinned = await pinCollaborationMailbox(input, initial, transaction);
+  const current = await authorizeCollaborationMailbox(input, transaction);
+  if (current.organizationId !== pinned.organizationId) {
+    throw new ORPCError("NOT_FOUND", {
+      data: { resource: "mailbox" },
+      message: "Conversation is not available.",
+    });
+  }
+  return { actorMemberId: pinned.actorMemberId, mailbox: current };
+};
+
+export const lockCollaborationThread = async (
+  input: CollaborationActorScope,
+  transaction: DatabaseTransaction
+) => {
+  const initial = await authorizeCollaborationThread(input, transaction);
+  const pinned = await pinCollaborationMailbox(input, initial, transaction);
   await transaction.execute(sql`
     select pg_advisory_xact_lock(hashtextextended(jsonb_build_array(
       'quieter-managed-collaboration-v1', ${input.mailboxId}::text, ${input.threadId}::text
     )::text, 0))
   `);
   const current = await authorizeCollaborationThread(input, transaction);
-  if (current.organizationId !== team.id) {
+  if (current.organizationId !== pinned.organizationId) {
     throw new ORPCError("NOT_FOUND", {
       data: { resource: "mailbox" },
       message: "Conversation is not available.",
     });
   }
-  return { actorMemberId: actor.id, mailbox: current };
+  return { actorMemberId: pinned.actorMemberId, mailbox: current };
+};
+
+export const lockCollaborationParticipant = async (
+  input: { mailboxId: string; memberId: string; organizationId: string },
+  transaction: DatabaseTransaction
+) => {
+  const [participant] = await transaction
+    .select({ id: member.id, userId: member.userId })
+    .from(member)
+    .where(
+      and(
+        eq(member.id, input.memberId),
+        eq(member.organizationId, input.organizationId)
+      )
+    )
+    .limit(1)
+    .for("key share", { noWait: true })
+    .catch(throwCollaborationLockError);
+  if (participant === undefined) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "A selected teammate is no longer available. Refresh and try again.",
+    });
+  }
+  const authorized = await authorizeCollaborationMailbox(
+    { mailboxId: input.mailboxId, userId: participant.userId },
+    transaction
+  ).catch((error: unknown) => {
+    if (!(error instanceof ORPCError) || error.code !== "NOT_FOUND") {
+      throw error;
+    }
+    throw new ORPCError("CONFLICT", {
+      message:
+        "A selected teammate is no longer available. Refresh and try again.",
+    });
+  });
+  if (authorized.organizationId !== input.organizationId) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "A selected teammate is no longer available. Refresh and try again.",
+    });
+  }
+  return participant;
 };

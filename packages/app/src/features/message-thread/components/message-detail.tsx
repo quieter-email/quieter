@@ -31,6 +31,7 @@ type MessageDetailProps = {
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
   isPending?: boolean;
+  isSharedManagedMailbox?: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
@@ -40,6 +41,7 @@ type MessageDetailProps = {
   onManageSnippets?: () => void;
   pendingActions: MailboxPendingActions;
   selectedMessage: MessageListItem | null;
+  selectionMode: "message" | "thread";
 };
 
 export const MessageDetail = ({
@@ -54,6 +56,7 @@ export const MessageDetail = ({
   focusOnOpen,
   currentUserEmail,
   isPending,
+  isSharedManagedMailbox = false,
   mailboxActions,
   onConversationOpened,
   onBackToList,
@@ -61,6 +64,7 @@ export const MessageDetail = ({
   onManageSnippets,
   pendingActions,
   selectedMessage,
+  selectionMode,
   mailboxId,
   mailboxProvider,
 }: MessageDetailProps) => {
@@ -99,6 +103,7 @@ export const MessageDetail = ({
         }
       >
         <MessageView
+          isSharedManagedMailbox={isSharedManagedMailbox}
           activeMailbox={activeMailbox}
           detailOnly={detailOnly}
           showDesktopBack={showDesktopBack}
@@ -153,7 +158,7 @@ export const MessageDetail = ({
                 transform: "translate3d(8px, 0, 0)",
               }
         }
-        key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
+        key={`${mailboxId}:${(selectionMode === "thread" ? selectedMessage?.threadId : selectedMessage?.id) ?? (isPending === true ? "loading" : "empty")}`}
         transition={{
           duration:
             reducedMotion === true

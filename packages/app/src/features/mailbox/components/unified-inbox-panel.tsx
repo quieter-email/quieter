@@ -193,6 +193,7 @@ export const UnifiedInboxPanel = ({
   searchQuery,
   userId,
 }: UnifiedInboxPanelProps) => {
+  const isDetailOpen = !!activeMessageId || !!activeThreadId;
   const preferences = useUnifiedInboxPreferences(userId);
   const accessibleMailboxes = mailboxes.filter(
     (mailbox): mailbox is ConnectedMailbox => mailbox.provider !== "api"
@@ -712,9 +713,9 @@ export const UnifiedInboxPanel = ({
     <>
       <WorkspaceSection
         className={cn({
-          flex: !activeMessageId,
-          hidden: !!activeMessageId,
-          "lg:hidden": wideCompactRows && !!activeMessageId,
+          flex: !isDetailOpen,
+          hidden: isDetailOpen,
+          "lg:hidden": wideCompactRows && isDetailOpen,
         })}
         layout="cell"
       >
@@ -817,7 +818,7 @@ export const UnifiedInboxPanel = ({
           />
         </div>
       </WorkspaceSection>
-      {activeMessageId ? null : (
+      {isDetailOpen ? null : (
         <WorkspaceSection
           className={cn("hidden", { "lg:hidden": wideCompactRows })}
           layout="cell"

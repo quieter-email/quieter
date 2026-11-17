@@ -6,6 +6,8 @@
     "./src/styles.css"
   ],
   "exports": {
+    "./features/collaboration-notes/thread-notes": "./src/features/collaboration-notes/thread-notes.tsx",
+    "./features/collaboration-notes/collaboration-mentions": "./src/features/collaboration-notes/collaboration-mentions.tsx",
     "./components/app-providers": "./src/components/app-providers.tsx",
     "./components/arrow-interaction-button": "./src/components/arrow-interaction-button.tsx",
     "./components/atmospheric-background": "./src/components/atmospheric-background.tsx",
