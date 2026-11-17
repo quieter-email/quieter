@@ -83,7 +83,7 @@ describe("server-owned snippet quote provenance", () => {
   test.each(["reply", "reply-all", "forward"] as const)(
     "admits only the inherited %s quote with matching private proof",
     (action) => {
-      const message = quotedMessage(action);
+      const message = composeMessageInputSchema.parse(quotedMessage(action));
       const snippetQuote = createProof(message);
       expect(() => {
         assertComposeSnippetFieldsResolved({ ...binding, message });
@@ -95,9 +95,20 @@ describe("server-owned snippet quote provenance", () => {
           snippetQuote,
         });
       }).not.toThrow();
-      expect(composeMessageInputSchema.safeParse(message).success).toBeFalsy();
     }
   );
+
+  test("public message input cannot supply private quote authority", () => {
+    const message = quotedMessage();
+    const input = composeMessageInputSchema.parse({
+      ...message,
+      snippetQuote: createProof(message),
+    });
+    expect("snippetQuote" in input).toBeFalsy();
+    expect(() => {
+      assertComposeSnippetFieldsResolved({ ...binding, message: input });
+    }).toThrow(ORPCError);
+  });
 
   test.each(["actor", "mailbox", "operation", "body", "anchor"] as const)(
     "does not exempt a quote when its %s binding changes",
