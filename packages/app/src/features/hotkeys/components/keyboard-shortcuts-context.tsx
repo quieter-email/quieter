@@ -6,6 +6,8 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { createContext, use, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
+import { CommandPaletteProvider } from "./command-palette-context";
+
 type KeyboardShortcutsContextValue = {
   closeKeyboardShortcuts: () => void;
   isKeyboardShortcutsOpen: boolean;
@@ -46,7 +48,13 @@ export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
 
   return (
     <KeyboardShortcutsContext.Provider value={value}>
-      {children}
+      <CommandPaletteProvider
+        onShowKeyboardShortcuts={() => {
+          value.openKeyboardShortcuts();
+        }}
+      >
+        {children}
+      </CommandPaletteProvider>
       {isKeyboardShortcutsOpen ? (
         <KeyboardShortcutsDialog
           onOpenChange={setIsKeyboardShortcutsOpen}

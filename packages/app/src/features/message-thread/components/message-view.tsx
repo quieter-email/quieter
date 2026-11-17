@@ -269,6 +269,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     hotkeyMessage,
     isActionPending,
     mailboxActions,
+    mailboxId,
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
