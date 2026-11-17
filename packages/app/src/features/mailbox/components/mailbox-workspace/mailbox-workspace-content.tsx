@@ -5,6 +5,7 @@ import {
   Mail01Icon,
   Settings01Icon,
 } from "@hugeicons/core-free-icons";
+import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { AgentWorkspaceProvider } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebar } from "@quieter/app/features/chat/components/assistant-sidebar";
@@ -13,6 +14,7 @@ import {
   AssistantSidebarTrigger,
 } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
+import { CollaborationMentions } from "@quieter/app/features/collaboration-notes/collaboration-mentions";
 import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
@@ -22,6 +24,7 @@ import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/m
 import {
   useMailboxMessageId,
   useMailboxSearchActions,
+  useMailboxThreadId,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   loadCalendarWorkspace,
@@ -60,6 +63,7 @@ import {
   useEffectEvent,
   useId,
   useLayoutEffect,
+  useMemo,
   useRef,
   useState,
 } from "react";
@@ -487,6 +491,10 @@ const MailboxWorkspaceContentInner = ({
   const mailLayout = useMailLayout();
   const onePanelDesktop = mailLayout === "one-panel";
   const messageId = useMailboxMessageId() ?? null;
+  const routeThreadId = useMailboxThreadId() ?? null;
+  const routeMailboxId = inboxRouteApi.useSearch({
+    select: (search) => search.mailboxId,
+  });
   const setMailboxSearch = useMailboxSearchActions();
   const workspace = inboxRouteApi.useSearch({
     select: (search) => search.workspace,
@@ -501,6 +509,12 @@ const MailboxWorkspaceContentInner = ({
     !isSnippetMailbox &&
     !isScheduledMailbox &&
     (selectedView === "inbox" || allInboxesActive);
+  const unavailableConversation =
+    mailViewActive &&
+    !messageId &&
+    !!routeThreadId &&
+    !!routeMailboxId &&
+    routeMailboxId !== selectedMailboxId;
   const mailboxes = mailboxGroups.flatMap((group) => group.mailboxes);
   const senderMailboxes = mailboxes
     .filter(
@@ -516,6 +530,20 @@ const MailboxWorkspaceContentInner = ({
     }));
   const composeMailbox = mailboxes.find(
     (mailbox) => mailbox.id === selectedMailboxId
+  );
+  const collaborationMailboxes = useMemo(
+    () =>
+      isDemoMode || isManagedDemoMode
+        ? []
+        : mailboxGroups.flatMap((group) =>
+            group.mailboxes
+              .filter((mailbox) => mailbox.isSharedManagedMailbox === true)
+              .map((mailbox) => ({
+                label: mailbox.displayName?.trim() || mailbox.emailAddress,
+                mailboxId: mailbox.id,
+              }))
+          ),
+    [isDemoMode, isManagedDemoMode, mailboxGroups]
   );
   const reminderRouteId = inboxRouteApi.useSearch({
     select: (search) => search.reminderId,
@@ -637,7 +665,16 @@ const MailboxWorkspaceContentInner = ({
     };
   }, []);
   let mailboxContent: ReactNode;
-  if (!selectedMailboxId) {
+  if (unavailableConversation) {
+    mailboxContent = (
+      <WorkspaceSection>
+        <EmptyMessageState
+          title="Conversation unavailable"
+          description="Choose another conversation."
+        />
+      </WorkspaceSection>
+    );
+  } else if (!selectedMailboxId) {
     mailboxContent = (
       <NoMailboxWorkspace
         connectError={reconnectError}
@@ -781,8 +818,11 @@ const MailboxWorkspaceContentInner = ({
           searchQuery={searchQuery}
           userId={userId}
         />
-        {messageId ? (
+        {messageId || routeThreadId ? (
           <MailboxMessagesPanel
+            isSharedManagedMailbox={
+              composeMailbox?.isSharedManagedMailbox === true
+            }
             mailLayout={mailLayout}
             detailOnly
             activeMailbox={activeMailbox}
@@ -915,6 +955,9 @@ const MailboxWorkspaceContentInner = ({
         })}
       >
         <MailboxMessagesPanel
+          isSharedManagedMailbox={
+            composeMailbox?.isSharedManagedMailbox === true
+          }
           mailLayout={mailLayout}
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
@@ -1135,7 +1178,9 @@ const MailboxWorkspaceContentInner = ({
                           docked
                           visible={assistantOpen && assistantTab === "chat"}
                           activeMailbox={activeMailbox ?? "inbox"}
-                          mailContext={chatContext}
+                          mailContext={
+                            unavailableConversation ? undefined : chatContext
+                          }
                           chatId={chatId}
                           draftChatKey={draftChatKey}
                           mailboxId={selectedMailboxId}
@@ -1170,6 +1215,33 @@ const MailboxWorkspaceContentInner = ({
                 </Suspense>
               </Activity>
               <Activity mode={calendarActive ? "hidden" : "visible"}>
+                {collaborationMailboxes.length > 0 ? (
+                  <WorkspaceHeader>
+                    <div className="flex justify-end">
+                      <CollaborationMentions
+                        mailboxes={collaborationMailboxes}
+                        onOpenConversation={({ mailboxId, threadId }) => {
+                          void setMailboxSearch({
+                            chatId:
+                              mailboxId === selectedMailboxId
+                                ? undefined
+                                : null,
+                            compose: null,
+                            mailbox: "inbox",
+                            mailboxId,
+                            mailto: null,
+                            messageId: null,
+                            query: null,
+                            reminderId: null,
+                            threadId,
+                            view: "inbox",
+                            workspace: null,
+                          });
+                        }}
+                      />
+                    </div>
+                  </WorkspaceHeader>
+                ) : null}
                 <div className="relative min-h-0 flex-1">{mailboxContent}</div>
                 {!allInboxesActive &&
                 !isComposeMailbox &&

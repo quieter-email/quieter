@@ -3,7 +3,9 @@
 import type {
   ListMessagesPageResult,
   MailboxCategory,
+  MessageListItem,
 } from "@quieter/app/lib/mail";
+import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
@@ -38,50 +40,10 @@ const hasLoadedMessagePages = (
   data: { pages: readonly unknown[] } | undefined
 ) => data !== undefined && data.pages.length > 0;
 
-const getCachedSelectedMessage = (
-  activeMailbox: MailboxCategory,
-  messageId: string | undefined,
-  messages: readonly ListMessagesPageResult[]
-) =>
-  activeMailbox !== "drafts" && messageId
-    ? messages
-        .flatMap((page) => page.messages)
-        .find((message) => message.id === messageId)
-    : undefined;
-
-const shouldLoadSelectedThread = ({
-  activeMailbox,
-  cachedSelectedMessage,
-  messageId,
-  selectedMailboxId,
-  threadId,
-}: {
-  activeMailbox: MailboxCategory;
-  cachedSelectedMessage: ListMessagesPageResult["messages"][number] | undefined;
-  messageId: string | undefined;
-  selectedMailboxId: string | null;
-  threadId: string | undefined;
-}) =>
-  activeMailbox !== "drafts" &&
-  !!selectedMailboxId &&
-  !!messageId &&
-  !!threadId &&
-  cachedSelectedMessage === undefined;
-
-const getSelectedMessage = ({
-  cachedSelectedMessage,
-  messageId,
-  selectedThreadData,
-}: {
-  cachedSelectedMessage: ListMessagesPageResult["messages"][number] | undefined;
-  messageId: string | undefined;
-  selectedThreadData:
-    | { messages: ListMessagesPageResult["messages"][number][] }
-    | undefined;
-}) =>
-  cachedSelectedMessage ??
-  selectedThreadData?.messages.find((message) => message.id === messageId) ??
-  null;
+type ReaderIntent =
+  | { kind: "closed" }
+  | { kind: "message"; messageId: string; threadId?: string }
+  | { kind: "thread"; threadId: string };
 
 type MailboxesQueryData = RouterOutputs["mail"]["listMailboxes"];
 
@@ -180,21 +142,29 @@ export const useMailboxMessages = ({
     () => messages.flatMap((page) => page.messages),
     [messages]
   );
-  const cachedSelectedMessage = getCachedSelectedMessage(
-    activeMailbox,
-    messageId,
-    messages
-  );
-  const shouldLoadThread = shouldLoadSelectedThread({
-    activeMailbox,
-    cachedSelectedMessage,
-    messageId,
-    selectedMailboxId,
-    threadId,
-  });
+  let intent: ReaderIntent = { kind: "closed" };
+  if (activeMailbox !== "drafts" && selectedMailboxId) {
+    if (messageId) {
+      intent = { kind: "message", messageId, threadId };
+    } else if (threadId) {
+      intent = { kind: "thread", threadId };
+    }
+  }
+  const cachedSelectedMessage =
+    intent.kind === "message"
+      ? flattenedMessages.find(
+          (message) =>
+            message.id === intent.messageId &&
+            (!intent.threadId || message.threadId === intent.threadId)
+        )
+      : undefined;
+  const shouldLoadThread =
+    intent.kind !== "closed" &&
+    !!intent.threadId &&
+    cachedSelectedMessage === undefined;
   const {
-    data: selectedThreadData,
-    error: selectedThreadError,
+    data: threadData,
+    error: threadError,
     isPending: isSelectedThreadPending,
     refetch: refreshSelectedThread,
   } = useQuery(
@@ -204,6 +174,13 @@ export const useMailboxMessages = ({
       shouldLoadThread
     )
   );
+  const selectedThreadError = intent.kind === "closed" ? null : threadError;
+  const selectedThreadData =
+    intent.kind !== "closed" &&
+    selectedThreadError === null &&
+    threadData?.threadId === intent.threadId
+      ? threadData
+      : undefined;
 
   useEffect(() => {
     const reconnectError = [messagesError, syncError, selectedThreadError].find(
@@ -264,11 +241,29 @@ export const useMailboxMessages = ({
     );
   }, [activeMailbox, normalizedQuery, queryClient, selectedMailboxId]);
 
-  const selectedMessage = getSelectedMessage({
-    cachedSelectedMessage,
-    messageId,
-    selectedThreadData,
-  });
+  let selectedMessage: MessageListItem | null = null;
+  if (selectedThreadError === null && intent.kind === "message") {
+    selectedMessage =
+      cachedSelectedMessage ??
+      selectedThreadData?.messages.find(
+        (message) =>
+          message.id === intent.messageId &&
+          message.threadId === intent.threadId
+      ) ??
+      null;
+  } else if (intent.kind === "thread") {
+    selectedMessage =
+      selectedThreadData?.messages.findLast(
+        (message) =>
+          message.threadId === intent.threadId &&
+          !message.draftId?.trim() &&
+          message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true
+      ) ??
+      selectedThreadData?.messages.findLast(
+        (message) => message.threadId === intent.threadId
+      ) ??
+      null;
+  }
 
   const isRefreshing =
     isManualRefreshing ||
@@ -314,7 +309,10 @@ export const useMailboxMessages = ({
     isRefreshing,
     listState,
     loadMoreMessages,
-    messagesPending: isPending || (shouldLoadThread && isSelectedThreadPending),
+    messagesPending:
+      intent.kind === "thread"
+        ? isSelectedThreadPending
+        : isPending || (shouldLoadThread && isSelectedThreadPending),
     refreshMessages,
     refreshSearchResultsIfNeeded,
     refreshSelectedThread,

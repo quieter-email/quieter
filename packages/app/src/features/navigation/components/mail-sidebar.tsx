@@ -47,6 +47,7 @@ type MailSidebarProps = {
       divisionName?: string | null;
       grantRole?: "manager" | "reader" | "responder" | null;
       id: string;
+      isSharedManagedMailbox?: boolean;
       emailAddress: string;
       displayName: string | null;
       signatureHtml?: string | null;

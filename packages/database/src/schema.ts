@@ -4166,7 +4166,10 @@ export const managedThreadCollaborationEvent = pgTable(
       .notNull()
       .references(() => managedThreadCollaboration.id, { onDelete: "cascade" }),
     createdAt: timestamp("createdAt").notNull(),
-    kind: text("kind").$type<"prepared">().notNull(),
+    kind: text("kind")
+      .$type<"prepared" | "note_created" | "note_edited" | "note_deleted">()
+      .notNull(),
+    noteId: text("noteId"),
     revision: bigint("revision", { mode: "bigint" }).notNull(),
   },
   (table) => [
@@ -4183,7 +4186,70 @@ export const managedThreadCollaborationEvent = pgTable(
     ),
     check(
       "managed_thread_collaboration_event_kind_check",
-      sql`${table.kind} = 'prepared'`
+      sql`(${table.kind} = 'prepared' and ${table.noteId} is null)
+        or (${table.kind} in ('note_created', 'note_edited', 'note_deleted') and ${table.noteId} is not null)`
+    ),
+  ]
+);
+
+export const managedThreadNote = pgTable(
+  "managedThreadNote",
+  {
+    authorMemberId: text("authorMemberId").references(() => member.id, {
+      onDelete: "set null",
+    }),
+    body: text("body").notNull(),
+    contextId: text("contextId")
+      .notNull()
+      .references(() => managedThreadCollaboration.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    index("managed_thread_note_context_created_idx").on(
+      table.contextId,
+      table.createdAt,
+      table.id
+    ),
+    index("managed_thread_note_author_idx").on(table.authorMemberId),
+    check(
+      "managed_thread_note_body_check",
+      sql`char_length(${table.body}) <= 10000 and ${table.body} ~ '[^[:space:]]'`
+    ),
+    check(
+      "managed_thread_note_time_check",
+      sql`${table.updatedAt} >= ${table.createdAt}`
+    ),
+  ]
+);
+
+export const managedThreadNoteMention = pgTable(
+  "managedThreadNoteMention",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    noteId: text("noteId")
+      .notNull()
+      .references(() => managedThreadNote.id, { onDelete: "cascade" }),
+    readAt: timestamp("readAt"),
+    recipientMemberId: text("recipientMemberId")
+      .notNull()
+      .references(() => member.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.noteId, table.recipientMemberId],
+      name: "managed_thread_note_mention_pkey",
+    }),
+    index("managed_thread_note_mention_recipient_idx").on(
+      table.recipientMemberId,
+      table.readAt,
+      table.createdAt,
+      table.noteId
+    ),
+    check(
+      "managed_thread_note_mention_time_check",
+      sql`${table.readAt} is null or ${table.readAt} >= ${table.createdAt}`
     ),
   ]
 );
@@ -4256,6 +4322,8 @@ export const tables = {
   managedMailRuleRun,
   managedThreadCollaboration,
   managedThreadCollaborationEvent,
+  managedThreadNote,
+  managedThreadNoteMention,
   member,
   organization,
   organizationApiMailAttachment,
