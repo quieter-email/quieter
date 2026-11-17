@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckmarkCircle02Icon, InboxIcon } from "@hugeicons/core-free-icons";
 import {
   DELIVERY_PILL_TONES,
   getDeliveryStatusLabel,
@@ -22,10 +23,14 @@ import {
   parseSender,
 } from "@quieter/app/lib/gmail/message-utils";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
+import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { RouterOutputs } from "@quieter/orpc";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import {
   MailListRowDetails,
   MailListRowMetadata,
@@ -272,6 +277,7 @@ const MessageRowSelectionButton = ({
 
 const MessageRowDetails = ({
   wideCompactRows,
+  actions,
   badge,
   date,
   deliveryStatus,
@@ -285,6 +291,7 @@ const MessageRowDetails = ({
   unread,
   verificationCode,
 }: {
+  actions?: ReactNode;
   badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -300,6 +307,7 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
+    actions={actions}
     active={isActive}
     badge={badge}
     layout={wideCompactRows === true ? "adaptive" : "stacked"}
@@ -461,6 +469,45 @@ const MessageRowSurface = ({
     thread,
     unread,
   });
+  const threadActions = createMailboxThreadMessageActionHandlers({
+    mailboxActions,
+    onOpenDraft,
+    supportsFolders: mailboxProvider === "gmail",
+    supportsLabels: mailboxProvider !== "api",
+    supportsReadState: mailboxProvider !== "api",
+    supportsUnsubscribe: mailboxProvider === "gmail",
+  });
+  const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
+  const canChangePlacement =
+    !["drafts", "spam", "trash", "sent"].includes(activeMailbox) &&
+    !showSelectionControl;
+  const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${mailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
+  const placementAction =
+    canChangePlacement &&
+    (returnsToInbox
+      ? threadActions.onReturnToInbox !== undefined
+      : threadActions.onMarkDone !== undefined) ? (
+      <IconButtonTooltip label={placementLabel} triggerClassName="w-full">
+        <Button
+          aria-label={placementLabel}
+          className="grow"
+          onClick={() => {
+            void (
+              returnsToInbox
+                ? threadActions.onReturnToInbox
+                : threadActions.onMarkDone
+            )?.(thread.threadId);
+          }}
+          pending={isActionPending}
+          variant="pill"
+        >
+          <Icon
+            aria-hidden
+            icon={returnsToInbox ? InboxIcon : CheckmarkCircle02Icon}
+          />
+        </Button>
+      </IconButtonTooltip>
+    ) : undefined;
 
   return (
     <div
@@ -522,14 +569,7 @@ const MessageRowSurface = ({
 
       <div className="relative h-full min-w-0 flex-1">
         <MessageActionsContextMenu
-          actions={createMailboxThreadMessageActionHandlers({
-            mailboxActions,
-            onOpenDraft,
-            supportsFolders: mailboxProvider === "gmail",
-            supportsLabels: mailboxProvider !== "api",
-            supportsReadState: mailboxProvider !== "api",
-            supportsUnsubscribe: mailboxProvider === "gmail",
-          })}
+          actions={threadActions}
           isPending={isActionPending}
           mailboxContextsByThreadId={mailboxContextsByThreadId}
           mailboxId={mailboxId}
@@ -565,6 +605,7 @@ const MessageRowSurface = ({
           />
           <MessageRowDetails
             wideCompactRows={wideCompactRows}
+            actions={placementAction}
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}

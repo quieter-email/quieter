@@ -143,6 +143,8 @@ export const buttonVariants = cva(
         outline: "border-border bg-control text-fg hover:bg-control-hover",
         // Outline treatment for dark backdrops, e.g. the status screens.
         overlay: "border-fg/20 bg-transparent text-fg hover:bg-fg/10",
+        // Compact pill-shaped action matching the mail metadata pills.
+        pill: "squircle h-auto rounded-sm bg-muted px-2 py-1 text-micro/none text-muted-fg hover:bg-control-hover hover:text-fg active:bg-control-active [&_svg]:size-3",
         // Full-width result row, e.g. settings search. The active look
         // follows data-active so callers only pass the state.
         result:
