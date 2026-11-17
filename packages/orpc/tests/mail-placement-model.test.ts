@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { resolvePlacementMessageIds } from "../src/mail/placement-model";
+import { resolvePlacementTargets } from "../src/mail/placement-model";
 import type { PlacementMessage } from "../src/mail/placement-model";
 
 const messages: PlacementMessage[] = [
@@ -33,13 +33,16 @@ const messages: PlacementMessage[] = [
 describe("conversation placement snapshots", () => {
   test("handles older incoming messages through the known anchor while preserving sent history and unseen replies", () => {
     expect(
-      resolvePlacementMessageIds({
+      resolvePlacementTargets({
         messages,
         placement: "done",
         requestedMessageIds: ["visible-anchor"],
         threadId: "conversation",
       })
-    ).toMatchObject(["old-incoming", "visible-anchor"]);
+    ).toMatchObject({
+      intentMessageIds: ["old-incoming", "visible-anchor"],
+      messageIds: ["old-incoming", "visible-anchor"],
+    });
   });
 
   test("restores only handled incoming history without rescuing protected or newer messages", () => {
@@ -51,18 +54,21 @@ describe("conversation placement snapshots", () => {
           : message.placement,
     }));
     expect(
-      resolvePlacementMessageIds({
+      resolvePlacementTargets({
         messages: handled,
         placement: "inbox",
         requestedMessageIds: ["visible-anchor"],
         threadId: "conversation",
       })
-    ).toMatchObject(["old-incoming", "visible-anchor"]);
+    ).toMatchObject({
+      intentMessageIds: ["old-incoming", "visible-anchor"],
+      messageIds: ["old-incoming", "visible-anchor"],
+    });
   });
 
   test("rejects missing or cross-conversation anchors before selecting any mail", () => {
     expect(
-      resolvePlacementMessageIds({
+      resolvePlacementTargets({
         messages,
         placement: "done",
         requestedMessageIds: ["missing"],
@@ -70,7 +76,7 @@ describe("conversation placement snapshots", () => {
       })
     ).toBeNull();
     expect(
-      resolvePlacementMessageIds({
+      resolvePlacementTargets({
         messages,
         placement: "done",
         requestedMessageIds: ["visible-anchor"],
@@ -85,12 +91,64 @@ describe("conversation placement snapshots", () => {
       placement: message.id === "visible-anchor" ? "done" : "protected",
     }));
     expect(
-      resolvePlacementMessageIds({
+      resolvePlacementTargets({
         messages: protectedMessages,
         placement: "done",
         requestedMessageIds: ["visible-anchor"],
         threadId: "conversation",
       })
-    ).toHaveLength(0);
+    ).toMatchObject({ intentMessageIds: ["visible-anchor"], messageIds: [] });
+  });
+
+  test("fences the complete normal prefix even when only part needs a state change", () => {
+    const result = resolvePlacementTargets({
+      messages: [
+        ...messages,
+        {
+          id: "already-done",
+          placement: "done",
+          receivedAt: 0,
+          threadId: "conversation",
+        },
+        {
+          id: "another-conversation",
+          placement: "done",
+          receivedAt: 1,
+          threadId: "another",
+        },
+      ],
+      placement: "done",
+      requestedMessageIds: ["visible-anchor"],
+      threadId: "conversation",
+    });
+    expect(result?.messageIds).toStrictEqual([
+      "old-incoming",
+      "visible-anchor",
+    ]);
+    expect(result?.intentMessageIds).toStrictEqual([
+      "already-done",
+      "old-incoming",
+      "visible-anchor",
+    ]);
+  });
+
+  test("Return to Inbox keeps newer handled mail outside both effects and intent", () => {
+    const result = resolvePlacementTargets({
+      messages: messages.map((message): PlacementMessage => ({
+        ...message,
+        placement: message.placement === "protected" ? "protected" : "done",
+      })),
+      placement: "inbox",
+      requestedMessageIds: ["visible-anchor", "visible-anchor"],
+      threadId: "conversation",
+    });
+    expect(result?.messageIds).toStrictEqual([
+      "old-incoming",
+      "visible-anchor",
+    ]);
+    expect(result?.intentMessageIds).toStrictEqual([
+      "old-incoming",
+      "visible-anchor",
+    ]);
   });
 });
