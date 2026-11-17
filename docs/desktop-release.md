@@ -51,6 +51,22 @@ vp run @quieter/desktop#release:size --revision <full-source-SHA>
 
 It writes `apps/desktop/release/release-size.json`. The manual build workflow uploads the report beside the measured installers. The report records checkout changes and rejects a different expected revision. A clean output directory and packaging in that same job establish artifact provenance. A matching revision alone cannot detect an old local artifact. A report from a different revision or a directory containing old artifacts is invalid.
 
+## Distribution integrity checks
+
+After the size collector completes, verify every recorded distribution against that same clean checkout:
+
+```sh
+vp run @quieter/desktop#release:verify --revision <full-source-SHA>
+```
+
+Use `--report <path-to-release-size.json>` for another release directory. The command validates the size report and its clean source revision, rejects duplicate or unsafe artifact paths, and streams each recorded installer to check its exact byte count and SHA-256. Symlinks and nonregular distribution files fail verification. Keep the release directory owned by one build job without concurrent writers.
+
+The command writes `release-integrity.json` beside the size report after every recorded distribution passes. A failed rerun removes the previous receipt. The receipt records the report's SHA-256 and the verifier's checkout revision. It references the existing report rather than creating a second artifact inventory. The manual workflow runs this check after size collection and uploads the receipt with the report and installers.
+
+An integrity receipt proves that the recorded installer bytes match the report at verification time. It does not establish origin trust, signatures, notarization, unpacked application contents, installation, updates or protection against later modification. Same-job packaging supplies the initial build association. Signed distribution and updates still need approved trust identities, a release channel and ownership, protected credentials, matching backend requirements and actual native installation and update-recovery evidence. No release or updater is configured by this command.
+
+## Native runtime measurements
+
 Run native installation and runtime acceptance on each candidate operating system. Use a dedicated synthetic or authorized development account and record whether transport is synthetic, service-backed, or provider-backed. Keep secure storage enabled. A startup error, missing inbox, denied permission, failed request, or authentication screen cannot count as a successful inbox measurement.
 
 For cold startup, reboot the owned test machine and measure at least five reboot launches. For warm startup, reuse the same profile and measure at least five full process restarts. A fresh profile on a warm machine is a fresh-profile result, not an OS-cold result. Report the median and range, plus failures, rather than the fastest run. Separate first paint from a verified usable target screen.
