@@ -867,10 +867,11 @@ export type OrganizationMailTrackingSettings = {
   openTrackingEnabled: boolean;
 };
 
-export const getOrganizationMailTrackingSettings = async (input: {
-  organizationId: string;
-}): Promise<OrganizationMailTrackingSettings> => {
-  const [settings] = await db
+export const getOrganizationMailTrackingSettings = async (
+  input: { organizationId: string },
+  database: DatabaseExecutor = db
+): Promise<OrganizationMailTrackingSettings> => {
+  const [settings] = await database
     .select({
       allowPerSendOverride:
         organizationMailTrackingSettings.allowPerSendOverride,
@@ -890,19 +891,22 @@ export const getOrganizationMailTrackingSettings = async (input: {
   );
 };
 
-export const setOrganizationMailTrackingSettings = async (input: {
-  actorUserId: string;
-  allowPerSendOverride?: boolean;
-  openTrackingEnabled?: boolean;
-  organizationId: string;
-}) => {
+export const setOrganizationMailTrackingSettings = async (
+  input: {
+    actorUserId: string;
+    allowPerSendOverride?: boolean;
+    openTrackingEnabled?: boolean;
+    organizationId: string;
+  },
+  database: DatabaseExecutor = db
+) => {
   const now = new Date();
   const next = {
     allowPerSendOverride: input.allowPerSendOverride ?? false,
     openTrackingEnabled: input.openTrackingEnabled ?? false,
   };
 
-  const [saved] = await db
+  const [saved] = await database
     .insert(organizationMailTrackingSettings)
     .values({
       ...next,
