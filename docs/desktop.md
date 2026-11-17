@@ -1,5 +1,7 @@
 # Electron desktop
 
+The [desktop runtime and release evidence](desktop-release.md) record defines the runtime decision, measurement budgets, and remaining platform acceptance.
+
 `apps/desktop` packages the React application locally with Electron 44, electron-vite 6, Vite+, and electron-builder. It shares mail, compose, chat, settings, onboarding, shortcuts, query persistence, and styles with the website through `@quieter/app`. It uses the same `@quieter/ui` design system. Web server functions and marketing pages remain in `apps/web`.
 
 Web and desktop auth use the same centered `AuthLayout` and the landing page's closing atmospheric shader.
