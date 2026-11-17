@@ -11,6 +11,8 @@
     "./compose/draft-anchor": "./src/compose/draft-anchor.ts",
     "./compose/mime": "./src/compose/mime.ts",
     "./compose/schema": "./src/compose/schema.ts",
+    "./compose/message-quote": "./src/compose/message-quote.ts",
+    "./compose/snippet-quotes": "./src/compose/snippet-quotes.ts",
     "./compose/sender": "./src/compose/sender.ts",
     "./source-set": "./src/source-set.ts",
     "./message-content": "./src/message-content.ts",
@@ -45,6 +47,7 @@
     "html-to-text": "10.0.1",
     "htmlparser2": "10.1.0",
     "nodemailer": "^10.1.0",
+    "parse5": "8.1.1",
     "postal-mime": "^4.0.5",
     "structured-headers": "2.1.1",
     "zod": "catalog:"
