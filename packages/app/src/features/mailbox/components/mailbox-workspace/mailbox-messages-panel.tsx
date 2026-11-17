@@ -19,6 +19,7 @@ import type { MailLayout } from "@quieter/app/features/settings/domain/mail-layo
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -34,7 +35,7 @@ type MailboxMessagesPanelProps = {
   isDemoMode: boolean;
   isManagedDemoMode: boolean;
   mailboxId: string;
-  mailboxProvider: "api" | "gmail" | "managed";
+  mailboxProvider: MailboxProvider;
   onComposeDraftRequested: (draft: ComposeDraftState) => void;
   onFocusRequestComplete?: () => void;
   onManageSnippets: () => void;

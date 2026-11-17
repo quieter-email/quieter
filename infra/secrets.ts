@@ -8,6 +8,12 @@ const directOnlySecretNames = new Set<SstSecretName>([
   "MAIL_INGEST_TOKEN",
 ]);
 
+const optionalSecretNames = new Set<SstSecretName>([
+  "OUTLOOK_MAIL_CLIENT_ID",
+  "OUTLOOK_MAIL_CLIENT_SECRET",
+  "OUTLOOK_MAIL_TOKEN_ENCRYPTION_KEY",
+]);
+
 const isSecretName = (name: string): name is SstSecretName =>
   Object.hasOwn(sstSecretNames, name);
 
@@ -41,7 +47,10 @@ export const createSecretInfrastructure = () => {
     if (!isSecretName(environmentName)) {
       throw new Error(`Unknown SST secret environment name ${environmentName}`);
     }
-    secretResources[environmentName] = new sst.Secret(secretName);
+    secretResources[environmentName] = new sst.Secret(
+      secretName,
+      optionalSecretNames.has(environmentName) ? "" : undefined
+    );
   }
 
   const secretBindings: SecretBindings = {};

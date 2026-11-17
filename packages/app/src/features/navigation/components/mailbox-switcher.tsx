@@ -28,6 +28,7 @@ import {
   appEaseOut,
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -57,7 +58,7 @@ type MailboxSwitcherMailbox = {
   emailAddress: string;
   groupName: string;
   id: string;
-  provider: "api" | "gmail" | "managed";
+  provider: MailboxProvider;
   grantRole?: "manager" | "reader" | "responder" | null;
   unreadNonSpamCount: number;
 };

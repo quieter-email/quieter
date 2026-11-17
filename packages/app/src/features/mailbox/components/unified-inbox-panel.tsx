@@ -30,6 +30,7 @@ import {
   isManagedSandboxMailboxId,
 } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
+import type { MailboxProvider } from "@quieter/mail/search";
 import {
   isMailSearchFilterSupported,
   parseStructuredSearchQuery,
@@ -61,7 +62,9 @@ type SourceState = {
   pendingActions: MailboxPendingActions;
 };
 
-type ConnectedMailbox = UnifiedInboxMailbox & { provider: "gmail" | "managed" };
+type ConnectedMailbox = UnifiedInboxMailbox & {
+  provider: Exclude<MailboxProvider, "api">;
+};
 
 type UnifiedInboxPanelProps = {
   wideCompactRows: boolean;

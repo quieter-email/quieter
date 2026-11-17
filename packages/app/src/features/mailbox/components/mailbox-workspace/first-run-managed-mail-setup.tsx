@@ -35,6 +35,7 @@ import { rethrowClassified } from "@quieter/app/lib/orpc-errors";
 import { getApiUrl, openExternalUrl } from "@quieter/app/runtime";
 import { ORGANIZATION_API_KEY_CONFIG_ID } from "@quieter/auth/organization-api-key";
 import { SEND_API_PATH } from "@quieter/mail/public-api";
+import type { MailboxProvider } from "@quieter/mail/search";
 import { Button, buttonVariants } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
@@ -57,7 +58,7 @@ import { useState } from "react";
 
 type FirstRunOrganization = {
   id: string;
-  mailboxes: { provider: "gmail" | "managed" }[];
+  mailboxes: { provider: Exclude<MailboxProvider, "api"> }[];
   name: string;
 };
 

@@ -37,6 +37,7 @@ import {
 } from "./feedback";
 import type { MailInputs } from "./inputs";
 import { applyMailPlacement, supersedePendingMailPlacement } from "./placement";
+import { assertMailWriteProvider } from "./provider";
 
 type MetadataOperation =
   | "read"
@@ -136,6 +137,7 @@ const mutateMessage = async (
       messageId: input.messageId,
     });
   }
+  assertMailWriteProvider(selectedMailbox.provider);
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -234,6 +236,7 @@ const mutateThread = async (
       threadIds: [input.threadId],
     });
   }
+  assertMailWriteProvider(selectedMailbox.provider);
   if (selectedMailbox.provider === "managed") {
     const authorizedInput = { ...input, userId: context.userId };
     if (operation === "read" || operation === "unread") {
@@ -341,6 +344,7 @@ export const mutationsMailOperations = {
         threadIds: input.targets.map((target) => target.threadId),
       });
     }
+    assertMailWriteProvider(selectedMailbox.provider);
     if (input.command.kind === "set-importance") {
       let { targets } = input;
       if (selectedMailbox.provider === "gmail") {
