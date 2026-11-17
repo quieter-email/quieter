@@ -3,9 +3,12 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./control/application-runtime": "./src/control/application-runtime.ts",
     "./control/authority": "./src/control/authority.ts",
     "./control/contracts": "./src/control/contracts.ts",
     "./control/http": "./src/control/http.ts",
+    "./control/mutation-contracts": "./src/control/mutation-contracts.ts",
+    "./control/mutations": "./src/control/mutations.ts",
     "./control/openapi": "./src/control/openapi.ts",
     "./control/registry": "./src/control/registry.ts",
     "./control/runtime": "./src/control/runtime.ts",

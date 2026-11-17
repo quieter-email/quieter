@@ -1,0 +1,42 @@
+name: Management mutation native checks
+
+on:
+  pull_request:
+    paths:
+      - .github/workflows/check-management-mutations.yml
+      - packages/orpc/src/control/**
+      - packages/orpc/src/organization-mail-delivery.ts
+      - packages/orpc/tests/control-mutations.native.test.ts
+      - packages/orpc/tests/helpers/control-mutation-native.ts
+      - packages/database/src/schema.ts
+      - packages/database/drizzle/**/migration.sql
+      - pnpm-lock.yaml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: management-mutations-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  native-control-mutations:
+    name: Native settings authority and replay
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: Setup repository
+        uses: ./.github/actions/setup
+
+      - name: Build runtime test dependencies
+        run: |
+          vp run @quieter/env#build
+          vp run @quieter/observability#build
+
+      - name: Check native transaction and authority behavior
+        run: vp test packages/orpc/tests/control-mutations.native.test.ts --mode control-native --maxWorkers=1

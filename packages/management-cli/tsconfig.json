@@ -1,0 +1,9 @@
+{
+  "extends": "@quieter/config/tsconfig/base.json",
+  "compilerOptions": {
+    "customConditions": ["development"],
+    "lib": ["ESNext", "DOM"],
+    "types": ["node"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts"]
+}
