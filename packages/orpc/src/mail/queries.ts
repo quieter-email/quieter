@@ -439,6 +439,13 @@ export const queriesMailOperations = {
     context: MailRequestContext;
     input: MailInputs["listThreads"];
   }) => {
+    // Kept out of the zod schema: refined object schemas break .omit() callers
+    // such as the chat mail tools, and this funnel sees every caller anyway.
+    if (input.correspondentEmail !== undefined && input.scope !== "all_mail") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Correspondent history requires all mail.",
+      });
+    }
     if (isOrganizationApiMailboxId(input.mailboxId)) {
       if (input.scope === "all_mail") {
         throw new ORPCError("BAD_REQUEST", {
