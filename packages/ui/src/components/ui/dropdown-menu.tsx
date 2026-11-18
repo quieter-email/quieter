@@ -60,7 +60,6 @@ const DropdownMenuDensityContext =
   createContext<DropdownMenuDensity>("default");
 
 const dropdownMenuTriggerVariants = cva(anchoredTriggerClassName, {
-  defaultVariants: { chrome: "default" },
   variants: {
     appearance: {
       // Muted square icon button, e.g. row overflow menus.
@@ -75,10 +74,6 @@ const dropdownMenuTriggerVariants = cva(anchoredTriggerClassName, {
       "row-strong":
         "flex min-w-0 items-center gap-2 rounded-md text-left text-body-sm font-medium text-fg",
     },
-    chrome: {
-      default: null,
-      toolbar: "rounded-xl",
-    },
   },
 });
 
@@ -89,15 +84,11 @@ type DropdownMenuTriggerProps = ComponentPropsWithoutRef<
 
 export const DropdownMenuTrigger = ({
   appearance,
-  chrome = "default",
   className,
   ...props
 }: DropdownMenuTriggerProps) => (
   <MenuPrimitive.Trigger
-    className={cn(
-      dropdownMenuTriggerVariants({ appearance, chrome }),
-      className
-    )}
+    className={cn(dropdownMenuTriggerVariants({ appearance }), className)}
     {...props}
   />
 );

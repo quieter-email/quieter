@@ -40,7 +40,6 @@ export const MobileHeader = ({
     >
       <IconButtonTooltip label={label}>
         <Button
-          chrome="toolbar"
           aria-label={label}
           onClick={onLeadingClick}
           size="icon-sm"

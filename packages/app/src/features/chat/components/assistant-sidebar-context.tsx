@@ -49,7 +49,6 @@ export const AssistantSidebarTrigger = ({
     >
       <IconButtonTooltip label="Expand assistant sidebar">
         <Button
-          chrome="toolbar"
           aria-controls={sidebar.panelId}
           aria-expanded={sidebar.open}
           aria-label="Expand assistant sidebar"

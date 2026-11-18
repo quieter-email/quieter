@@ -927,7 +927,6 @@ const ReadyComposeSurface = ({
                                       render={
                                         <Button
                                           className="max-w-full min-w-0 shrink justify-start"
-                                          chrome="toolbar"
                                           size="field"
                                           variant="secondary"
                                         />
@@ -1123,7 +1122,6 @@ const ReadyComposeSurface = ({
                               trailing={
                                 <div className="flex shrink-0 items-center gap-2">
                                   <Button
-                                    chrome="toolbar"
                                     aria-controls="compose-cc-field"
                                     aria-expanded={state.showCc}
                                     aria-pressed={state.showCc}
@@ -1137,7 +1135,6 @@ const ReadyComposeSurface = ({
                                     Cc
                                   </Button>
                                   <Button
-                                    chrome="toolbar"
                                     aria-controls="compose-bcc-field"
                                     aria-expanded={state.showBcc}
                                     aria-pressed={state.showBcc}

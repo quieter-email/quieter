@@ -44,7 +44,6 @@ export const MessageListHeader = ({
           <div className="flex self-stretch lg:hidden">
             <IconButtonTooltip label="Open sidebar">
               <Button
-                chrome="toolbar"
                 aria-label="Open sidebar"
                 onClick={onOpenSidebar}
                 size="icon"

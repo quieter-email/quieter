@@ -130,7 +130,6 @@ export const MessageReminderQuickAction = ({
       <IconButtonTooltip label="Remind me">
         <DropdownMenuTrigger
           appearance="icon"
-          chrome="toolbar"
           aria-label="Remind me"
           disabled={quick.isPending || reminders.isPending}
         >

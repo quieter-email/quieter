@@ -543,7 +543,6 @@ const WorkspaceDockShowcase = () => {
                 >
                   <IconButtonTooltip label="Open side panel">
                     <Button
-                      chrome="toolbar"
                       aria-label="Open side panel"
                       onClick={() => {
                         setOpen(true);
@@ -733,16 +732,14 @@ export const DesignSystemShowcase = () => {
           <WorkspaceSection layout="surface">
             <WorkspaceHeader>
               <div className="flex items-center gap-3">
-                <InputGroup chrome="toolbar" className="flex-1">
+                <InputGroup className="flex-1">
                   <Input
                     aria-label="Sample panel search"
                     chrome="attached"
                     placeholder="Search"
                   />
                 </InputGroup>
-                <Button chrome="toolbar" variant="secondary">
-                  Refresh
-                </Button>
+                <Button variant="secondary">Refresh</Button>
               </div>
             </WorkspaceHeader>
             <div className="p-0.5">
@@ -1117,12 +1114,7 @@ export const DesignSystemShowcase = () => {
               Small
             </Button>
             <Button type="button">Default</Button>
-            <Button
-              chrome="toolbar"
-              size="field"
-              type="button"
-              variant="secondary"
-            >
+            <Button size="field" type="button" variant="secondary">
               Field action
             </Button>
             <Button size="lg" type="button">

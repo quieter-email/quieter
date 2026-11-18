@@ -24,7 +24,7 @@ export type SearchableSelectOption = {
 
 export type SearchableSelectProps = Pick<
   SelectTriggerProps,
-  "aria-label" | "chrome" | "className" | "disabled" | "id" | "size" | "variant"
+  "aria-label" | "className" | "disabled" | "id" | "size" | "variant"
 > & {
   emptyMessage?: string;
   onValueChange: (value: string) => void;
@@ -35,7 +35,6 @@ export type SearchableSelectProps = Pick<
 
 export const SearchableSelect = ({
   "aria-label": ariaLabel,
-  chrome = "default",
   className,
   disabled,
   emptyMessage = "No matches found.",
@@ -89,10 +88,7 @@ export const SearchableSelect = ({
     >
       <ComboboxPrimitive.Trigger
         aria-label={ariaLabel}
-        className={cn(
-          selectTriggerVariants({ chrome, size, variant }),
-          className
-        )}
+        className={cn(selectTriggerVariants({ size, variant }), className)}
         id={id}
       >
         <span className="min-w-0 flex-1 truncate">
