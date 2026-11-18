@@ -68,6 +68,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
+import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
@@ -705,14 +706,9 @@ export const LabelsWorkspacePanel = ({
             <DialogHeader>
               <DialogTitle>New label</DialogTitle>
             </DialogHeader>
-            <DialogBody spacing="5">
-              <div className="space-y-2">
-                <label
-                  className="text-caption font-medium"
-                  htmlFor={`${id}-new-name`}
-                >
-                  Name
-                </label>
+            <DialogBody spacing="3">
+              <Field>
+                <FieldLabel htmlFor={`${id}-new-name`}>Name</FieldLabel>
                 <Input
                   disabled={!canManage || createLabelMutation.isPending}
                   id={`${id}-new-name`}
@@ -724,16 +720,16 @@ export const LabelsWorkspacePanel = ({
                   required
                   value={newLabelName}
                 />
-              </div>
-              <div className="space-y-3">
-                <p className="text-caption font-medium">Color</p>
+              </Field>
+              <Field>
+                <FieldLabel>Color</FieldLabel>
                 <MailboxColorPicker
                   disabled={!canManage || createLabelMutation.isPending}
                   label="Label color"
                   onChange={setNewLabelColor}
                   value={newLabelColor}
                 />
-              </div>
+              </Field>
             </DialogBody>
             <DialogFooter>
               <DialogCloseButton
