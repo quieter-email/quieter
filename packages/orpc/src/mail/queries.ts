@@ -288,9 +288,11 @@ export const queriesMailOperations = {
   getThread: async ({
     context,
     input,
+    recordActivity = true,
   }: {
     context: MailRequestContext;
     input: MailInputs["getThread"];
+    recordActivity?: boolean;
   }) => {
     if (isOrganizationApiMailboxId(input.mailboxId)) {
       return await getOrganizationApiMailThread({
@@ -315,9 +317,11 @@ export const queriesMailOperations = {
                 accessToken,
                 input.threadId,
                 signal,
-                (snapshot) => {
-                  snapshots.push(snapshot);
-                }
+                recordActivity
+                  ? (snapshot) => {
+                      snapshots.push(snapshot);
+                    }
+                  : undefined
               )
           ).catch((error: unknown) => {
             if (isGmailServiceError(error) && error.status === 404) {
@@ -338,6 +342,9 @@ export const queriesMailOperations = {
               context.resHeaders
             ),
           };
+    if (!recordActivity) {
+      return result;
+    }
     const capture = (async () => {
       try {
         await withRequestDatabaseClient(async () => {
@@ -432,7 +439,19 @@ export const queriesMailOperations = {
     context: MailRequestContext;
     input: MailInputs["listThreads"];
   }) => {
+    // Kept out of the zod schema: refined object schemas break .omit() callers
+    // such as the chat mail tools, and this funnel sees every caller anyway.
+    if (input.correspondentEmail !== undefined && input.scope !== "all_mail") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Correspondent history requires all mail.",
+      });
+    }
     if (isOrganizationApiMailboxId(input.mailboxId)) {
+      if (input.scope === "all_mail") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "All mail history is unavailable for this mailbox.",
+        });
+      }
       return await listOrganizationApiMailMessages({
         ...input,
         userId: context.userId,
@@ -450,7 +469,7 @@ export const queriesMailOperations = {
       });
     }
 
-    if (input.category === "important") {
+    if (input.scope !== "all_mail" && input.category === "important") {
       const searchExpression = parseCapturedImportanceSearch(input.query);
       const pending: MailSearchExpression[] = searchExpression
         ? [searchExpression]
@@ -501,7 +520,7 @@ export const queriesMailOperations = {
       context,
       input.mailboxId,
       async (accessToken, signal) =>
-        input.category === "drafts"
+        input.scope !== "all_mail" && input.category === "drafts"
           ? await listDraftsWithDetails(accessToken, {
               maxResults: input.maxResults,
               pageToken: input.pageToken,
@@ -509,7 +528,9 @@ export const queriesMailOperations = {
               signal,
             })
           : await listMessagesWithDetails(accessToken, {
-              mailbox: input.category,
+              correspondentEmail: input.correspondentEmail,
+              excludeProtected: input.scope === "all_mail",
+              mailbox: input.scope === "all_mail" ? undefined : input.category,
               maxResults: input.maxResults,
               pageToken: input.pageToken,
               query: input.query?.trim() || undefined,
