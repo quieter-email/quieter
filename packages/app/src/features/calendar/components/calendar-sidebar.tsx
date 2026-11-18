@@ -426,7 +426,7 @@ const CalendarSidebarContent = ({
                           }
                           presets={colorPresets}
                         >
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-body-sm">
+                          <label className="flex min-w-0 flex-1 cursor-default items-center gap-2 text-body-sm">
                             <Checkbox
                               aria-label={`Show ${calendar.name}`}
                               checked={

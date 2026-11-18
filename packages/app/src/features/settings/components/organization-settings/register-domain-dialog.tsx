@@ -201,7 +201,7 @@ export const RegisterDomainDialog = ({
                             htmlFor={`domain-mode-${option.value}`}
                             className={cn(
                               surfaceVariants({ variant: "detail" }),
-                              "flex cursor-pointer gap-3"
+                              "flex cursor-default gap-3"
                             )}
                             key={option.value}
                           >

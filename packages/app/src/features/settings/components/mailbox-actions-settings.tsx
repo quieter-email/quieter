@@ -157,7 +157,7 @@ const MailboxActionsForm = ({
               </SettingsRowText>
             ) : null}
             <details className="text-body-sm text-muted-fg">
-              <summary className="cursor-pointer">Current instructions</summary>
+              <summary className="cursor-default">Current instructions</summary>
               <p className="mt-2 whitespace-pre-wrap text-fg">
                 {data.active.specification.instructions}
               </p>

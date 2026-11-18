@@ -539,7 +539,7 @@ const DivisionDetailView = ({
                   <label
                     className={cn(
                       settingsSurfaceVariants({ variant: "insetRow" }),
-                      "cursor-pointer gap-3"
+                      "cursor-default gap-3"
                     )}
                     htmlFor={`division-member-${memberRecord.id}`}
                     key={memberRecord.id}
