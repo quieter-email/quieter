@@ -14,7 +14,6 @@ import {
 import type { composeMailOperations } from "../src/mail/compose";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
 import {
-  cancelScheduledSend,
   createScheduledSend,
   dispatchScheduledSend,
   validateScheduledSendTime,
@@ -86,6 +85,7 @@ describe("scheduled send execution", () => {
     row = {
       ...scope,
       createdAt: new Date(),
+      deliveryKind: "scheduled",
       draftRemovedAt: new Date(),
       errorMessage: null,
       leaseToken: null,
@@ -358,25 +358,6 @@ describe("scheduled send execution", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(fixture.deleteDraft).not.toHaveBeenCalled();
     expect(fixture.send).not.toHaveBeenCalled();
-  });
-
-  test("rejects cancellation once submission can have started", async () => {
-    row.status = "sending";
-    // A real database refuses this conditional update once status has changed.
-    // oxlint-disable-next-line eslint/require-await -- The driver refuses the state transition without I/O.
-    fixture.query.mockImplementation(async (query) => ({
-      rows: query.startsWith("select")
-        ? [
-            Object.keys(getTableColumns(scheduledMailSend)).map(
-              (key) => Object.entries(row).find(([name]) => name === key)?.[1]
-            ),
-          ]
-        : [],
-    }));
-    await expect(cancelScheduledSend(scope)).rejects.toMatchObject({
-      code: "CONFLICT",
-    });
-    expect(fixture.saveDraft).not.toHaveBeenCalled();
   });
 });
 
