@@ -1140,7 +1140,6 @@ const CalendarWorkspaceContent = ({
     .formatToParts(new Date(currentInstant))
     .find((part) => part.type === "timeZoneName")
     ?.value.replace("GMT", "UTC");
-  const detailsVisible = wide && details !== null;
   return (
     <div
       className={cn(
@@ -1677,33 +1676,35 @@ const CalendarWorkspaceContent = ({
           ) : null}
           {wide ? (
             <aside
-              aria-hidden={!detailsVisible || undefined}
               aria-label="Event details"
-              className={cn(
-                // oxlint-disable-next-line shadcn/no-arbitrary-values -- The event panel collapses by animating its width alongside the schedule.
-                "ml-auto flex shrink-0 flex-col overflow-hidden transition-[width,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none",
-                {
-                  "pointer-events-none w-0 opacity-0": !detailsVisible,
-                  "w-88": detailsVisible,
-                }
-              )}
-              inert={!detailsVisible}
+              className="ml-auto flex w-88 shrink-0 flex-col"
             >
-              <div className="flex min-h-0 w-88 flex-1 flex-col">
-                {details && activeEditor?.kind === "create" ? (
-                  <div
-                    className={cn(
-                      "flex min-h-0 flex-1 flex-col",
-                      entranceMotionVariants()
-                    )}
-                    key={activeEditor.operationId}
+              {details && activeEditor?.kind === "create" ? (
+                <div
+                  className={cn(
+                    "flex min-h-0 flex-1 flex-col",
+                    entranceMotionVariants()
+                  )}
+                  key={activeEditor.operationId}
+                >
+                  {details}
+                </div>
+              ) : (
+                (details ?? (
+                  <Surface
+                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    padding="none"
+                    variant="section"
                   >
-                    {details}
-                  </div>
-                ) : (
-                  details
-                )}
-              </div>
+                    <LazyMotion features={domAnimation}>
+                      <EmptyMessageState
+                        title="No event selected"
+                        description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
+                      />
+                    </LazyMotion>
+                  </Surface>
+                ))
+              )}
             </aside>
           ) : null}
         </div>
