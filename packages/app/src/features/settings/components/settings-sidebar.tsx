@@ -182,7 +182,9 @@ export const SettingsSidebar = ({
       ) : (
         <nav aria-label="Settings" className="space-y-4 p-1">
           <div className="space-y-0">
-            <p className="px-2 py-1 text-caption text-muted-fg">Personal</p>
+            <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
+              Personal
+            </p>
             {PERSONAL_ITEMS.map((item) =>
               navigationLink(
                 item.title,
@@ -203,7 +205,7 @@ export const SettingsSidebar = ({
             {internalNavigation}
           </div>
           <div className="space-y-0">
-            <p className="px-2 py-1 text-caption text-muted-fg">
+            <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
               Team settings
             </p>
             <DropdownMenu>
