@@ -1008,25 +1008,28 @@ export const DesignSystemShowcase = () => {
               })}
             >
               <MailListRowDetails
+                actions={
+                  <IconButtonTooltip label="Mark conversation Done">
+                    <Button
+                      aria-label="Mark conversation Done"
+                      fullWidth
+                      size="xs"
+                      type="button"
+                      variant="row-action"
+                    >
+                      <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+                      <span className="hidden @3xl:inline">Done</span>
+                    </Button>
+                  </IconButtonTooltip>
+                }
                 active
                 metadata={
-                  <>
-                    <MailListRowMetadata
-                      attachmentCount={2}
-                      attachmentNames={["Project brief.pdf", "Budget.xlsx"]}
-                      layout="adaptive"
-                      messageCount={4}
-                    />
-                    <IconButtonTooltip label="Mark conversation Done">
-                      <Button
-                        aria-label="Mark conversation Done"
-                        type="button"
-                        variant="pill"
-                      >
-                        <Icon aria-hidden icon={CheckmarkCircle02Icon} />
-                      </Button>
-                    </IconButtonTooltip>
-                  </>
+                  <MailListRowMetadata
+                    attachmentCount={2}
+                    attachmentNames={["Project brief.pdf", "Budget.xlsx"]}
+                    layout="adaptive"
+                    messageCount={4}
+                  />
                 }
                 badge={
                   <Pill size="xs" tone="purple">
@@ -1102,9 +1105,6 @@ export const DesignSystemShowcase = () => {
             </Button>
             <Button type="button" variant="ghost">
               Ghost
-            </Button>
-            <Button type="button" variant="pill">
-              Pill
             </Button>
             <Button type="button" variant="destructive">
               Destructive
