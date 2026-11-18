@@ -29,6 +29,12 @@ export const appRouter = {
     async () =>
       await import("./chat").then(({ chatRouter }) => ({ default: chatRouter }))
   ),
+  collaboration: lazy(
+    async () =>
+      await import("./collaboration").then(({ collaborationRouter }) => ({
+        default: collaborationRouter,
+      }))
+  ),
   connectors: lazy(
     async () =>
       await import("./connectors").then(({ connectorsRouter }) => ({
