@@ -148,7 +148,7 @@ export const RegisterDomainDialog = ({
               action={async () => {
                 await form.handleSubmit();
               }}
-              className="space-y-5"
+              className="space-y-3"
             >
               <form.Field name="domain">
                 {(field) => (

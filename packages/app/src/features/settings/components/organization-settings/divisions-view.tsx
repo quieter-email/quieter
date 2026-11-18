@@ -153,7 +153,7 @@ const CreateDivisionDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody spacing="4">
+            <DialogBody spacing="3">
               <form.Field name="name">
                 {(field) => (
                   <TextField>
@@ -315,7 +315,7 @@ const EditDivisionFieldDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody spacing="4">
+            <DialogBody spacing="3">
               <form.Field name="value">
                 {(formField) => (
                   <TextField>

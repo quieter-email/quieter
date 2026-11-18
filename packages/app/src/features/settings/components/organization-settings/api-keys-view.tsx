@@ -349,7 +349,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                 </DialogDescription>
               </DialogHeader>
 
-              <DialogBody spacing="4">
+              <DialogBody spacing="3">
                 <form.Field name="name">
                   {(field) => (
                     <TextField>
