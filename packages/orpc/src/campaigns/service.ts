@@ -354,13 +354,28 @@ export const sendCampaign = async (
   ) {
     return serializeCampaign(campaign);
   }
-  sendMessageInputSchema.parse({
+  const messageValidation = sendMessageInputSchema.safeParse({
     from: campaign.from,
     html: campaign.html ?? undefined,
     subject: campaign.subject,
     text: campaign.text,
     to: ["validation@example.com"],
   });
+  if (!messageValidation.success) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: messageValidation.error.issues
+        .map((issue) => {
+          if (issue.path[0] === "subject") {
+            return "Add a subject before sending.";
+          }
+          if (issue.path[0] === "text") {
+            return "Add text content before sending.";
+          }
+          return issue.message;
+        })
+        .join(" "),
+    });
+  }
   await assertOrganizationOwnsVerifiedSenderDomain({
     organizationId: actor.organizationId,
     sender: campaign.from,

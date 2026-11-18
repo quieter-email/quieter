@@ -318,7 +318,6 @@ export const updateContact = async (
     await transaction
       .update(organizationAudienceMembership)
       .set({
-        lastLifecycleOccurredAt: now,
         tags:
           input.tags === undefined
             ? undefined

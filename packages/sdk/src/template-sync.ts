@@ -325,7 +325,7 @@ export const openTemplateSync = async ({
               )
             ) {
               throw new QuieterApiError({
-                message: `Template ${key} changed after its creation. Review it in Quieter, then run quieter templates link ${key} ${current.id} to accept that version.`,
+                message: `Template ${key} changed after its creation. Review it in Quieter, then copy the saved content into your local files to keep it, or run quieter templates link ${key} ${current.id} to overwrite it with your local content on the next sync.`,
                 status: 409,
               });
             }
@@ -343,7 +343,7 @@ export const openTemplateSync = async ({
             ) {
               if (current.updatedAt !== binding.expectedUpdatedAt) {
                 throw new QuieterApiError({
-                  message: `Template ${key} changed while an upload was pending. Review it in Quieter, then run quieter templates link ${key} ${current.id} to accept that version.`,
+                  message: `Template ${key} changed while an upload was pending. Review it in Quieter, then copy the saved content into your local files to keep it, or run quieter templates link ${key} ${current.id} to overwrite it with your local content on the next sync.`,
                   status: 409,
                 });
               }
@@ -377,7 +377,7 @@ export const openTemplateSync = async ({
           }
           if (current.updatedAt !== binding.updatedAt) {
             throw new QuieterApiError({
-              message: `Template ${key} has a newer saved version. Review it in Quieter, then run quieter templates link ${key} ${current.id} to accept that version.`,
+              message: `Template ${key} has a newer saved version. Review it in Quieter, then copy the saved content into your local files to keep it, or run quieter templates link ${key} ${current.id} to overwrite it with your local content on the next sync.`,
               status: 409,
             });
           }

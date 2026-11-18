@@ -95,7 +95,10 @@ export const list = async (
         eq(organizationAudience.organizationId, input.organizationId),
         input.cursor ? gt(organizationAudience.id, input.cursor) : undefined,
         input.search
-          ? ilike(organizationAudience.name, `%${input.search}%`)
+          ? ilike(
+              organizationAudience.name,
+              `%${input.search.replaceAll(/[\\%_]/gu, "\\$&")}%`
+            )
           : undefined
       )
     )
@@ -254,8 +257,14 @@ export const listContacts = async (
           : undefined,
         input.search
           ? or(
-              ilike(organizationContact.email, `%${input.search}%`),
-              ilike(organizationContact.name, `%${input.search}%`)
+              ilike(
+                organizationContact.email,
+                `%${input.search.replaceAll(/[\\%_]/gu, "\\$&")}%`
+              ),
+              ilike(
+                organizationContact.name,
+                `%${input.search.replaceAll(/[\\%_]/gu, "\\$&")}%`
+              )
             )
           : undefined,
         suppressionCondition,

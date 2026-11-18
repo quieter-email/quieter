@@ -159,7 +159,8 @@ export const CampaignDetail = ({ campaignId }: { campaignId: string }) => {
                 </p>
                 {canManage ? (
                   <div className="flex gap-2">
-                    {counts.failed > 0 && item.status !== "canceled" ? (
+                    {counts.failed > 0 &&
+                    ["paused", "completed"].includes(item.status) ? (
                       <Button
                         disabled={action.isPending}
                         onClick={() => {
