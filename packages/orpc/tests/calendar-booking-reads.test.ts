@@ -281,6 +281,19 @@ describe("booking read boundaries", () => {
         ).size
       ).toBe(1);
     });
+
+    test("rate limits do not become a definitive unavailable view", async () => {
+      vi.mocked(consumeRateLimit).mockResolvedValue({
+        allowed: false,
+        remaining: 0,
+        resetAt: now,
+      });
+      await expect(viewCalendarBooking({ capability })).rejects.toMatchObject({
+        code: "TOO_MANY_REQUESTS",
+      });
+      expect(mocks.query).not.toHaveBeenCalled();
+      expect(mocks.report).not.toHaveBeenCalled();
+    });
   });
 
   describe("booking receipt privacy and uncertainty", () => {

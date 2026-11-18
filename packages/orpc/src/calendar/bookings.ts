@@ -993,6 +993,9 @@ export const viewCalendarBooking = async (
     };
   } catch (error) {
     input.signal?.throwIfAborted();
+    if (error instanceof ORPCError && error.code === "TOO_MANY_REQUESTS") {
+      throw error;
+    }
     if (!(error instanceof ORPCError) || error.status >= 500) {
       reportError(new Error("Booking availability could not be loaded."), {
         operation: "calendar:booking-view",
