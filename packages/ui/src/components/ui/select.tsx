@@ -11,10 +11,17 @@ import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon, ChevronUpIcon } from "./icons";
 import {
+  menuCompactGroupLabelClassName,
+  menuCompactItemClassName,
+  menuCompactPopupClassName,
+  menuGroupLabelClassName,
+  menuItemClassName,
+} from "./menu-chrome";
+import {
   anchoredPopupMotionClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 
 type SelectDensity = "default" | "compact";
 
@@ -117,7 +124,7 @@ export const SelectContent = ({
   className,
   positionerClassName,
   side,
-  sideOffset = 4,
+  sideOffset = popupSideOffset,
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.Popup> &
@@ -143,7 +150,7 @@ export const SelectContent = ({
             anchoredPopupMotionClassName,
             popupSurfaceClassName,
             "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl p-1 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
-            { "min-w-40 p-0.5 text-caption": size === "compact" },
+            { [menuCompactPopupClassName]: size === "compact" },
             className
           )}
           {...props}
@@ -208,8 +215,12 @@ export const SelectItem = ({
   return (
     <SelectPrimitive.Item
       className={cn(
-        "relative flex min-h-7 cursor-default scroll-my-1 items-center gap-2 rounded-md py-1 pr-8 pl-2.5 text-body text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100",
-        { "min-h-7 gap-1.5 py-1 pr-7 pl-2 text-caption": size === "compact" },
+        menuItemClassName,
+        "scroll-my-1 pr-8",
+        {
+          [menuCompactItemClassName]: size === "compact",
+          "pr-7": size === "compact",
+        },
         className
       )}
       {...props}
@@ -231,8 +242,8 @@ export const SelectGroupLabel = ({
   return (
     <SelectPrimitive.GroupLabel
       className={cn(
-        "px-2.5 py-1 text-caption text-muted-fg",
-        { "px-2 py-0.5 text-micro": size === "compact" },
+        menuGroupLabelClassName,
+        { [menuCompactGroupLabelClassName]: size === "compact" },
         className
       )}
       {...props}
