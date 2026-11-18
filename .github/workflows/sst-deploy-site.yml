@@ -59,6 +59,12 @@ jobs:
       - name: Confirm the landing host is already attached
         run: vp exec node scripts/assert-marketing-host.ts
 
+      # sst deploy --target Site still evaluates the whole config, and Web
+      # requires a release plan whose current build ID matches this run.
+      # The app router serves the deployment status this preparation reads.
+      - name: Prepare web release routing
+        run: vp exec node scripts/web-release.ts prepare https://app.quieter.email "$QUIETER_BUILD_ID"
+
       - name: Deploy the landing worker
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
