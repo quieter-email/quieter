@@ -357,7 +357,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             <div className={cn("shrink-0", { "lg:hidden": !showDesktopBack })}>
               <IconButtonTooltip label="Back to list">
                 <Button
-                  chrome="toolbar"
                   aria-label="Back to list"
                   onClick={onBackToList}
                   size="icon-sm"
@@ -399,7 +398,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {toggleThreadPlacement && (
             <IconButtonTooltip label={placementLabel}>
               <Button
-                chrome="toolbar"
                 aria-label={placementLabel}
                 disabled={isActionPending}
                 onClick={toggleThreadPlacement}
@@ -417,7 +415,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {toggleThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
-                chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}
@@ -450,9 +447,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             </div>
           )}
-          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
-            <AssistantSidebarTrigger />
-          </div>
+          <AssistantSidebarTrigger
+            className={cn("data-[sidebar-open=true]:-ms-3", {
+              "lg:hidden": !detailOnly,
+            })}
+          />
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
@@ -580,7 +579,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             )}
 
             {showInlineCompose ? (
-              <div className="px-4 py-4 @sm:px-5 @sm:py-5">
+              <div className="p-4">
                 <LazyMotion features={domMax}>
                   <AnimatePresence initial={false} mode="popLayout">
                     {inlineDraft ? (

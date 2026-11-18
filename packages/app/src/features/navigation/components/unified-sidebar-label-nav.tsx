@@ -129,7 +129,7 @@ export const UnifiedSidebarLabelNav = ({
 
   return (
     <section className="mt-4">
-      <div className="mb-1 flex items-center justify-between px-2">
+      <div className="mb-1 flex items-center justify-between px-3">
         <p className="text-caption font-medium text-muted-fg">Labels</p>
         {mailboxes.length > 0 && (
           <DropdownMenu>

@@ -94,7 +94,7 @@ export const SidebarMailboxNav = ({
     <nav aria-label="Mailboxes" className="flex flex-col">
       <SidebarEntrance
         animateEntrance={animateEntrance}
-        className="mt-2 mb-1 flex items-center justify-between px-2"
+        className="mt-2 mb-1 flex items-center justify-between px-3"
         index={3}
       >
         <p className="text-caption font-medium text-muted-fg">Mail</p>

@@ -206,7 +206,6 @@ export const AssistantSidebar = ({
               </Tabs>
               <IconButtonTooltip label="Collapse assistant sidebar">
                 <Button
-                  chrome="toolbar"
                   aria-controls={id}
                   aria-expanded={open}
                   aria-label="Collapse assistant sidebar"
@@ -221,11 +220,10 @@ export const AssistantSidebar = ({
             </div>
           </WorkspaceHeader>
           <div hidden={tab !== "chat"}>
-            <WorkspaceHeader>
+            <WorkspaceHeader className="mt-0">
               <div className="flex items-center gap-2">
                 <DropdownMenu key={open ? "visible" : "hidden"}>
                   <DropdownMenuTrigger
-                    chrome="toolbar"
                     appearance="row-strong"
                     aria-label="Open conversation history"
                     type="button"
@@ -340,7 +338,6 @@ export const AssistantSidebar = ({
                 </DropdownMenu>
                 <IconButtonTooltip label="New conversation">
                   <Button
-                    chrome="toolbar"
                     aria-label="New conversation"
                     onClick={onNewChat}
                     size="icon-sm"

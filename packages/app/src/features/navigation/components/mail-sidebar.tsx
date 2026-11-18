@@ -230,7 +230,7 @@ const SidebarInboxSection = ({
             index={10}
           >
             <nav aria-label="Mail tools" className="flex flex-col">
-              <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
+              <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
                 Tools
               </p>
               <SidebarMailboxNavItem

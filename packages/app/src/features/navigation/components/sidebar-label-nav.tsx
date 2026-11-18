@@ -278,7 +278,7 @@ export const SidebarLabelNav = ({
     <section className="mt-4">
       <SidebarEntrance
         animateEntrance={shouldAnimateEntrance}
-        className="mb-1 flex items-center justify-between px-2"
+        className="mb-1 flex items-center justify-between px-3"
         index={8}
       >
         <p className="text-caption font-medium text-muted-fg">{labelTitle}</p>
