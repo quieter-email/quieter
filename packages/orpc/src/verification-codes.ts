@@ -171,7 +171,7 @@ const reportVerificationCodeUsage = async (
   userId: string
 ) => {
   const { model } = event;
-  // Legacy rows store "<screen-model>+<chat-model>" from the screened pipeline.
+  // Legacy rows store the pre-migration screen slug or "<screen>+<chat>" pairs.
   const legacyExtractionModel =
     model?.includes("+") === true
       ? model.slice(model.indexOf("+") + 1)
@@ -181,6 +181,7 @@ const reportVerificationCodeUsage = async (
     !event.processedAt ||
     model === null ||
     (model !== VERIFICATION_CODE_MODEL &&
+      model !== "typesafe/jev-1.13" &&
       (legacyExtractionModel === undefined ||
         !chatModelSchema.safeParse(legacyExtractionModel).success)) ||
     event.costUsd === null ||

@@ -23,6 +23,7 @@ const mailRequestBudgets = {
     provider: {
       max_price: { completion: 0, prompt: 0.042, request: 0 },
       only: ["liquid"],
+      zdr: true,
     },
   },
 } as const;

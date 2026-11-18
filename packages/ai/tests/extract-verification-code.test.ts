@@ -88,6 +88,32 @@ describe("mail verification code extraction", () => {
     });
   });
 
+  test("removes spaces between code characters before validation", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          answers: {
+            code: { type: "text", value: "482 193" },
+            expiresInSeconds: { type: "number", value: null },
+            service: { type: "text", value: null },
+          },
+          usage,
+        })
+      )
+    );
+    await expect(
+      extractMailVerificationCode({
+        billing,
+        message: { bodyText: "Your code is 482 193.", id: "message" },
+      })
+    ).resolves.toStrictEqual({
+      code: "482193",
+      expiresInSeconds: null,
+      service: null,
+    });
+  });
+
   test("fails closed when the answer shape is incomplete", async () => {
     vi.stubGlobal(
       "fetch",
@@ -95,12 +121,17 @@ describe("mail verification code extraction", () => {
         .fn<typeof fetch>()
         .mockResolvedValue(Response.json({ answers: {}, usage }))
     );
+    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
     await expect(
       extractMailVerificationCode({
         billing,
         message: { bodyText: "Your code is 482193.", id: "message" },
+        onUsage,
       })
     ).rejects.toThrow(/answers/u);
+    expect(onUsage).toHaveBeenCalledWith(
+      expect.objectContaining({ costUsd: 0.001 })
+    );
   });
 });
 

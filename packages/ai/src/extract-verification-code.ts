@@ -16,8 +16,6 @@ export const VERIFICATION_CODE_MODEL = "liquid/d1.2-ultra";
 
 const codeField = z
   .string()
-  .min(4)
-  .max(24)
   .refine((value) => /^[\p{L}\p{N}-]{4,12}$/u.test(value));
 
 const verificationCodeSchema = z.object({
@@ -156,11 +154,9 @@ export const extractMailVerificationCode = async ({
     });
     const { answers } = extractionAnswersSchema.parse(payload);
     const expiresInSeconds = answers.expiresInSeconds.value;
+    const code = answers.code.value?.replaceAll(/[\s\p{Z}]+/gu, "") ?? null;
     return verificationCodeSchema.parse({
-      code:
-        answers.code.value === null
-          ? null
-          : (codeField.safeParse(answers.code.value).data ?? null),
+      code: code === null ? null : (codeField.safeParse(code).data ?? null),
       expiresInSeconds:
         expiresInSeconds !== null &&
         Number.isInteger(expiresInSeconds) &&
