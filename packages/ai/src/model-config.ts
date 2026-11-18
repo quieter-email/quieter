@@ -8,9 +8,6 @@ import {
 } from "./chat-models";
 import type { ChatModel } from "./chat-models";
 
-export const VERIFICATION_CODE_MODEL: ChatModel =
-  "google/gemini-3.1-flash-lite";
-
 /**
  * Resolves a configured model id against the catalog. Unset values fall back
  * to the matching default; misconfigured values fail loudly so bad secret

@@ -5,7 +5,6 @@ import { beforeEach, describe, expect, test, vi } from "vite-plus/test";
 import { z } from "zod";
 
 import type { AiUsageReport } from "../src/chat-usage";
-import { extractMailVerificationCode } from "../src/extract-verification-code";
 import { runStructuredGeneration } from "../src/generation";
 
 const billing: AiBillingContext = {
@@ -195,33 +194,6 @@ describe("structured generation recovery", () => {
       );
     }
   );
-
-  test("rejects a login-link token as a verification code and accounts for the response", async () => {
-    const model = new MockLanguageModelV4({
-      doGenerate: response({
-        costUsd: 0.125,
-        text: JSON.stringify({
-          code: `signed.${"synthetic".repeat(20)}.token`,
-          expiresInSeconds: null,
-          service: "Example",
-        }),
-      }),
-    });
-    state.model.mockReturnValue(model);
-    const onUsage = vi.fn<(usage: AiUsageReport) => void>();
-
-    await expect(
-      extractMailVerificationCode({
-        billing,
-        message: { id: "synthetic-message", subject: "Sign in to Example" },
-        onUsage,
-      })
-    ).rejects.toThrow(NoObjectGeneratedError);
-
-    expect(onUsage).toHaveBeenCalledWith(
-      expect.objectContaining({ costUsd: 0.125 })
-    );
-  });
 
   test.each(["content-filter", "error"] as const)(
     "does not retry %s output and retains its billed usage",
