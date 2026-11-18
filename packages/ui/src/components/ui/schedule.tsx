@@ -80,6 +80,7 @@ export type ScheduleProps = {
   }) => void;
   selectedDate?: string;
   selectedId?: string;
+  timeZoneLabel?: string;
   today: string;
   view: "day" | "week" | "month" | "agenda";
 };
@@ -211,6 +212,7 @@ export const Schedule = ({
   onSlotCreate,
   selectedDate,
   selectedId,
+  timeZoneLabel,
   today,
   view,
 }: ScheduleProps) => {
@@ -456,7 +458,7 @@ export const Schedule = ({
                 className={cn(
                   "absolute inset-x-0 top-[var(--schedule-top)] h-3.5 cursor-crosshair text-left outline-none hover:bg-control-hover focus-visible:z-10 focus-visible:bg-control-hover focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset",
                   {
-                    "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border":
+                    "before:pointer-events-none before:absolute before:inset-x-0 before:top-0 before:border-t before:border-border/60":
                       minute % 60 === 0,
                   }
                 )}
@@ -578,7 +580,8 @@ export const Schedule = ({
         aria-label={`${item.title}, ${item.allDay ? "all day" : `${formatTimeMinute(item.startMinute, timeFormat)} to ${formatTimeMinute(item.endMinute, timeFormat)}`}. ${item.preview ? "Unsaved event preview." : "Open event to edit."}`}
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
-          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_srgb,var(--schedule-event-color)_30%,var(--card))] px-2 py-1 text-left text-body-sm leading-4 text-fg transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:brightness-95 data-dragging:opacity-35 data-selected:ring-2 data-selected:ring-primary motion-reduce:transition-none",
+          // Mixing the calendar color toward the theme foreground keeps tinted text readable in light and dark themes.
+          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border border-[color-mix(in_oklab,var(--schedule-event-color)_32%,transparent)] bg-[color-mix(in_oklab,var(--schedule-event-color)_20%,var(--section))] px-2 py-1 text-left text-body-sm leading-4 text-[color-mix(in_oklab,var(--schedule-event-color)_62%,var(--fg))] transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:bg-[color-mix(in_oklab,var(--schedule-event-color)_27%,var(--section))] data-dragging:opacity-35 data-selected:border-[color-mix(in_oklab,var(--schedule-event-color)_85%,var(--fg))] data-selected:bg-[color-mix(in_oklab,var(--schedule-event-color)_34%,var(--section))] motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
             "cursor-grab active:cursor-grabbing":
@@ -635,13 +638,13 @@ export const Schedule = ({
           {item.title}
         </span>
         {!compact && !item.allDay && duration >= 45 ? (
-          <span className="w-full shrink-0 truncate text-micro">
+          <span className="mt-0.5 w-full shrink-0 truncate text-caption opacity-75">
             {formatTimeMinute(item.startMinute, timeFormat)} –{" "}
             {formatTimeMinute(item.endMinute, timeFormat)}
           </span>
         ) : null}
         {!compact && duration >= 90 && item.detail ? (
-          <span className="hidden w-full shrink-0 truncate text-micro @min-[8rem]/event-card:block">
+          <span className="hidden w-full shrink-0 truncate text-micro opacity-75 @min-[8rem]/event-card:block">
             {item.detail}
           </span>
         ) : null}
@@ -740,18 +743,14 @@ export const Schedule = ({
           ref={scrollRef}
         >
           <div
-            className={cn(
-              surfaceVariants({
-                chrome: "inset",
-                padding: "none",
-                variant: "detail",
-              }),
-              "sticky top-0 z-30 mb-0.5 grid min-w-xl shrink-0 grid-cols-7 overflow-hidden"
-            )}
+            className="sticky top-0 z-30 grid min-w-xl shrink-0 grid-cols-7 bg-section"
             data-schedule-weekdays=""
           >
             {dates.slice(0, 7).map((date) => (
-              <div className="px-3 py-3 text-caption text-muted-fg" key={date}>
+              <div
+                className="px-3 py-3 text-center text-body-sm text-muted-fg"
+                key={date}
+              >
                 {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
               </div>
             ))}
@@ -775,7 +774,7 @@ export const Schedule = ({
                     date === selectedDate ? "secondary" : "ghost";
                   return (
                     <div
-                      className="min-h-28 min-w-0 border-t border-r border-border px-2 py-3 data-schedule-drop-active:bg-primary/5 nth-[7n]:border-r-0"
+                      className="min-h-28 min-w-0 border-t border-r border-border/60 px-2 py-3 data-schedule-drop-active:bg-primary/5 nth-[7n]:border-r-0"
                       data-schedule-drop-date={date}
                       data-schedule-drop-kind="date"
                       data-selected-date={date === selectedDate || undefined}
@@ -885,9 +884,10 @@ export const Schedule = ({
   }
 
   const columnStyle: ScheduleStyle = {
-    "--schedule-columns": `${timeFormat === "12h" ? "4rem" : "3rem"} repeat(${dates.length}, minmax(6.5rem, 1fr))`,
-    "--schedule-min-width": `${(timeFormat === "12h" ? 64 : 48) + dates.length * 104}px`,
+    "--schedule-columns": `${timeFormat === "12h" ? "4.5rem" : "4rem"} repeat(${dates.length}, minmax(6.5rem, 1fr))`,
+    "--schedule-min-width": `${(timeFormat === "12h" ? 72 : 64) + dates.length * 104}px`,
   };
+  const showCurrentTime = currentMinute !== undefined && dates.includes(today);
   const currentTimeStyle: ScheduleStyle = {
     "--schedule-top": `${((currentMinute ?? 0) * hourHeight) / 60}px`,
   };
@@ -905,7 +905,7 @@ export const Schedule = ({
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
       className={cn(
-        surfaceVariants({ padding: "compact" }),
+        surfaceVariants({ padding: "none" }),
         scheduleFrameClassName
       )}
       ref={scrollRef}
@@ -917,59 +917,43 @@ export const Schedule = ({
         date and time.
       </p>
       <div
-        className="sticky -top-0.5 z-30 -mt-0.5 w-full min-w-[var(--schedule-min-width)] bg-section pt-0.5 pb-0.5"
+        className="sticky top-0 z-30 w-full min-w-[var(--schedule-min-width)] bg-section"
         style={columnStyle}
       >
-        <div
-          className={cn(
-            surfaceVariants({
-              chrome: "inset",
-              padding: "none",
-              variant: "detail",
-            }),
-            "grid grid-cols-[var(--schedule-columns)] overflow-hidden border-b border-border"
-          )}
-        >
-          <div className="border-r border-border" />
-          {dates.map((date, index) => (
+        <div className="grid grid-cols-[var(--schedule-columns)] border-b border-border">
+          <div className="flex items-center justify-end truncate pr-2 text-micro text-muted-fg">
+            {timeZoneLabel}
+          </div>
+          {dates.map((date) => (
             <div
+              aria-current={date === today ? "date" : undefined}
               className={cn(
-                "flex min-h-8 items-center justify-center border-border px-2",
-                { "border-r": index < dates.length - 1 }
+                "flex h-12 min-w-0 items-center justify-center gap-1.5 px-2 text-body",
+                {
+                  "font-medium text-fg": date === today,
+                  "text-muted-fg": date !== today,
+                }
               )}
               data-selected-date={date === selectedDate || undefined}
               key={date}
             >
-              <span
-                aria-current={date === today ? "date" : undefined}
-                className={cn(
-                  "inline-flex items-center gap-1.5 rounded-sm px-2 py-1",
-                  { "bg-primary text-primary-fg": date === today }
-                )}
-              >
-                <span
-                  className={cn("text-caption", {
-                    "font-medium": date === today || date === selectedDate,
-                    "text-muted-fg": date !== today && date !== selectedDate,
-                  })}
-                >
-                  {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
-                </span>
-                <span className="text-body-sm font-medium">
-                  {Number(date.slice(8))}
-                  {date === selectedDate ? (
-                    <span className="sr-only">, selected date</span>
-                  ) : null}
-                </span>
+              <span className="truncate">
+                {weekdayFormatter.format(new Date(`${date}T12:00:00Z`))}
+              </span>
+              <span className="tabular-nums">
+                {Number(date.slice(8))}
+                {date === selectedDate ? (
+                  <span className="sr-only">, selected date</span>
+                ) : null}
               </span>
             </div>
           ))}
-          <div className="border-t border-r border-border px-1 py-2 text-right text-micro whitespace-nowrap text-muted-fg">
+          <div className="flex items-center justify-end pr-2 text-micro whitespace-nowrap text-muted-fg">
             All day
           </div>
           {dates.map((date) => (
             <div
-              className="relative min-h-8 space-y-1 border-t border-r border-border px-0.5 py-1 last:border-r-0 data-schedule-drop-active:bg-primary/5"
+              className="relative min-h-9 space-y-1 border-l border-border/60 px-0.5 py-1 data-schedule-drop-active:bg-primary/5"
               data-schedule-drop-date={date}
               data-schedule-drop-kind="all-day"
               data-selected-date={date === selectedDate || undefined}
@@ -1002,25 +986,35 @@ export const Schedule = ({
         className="grid h-336 w-full min-w-[var(--schedule-min-width)] grid-cols-[var(--schedule-columns)]"
         style={columnStyle}
       >
-        <div aria-hidden className="relative border-r border-border">
+        <div aria-hidden className="relative">
           {hours.map((hour) => {
             const hourStyle: ScheduleStyle = {
               "--schedule-top": `${hour * hourHeight}px`,
             };
-            return (
+            return hour === 0 ||
+              (showCurrentTime &&
+                Math.abs(hour * 60 - (currentMinute ?? 0)) < 15) ? null : (
               <span
-                className="absolute top-[var(--schedule-top)] right-2 -translate-y-1/2 text-micro whitespace-nowrap text-muted-fg"
+                className="absolute top-[var(--schedule-top)] right-2 -translate-y-1/2 text-micro whitespace-nowrap text-muted-fg tabular-nums"
                 key={hour}
                 style={hourStyle}
               >
-                {hour === 0 ? "" : formatTimeMinute(hour * 60, timeFormat)}
+                {formatTimeMinute(hour * 60, timeFormat)}
               </span>
             );
           })}
+          {showCurrentTime ? (
+            <span
+              className="absolute top-[var(--schedule-top)] right-2 z-20 -translate-y-1/2 text-micro font-medium whitespace-nowrap text-destructive tabular-nums"
+              style={currentTimeStyle}
+            >
+              {formatTimeMinute(currentMinute ?? 0, timeFormat)}
+            </span>
+          ) : null}
         </div>
         {dates.map((date) => (
           <div
-            className="relative border-r border-border last:border-r-0 data-schedule-drop-active:bg-primary/5"
+            className="relative border-l border-border/60 data-schedule-drop-active:bg-primary/5"
             data-schedule-drop-date={date}
             data-schedule-drop-kind="time"
             data-selected-date={date === selectedDate || undefined}
@@ -1351,10 +1345,17 @@ export const Schedule = ({
                 {formatTimeMinute(selectionEnd, timeFormat)}
               </div>
             ) : null}
-            {date === today && currentMinute !== undefined ? (
+            {showCurrentTime && date !== today ? (
               <div
-                aria-label={`Current time ${formatTimeMinute(currentMinute, timeFormat)}`}
-                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-primary before:absolute before:-top-1 before:-left-1 before:size-2 before:rounded-full before:bg-primary before:not-squircle"
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 border-t border-destructive/35"
+                style={currentTimeStyle}
+              />
+            ) : null}
+            {showCurrentTime && date === today ? (
+              <div
+                aria-label={`Current time ${formatTimeMinute(currentMinute ?? 0, timeFormat)}`}
+                className="pointer-events-none absolute inset-x-0 top-[var(--schedule-top)] z-20 -mt-px h-0.5 bg-destructive before:absolute before:-top-1.25 before:-left-0.75 before:h-3 before:w-1.5 before:rounded-full before:bg-destructive before:not-squircle"
                 style={currentTimeStyle}
               />
             ) : null}

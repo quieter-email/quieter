@@ -67,8 +67,10 @@ type CalendarSidebarProps = {
   calendars: CalendarSummary[];
   canCreate: boolean;
   canConnectMicrosoft: boolean;
+  collapsed: boolean;
   date: string;
   hiddenCalendarKeys: string[];
+  highlightedDates?: { end: string; start: string };
   isConfigured: boolean;
   isMobileOpen: boolean;
   onConnect: (target: CalendarConnectionTarget) => void;
@@ -197,6 +199,7 @@ const CalendarSidebarContent = ({
   close,
   date,
   hiddenCalendarKeys,
+  highlightedDates,
   isConfigured,
   onConnect,
   onCreate,
@@ -206,7 +209,10 @@ const CalendarSidebarContent = ({
   pendingCalendarColorKey,
   pendingConnection,
   preview,
-}: Omit<CalendarSidebarProps, "isMobileOpen" | "onMobileOpenChange"> & {
+}: Omit<
+  CalendarSidebarProps,
+  "collapsed" | "isMobileOpen" | "onMobileOpenChange"
+> & {
   close?: () => void;
 }) => {
   const selectedDate = new Date(`${date}T12:00:00`);
@@ -275,8 +281,23 @@ const CalendarSidebarContent = ({
       <div className="-mx-2 min-h-0 flex-1 space-y-6 overflow-y-auto">
         <Calendar
           className="mx-auto"
+          formatters={{
+            formatWeekdayName: (weekday) =>
+              weekday
+                .toLocaleDateString(undefined, { weekday: "short" })
+                .slice(0, 2),
+          }}
+          highlightedRange={
+            highlightedDates
+              ? {
+                  from: new Date(`${highlightedDates.start}T12:00:00`),
+                  to: new Date(`${highlightedDates.end}T12:00:00`),
+                }
+              : undefined
+          }
           mode="single"
           month={selectedDate}
+          navPlacement="end"
           onMonthChange={(month) => {
             onDateChange(
               `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-01`
@@ -495,11 +516,13 @@ const CalendarSidebarContent = ({
 };
 
 export const CalendarSidebar = ({
+  collapsed,
   isMobileOpen,
   onMobileOpenChange,
   ...props
 }: CalendarSidebarProps) => (
   <WorkspaceSidebar
+    collapsed={collapsed}
     isMobileOpen={isMobileOpen}
     label="Calendar sidebar"
     onMobileOpenChange={onMobileOpenChange}
