@@ -581,7 +581,7 @@ export const Schedule = ({
         aria-pressed={item.preview ? undefined : selectedId === item.id}
         className={cn(
           // Mixing the calendar color toward the theme foreground keeps tinted text readable in light and dark themes.
-          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm border border-[color-mix(in_oklab,var(--schedule-event-color)_32%,transparent)] bg-[color-mix(in_oklab,var(--schedule-event-color)_20%,var(--section))] px-2 py-1 text-left text-body-sm leading-4 text-[color-mix(in_oklab,var(--schedule-event-color)_62%,var(--fg))] transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:bg-[color-mix(in_oklab,var(--schedule-event-color)_27%,var(--section))] data-dragging:opacity-35 data-selected:border-[color-mix(in_oklab,var(--schedule-event-color)_85%,var(--fg))] data-selected:bg-[color-mix(in_oklab,var(--schedule-event-color)_34%,var(--section))] motion-reduce:transition-none",
+          "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_oklab,var(--schedule-event-color)_20%,var(--section))] px-2 py-1 text-left text-body-sm leading-4 text-[color-mix(in_oklab,var(--schedule-event-color)_62%,var(--fg))] transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:bg-[color-mix(in_oklab,var(--schedule-event-color)_27%,var(--section))] data-dragging:opacity-35 data-selected:bg-[color-mix(in_oklab,var(--schedule-event-color)_38%,var(--section))] motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
             "cursor-grab active:cursor-grabbing":
@@ -948,12 +948,12 @@ export const Schedule = ({
               </span>
             </div>
           ))}
-          <div className="flex items-center justify-end pr-2 text-micro whitespace-nowrap text-muted-fg">
+          <div className="flex items-center justify-end border-t border-border pr-2 text-micro whitespace-nowrap text-muted-fg">
             All day
           </div>
           {dates.map((date) => (
             <div
-              className="relative min-h-9 space-y-1 border-l border-border/60 px-0.5 py-1 data-schedule-drop-active:bg-primary/5"
+              className="relative min-h-9 space-y-1 border-t border-l border-t-border border-l-border/60 px-0.5 py-1 data-schedule-drop-active:bg-primary/5"
               data-schedule-drop-date={date}
               data-schedule-drop-kind="all-day"
               data-selected-date={date === selectedDate || undefined}

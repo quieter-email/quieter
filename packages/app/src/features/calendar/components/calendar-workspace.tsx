@@ -8,7 +8,6 @@ import {
   RefreshIcon,
   Search01Icon,
   SidebarLeftIcon,
-  SidebarRightIcon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
@@ -138,7 +137,6 @@ type CalendarWorkspaceProps = {
 };
 
 const calendarPreferencesSchema = z.object({
-  detailsCollapsed: z.boolean().default(false),
   hiddenCalendarKeys: z.array(z.string()).max(100),
   sidebarCollapsed: z.boolean().default(false),
 });
@@ -247,7 +245,6 @@ const CalendarWorkspaceContent = ({
   const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
   const initialPreferences = useMemo<CalendarPreferences>(() => {
     const fallback = {
-      detailsCollapsed: false,
       hiddenCalendarKeys: [],
       sidebarCollapsed: false,
     };
@@ -273,13 +270,11 @@ const CalendarWorkspaceContent = ({
   const ui = useSelector(store, (current) => current);
   const updatePreferences = (changes: Partial<CalendarPreferences>) => {
     store.setState((current) => ({ ...current, ...changes }));
-    const { detailsCollapsed, hiddenCalendarKeys, sidebarCollapsed } =
-      store.get();
+    const { hiddenCalendarKeys, sidebarCollapsed } = store.get();
     try {
       window.localStorage.setItem(
         preferencesKey,
         JSON.stringify({
-          detailsCollapsed,
           hiddenCalendarKeys,
           sidebarCollapsed,
         } satisfies CalendarPreferences)
@@ -1145,7 +1140,7 @@ const CalendarWorkspaceContent = ({
     .formatToParts(new Date(currentInstant))
     .find((part) => part.type === "timeZoneName")
     ?.value.replace("GMT", "UTC");
-  const detailsVisible = wide && (!ui.detailsCollapsed || details !== null);
+  const detailsVisible = wide && details !== null;
   return (
     <div
       className={cn(
@@ -1438,31 +1433,6 @@ const CalendarWorkspaceContent = ({
                   <Icon aria-hidden icon={RefreshIcon} />
                 </Button>
               </IconButtonTooltip>
-              {wide ? (
-                <IconButtonTooltip
-                  label={
-                    detailsVisible ? "Hide event panel" : "Show event panel"
-                  }
-                >
-                  <Button
-                    chrome="toolbar"
-                    aria-label={
-                      detailsVisible ? "Hide event panel" : "Show event panel"
-                    }
-                    aria-pressed={detailsVisible}
-                    onClick={() => {
-                      updatePreferences({ detailsCollapsed: detailsVisible });
-                      if (detailsVisible && details !== null) {
-                        closeEvent();
-                      }
-                    }}
-                    size="icon-sm"
-                    variant="ghost"
-                  >
-                    <Icon aria-hidden icon={SidebarRightIcon} />
-                  </Button>
-                </IconButtonTooltip>
-              ) : null}
               <AssistantSidebarTrigger
                 className="data-[sidebar-open=true]:-ms-2"
                 size="icon-sm"
@@ -1731,20 +1701,7 @@ const CalendarWorkspaceContent = ({
                     {details}
                   </div>
                 ) : (
-                  (details ?? (
-                    <Surface
-                      className="m-0.5 flex min-h-0 flex-1 flex-col"
-                      padding="none"
-                      variant="section"
-                    >
-                      <LazyMotion features={domAnimation}>
-                        <EmptyMessageState
-                          title="No event selected"
-                          description="Select an event to view its details. Double-click an empty time or drag across the calendar to create one."
-                        />
-                      </LazyMotion>
-                    </Surface>
-                  ))
+                  details
                 )}
               </div>
             </aside>
