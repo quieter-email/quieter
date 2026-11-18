@@ -12,6 +12,7 @@ import {
   resolveLinearToolReview,
   resolveConnectorWriteReview,
   foregroundSnapshotSchema,
+  getWorkspaceOutputSchema,
   isForegroundClientToolName,
   isCalendarWriteToolName,
   calendarWriteInputSchemas,
@@ -39,7 +40,7 @@ import {
   getMailboxThreadQueriesKey,
   getThreadQueryKey,
 } from "@quieter/app/lib/mail/thread-query-keys";
-import { rpc } from "@quieter/app/lib/orpc";
+import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
@@ -59,6 +60,8 @@ import {
   useState,
 } from "react";
 
+import { recoverCanceledHeldSend } from "../domain/canceled-held-send";
+import type { CanceledHeldSendCapture } from "../domain/canceled-held-send";
 import { emptyChatQueue, updateChatQueue } from "../domain/chat-queue";
 import type {
   ChatQueues,
@@ -76,9 +79,14 @@ import { executeWorkspaceTool } from "../domain/workspace-tools";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatContextPicker } from "./chat-context-picker";
+import { ChatHeldSend } from "./chat-held-send";
 import { ChatTranscript } from "./chat-transcript";
 
 type ChatData = RouterOutputs["chat"]["get"];
+type RecoveredHeldSend = {
+  capture: CanceledHeldSendCapture;
+  receipt: NonNullable<Awaited<ReturnType<typeof recoverCanceledHeldSend>>>;
+};
 type ChatEdit = {
   chatId: string;
   messageId: string;
@@ -150,6 +158,10 @@ const ChatSession = ({
     useState<string | null>(null);
   const [interruptionMessage, setInterruptionMessage] = useState("");
   const foregroundRef = useRef<ForegroundSnapshot | null>(null);
+  const heldSendCaptureRef = useRef<CanceledHeldSendCapture | null>(null);
+  const [recoveredHeldSends, setRecoveredHeldSends] = useState(
+    new Map<string, RecoveredHeldSend>()
+  );
   const editRef = useRef<ChatEdit | null>(null);
   const requestContextRef = useRef<{
     category?: QueuedChatMessage["category"];
@@ -158,9 +170,9 @@ const ChatSession = ({
   } | null>(null);
   const mountedRef = useRef(true);
   const appliedReceipts = useRef(new Set<string>());
-  const latestRef = useRef({ props });
+  const latestRef = useRef({ props, userId });
   useLayoutEffect(() => {
-    latestRef.current = { props };
+    latestRef.current = { props, userId };
   });
   const synchronizeHistory = async () => {
     try {
@@ -305,12 +317,31 @@ const ChatSession = ({
       for (const part of message.parts) {
         if (
           !isToolUIPart(part) ||
-          part.state !== "output-available" ||
           appliedReceipts.current.has(part.toolCallId)
         ) {
           continue;
         }
         const toolName = part.type.replace("tool-", "");
+        if (
+          (toolName === "get_send_status" || toolName === "undo_send") &&
+          (part.state === "output-available" || part.state === "output-error")
+        ) {
+          appliedReceipts.current.add(part.toolCallId);
+          void queryClient.invalidateQueries({
+            queryKey: orpc.mail.getHeldSend.key({
+              input: { mailboxId: workspace.mailboxId },
+            }),
+          });
+          if (toolName === "undo_send") {
+            void refreshMailQueries([
+              getMessagesQueryKey(workspace.mailboxId, "drafts").slice(0, 3),
+            ]);
+          }
+          continue;
+        }
+        if (part.state !== "output-available") {
+          continue;
+        }
         if (toolName === "modify_mail" || toolName === "modify_mail_batch") {
           const changed =
             toolName === "modify_mail_batch"
@@ -389,8 +420,26 @@ const ChatSession = ({
             : saveComposeDraftOutputSchema.safeParse(part.output);
         if (receipt.success) {
           appliedReceipts.current.add(part.toolCallId);
-          if (currentRun) {
+          if (
+            currentRun &&
+            (receipt.data.status === "draft_saved" ||
+              receipt.data.status === "sent")
+          ) {
             workspace.getCompose()?.applyReceipt(receipt.data);
+          } else if (
+            currentRun &&
+            receipt.data.status !== "draft_saved" &&
+            receipt.data.status !== "sent" &&
+            receipt.data.mailboxId === workspace.mailboxId
+          ) {
+            const heldReceipt = receipt.data;
+            void (async () => {
+              try {
+                await workspace.getCompose()?.applyHeldReceipt(heldReceipt);
+              } catch (error) {
+                toastError(error, { boundary: "assistant-held-receipt" });
+              }
+            })();
           }
           const draftInput = saveComposeDraftInputSchema.safeParse(part.input);
           const affectedThreadId =
@@ -499,6 +548,28 @@ const ChatSession = ({
           generation
         );
         if (workspace.control.isCurrent(generation)) {
+          if (toolCall.toolName === "get_workspace" && userId !== undefined) {
+            const snapshot = getWorkspaceOutputSchema.safeParse(output);
+            const foreground = foregroundRef.current;
+            if (
+              snapshot.success &&
+              snapshot.data.draft !== undefined &&
+              snapshot.data.mailboxId === workspace.mailboxId &&
+              snapshot.data.generation === generation &&
+              foreground?.generation === generation
+            ) {
+              const { draft } = snapshot.data;
+              heldSendCaptureRef.current = {
+                assistantMessageId: foreground.exchangeId,
+                chatId: editRef.current?.chatId ?? threadId,
+                draftId: draft.draftId,
+                draftRevision: draft.draftRevision,
+                mailboxId: workspace.mailboxId,
+                sendOperationId: draft.sendOperationId ?? draft.draftId,
+                userId,
+              };
+            }
+          }
           void chat.addToolOutput({
             output,
             tool: toolCall.toolName,
@@ -537,15 +608,42 @@ const ChatSession = ({
 
   useEffect(() => {
     mountedRef.current = true;
-    const cancelServer = async (assistantMessageId: string, chatId: string) => {
+    const cancelServer = async (
+      assistantMessageId: string,
+      chatId: string,
+      capture: CanceledHeldSendCapture | null,
+      canceledGeneration: number
+    ) => {
       try {
-        await rpc.chat.cancel({
-          assistantMessageId,
-          chatId,
-          mailboxId: workspace.mailboxId,
+        const receipt = await recoverCanceledHeldSend({
+          cancel: async () =>
+            await rpc.chat.cancel({
+              assistantMessageId,
+              chatId,
+              mailboxId: workspace.mailboxId,
+            }),
+          capture,
+          isCurrent: () =>
+            mountedRef.current &&
+            capture !== null &&
+            latestRef.current.userId === capture.userId &&
+            (editRef.current?.chatId ?? threadId) === capture.chatId &&
+            workspace.mailboxId === capture.mailboxId &&
+            workspace.control.state.get().generation === canceledGeneration,
+          readStatus: async (scope) => await rpc.mail.getHeldSend(scope),
         });
+        if (capture !== null && receipt !== null) {
+          setRecoveredHeldSends((current) =>
+            new Map(current).set(capture.assistantMessageId, {
+              capture,
+              receipt,
+            })
+          );
+        }
       } catch (error) {
-        toastError(error, { boundary: "assistant-cancel" });
+        if (mountedRef.current) {
+          toastError(error, { boundary: "assistant-cancel" });
+        }
       }
     };
     const cancel = () => {
@@ -554,6 +652,13 @@ const ChatSession = ({
         return;
       }
       foregroundRef.current = null;
+      const capturedHeldSend = heldSendCaptureRef.current;
+      heldSendCaptureRef.current = null;
+      const canceledGeneration = workspace.control.state.get().generation;
+      const capture =
+        capturedHeldSend?.assistantMessageId === foreground.exchangeId
+          ? capturedHeldSend
+          : null;
       setCompletedAssistantMessageId(null);
       const activeChatId = editRef.current?.chatId ?? threadId;
       const canceledQueueKey = `${workspace.mailboxId}:${activeChatId}`;
@@ -565,7 +670,12 @@ const ChatSession = ({
       void (async () => {
         await Promise.allSettled([
           stopped,
-          cancelServer(foreground.exchangeId, activeChatId),
+          cancelServer(
+            foreground.exchangeId,
+            activeChatId,
+            capture,
+            canceledGeneration
+          ),
         ]);
         updateChatQueue(queues, canceledQueueKey, { type: "canceled" });
       })();
@@ -779,6 +889,7 @@ const ChatSession = ({
     setBusy(true);
     setCompletedAssistantMessageId(null);
     setInterruptionMessage("");
+    heldSendCaptureRef.current = null;
     const generation = workspace.control.begin();
     try {
       const snapshot = workspace.read();
@@ -925,6 +1036,39 @@ const ChatSession = ({
     return undefined;
   }, [queue, submissionBlocked]);
 
+  const heldSendReceipts = chat.messages.flatMap((message) => {
+    const receipts = message.parts.flatMap((part) => {
+      if (part.type !== "tool-send_mail" || !("output" in part)) {
+        return [];
+      }
+      const parsed = sendMailOutputSchema.safeParse(part.output);
+      return parsed.success &&
+        parsed.data.status !== "sent" &&
+        parsed.data.mailboxId === workspace.mailboxId
+        ? [parsed.data]
+        : [];
+    });
+    const recovered = recoveredHeldSends.get(message.id);
+    const recoveredReceipt =
+      recovered !== undefined &&
+      recovered.capture.userId === userId &&
+      recovered.capture.chatId === (editSession?.chatId ?? threadId)
+        ? recovered.receipt
+        : undefined;
+    return recoveredReceipt !== undefined &&
+      recoveredReceipt.mailboxId === workspace.mailboxId &&
+      !receipts.some(
+        (receipt) =>
+          receipt.sendOperationId === recoveredReceipt.sendOperationId
+      )
+      ? [...receipts, recoveredReceipt]
+      : receipts;
+  });
+  const latestHeldSendOperation = heldSendReceipts.at(-1)?.sendOperationId;
+  const latestHeldSend = heldSendReceipts.find(
+    (receipt) => receipt.sendOperationId === latestHeldSendOperation
+  );
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
@@ -962,6 +1106,12 @@ const ChatSession = ({
           }
         />
       ) : null}
+      {latestHeldSend === undefined ? null : (
+        <ChatHeldSend
+          key={`${latestHeldSend.mailboxId}:${latestHeldSend.sendOperationId}`}
+          receipt={latestHeldSend}
+        />
+      )}
       {canUseAiChat ? null : (
         <p className="px-4 py-4 text-body-sm text-muted-fg">
           Choose a plan with AI credits in settings to use quieter.

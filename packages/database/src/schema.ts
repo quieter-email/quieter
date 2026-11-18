@@ -199,6 +199,7 @@ export type MailSendSnapshot = {
   headers: ManagedMailHeader[];
   kind: "api" | "mailbox";
   mailboxId?: string;
+  origin?: unknown;
   replyTo: string[];
   sender: string;
   sentAt: string;
@@ -1414,6 +1415,7 @@ export const mailMessageImportance = pgTable(
   {
     aiImportant: boolean("aiImportant"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     classifierVersion: text("classifierVersion").notNull(),
     contentHash: text("contentHash").notNull(),
     createdAt: timestamp("createdAt").notNull(),
@@ -1447,6 +1449,10 @@ export const mailMessageImportance = pgTable(
   },
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.messageId] }),
+    check(
+      "mail_message_importance_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
     index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
   ]
@@ -1502,6 +1508,7 @@ export const gmailAutoLabelEvent = pgTable(
   {
     appliedAt: timestamp("appliedAt"),
     attemptCount: integer("attemptCount").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1516,11 +1523,16 @@ export const gmailAutoLabelEvent = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     model: text("model"),
     nextAttemptAt: timestamp("nextAttemptAt"),
+    privateContextUserId: text("privateContextUserId"),
     promptTokens: integer("promptTokens"),
     updatedAt: timestamp("updatedAt").notNull(),
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "gmail_auto_label_event_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("gmail_auto_label_event_mailbox_created_at_idx").on(
       table.mailboxId,
       table.createdAt
@@ -1550,6 +1562,7 @@ export const mailboxVerificationCode = pgTable(
   "mailboxVerificationCode",
   {
     attemptCount: integer("attemptCount"),
+    authorityVersion: integer("authorityVersion"),
     cacheWriteTokens: integer("cacheWriteTokens"),
     cachedTokens: integer("cachedTokens"),
     completionTokens: integer("completionTokens"),
@@ -1575,6 +1588,10 @@ export const mailboxVerificationCode = pgTable(
     usageReportedAt: timestamp("usageReportedAt"),
   },
   (table) => [
+    check(
+      "mailbox_verification_code_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     check(
       "mailbox_verification_code_payload_check",
       sql`${table.encryptedCode} is null or (${table.expiresAt} is not null and ${table.threadId} is not null)`
@@ -1791,6 +1808,26 @@ export const mailPlacementOperation = pgTable(
       "mail_placement_operation_status_check",
       sql`${table.status} in ('pending', 'submitting', 'applied', 'failed', 'uncertain', 'superseded')`
     ),
+  ]
+);
+
+export const mailboxAiAuthority = pgTable(
+  "mailboxAiAuthority",
+  {
+    automationPaused: boolean("automationPaused").notNull().default(false),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    readOnly: boolean("readOnly").notNull().default(false),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    updatedByUserId: text("updatedByUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    version: integer("version").notNull().default(0),
+  },
+  (table) => [
+    check("mailbox_ai_authority_version_check", sql`${table.version} >= 0`),
   ]
 );
 
@@ -3455,6 +3492,7 @@ export const mailReminderJob = pgTable(
   "mailReminderJob",
   {
     attempts: integer("attempts").notNull(),
+    authorityVersion: integer("authorityVersion"),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     completedAt: timestamp("completedAt", { withTimezone: true }),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3485,6 +3523,10 @@ export const mailReminderJob = pgTable(
     usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
   },
   (table) => [
+    check(
+      "mail_reminder_job_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     index("mail_reminder_job_ready_idx").on(
       table.kind,
       table.completedAt,
@@ -3515,6 +3557,7 @@ export const mailReminderSuggestion = pgTable(
   "mailReminderSuggestion",
   {
     attempts: integer("attempts").notNull().default(0),
+    authorityVersion: integer("authorityVersion"),
     automatic: boolean("automatic").notNull(),
     availableAt: timestamp("availableAt", { withTimezone: true }).notNull(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
@@ -3554,6 +3597,10 @@ export const mailReminderSuggestion = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
   },
   (table) => [
+    check(
+      "mail_reminder_suggestion_authority_version_check",
+      sql`${table.authorityVersion} >= 0`
+    ),
     unique("mail_reminder_suggestion_source_unique").on(
       table.userId,
       table.mailboxId,
@@ -3579,6 +3626,7 @@ export const gmailComposeOperation = pgTable(
     followUpReminder: jsonb("followUpReminder").$type<{
       userId: string;
       intent: FollowUpReminderIntent;
+      origin?: unknown;
     }>(),
     id: text("id").primaryKey(),
     kind: text("kind").$type<"save" | "send">().notNull(),
@@ -4053,7 +4101,12 @@ export const semanticIndexRequest = pgTable(
 export const scheduledMailSend = pgTable(
   "scheduledMailSend",
   {
+    cancellationOrigin: jsonb("cancellationOrigin").$type<unknown>(),
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    deliveryKind: text("deliveryKind")
+      .$type<"scheduled" | "undo">()
+      .default("scheduled")
+      .notNull(),
     draftRemovedAt: timestamp("draftRemovedAt", { withTimezone: true }),
     errorMessage: text("errorMessage"),
     id: text("id").primaryKey(),
@@ -4106,6 +4159,10 @@ export const scheduledMailSend = pgTable(
       .where(
         sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
       ),
+    check(
+      "scheduled_mail_send_delivery_kind_check",
+      sql`${table.deliveryKind} in ('scheduled', 'undo')`
+    ),
     check(
       "scheduled_mail_send_status_check",
       sql`${table.status} in ('preparing', 'scheduled', 'sending', 'sent', 'failed', 'uncertain', 'cancelled')`
@@ -4185,6 +4242,7 @@ export const tables = {
   mailboxAgentRevision,
   mailboxAgentRun,
   mailboxAgentSetting,
+  mailboxAiAuthority,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
@@ -4502,6 +4560,11 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailbox.id,
       to: r.mailboxAction.mailboxId,
     }),
+    aiAuthority: r.one.mailboxAiAuthority({
+      from: r.mailbox.id,
+      optional: true,
+      to: r.mailboxAiAuthority.mailboxId,
+    }),
     aiMemories: r.many.aiMemory({
       from: r.mailbox.id,
       to: r.aiMemory.mailboxId,
@@ -4747,6 +4810,18 @@ export const authRelations = defineRelations(tables, (r) => ({
       from: r.mailboxActionStepRun.runId,
       optional: false,
       to: r.mailboxActionRun.id,
+    }),
+  },
+  mailboxAiAuthority: {
+    mailbox: r.one.mailbox({
+      from: r.mailboxAiAuthority.mailboxId,
+      optional: false,
+      to: r.mailbox.id,
+    }),
+    updatedBy: r.one.user({
+      from: r.mailboxAiAuthority.updatedByUserId,
+      optional: true,
+      to: r.user.id,
     }),
   },
   mailboxAutomationSettings: {

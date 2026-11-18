@@ -1,15 +1,11 @@
 import { createHash } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
-import type { DatabaseTransaction } from "@quieter/database/client";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
-  mailboxGrant,
-  mailboxDivisionGrant,
   managedMailAttachment,
   managedMailMessage,
-  member,
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
@@ -20,9 +16,12 @@ import {
   parseRawMailMessage,
 } from "@quieter/mail/raw-message";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { assertMailEffectAllowed } from "../../gmail-request";
+import type { MailRequestContext } from "../../gmail-request";
+import { assertPrivateMailContext } from "../../mail/private-context";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { hashRequest } from "../../request-hash";
 import {
@@ -121,64 +120,8 @@ const toSavedManagedDraft = (
   subject: draft.subject,
 });
 
-const assertPrivateDraftContext = async (
-  tx: DatabaseTransaction,
-  input: { mailboxId: string; privateContext?: boolean; userId: string }
-) => {
-  if (input.privateContext !== true) {
-    return;
-  }
-  const [record] = await tx
-    .select({
-      accessMode: mailbox.accessMode,
-      ownerId: mailbox.managedOwnerUserId,
-    })
-    .from(mailbox)
-    .where(eq(mailbox.id, input.mailboxId))
-    .for("no key update");
-  const [otherGrant] = await tx
-    .select({ id: mailboxGrant.id })
-    .from(mailboxGrant)
-    .innerJoin(
-      member,
-      and(
-        eq(member.id, mailboxGrant.memberId),
-        eq(member.userId, mailboxGrant.userId)
-      )
-    )
-    .innerJoin(
-      mailbox,
-      and(
-        eq(mailbox.id, mailboxGrant.mailboxId),
-        eq(mailbox.organizationId, member.organizationId)
-      )
-    )
-    .where(
-      and(
-        eq(mailboxGrant.mailboxId, input.mailboxId),
-        ne(mailboxGrant.userId, input.userId)
-      )
-    )
-    .limit(1);
-  const [divisionGrant] = await tx
-    .select({ id: mailboxDivisionGrant.id })
-    .from(mailboxDivisionGrant)
-    .where(eq(mailboxDivisionGrant.mailboxId, input.mailboxId))
-    .limit(1);
-  if (
-    record?.accessMode !== "private" ||
-    record.ownerId !== input.userId ||
-    otherGrant !== undefined ||
-    divisionGrant !== undefined
-  ) {
-    throw new ORPCError("FORBIDDEN", {
-      message:
-        "Personal context cannot be saved into a draft visible to other inbox members. Review this prompt again.",
-    });
-  }
-};
-
 export const saveManagedDraft = async (input: {
+  context?: MailRequestContext;
   draft: z.infer<typeof composeDraftInputSchema>;
   privateContext?: boolean;
   mailboxId: string;
@@ -299,6 +242,20 @@ export const saveManagedDraft = async (input: {
       );
       if (requestedHash === storedHash) {
         return await db.transaction(async (tx) => {
+          await tx
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(eq(mailbox.id, mailboxId))
+            .for("update");
+          await getAuthorizedManagedMailbox(
+            {
+              mailboxId,
+              requiredRoles: ["responder", "manager"],
+              userId: input.userId,
+            },
+            tx
+          );
+          await assertPrivateMailContext(tx, input);
           const [unchanged] = await tx
             .select({ id: managedMailMessage.id })
             .from(managedMailMessage)
@@ -312,7 +269,6 @@ export const saveManagedDraft = async (input: {
             )
             .for("update");
           if (unchanged !== undefined) {
-            await assertPrivateDraftContext(tx, input);
             const assets = await tx
               .select()
               .from(managedMailAttachment)
@@ -347,6 +303,8 @@ export const saveManagedDraft = async (input: {
     });
   }
   const parsed = await parseRawMailMessage(raw);
+  const context = input.context ?? { userId: input.userId };
+  await assertMailEffectAllowed(context, mailboxId);
   const object = await storeRawMailObject(raw);
   const savedAttachments = parsed.attachments.map((attachment, partIndex) => ({
     ...attachment,
@@ -391,6 +349,7 @@ export const saveManagedDraft = async (input: {
     updatedAt: now,
   };
   await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(context, mailboxId, tx);
     if (existing === undefined) {
       await tx.insert(managedMailMessage).values({
         ...values,
@@ -421,7 +380,7 @@ export const saveManagedDraft = async (input: {
         });
       }
     }
-    await assertPrivateDraftContext(tx, input);
+    await assertPrivateMailContext(tx, input);
     await tx
       .delete(managedMailAttachment)
       .where(
@@ -460,6 +419,7 @@ export const saveManagedDraft = async (input: {
 };
 
 export const deleteManagedDraft = async (input: {
+  context?: MailRequestContext;
   baseRevision?: string;
   draftId: string;
   mailboxId: string;
@@ -471,6 +431,11 @@ export const deleteManagedDraft = async (input: {
     requiredRoles: ["responder", "manager"],
   });
   const deleted = await db.transaction(async (tx) => {
+    await assertMailEffectAllowed(
+      input.context ?? { userId: input.userId },
+      input.mailboxId,
+      tx
+    );
     const [existing] = await tx
       .select({
         id: managedMailMessage.id,

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 
+import { ORPCError } from "@orpc/server";
 import { chatModelSchema } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
@@ -33,6 +34,8 @@ import {
   sql,
 } from "drizzle-orm";
 
+import { assertAiAuthority, captureAiOrigin } from "./ai-authority";
+import type { AiOrigin, MailboxAutomationOrigin } from "./ai-authority";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
 import { publishMailUpdate } from "./mail-updates";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -50,6 +53,7 @@ export const AI_ADMISSION_RETRY_MS = 5000;
 
 export type VerificationCodeProcessingResult =
   | { status: "complete" }
+  | { reason: "policy"; status: "skipped" }
   | {
       status: "retry";
       reason:
@@ -68,6 +72,7 @@ const RETRY_MAX_MS = 30 * 60_000;
 const COMBINED_CODE_MODEL = `${AUTO_LABEL_MODEL}+${VERIFICATION_CODE_MODEL}`;
 const claimSelection = {
   attemptCount: mailboxVerificationCode.attemptCount,
+  authorityVersion: mailboxVerificationCode.authorityVersion,
   cacheWriteTokens: mailboxVerificationCode.cacheWriteTokens,
   cachedTokens: mailboxVerificationCode.cachedTokens,
   completionTokens: mailboxVerificationCode.completionTokens,
@@ -332,6 +337,7 @@ export const listVerificationCodes = async ({
 };
 
 export const processMailVerificationCode = async ({
+  origin: suppliedOrigin,
   loadMessage,
   mailboxId,
   messageId,
@@ -339,11 +345,15 @@ export const processMailVerificationCode = async ({
   userId,
 }: {
   loadMessage: () => Promise<AutomationMailMessage | null>;
+  origin?: AiOrigin | MailboxAutomationOrigin;
   mailboxId: string;
   messageId: string;
   organizationId?: string | null;
   userId: string;
 }): Promise<VerificationCodeProcessingResult> => {
+  const admittedOrigin =
+    suppliedOrigin ??
+    (await captureAiOrigin({ mailboxId, mode: "automation", userId }));
   const now = new Date();
   const leaseToken = randomUUID();
   const leaseUntil = new Date(now.getTime() + LEASE_MS);
@@ -351,6 +361,7 @@ export const processMailVerificationCode = async ({
     .insert(mailboxVerificationCode)
     .values({
       attemptCount: 0,
+      authorityVersion: admittedOrigin.policyVersion,
       createdAt: now,
       id: randomUUID(),
       leaseToken,
@@ -418,6 +429,7 @@ export const processMailVerificationCode = async ({
     };
   }
 
+  let origin: AiOrigin | MailboxAutomationOrigin | undefined;
   let screenUsage: AiUsageReport | undefined;
   let extractionUsage: AiUsageReport | undefined;
   let extractionAttempted = false;
@@ -482,6 +494,20 @@ export const processMailVerificationCode = async ({
         service: message.otpToken.origin,
       };
     } else {
+      if (claimed.authorityVersion === null) {
+        throw new ORPCError("FORBIDDEN", {
+          data: { aiAuthorityReason: "policy_changed" },
+          message:
+            "This earlier assistant action needs a new request before it can continue.",
+        });
+      }
+      origin = { ...admittedOrigin, policyVersion: claimed.authorityVersion };
+      await assertAiAuthority({
+        effect: "write",
+        mailboxId,
+        origin,
+        userId: "scope" in origin ? undefined : userId,
+      });
       const budget = await getMailAutomationAiBudgetStatus({
         organizationId,
         userId,
@@ -508,20 +534,27 @@ export const processMailVerificationCode = async ({
 
       let probability: number | undefined;
       try {
+        const billing = await createMailboxAiBillingContext({
+          externalId: claimed.id,
+          mailboxId,
+          usageKind: "verificationCode",
+          userId,
+        });
+        await assertAiAuthority({
+          effect: "write",
+          mailboxId,
+          origin,
+          userId: "scope" in origin ? undefined : userId,
+        });
         probability = await detectMailVerificationCode({
-          billing: await createMailboxAiBillingContext({
-            externalId: claimed.id,
-            mailboxId,
-            usageKind: "verificationCode",
-            userId,
-          }),
+          billing,
           message,
           onUsage: (reported) => {
             screenUsage = reported;
           },
         });
       } catch (error) {
-        if (isAiCreditAdmissionBusy(error)) {
+        if (isAiCreditAdmissionBusy(error) || error instanceof ORPCError) {
           throw error;
         }
         reportError(error, {
@@ -535,21 +568,31 @@ export const processMailVerificationCode = async ({
         (claimed.model !== null && claimed.model !== AUTO_LABEL_MODEL)
           ? COMBINED_CODE_MODEL
           : AUTO_LABEL_MODEL;
-      const candidate = extractCode
-        ? await extractMailVerificationCode({
-            billing: await createMailboxAiBillingContext({
-              externalId: claimed.id,
-              mailboxId,
-              usageKind: "verificationCode",
-              userId,
-            }),
-            message,
-            model: VERIFICATION_CODE_MODEL,
-            onUsage: (reported) => {
-              extractionUsage = reported;
-            },
-          })
-        : { code: null, expiresInSeconds: null, service: null };
+      let candidate: Awaited<ReturnType<typeof extractMailVerificationCode>>;
+      if (extractCode) {
+        const billing = await createMailboxAiBillingContext({
+          externalId: claimed.id,
+          mailboxId,
+          usageKind: "verificationCode",
+          userId,
+        });
+        await assertAiAuthority({
+          effect: "write",
+          mailboxId,
+          origin,
+          userId: "scope" in origin ? undefined : userId,
+        });
+        candidate = await extractMailVerificationCode({
+          billing,
+          message,
+          model: VERIFICATION_CODE_MODEL,
+          onUsage: (reported) => {
+            extractionUsage = reported;
+          },
+        });
+      } else {
+        candidate = { code: null, expiresInSeconds: null, service: null };
+      }
       detail = validateVerificationCodeCandidate({
         candidate,
         message,
@@ -568,34 +611,50 @@ export const processMailVerificationCode = async ({
         : Date.parse(message.date ?? "")
     );
     const finishedAt = new Date();
-    const [saved] = await db
-      .update(mailboxVerificationCode)
-      .set({
-        cacheWriteTokens: usage.cacheWriteTokens,
-        cachedTokens: usage.cachedTokens,
-        completionTokens: usage.completionTokens,
-        costUsd: usage.costUsd,
-        encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
-        expiresAt: detail?.expiresAt ?? null,
-        leaseToken: null,
-        leaseUntil: null,
-        model,
-        nextAttemptAt: null,
-        processedAt: finishedAt,
-        promptTokens: usage.promptTokens,
-        receivedAt: detail ? receivedAt : null,
-        service: detail?.service ?? null,
-        threadId: detail ? message.threadId : null,
-        updatedAt: finishedAt,
-        usageReportedAt: usage.costUsd === null ? finishedAt : null,
-      })
-      .where(
-        and(
-          eq(mailboxVerificationCode.id, claimed.id),
-          eq(mailboxVerificationCode.leaseToken, leaseToken)
+    const [saved] = await db.transaction(async (tx) => {
+      if (origin !== undefined) {
+        await assertAiAuthority(
+          {
+            effect: "write",
+            mailboxId,
+            origin,
+            userId: "scope" in origin ? undefined : userId,
+          },
+          tx,
+          {
+            lock: true,
+          }
+        );
+      }
+      return await tx
+        .update(mailboxVerificationCode)
+        .set({
+          cacheWriteTokens: usage.cacheWriteTokens,
+          cachedTokens: usage.cachedTokens,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
+          expiresAt: detail?.expiresAt ?? null,
+          leaseToken: null,
+          leaseUntil: null,
+          model,
+          nextAttemptAt: null,
+          processedAt: finishedAt,
+          promptTokens: usage.promptTokens,
+          receivedAt: detail ? receivedAt : null,
+          service: detail?.service ?? null,
+          threadId: detail ? message.threadId : null,
+          updatedAt: finishedAt,
+          usageReportedAt: usage.costUsd === null ? finishedAt : null,
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
         )
-      )
-      .returning({ id: mailboxVerificationCode.id });
+        .returning({ id: mailboxVerificationCode.id });
+    });
     if (saved === undefined) {
       return {
         reason: "in_progress",
@@ -618,13 +677,19 @@ export const processMailVerificationCode = async ({
     }
     return { status: "complete" };
   } catch (error) {
+    const policyBlocked =
+      error instanceof ORPCError &&
+      (error.code === "NOT_FOUND" ||
+        (typeof error.data === "object" &&
+          error.data !== null &&
+          "aiAuthorityReason" in error.data));
     const extractionTimedOut =
       error instanceof MailVerificationCodeTimeoutError;
     const failureReason = extractionTimedOut ? "extraction_timeout" : "failure";
     const reason = isAiCreditAdmissionBusy(error)
       ? "admission_busy"
       : failureReason;
-    if (phase === "extract" && reason !== "admission_busy") {
+    if (phase === "extract" && reason !== "admission_busy" && !policyBlocked) {
       reportError(extractionTimedOut ? error.cause : error, {
         operation: "verification-code:extract",
       });
@@ -636,7 +701,8 @@ export const processMailVerificationCode = async ({
     );
     const failedAt = new Date();
     const attemptCount =
-      (claimed.attemptCount ?? 0) + (reason === "admission_busy" ? 0 : 1);
+      (claimed.attemptCount ?? 0) +
+      (reason === "admission_busy" || policyBlocked ? 0 : 1);
     let retryDelayMs = Math.min(
       RETRY_MAX_MS,
       RETRY_BASE_MS * 2 ** Math.min(attemptCount - 1, 20)
@@ -663,7 +729,8 @@ export const processMailVerificationCode = async ({
         attemptCount,
         leaseToken: null,
         leaseUntil: null,
-        nextAttemptAt: retryAt,
+        nextAttemptAt: policyBlocked ? null : retryAt,
+        ...(policyBlocked ? { processedAt: failedAt } : {}),
         updatedAt: failedAt,
       })
       .where(
@@ -674,6 +741,9 @@ export const processMailVerificationCode = async ({
       );
     if (phase === "load") {
       throw error;
+    }
+    if (policyBlocked) {
+      return { reason: "policy", status: "skipped" };
     }
     return {
       reason,

@@ -22,7 +22,7 @@ import {
   mailbox,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
-import { and, eq } from "drizzle-orm";
+import { and, eq, or } from "drizzle-orm";
 import type { z } from "zod";
 
 import type { GoogleCalendarEventDraft } from "../connectors/ical";
@@ -34,6 +34,8 @@ import {
   CALENDAR_SCOPES,
   runAuthorizedGmailMailbox,
 } from "../gmail-mailbox-access";
+import type { PreparedGmailMailboxIdentity } from "../gmail-mailbox-access";
+import type { MailEffectAssertion } from "../gmail-request";
 import {
   createGoogleEvent,
   deleteGoogleEvent,
@@ -60,8 +62,15 @@ import {
   updateMicrosoftCalendarColorForUser,
   updateMicrosoftCalendarEventForUser,
 } from "./microsoft";
+import { lockCalendarNativeAccounts } from "./native-lock-plan";
+import type { CalendarNativeLockPlan } from "./native-lock-plan";
+import { lockCalendarBookingOwner } from "./owner-lock";
 
 type UserRequest = {
+  authorityMailboxId?: string;
+  beforeEffect?: MailEffectAssertion;
+  calendarLockPlan?: CalendarNativeLockPlan;
+  prepareEffect?: () => Promise<void>;
   retryUnauthorized?: boolean;
   signal?: AbortSignal;
   userId: string;
@@ -69,6 +78,7 @@ type UserRequest = {
 type CalendarRequest = CalendarRef & UserRequest;
 type CalendarContext = {
   accessToken: string;
+  beforeEffect?: () => Promise<void>;
   calendar: GoogleCalendar;
   calendarId: string;
   connectionId: string;
@@ -310,12 +320,75 @@ const getAuthorizedCalendarAccount = async (
   return account;
 };
 
+const assertGoogleCalendarWriteAccess = async (
+  input: PreparedGmailMailboxIdentity &
+    Pick<CalendarRequest, "connectionId" | "userId">,
+  database: Pick<typeof db, "select">
+) => {
+  const [current] = await database
+    .select({
+      googleSubject: gmailCredential.googleSubject,
+      scopes: gmailCredential.scopes,
+      status: mailbox.status,
+    })
+    .from(mailbox)
+    .innerJoin(gmailCredential, eq(gmailCredential.mailboxId, mailbox.id))
+    .leftJoin(
+      connectorCredential,
+      and(
+        eq(connectorCredential.id, input.connectionId),
+        eq(connectorCredential.userId, input.userId),
+        eq(connectorCredential.provider, "google_calendar"),
+        eq(connectorCredential.providerAccountId, gmailCredential.googleSubject)
+      )
+    )
+    .where(
+      and(
+        eq(mailbox.id, input.mailboxId),
+        eq(mailbox.ownerUserId, input.userId),
+        eq(mailbox.provider, "gmail"),
+        or(
+          eq(mailbox.id, input.connectionId),
+          eq(connectorCredential.id, input.connectionId)
+        )
+      )
+    )
+    .limit(1)
+    .for("no key update", { of: gmailCredential });
+  if (current === undefined || current.googleSubject !== input.googleSubject) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "This calendar account changed. Review the action again.",
+    });
+  }
+  if (current.status !== "connected") {
+    throw new ORPCError("UNAUTHORIZED", {
+      message: "Reconnect this Gmail mailbox before trying again.",
+    });
+  }
+  const scopes = new Set(current.scopes.split(/\s+/u));
+  if (!CALENDAR_SCOPES.every((scope) => scopes.has(scope))) {
+    throw new ORPCError("FORBIDDEN", {
+      message:
+        "Enable calendar access for this Gmail mailbox before trying again.",
+    });
+  }
+};
+
 const withCalendar = async <T>(
   input: CalendarRequest,
   access: "read" | "event-write" | "preference-write",
   run: (context: CalendarContext) => Promise<T>
 ): Promise<T> => {
   const account = await getAuthorizedCalendarAccount(input);
+  if (
+    access !== "read" &&
+    input.beforeEffect !== undefined &&
+    input.authorityMailboxId === undefined
+  ) {
+    throw new ORPCError("FORBIDDEN", {
+      message: "This assistant request must be reviewed again.",
+    });
+  }
   const localWrite =
     access !== "read" && serverEnv.QUIETER_DEPLOYMENT_ENV === "local";
   const allowed = new Set(
@@ -344,7 +417,7 @@ const withCalendar = async <T>(
         retryUnauthorized: input.retryUnauthorized,
         userId: input.userId,
       },
-      async (accessToken) => {
+      async (accessToken, identity) => {
         const { signal } = input;
         signal?.throwIfAborted();
         const calendar = await getGoogleCalendar({
@@ -375,6 +448,69 @@ const withCalendar = async <T>(
         }
         return await run({
           accessToken,
+          beforeEffect:
+            access === "read"
+              ? undefined
+              : async () => {
+                  signal?.throwIfAborted();
+                  await input.prepareEffect?.();
+                  signal?.throwIfAborted();
+                  const current = await getGoogleCalendar({
+                    accessToken,
+                    calendarId: calendar.id,
+                    signal,
+                  });
+                  if (
+                    access === "event-write" &&
+                    current.accessRole !== "owner" &&
+                    current.accessRole !== "writer" &&
+                    current.accessRole !== "writerWithoutPrivateAccess"
+                  ) {
+                    throw new ORPCError("FORBIDDEN", {
+                      message:
+                        "This calendar is read only. Choose a calendar you can edit.",
+                    });
+                  }
+                  if (
+                    localWrite &&
+                    current.primary !== true &&
+                    !allowed.has(current.id.toLowerCase())
+                  ) {
+                    throw new ORPCError("FORBIDDEN", {
+                      message:
+                        "This calendar is not allowed for development write tests.",
+                    });
+                  }
+                  signal?.throwIfAborted();
+                  await db.transaction(async (transaction) => {
+                    await lockCalendarBookingOwner({
+                      executor: transaction,
+                      userId: input.userId,
+                    });
+                    await lockCalendarNativeAccounts({
+                      authorityMailboxId: input.authorityMailboxId,
+                      calendarLockPlan: input.calendarLockPlan,
+                      executor: transaction,
+                      googleMailboxId: identity.mailboxId,
+                    });
+                    if (identity.mailboxId !== account.mailboxId) {
+                      throw new ORPCError("FORBIDDEN", {
+                        message:
+                          "This calendar account changed. Review the action again.",
+                      });
+                    }
+                    await assertGoogleCalendarWriteAccess(
+                      {
+                        ...identity,
+                        connectionId: input.connectionId,
+                        userId: input.userId,
+                      },
+                      transaction
+                    );
+                    await input.beforeEffect?.(transaction);
+                  });
+                  signal?.throwIfAborted();
+                },
           calendar,
           calendarId: calendar.id,
           connectionId: input.connectionId,

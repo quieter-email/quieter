@@ -34,7 +34,15 @@ import { useState } from "react";
 
 type ScheduledMessage = Pick<
   RouterOutputs["scheduledSends"]["list"][number],
-  "id" | "subject" | "to" | "sendAt" | "timeZone" | "status" | "errorMessage"
+  | "id"
+  | "subject"
+  | "to"
+  | "sendAt"
+  | "timeZone"
+  | "status"
+  | "errorMessage"
+  | "deliveryKind"
+  | "canUndo"
 >;
 
 const scheduledStatusLabels = {
@@ -71,6 +79,8 @@ export const ScheduledMessagesWorkspace = ({
     nextWeek.setDate(nextWeek.getDate() + 7);
     return [
       {
+        canUndo: false,
+        deliveryKind: "scheduled",
         errorMessage: null,
         id: "demo-scheduled-proposal",
         sendAt: tomorrow.toISOString(),
@@ -80,6 +90,8 @@ export const ScheduledMessagesWorkspace = ({
         to: "Alex <alex@example.com>",
       },
       {
+        canUndo: false,
+        deliveryKind: "scheduled",
         errorMessage: null,
         id: "demo-scheduled-check-in",
         sendAt: nextWeek.toISOString(),
@@ -96,7 +108,13 @@ export const ScheduledMessagesWorkspace = ({
   const messagesQuery = useQuery({
     ...listOptions,
     enabled: !demo,
-    refetchInterval: 15_000,
+    refetchInterval: (query) =>
+      query.state.data?.some(
+        (message) =>
+          message.deliveryKind === "undo" && message.status === "scheduled"
+      ) === true
+        ? 1000
+        : 15_000,
   });
   const cancelMutation = useMutation({
     ...orpc.scheduledSends.cancel.mutationOptions(),
@@ -104,7 +122,7 @@ export const ScheduledMessagesWorkspace = ({
       toastError(error, { boundary: "scheduled-send-cancel" });
     },
     onSuccess: async () => {
-      toast.success("Scheduled send canceled. Message returned to Drafts.");
+      toast.success("Sending canceled. Message returned to Drafts.");
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: listOptions.queryKey }),
         refreshCachedMailboxQueries(queryClient, mailboxId, "drafts"),
@@ -189,16 +207,34 @@ export const ScheduledMessagesWorkspace = ({
         {messages.length > 0 ? (
           <div className="min-h-0 flex-1 overflow-y-auto">
             <Text className="mx-4 mt-4" size="caption" tone="muted">
-              Messages send automatically, even when Quieter is closed.
-              Canceling returns them to Drafts.
+              Pending messages send automatically, even when Quieter is closed.
+              Undo send is available only during its short hold. Canceling
+              returns a message to Drafts.
             </Text>
             <ul className="flex flex-col">
               {messages.map((message) => {
-                const canReschedule = message.status === "scheduled";
+                const undoHeld = message.deliveryKind === "undo";
+                const undoAvailable = message.canUndo;
+                const canReschedule =
+                  !undoHeld && message.status === "scheduled";
                 const canCancel =
-                  message.status === "scheduled" ||
+                  (message.status === "scheduled" &&
+                    (!undoHeld || undoAvailable)) ||
                   message.status === "failed" ||
                   message.status === "cancelled";
+                let statusLabel = scheduledStatusLabels[message.status];
+                if (undoHeld && message.status === "scheduled") {
+                  statusLabel = undoAvailable ? "Held" : "Sending";
+                }
+                let cancelLabel = "Cancel send";
+                if (
+                  message.status === "cancelled" ||
+                  message.status === "failed"
+                ) {
+                  cancelLabel = "Return to drafts";
+                } else if (undoHeld) {
+                  cancelLabel = "Undo send";
+                }
                 return (
                   <li
                     className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center sm:gap-4"
@@ -238,7 +274,7 @@ export const ScheduledMessagesWorkspace = ({
                           {", "}
                           {message.timeZone}
                         </Text>
-                        {message.status === "scheduled" ? null : (
+                        {message.status === "scheduled" && !undoHeld ? null : (
                           <Pill
                             size="xs"
                             tone={
@@ -247,7 +283,7 @@ export const ScheduledMessagesWorkspace = ({
                                 : "neutral"
                             }
                           >
-                            {scheduledStatusLabels[message.status]}
+                            {statusLabel}
                           </Pill>
                         )}
                         {message.errorMessage ? (
@@ -291,9 +327,7 @@ export const ScheduledMessagesWorkspace = ({
                             type="button"
                             variant="secondary"
                           >
-                            {message.status === "cancelled"
-                              ? "Return to drafts"
-                              : "Cancel send"}
+                            {cancelLabel}
                           </Button>
                         ) : null}
                       </div>

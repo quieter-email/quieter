@@ -130,13 +130,19 @@ export const useDraftRecovery = ({
 
   return {
     checkpoint,
-    complete: async (draft: ComposeDraftState) => {
-      completed.current = true;
+    complete: async (draft: ComposeDraftState, isCurrent?: () => boolean) => {
+      if (isCurrent === undefined) {
+        completed.current = true;
+      }
       if (mailboxId === null || userId === undefined) {
         return;
       }
       try {
-        for (const record of await recovery.list({ mailboxId, userId })) {
+        const records = await recovery.list({ mailboxId, userId });
+        if (isCurrent?.() === false) {
+          return;
+        }
+        for (const record of records) {
           if (
             (record.localId === draft.localId &&
               record.editorId === editorId.current) ||
@@ -145,14 +151,66 @@ export const useDraftRecovery = ({
               record.revision === draft.recoveryRevision)
           ) {
             await recovery.remove(record);
+            if (isCurrent?.() === false) {
+              return;
+            }
           }
         }
         await queryClient.invalidateQueries({
           queryKey: ["local-draft-recovery", userId, mailboxId],
         });
+        if (isCurrent?.() === true) {
+          completed.current = true;
+        }
       } catch (error) {
         toastError(error, { boundary: "compose-recovery-cleanup" });
       }
+    },
+    preserveCopy: async (
+      draft: ComposeDraftState,
+      identity: { editorId: string; localId: string }
+    ) => {
+      if (
+        mailboxId === null ||
+        userId === undefined ||
+        !(await recovery.ready())
+      ) {
+        throw new Error("This browser could not keep your newer draft edits.");
+      }
+      const scope = { mailboxId, userId };
+      const records = await recovery.list(scope);
+      const existing = records.find(
+        (record) =>
+          record.localId === identity.localId &&
+          record.editorId === identity.editorId
+      );
+      if (existing) {
+        return;
+      }
+      const payload = JSON.stringify({ ...draft, localId: identity.localId });
+      await recovery.save({
+        ...scope,
+        ...identity,
+        payload,
+        updatedAt: Date.now(),
+      });
+      const savedRecords = await recovery.list(scope);
+      const persisted = savedRecords.some(
+        (record) =>
+          record.localId === identity.localId &&
+          record.editorId === identity.editorId &&
+          record.payload === payload
+      );
+      if (!persisted) {
+        throw new Error("This browser could not keep your newer draft edits.");
+      }
+      await queryClient.invalidateQueries({
+        queryKey: ["local-draft-recovery", userId, mailboxId],
+      });
+    },
+    retainHeldDraft: () => {
+      completed.current = false;
+      checkpoint();
     },
   };
 };

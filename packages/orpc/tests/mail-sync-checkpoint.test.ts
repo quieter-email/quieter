@@ -64,7 +64,17 @@ describe("mail sync checkpoints", () => {
     });
     fixtures.hydrate.mockResolvedValue([]);
     fixtures.provider.mockImplementation(
-      async (_context, _mailboxId, operation) => await operation("access-token")
+      async (context, mailboxId, operation) =>
+        await operation(
+          "access-token",
+          context.signal,
+          // oxlint-disable-next-line eslint/require-await -- The provider guard double preserves its asynchronous contract without I/O.
+          async () => {},
+          {
+            googleSubject: "checkpoint-subject",
+            mailboxId,
+          }
+        )
     );
   });
 

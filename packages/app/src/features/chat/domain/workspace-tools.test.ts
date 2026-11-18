@@ -67,6 +67,9 @@ const createCompose = () => {
   };
   const edit = vi.fn<ComposeBridge["edit"]>();
   const compose: ComposeBridge = {
+    applyHeldReceipt: vi
+      .fn<ComposeBridge["applyHeldReceipt"]>()
+      .mockResolvedValue(),
     applyReceipt: vi.fn<ComposeBridge["applyReceipt"]>(),
     edit,
     read: () => ({

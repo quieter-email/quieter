@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import {
   managedMailLabel,
   mailbox,
@@ -15,6 +16,8 @@ import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { and, asc, countDistinct, eq, inArray, sql } from "drizzle-orm";
 
+import { assertMailEffectAllowed } from "../../gmail-request";
+import type { MailRequestContext } from "../../gmail-request";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { getManagedMessageLabelIds } from "../messages/service";
 import { throwMailboxOrganizationNameConflict } from "../organization/name-conflict";
@@ -105,7 +108,24 @@ export const listManagedLabelCounts = async (input: {
     .groupBy(managedMailMessageLabel.labelId);
 };
 
+const authorizeManagedLabelEffect = async (
+  input: { context?: MailRequestContext; mailboxId: string; userId: string },
+  transaction: DatabaseTransaction,
+  role: "manager" | "responder"
+) => {
+  await assertMailEffectAllowed(
+    input.context ?? { userId: input.userId },
+    input.mailboxId,
+    transaction
+  );
+  await getAuthorizedManagedMailbox(
+    { mailboxId: input.mailboxId, requiredRoles: [role], userId: input.userId },
+    transaction
+  );
+};
+
 export const createManagedLabel = async (input: {
+  context?: MailRequestContext;
   autoLabel?: AutoLabelSettings | null;
   color: string;
   description?: string | null;
@@ -120,27 +140,32 @@ export const createManagedLabel = async (input: {
   });
   const name = input.name.replaceAll(/\s+/gu, " ").trim();
   const now = new Date();
-  const [record] = await db
-    .insert(managedMailLabel)
-    .values({
-      autoLabel: input.autoLabel,
-      color: mailboxLabelColorSchema.parse(input.color),
-      createdAt: now,
-      createdByUserId: input.userId,
-      description: input.description ? input.description.trim() : null,
-      id: randomUUID(),
-      mailboxId: input.mailboxId,
-      name,
-      normalizedName: normalizeManagedOrganizationName(name),
-      updatedAt: now,
-      updatedByUserId: input.userId,
-    })
-    .returning()
-    .catch(throwMailboxOrganizationNameConflict);
+  const record = await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "manager");
+    const [created] = await tx
+      .insert(managedMailLabel)
+      .values({
+        autoLabel: input.autoLabel,
+        color: mailboxLabelColorSchema.parse(input.color),
+        createdAt: now,
+        createdByUserId: input.userId,
+        description: input.description ? input.description.trim() : null,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        name,
+        normalizedName: normalizeManagedOrganizationName(name),
+        updatedAt: now,
+        updatedByUserId: input.userId,
+      })
+      .returning()
+      .catch(throwMailboxOrganizationNameConflict);
+    return created;
+  });
   return toMailboxLabel(record);
 };
 
 export const updateManagedLabel = async (input: {
+  context?: MailRequestContext;
   autoLabel?: AutoLabelSettings | null;
   color?: string;
   description?: string | null;
@@ -157,6 +182,7 @@ export const updateManagedLabel = async (input: {
     userId: input.userId,
   });
   return await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "manager");
     const [label] = await tx
       .select()
       .from(managedMailLabel)
@@ -214,6 +240,7 @@ export const updateManagedLabel = async (input: {
 };
 
 export const reorderManagedLabels = async (input: {
+  context?: MailRequestContext;
   labelIds: string[];
   mailboxId: string;
   userId: string;
@@ -225,6 +252,7 @@ export const reorderManagedLabels = async (input: {
   });
   const now = new Date();
   await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "manager");
     const labels =
       input.labelIds.length > 0
         ? await tx
@@ -260,6 +288,7 @@ export const reorderManagedLabels = async (input: {
 };
 
 export const deleteManagedLabel = async (input: {
+  context?: MailRequestContext;
   labelId: string;
   mailboxId: string;
   userId: string;
@@ -270,6 +299,7 @@ export const deleteManagedLabel = async (input: {
     userId: input.userId,
   });
   return await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "manager");
     const [label] = await tx
       .select()
       .from(managedMailLabel)
@@ -290,6 +320,7 @@ export const deleteManagedLabel = async (input: {
 };
 
 export const updateManagedThreadLabels = async (input: {
+  context?: MailRequestContext;
   addLabelIds?: string[];
   mailboxId: string;
   removeLabelIds?: string[];
@@ -303,6 +334,7 @@ export const updateManagedThreadLabels = async (input: {
   });
   const mailboxState = getMailboxStateFromLabelChanges(input);
   const { messages, updated } = await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "responder");
     const lockedMessages = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -380,6 +412,7 @@ export const updateManagedThreadLabels = async (input: {
 };
 
 export const updateSingleManagedMessageLabels = async (input: {
+  context?: MailRequestContext;
   addLabelIds?: string[];
   mailboxId: string;
   messageId: string;
@@ -393,6 +426,7 @@ export const updateSingleManagedMessageLabels = async (input: {
   });
   const mailboxState = getMailboxStateFromLabelChanges(input);
   const { message, updated } = await db.transaction(async (tx) => {
+    await authorizeManagedLabelEffect(input, tx, "responder");
     const [lockedMessage] = await tx
       .select({
         direction: managedMailMessage.direction,
