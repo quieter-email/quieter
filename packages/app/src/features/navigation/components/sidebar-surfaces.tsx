@@ -15,7 +15,7 @@ const sidebarSurfaceVariants = cva("squircle rounded-md", {
 });
 
 export const sidebarNavButtonVariants = cva(
-  "relative z-10 w-full bg-transparent hover:bg-transparent active:scale-100 active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:hover:bg-transparent aria-[current=page]:active:bg-transparent motion-reduce:active:scale-100"
+  "relative z-10 w-full justify-start gap-3 bg-transparent px-3 text-left hover:bg-transparent active:scale-100 active:bg-transparent aria-[current=page]:bg-transparent aria-[current=page]:hover:bg-transparent aria-[current=page]:active:bg-transparent motion-reduce:active:scale-100"
 );
 
 type SidebarEntranceProps = {

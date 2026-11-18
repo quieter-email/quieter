@@ -231,10 +231,10 @@ const CalendarSidebarContent = ({
     value: color,
   }));
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 p-4">
-      <div className="flex items-center gap-2">
+    <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 py-6">
+      <div className="flex items-center justify-between px-1">
         <Button
-          fullWidth
+          className="justify-start"
           nativeButton={false}
           onClick={close}
           render={
@@ -246,14 +246,11 @@ const CalendarSidebarContent = ({
           }
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
           role="link"
+          size="sm"
           variant="ghost"
         >
-          <Icon
-            aria-hidden
-            className="absolute start-3"
-            icon={ArrowLeft01Icon}
-          />
-          Back to Mail
+          <Icon aria-hidden icon={ArrowLeft01Icon} />
+          Back to mail
         </Button>
         {close ? (
           <IconButtonTooltip label="Close calendar sidebar">
@@ -268,16 +265,20 @@ const CalendarSidebarContent = ({
           </IconButtonTooltip>
         ) : null}
       </div>
-      <Button
-        disabled={!canCreate}
-        fullWidth
-        onClick={() => {
-          onCreate();
-          close?.();
-        }}
-      >
-        New event
-      </Button>
+      <div className="px-1">
+        <Button
+          // oxlint-disable-next-line shadcn/no-restyle -- Matches the left-aligned Compose action in the mail sidebar.
+          className="w-full justify-start px-4"
+          disabled={!canCreate}
+          onClick={() => {
+            onCreate();
+            close?.();
+          }}
+        >
+          <Icon aria-hidden icon={Add01Icon} />
+          New event
+        </Button>
+      </div>
       <div className="-mx-2 min-h-0 flex-1 space-y-6 overflow-y-auto">
         <Calendar
           className="mx-auto"
@@ -313,7 +314,7 @@ const CalendarSidebarContent = ({
           }}
           selected={selectedDate}
         />
-        <div className="space-y-2 px-2">
+        <div className="space-y-2 px-3">
           <Popover>
             <PopoverTrigger
               render={<Button fullWidth size="sm" variant="secondary" />}
@@ -508,7 +509,7 @@ const CalendarSidebarContent = ({
           )}
         </div>
       </div>
-      <div className="mx-4 mb-4">
+      <div className="p-1">
         <SidebarFooterLinks onRequestClose={close} />
       </div>
     </div>

@@ -115,9 +115,6 @@ export const SidebarMailboxNav = ({
             <SidebarMailboxNavItem
               active={isActive}
               aria-current={isActive ? "page" : undefined}
-              // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
-              className="justify-start gap-3 px-3 text-left"
-              // oxlint-enable shadcn/no-restyle
               mailboxSearch={
                 embedded
                   ? undefined
@@ -140,7 +137,6 @@ export const SidebarMailboxNav = ({
                 }
                 onRequestClose?.();
               }}
-              size="sm"
               type="button"
               variant="ghost"
             >

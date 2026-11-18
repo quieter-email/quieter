@@ -114,7 +114,6 @@ export const SettingsSidebar = ({
       active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
-      className="justify-start text-left"
       nativeButton={false}
       onClick={onRequestClose}
       onFocus={() => {
@@ -144,7 +143,6 @@ export const SettingsSidebar = ({
         />
       }
       variant="ghost"
-      size="sm"
     >
       <Icon icon={SETTINGS_ICONS[title] ?? Settings01Icon} tone="default" />
       {title}
