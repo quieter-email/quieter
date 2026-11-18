@@ -16,6 +16,7 @@ export const workspaceSidebarEntranceClassName = cn(
 type WorkspaceSidebarProps = {
   animateEntrance?: boolean;
   children: (close?: () => void) => ReactNode;
+  collapsed?: boolean;
   isMobileOpen: boolean;
   onMobileOpenChange: (open: boolean) => void;
   label: string;
@@ -24,6 +25,7 @@ type WorkspaceSidebarProps = {
 export const WorkspaceSidebar = ({
   animateEntrance = false,
   children,
+  collapsed = false,
   isMobileOpen,
   onMobileOpenChange,
   label,
@@ -51,15 +53,21 @@ export const WorkspaceSidebar = ({
   return (
     <LazyMotion features={domMax}>
       <aside
+        aria-hidden={collapsed || undefined}
         className={cn(
-          "relative hidden h-full w-64 shrink-0 bg-transparent text-fg lg:flex lg:flex-col",
+          "relative hidden h-full shrink-0 overflow-hidden bg-transparent text-fg transition-[width,opacity] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-out) motion-reduce:transition-none lg:flex lg:flex-col",
           {
             "origin-left transition-[scale] duration-500 ease-(--app-motion-ease-out) motion-safe:starting:scale-[0.97]":
               animateEntrance,
+            "pointer-events-none w-0 opacity-0": collapsed,
+            "w-64": !collapsed,
           }
         )}
+        inert={collapsed}
       >
-        {children()}
+        <div className="relative flex h-full w-64 shrink-0 flex-col">
+          {children()}
+        </div>
       </aside>
       <DialogPrimitive.Root
         modal

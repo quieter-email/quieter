@@ -39,6 +39,7 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Autocomplete } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
+import { Calendar } from "@quieter/ui/calendar";
 import { CardStack } from "@quieter/ui/card-stack";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
@@ -473,6 +474,7 @@ const ScheduleShowcase = () => {
           }}
           selectedDate={view === "day" ? "2026-10-23" : "2026-10-22"}
           selectedId={showPreview ? creationPreview.id : selectedId}
+          timeZoneLabel="UTC"
           today="2026-10-23"
           view={view}
         />
@@ -1415,6 +1417,18 @@ export const DesignSystemShowcase = () => {
                 onValueChange={setTime}
               />
             </div>
+          </Row>
+          <Row label="Mini calendar, visible week">
+            <Calendar
+              defaultMonth={new Date(2026, 10, 18)}
+              highlightedRange={{
+                from: new Date(2026, 10, 16),
+                to: new Date(2026, 10, 22),
+              }}
+              mode="single"
+              navPlacement="end"
+              selected={new Date(2026, 10, 18)}
+            />
           </Row>
           <Row label="Input">
             <Input
