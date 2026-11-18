@@ -146,6 +146,7 @@ export const MailListRowMetadata = ({
 };
 
 type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
+  actions?: ReactNode;
   active?: boolean;
   badge?: ReactNode;
   metadata?: ReactNode;
@@ -159,6 +160,7 @@ type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
 };
 
 export const MailListRowDetails = ({
+  actions,
   active = false,
   badge,
   layout = "stacked",
@@ -234,18 +236,32 @@ export const MailListRowDetails = ({
           >
             {metadata}
           </div>
-          <span
-            className={cn("shrink-0 text-caption tabular-nums", {
-              "@3xl:col-start-5 @3xl:row-start-1 @3xl:text-right":
-                layout === "adaptive",
-              "font-semibold text-fg/90": unread,
-              "text-fg/75": active && !unread,
-              "text-muted-fg": !unread,
+          <div
+            className={cn("grid shrink-0 items-center justify-items-end", {
+              "@3xl:col-start-5 @3xl:row-start-1": layout === "adaptive",
             })}
-            suppressHydrationWarning
           >
-            {timestamp}
-          </span>
+            <span
+              className={cn(
+                "col-start-1 row-start-1 text-caption tabular-nums transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out)",
+                {
+                  "font-semibold text-fg/90": unread,
+                  "group-hover/row:opacity-0 group-has-focus-visible/row:opacity-0":
+                    actions !== undefined && actions !== null,
+                  "text-fg/75": active && !unread,
+                  "text-muted-fg": !unread,
+                }
+              )}
+              suppressHydrationWarning
+            >
+              {timestamp}
+            </span>
+            {actions !== undefined && actions !== null && (
+              <div className="pointer-events-none col-start-1 row-start-1 -my-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-has-focus-visible/row:pointer-events-auto group-has-focus-visible/row:opacity-100">
+                {actions}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
