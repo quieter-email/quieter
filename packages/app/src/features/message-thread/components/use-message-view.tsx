@@ -358,6 +358,8 @@ export const useMessageViewHotkeys = ({
   mailboxProvider,
   onBackToList,
   onComposeDraftRequested,
+  onToggleImportance,
+  onTogglePlacement,
 }: {
   activeMailbox: MailboxCategory;
   canComposeFromMailbox: boolean;
@@ -369,6 +371,8 @@ export const useMessageViewHotkeys = ({
   mailboxProvider: MessageViewProps["mailboxProvider"];
   onBackToList?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onToggleImportance?: () => void;
+  onTogglePlacement?: () => void;
 }) => {
   const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
     if (!canComposeFromMailbox || onComposeDraftRequested === undefined) {
@@ -501,6 +505,28 @@ export const useMessageViewHotkeys = ({
             !isActionPending &&
             mailboxActions.canMarkRead &&
             activeMailbox !== "drafts",
+        },
+      },
+      {
+        callback: (event) => {
+          if (!shouldIgnoreAppShortcut(event)) {
+            onTogglePlacement?.();
+          }
+        },
+        hotkey: "E",
+        options: {
+          enabled: !isActionPending && onTogglePlacement !== undefined,
+        },
+      },
+      {
+        callback: (event) => {
+          if (!shouldIgnoreAppShortcut(event)) {
+            onToggleImportance?.();
+          }
+        },
+        hotkey: "I",
+        options: {
+          enabled: !isActionPending && onToggleImportance !== undefined,
         },
       },
     ]),
