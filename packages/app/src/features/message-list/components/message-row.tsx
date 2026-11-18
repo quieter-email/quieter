@@ -493,6 +493,7 @@ const MessageRowSurface = ({
         <Button
           aria-label={placementLabel}
           disabled={isActionPending}
+          fullWidth
           onClick={() => {
             void placementAction(thread.threadId);
           }}

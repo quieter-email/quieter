@@ -1012,6 +1012,7 @@ export const DesignSystemShowcase = () => {
                   <IconButtonTooltip label="Mark conversation Done">
                     <Button
                       aria-label="Mark conversation Done"
+                      fullWidth
                       size="xs"
                       type="button"
                       variant="row-action"
