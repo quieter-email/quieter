@@ -245,7 +245,6 @@ export const AssistantSidebar = ({
                   <DropdownMenuContent
                     align="start"
                     className="w-72"
-                    sideOffset={8}
                     data-assistant-panel
                   >
                     <DropdownMenuItem

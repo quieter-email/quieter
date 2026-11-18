@@ -722,7 +722,9 @@ export const LabelsWorkspacePanel = ({
                 />
               </Field>
               <Field>
-                <FieldLabel>Color</FieldLabel>
+                <Text as="p" weight="medium">
+                  Color
+                </Text>
                 <MailboxColorPicker
                   disabled={!canManage || createLabelMutation.isPending}
                   label="Label color"

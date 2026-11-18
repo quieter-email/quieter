@@ -111,7 +111,7 @@ export const InviteMemberForm = ({
               />
               <div
                 aria-live="polite"
-                className="text-body empty:hidden"
+                className="text-body empty:sr-only"
                 id={emailErrorId}
               >
                 {hasErrors

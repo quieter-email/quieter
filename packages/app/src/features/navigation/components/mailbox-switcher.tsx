@@ -871,7 +871,6 @@ export const MailboxSwitcherDropdown = ({
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
         className="w-[min(20rem,calc(100vw-2rem))] p-1"
         side={side}
-        sideOffset={10}
       >
         <DragDropProvider<SwitcherDragData>
           plugins={defaultPreset.plugins.filter(
