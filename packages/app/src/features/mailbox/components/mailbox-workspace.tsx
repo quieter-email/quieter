@@ -527,7 +527,23 @@ const useMailboxWorkspaceActions = ({
     });
   };
 
-  const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
+  const selectMailboxFromHotkey = (mailbox: MailboxCategory | "scheduled") => {
+    if (mailbox === "scheduled") {
+      if (
+        selectedMailboxProvider === "gmail" ||
+        selectedMailboxProvider === "managed"
+      ) {
+        void setMailboxSearch({
+          mailbox: "scheduled",
+          messageId: null,
+          query: null,
+          threadId: null,
+          view: "inbox",
+          workspace: null,
+        });
+      }
+      return;
+    }
     if (!isMailboxSupportedByProvider(selectedMailboxProvider, mailbox)) {
       return;
     }
@@ -665,7 +681,7 @@ const useMailboxWorkspaceHotkeys = ({
 }: {
   isWorkspaceReady: boolean;
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
-  selectMailboxFromHotkey: (mailbox: MailboxCategory) => void;
+  selectMailboxFromHotkey: (mailbox: MailboxCategory | "scheduled") => void;
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
 }) => {
@@ -736,6 +752,33 @@ const useMailboxWorkspaceHotkeys = ({
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
         selectMailboxFromHotkey("trash");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "M"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("important");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "E"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("done");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "C"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("scheduled");
       }
     },
     { enabled, ignoreInputs: true }

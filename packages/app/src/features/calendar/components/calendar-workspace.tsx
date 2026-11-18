@@ -7,6 +7,7 @@ import {
   Loading03Icon,
   RefreshIcon,
   Search01Icon,
+  SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
@@ -120,10 +121,9 @@ type CalendarConfirmation =
   | { kind: "delete"; event: CalendarEvent; scope: "occurrence" | "series" }
   | { kind: "move"; event: CalendarEvent; time: CalendarEventTime };
 
-type CalendarUiState = {
+type CalendarUiState = CalendarPreferences & {
   confirmation: CalendarConfirmation | null;
   editor: CalendarEditor | null;
-  hiddenCalendarKeys: string[];
   loadingSeries: boolean;
   pendingConnection: CalendarConnectionTarget | null;
   recurringAction: CalendarEvent | null;
@@ -138,7 +138,9 @@ type CalendarWorkspaceProps = {
 
 const calendarPreferencesSchema = z.object({
   hiddenCalendarKeys: z.array(z.string()).max(100),
+  sidebarCollapsed: z.boolean().default(false),
 });
+type CalendarPreferences = z.infer<typeof calendarPreferencesSchema>;
 const viewOptions = [
   { label: "Day", value: "day" },
   { label: "Week", value: "week" },
@@ -241,27 +243,46 @@ const CalendarWorkspaceContent = ({
     };
   }, [date, timeZone, view, weekStartsOn]);
   const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
-  const initialPreferences = useMemo<string[]>(() => {
+  const initialPreferences = useMemo<CalendarPreferences>(() => {
+    const fallback = {
+      hiddenCalendarKeys: [],
+      sidebarCollapsed: false,
+    };
     try {
       const parsed: unknown = JSON.parse(
         window.localStorage.getItem(preferencesKey) ?? "null"
       );
       const preferences = calendarPreferencesSchema.safeParse(parsed);
-      return preferences.success ? preferences.data.hiddenCalendarKeys : [];
+      return preferences.success ? preferences.data : fallback;
     } catch {
-      return [];
+      return fallback;
     }
   }, [preferencesKey]);
   const store = useCreateStore<CalendarUiState>({
+    ...initialPreferences,
     confirmation: null,
     editor: null,
-    hiddenCalendarKeys: initialPreferences,
     loadingSeries: false,
     pendingConnection: null,
     recurringAction: null,
     search: "",
   });
   const ui = useSelector(store, (current) => current);
+  const updatePreferences = (changes: Partial<CalendarPreferences>) => {
+    store.setState((current) => ({ ...current, ...changes }));
+    const { hiddenCalendarKeys, sidebarCollapsed } = store.get();
+    try {
+      window.localStorage.setItem(
+        preferencesKey,
+        JSON.stringify({
+          hiddenCalendarKeys,
+          sidebarCollapsed,
+        } satisfies CalendarPreferences)
+      );
+    } catch {
+      // Persistence is optional.
+    }
+  };
   const [editorSession, setEditorSession] = useState<{
     key: string;
     store: ReturnType<typeof createCalendarEventEditorStore>;
@@ -1092,13 +1113,33 @@ const CalendarWorkspaceContent = ({
   } else if (ui.confirmation?.kind === "move") {
     confirmationDescription = `This changes ${ui.confirmation.event.recurringEventId || ui.confirmation.event.recurrence.length > 0 ? "this occurrence only" : "the event time"}.${ui.confirmation.event.attendees.some((guest) => !guest.self) ? " Guests will be notified." : ""}`;
   }
-  const rangeHeading = new Intl.DateTimeFormat(undefined, {
+  const headingParts = new Intl.DateTimeFormat(undefined, {
     month: "long",
     timeZone,
     year: "numeric",
-  }).format(
+  }).formatToParts(
     new Date(calendarWallTimeToInstant({ date, time: "12:00", timeZone }))
   );
+  const headingMonth =
+    headingParts.find((part) => part.type === "month")?.value ?? "";
+  const headingYear =
+    headingParts.find((part) => part.type === "year")?.value ?? "";
+  const weekThursday = new Date(`${date}T12:00:00Z`);
+  weekThursday.setUTCDate(
+    weekThursday.getUTCDate() + 3 - ((weekThursday.getUTCDay() + 6) % 7)
+  );
+  const weekNumber =
+    Math.floor(
+      (weekThursday.getTime() - Date.UTC(weekThursday.getUTCFullYear(), 0, 1)) /
+        (7 * 86_400_000)
+    ) + 1;
+  const timeZoneLabel = new Intl.DateTimeFormat("en", {
+    timeZone,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(new Date(currentInstant))
+    .find((part) => part.type === "timeZoneName")
+    ?.value.replace("GMT", "UTC");
   return (
     <div
       className={cn(
@@ -1111,8 +1152,14 @@ const CalendarWorkspaceContent = ({
         calendars={data.calendars}
         canConnectMicrosoft={data.microsoftConfigured}
         canCreate={writableCalendars.length > 0}
+        collapsed={ui.sidebarCollapsed}
         date={date}
         hiddenCalendarKeys={data.hiddenCalendarKeys}
+        highlightedDates={
+          view === "week" && range.dates[0]
+            ? { end: range.dates.at(-1) ?? date, start: range.dates[0] }
+            : undefined
+        }
         isConfigured={data.googleConfigured}
         isMobileOpen={isMobileSidebarOpen}
         onConnect={(target) => {
@@ -1131,21 +1178,13 @@ const CalendarWorkspaceContent = ({
             groups: data.calendarGroups,
             hiddenCalendarKeys: ui.hiddenCalendarKeys,
           });
-          store.setState((current) => ({ ...current, hiddenCalendarKeys }));
+          updatePreferences({ hiddenCalendarKeys });
           if (
             selectedRef &&
             calendar.calendarId === selectedRef.calendarId &&
             hiddenCalendarKeys.includes(getCalendarRefKey(selectedRef))
           ) {
             closeEvent();
-          }
-          try {
-            window.localStorage.setItem(
-              preferencesKey,
-              JSON.stringify({ hiddenCalendarKeys })
-            );
-          } catch {
-            // Persistence is optional.
           }
         }}
         preview={preview !== null}
@@ -1177,6 +1216,66 @@ const CalendarWorkspaceContent = ({
         <WorkspaceHeader>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex max-w-full min-w-0 items-center gap-2">
+              <IconButtonTooltip
+                label={
+                  ui.sidebarCollapsed
+                    ? "Show calendar sidebar"
+                    : "Hide calendar sidebar"
+                }
+              >
+                <Button
+                  chrome="toolbar"
+                  aria-label={
+                    ui.sidebarCollapsed
+                      ? "Show calendar sidebar"
+                      : "Hide calendar sidebar"
+                  }
+                  aria-pressed={!ui.sidebarCollapsed}
+                  className="hidden shrink-0 lg:inline-flex"
+                  onClick={() => {
+                    updatePreferences({
+                      sidebarCollapsed: !ui.sidebarCollapsed,
+                    });
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={SidebarLeftIcon} />
+                </Button>
+              </IconButtonTooltip>
+              <Text
+                as="h2"
+                className="min-w-0"
+                size="lg"
+                truncate
+                weight="medium"
+              >
+                <LazyMotion features={domAnimation}>
+                  <m.span
+                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                    className="block truncate"
+                    key={`${headingMonth} ${headingYear}`}
+                  >
+                    {headingMonth}{" "}
+                    <span className="font-normal text-muted-fg">
+                      {headingYear}
+                    </span>
+                  </m.span>
+                </LazyMotion>
+              </Text>
+              {view === "week" || view === "day" ? (
+                <Text
+                  as="span"
+                  aria-label={`Week ${weekNumber}`}
+                  className="shrink-0"
+                  size="sm"
+                  tone="muted"
+                >
+                  W{weekNumber}
+                </Text>
+              ) : null}
+            </div>
+            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <div className="flex shrink-0 items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
@@ -1231,36 +1330,6 @@ const CalendarWorkspaceContent = ({
                   </Button>
                 </IconButtonTooltip>
               </div>
-              <Text
-                as="h2"
-                className="min-w-0"
-                size="lg"
-                truncate
-                weight="medium"
-              >
-                <LazyMotion features={domAnimation}>
-                  <m.span
-                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
-                    className="block truncate"
-                    key={rangeHeading}
-                  >
-                    {rangeHeading}
-                  </m.span>
-                </LazyMotion>
-              </Text>
-              <Button
-                chrome="toolbar"
-                className="shrink-0"
-                onClick={() => {
-                  void setMailboxSearch({ calendarDate: now.date });
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                Today
-              </Button>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Select
                 items={viewOptions}
                 onValueChange={(value) => {
@@ -1292,6 +1361,17 @@ const CalendarWorkspaceContent = ({
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                chrome="toolbar"
+                className="shrink-0"
+                onClick={() => {
+                  void setMailboxSearch({ calendarDate: now.date });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                Today
+              </Button>
               <CalendarTimeZonePicker
                 chrome="toolbar"
                 aria-label="Display time zone"
@@ -1585,6 +1665,7 @@ const CalendarWorkspaceContent = ({
               onSlotCreate={createEvent}
               onEmptyClick={closeEvent}
               selectedDate={date}
+              timeZoneLabel={timeZoneLabel}
               selectedId={
                 draftId ??
                 (selectedEvent ? getCalendarEventKey(selectedEvent) : undefined)

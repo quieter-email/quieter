@@ -51,13 +51,15 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      { id: "go-important", label: "Important" },
       { id: "go-inbox", label: "Inbox" },
+      { id: "go-done", label: "Done" },
       { id: "go-sent", label: "Sent" },
+      { id: "go-scheduled", label: "Scheduled" },
       { id: "go-drafts", label: "Drafts" },
       { id: "go-unread", label: "Unread" },
       { id: "go-spam", label: "Spam" },
       { id: "go-trash", label: "Trash" },
-      { id: "go-chat", label: "Chat" },
     ],
     title: "Go to",
   },
@@ -75,6 +77,8 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      { id: "detail-next-conversation" },
+      { id: "detail-previous-conversation" },
       { id: "detail-reply" },
       { id: "detail-reply-all" },
       { id: "detail-forward" },
@@ -84,6 +88,11 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      {
+        context: "List and detail, returns to Inbox from Done",
+        id: "list-done",
+      },
+      { context: "List and detail", id: "list-important" },
       { context: "List and detail", id: "list-trash" },
       { context: "List and detail", id: "list-spam" },
       { context: "List and detail", id: "list-mark-read" },

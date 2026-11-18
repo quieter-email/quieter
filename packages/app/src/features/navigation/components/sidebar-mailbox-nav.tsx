@@ -26,12 +26,27 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   label: string;
   shortcutId?: KeyboardShortcutId;
 }[] = [
-  { icon: Flag01Icon, id: "important", label: "Important" },
+  {
+    icon: Flag01Icon,
+    id: "important",
+    label: "Important",
+    shortcutId: "go-important",
+  },
   { icon: InboxIcon, id: "inbox", label: "Inbox", shortcutId: "go-inbox" },
-  { icon: CheckmarkCircle02Icon, id: "done", label: "Done" },
+  {
+    icon: CheckmarkCircle02Icon,
+    id: "done",
+    label: "Done",
+    shortcutId: "go-done",
+  },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
-  { icon: Clock01Icon, id: "scheduled", label: "Scheduled" },
+  {
+    icon: Clock01Icon,
+    id: "scheduled",
+    label: "Scheduled",
+    shortcutId: "go-scheduled",
+  },
   { icon: Edit01Icon, id: "drafts", label: "Drafts", shortcutId: "go-drafts" },
   { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },

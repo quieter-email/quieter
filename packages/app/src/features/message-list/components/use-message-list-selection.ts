@@ -518,6 +518,12 @@ export const useMessageListSelection = ({
     setFocusedThreadId(threadId);
   }, []);
 
+  const openThread = useCallback((thread: ThreadListEntry) => {
+    focusRingRequestedRef.current = true;
+    setFocusedThreadId(thread.threadId);
+    onActivateMessageRef.current(thread.anchorMessage.id, thread.threadId);
+  }, []);
+
   const openFocusedThread = useCallback(() => {
     const currentThreadedMessages = threadedMessagesRef.current;
     const currentFocusedThreadId =
@@ -533,10 +539,8 @@ export const useMessageListSelection = ({
     if (thread === undefined) {
       return;
     }
-    focusRingRequestedRef.current = true;
-    setFocusedThreadId(thread.threadId);
-    onActivateMessageRef.current(thread.anchorMessage.id, thread.threadId);
-  }, []);
+    openThread(thread);
+  }, [openThread]);
 
   const toggleFocusedThreadSelection = useCallback(() => {
     const currentThreadedMessages = threadedMessagesRef.current;
@@ -603,6 +607,7 @@ export const useMessageListSelection = ({
     isProgrammaticScrollToTopRef,
     keyboardFocusedThreadId: focusedThreadId,
     openFocusedThread,
+    openThread,
     requestFocusRing,
     scrollListToTop,
     scrollRef,
