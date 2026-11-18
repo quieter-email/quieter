@@ -38,13 +38,12 @@ import type {
 import { captureMailboxMessageMemory } from "../ai-memory-capture";
 import { enqueueMailAgentMessage } from "../mail-agent/inbox";
 import type { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
-import {
-  AUTO_LABEL_BUDGET_RETRY_MS,
-  deferAutoLabelAutomation,
-} from "../mail-automation/auto-label-events";
+import { deferAutoLabelAutomation } from "../mail-automation/auto-label-events";
 import { loadMailAutoLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { writeGmailCapturedMessage } from "../mail-capture";
+import { runReceiveStage } from "../mail-receive";
+import type { ReceiveStageOutcome } from "../mail-receive";
 import { observeReminderMail } from "../reminders/service";
 import {
   processMailVerificationCode,
@@ -75,13 +74,10 @@ export type MailAutomationRuntime = {
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
 };
-export type AutoLabelProcessingResult =
-  | { status: "complete" }
-  | {
-      status: "retry";
-      reason: "admission_busy" | "budget" | "failure";
-      retryAt: Date;
-    };
+export type AutoLabelProcessingResult = Exclude<
+  ReceiveStageOutcome<"auto_label">,
+  { status: "skipped" }
+>;
 
 type AutoLabelStage =
   | "event"
@@ -376,13 +372,16 @@ const processAutoLabelMessage = async ({
               recordStage(null);
             }
             recordStage("saveRetry");
-            await deferAutoLabelAutomation(event.id, budgetStatus.message);
+            const retryAt = await deferAutoLabelAutomation(
+              event.id,
+              budgetStatus.message
+            );
             recordStage(null);
             attempt.outcome = "retry";
             attempt.retryReason = "budget";
             return {
               reason: "budget",
-              retryAt: new Date(Date.now() + AUTO_LABEL_BUDGET_RETRY_MS),
+              retryAt,
               status: "retry",
             };
           }
@@ -679,33 +678,49 @@ export const processGmailMessage = async ({
   let autoLabelMs = 0;
   try {
     const [verificationCode, autoLabel] = await Promise.allSettled([
-      (extractCodes
-        ? processMailVerificationCode({
-            loadMessage,
-            mailboxId,
-            messageId: gmailMessageId,
-            organizationId,
-            userId,
+      extractCodes
+        ? runReceiveStage({
+            execute: async (identity) =>
+              await processMailVerificationCode({
+                loadMessage,
+                mailboxId: identity.mailboxId,
+                messageId: identity.messageId,
+                organizationId,
+                userId,
+              }),
+            identity: { mailboxId, messageId: gmailMessageId },
+            onAttempt: (stage) => {
+              verificationCodeMs = stage.elapsedMs;
+              if (stage.status === "failed") {
+                attempt.verificationCodeOutcome = "error";
+              }
+            },
+            stage: "verification_code",
           })
-        : Promise.resolve({ status: "disabled" } as const)
-      ).finally(() => {
-        verificationCodeMs = performance.now() - startedAt;
-      }),
-      (autoLabelEnabled
-        ? processAutoLabelMessage({
-            accessToken,
-            attempt: attempt.autoLabel,
-            getAutoLabelContext: automationRuntime.getAutoLabelContext,
-            getBudgetStatus: automationRuntime.getBudgetStatus,
-            gmailMessageId,
-            loadMessage,
-            mailboxId,
-            userId,
+        : Promise.resolve({ status: "disabled" } as const),
+      autoLabelEnabled
+        ? runReceiveStage({
+            execute: async (identity) =>
+              await processAutoLabelMessage({
+                accessToken,
+                attempt: attempt.autoLabel,
+                getAutoLabelContext: automationRuntime.getAutoLabelContext,
+                getBudgetStatus: automationRuntime.getBudgetStatus,
+                gmailMessageId: identity.messageId,
+                loadMessage,
+                mailboxId: identity.mailboxId,
+                userId,
+              }),
+            identity: { mailboxId, messageId: gmailMessageId },
+            onAttempt: (stage) => {
+              autoLabelMs = stage.elapsedMs;
+              if (stage.status === "failed") {
+                attempt.autoLabel.outcome = "error";
+              }
+            },
+            stage: "auto_label",
           })
-        : Promise.resolve({ status: "disabled" } as const)
-      ).finally(() => {
-        autoLabelMs = performance.now() - startedAt;
-      }),
+        : Promise.resolve({ status: "disabled" } as const),
     ]);
     const labelFinishedAt = performance.now();
     attempt.autoLabelMs = autoLabelMs;
@@ -764,11 +779,16 @@ export const processGmailMessage = async ({
               if (!Number.isFinite(receivedAt) || receivedAt <= 0) {
                 throw new Error("Gmail message is missing its arrival time.");
               }
-              await enqueueMailAgentMessage({
-                mailboxId,
-                messageId: message.id,
-                receivedAt: new Date(receivedAt),
-                threadId: message.threadId,
+              await runReceiveStage({
+                execute: async (identity) =>
+                  await enqueueMailAgentMessage({
+                    mailboxId: identity.mailboxId,
+                    messageId: identity.messageId,
+                    receivedAt: new Date(receivedAt),
+                    threadId: message.threadId,
+                  }),
+                identity: { mailboxId, messageId: message.id },
+                stage: "personal_actions",
               });
               await observeReminderMail({
                 mailboxId,
