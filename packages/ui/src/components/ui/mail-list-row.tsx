@@ -260,12 +260,7 @@ export const MailListRowDetails = ({
               {timestamp}
             </span>
             {actions !== undefined && actions !== null && (
-              <div
-                className={cn(
-                  "pointer-events-none col-start-1 row-start-1 -mt-1.5 flex items-center gap-1 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-has-focus-visible/row:pointer-events-auto group-has-focus-visible/row:opacity-100",
-                  { "@3xl:-my-1": layout === "adaptive" }
-                )}
-              >
+              <div className="pointer-events-none col-start-1 row-start-1 flex items-center gap-1 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-has-focus-visible/row:pointer-events-auto group-has-focus-visible/row:opacity-100">
                 {actions}
               </div>
             )}

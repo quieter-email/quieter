@@ -147,9 +147,11 @@ export const buttonVariants = cva(
         // follows data-active so callers only pass the state.
         result:
           "h-auto w-full justify-start bg-transparent py-4 text-left font-normal whitespace-normal text-muted-fg hover:bg-muted hover:text-fg data-[active=true]:bg-accent",
-        // Action chip revealed on a mail row. Translucent fills keep
-        // contrast on hovered, active and selected row surfaces.
-        "row-action": "gap-1.5 bg-fg/8 text-fg hover:bg-fg/12 [&_svg]:size-3.5",
+        // Action chip revealed on a mail row. It shares the xs Pill box so it
+        // lines up with the row's metadata and label pills; translucent fills
+        // keep contrast on hovered, active and selected row surfaces.
+        "row-action":
+          "squircle h-auto gap-1 rounded-sm border-0 bg-fg/8 px-2 py-1 text-micro/none text-fg hover:bg-fg/12 [&_svg]:size-3",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",
