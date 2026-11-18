@@ -147,10 +147,9 @@ export const buttonVariants = cva(
         // follows data-active so callers only pass the state.
         result:
           "h-auto w-full justify-start bg-transparent py-4 text-left font-normal whitespace-normal text-muted-fg hover:bg-muted hover:text-fg data-[active=true]:bg-accent",
-        // Quiet icon action revealed on a mail row. Translucent fills keep
+        // Action chip revealed on a mail row. Translucent fills keep
         // contrast on hovered, active and selected row surfaces.
-        "row-action":
-          "bg-transparent text-muted-fg hover:bg-fg/10 hover:text-fg [&_svg]:size-4",
+        "row-action": "gap-1.5 bg-fg/8 text-fg hover:bg-fg/12 [&_svg]:size-3.5",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",

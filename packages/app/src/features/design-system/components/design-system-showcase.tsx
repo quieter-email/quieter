@@ -1012,11 +1012,12 @@ export const DesignSystemShowcase = () => {
                   <IconButtonTooltip label="Mark conversation Done">
                     <Button
                       aria-label="Mark conversation Done"
-                      size="icon-xs"
+                      size="xs"
                       type="button"
                       variant="row-action"
                     >
                       <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+                      <span className="hidden @3xl:inline">Done</span>
                     </Button>
                   </IconButtonTooltip>
                 }

@@ -496,13 +496,18 @@ const MessageRowSurface = ({
           onClick={() => {
             void placementAction(thread.threadId);
           }}
-          size="icon-xs"
+          size="xs"
           variant="row-action"
         >
           <Icon
             aria-hidden
             icon={returnsToInbox ? InboxIcon : CheckmarkCircle02Icon}
           />
+          {wideCompactRows === true && (
+            <span className="hidden @3xl:inline">
+              {returnsToInbox ? "Inbox" : "Done"}
+            </span>
+          )}
         </Button>
       </IconButtonTooltip>
     ) : undefined;

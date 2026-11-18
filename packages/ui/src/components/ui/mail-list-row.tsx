@@ -176,7 +176,7 @@ export const MailListRowDetails = ({
   <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 px-2 @sm:gap-3 @sm:px-3">
     <div
       className={cn(
-        "flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-hidden",
+        "flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-x-clip",
         {
           "@3xl:grid @3xl:grid-cols-[clamp(calc(var(--spacing)*40),25%,calc(var(--spacing)*72))_minmax(calc(var(--spacing)*24),1fr)_minmax(0,max-content)_minmax(0,max-content)_calc(var(--spacing)*16)] @3xl:items-center @3xl:gap-3":
             layout === "adaptive",
@@ -237,9 +237,12 @@ export const MailListRowDetails = ({
             {metadata}
           </div>
           <div
-            className={cn("grid shrink-0 items-center justify-items-end", {
-              "@3xl:col-start-5 @3xl:row-start-1": layout === "adaptive",
-            })}
+            className={cn(
+              "grid shrink-0 grid-cols-1 items-center justify-items-end",
+              {
+                "@3xl:col-start-5 @3xl:row-start-1": layout === "adaptive",
+              }
+            )}
           >
             <span
               className={cn(
@@ -257,7 +260,12 @@ export const MailListRowDetails = ({
               {timestamp}
             </span>
             {actions !== undefined && actions !== null && (
-              <div className="pointer-events-none col-start-1 row-start-1 -my-1 flex items-center gap-0.5 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-has-focus-visible/row:pointer-events-auto group-has-focus-visible/row:opacity-100">
+              <div
+                className={cn(
+                  "pointer-events-none col-start-1 row-start-1 -mt-1.5 flex items-center gap-1 opacity-0 transition-opacity duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) group-hover/row:pointer-events-auto group-hover/row:opacity-100 group-has-focus-visible/row:pointer-events-auto group-has-focus-visible/row:opacity-100",
+                  { "@3xl:-my-1": layout === "adaptive" }
+                )}
+              >
                 {actions}
               </div>
             )}
