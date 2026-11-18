@@ -4132,6 +4132,147 @@ export const scheduledMailSendAbandonment = pgTable(
   ]
 );
 
+export type CalendarBookingReservationStatus =
+  | "reserved"
+  | "creating"
+  | "confirmed"
+  | "failed"
+  | "uncertain"
+  | "cancelled";
+
+export const calendarBookingLink = pgTable(
+  "calendarBookingLink",
+  {
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    id: text("id").primaryKey(),
+    revokedAt: timestamp("revokedAt", { withTimezone: true }),
+    scope: jsonb("scope").$type<unknown>().notNull(),
+    title: text("title").notNull(),
+    tokenHash: text("tokenHash").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    unique("calendar_booking_link_token_unique").on(table.tokenHash),
+    unique("calendar_booking_link_owner_unique").on(table.id, table.userId),
+    index("calendar_booking_link_owner_created_idx").on(
+      table.userId,
+      table.createdAt
+    ),
+    index("calendar_booking_link_expiry_idx").on(table.expiresAt),
+    check(
+      "calendar_booking_link_token_hash_check",
+      sql`${table.tokenHash} ~ '^[a-f0-9]{64}$'`
+    ),
+    check(
+      "calendar_booking_link_scope_check",
+      sql`jsonb_typeof(${table.scope}) = 'object'`
+    ),
+    check(
+      "calendar_booking_link_title_check",
+      sql`length(btrim(${table.title})) > 0 and length(${table.title}) <= 120`
+    ),
+    check(
+      "calendar_booking_link_time_check",
+      sql`${table.expiresAt} > ${table.createdAt}
+        and ${table.updatedAt} >= ${table.createdAt}
+        and (${table.revokedAt} is null or ${table.revokedAt} >= ${table.createdAt})`
+    ),
+  ]
+);
+
+export const calendarBookingReservation = pgTable(
+  "calendarBookingReservation",
+  {
+    busyEnd: timestamp("busyEnd", { withTimezone: true }).notNull(),
+    busyStart: timestamp("busyStart", { withTimezone: true }).notNull(),
+    confirmedAt: timestamp("confirmedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    effectStartedAt: timestamp("effectStartedAt", { withTimezone: true }),
+    end: timestamp("end", { withTimezone: true }).notNull(),
+    eventId: text("eventId"),
+    id: text("id").primaryKey(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    linkId: text("linkId").notNull(),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    start: timestamp("start", { withTimezone: true }).notNull(),
+    status: text("status").$type<CalendarBookingReservationStatus>().notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    foreignKey({
+      columns: [table.linkId, table.userId],
+      foreignColumns: [calendarBookingLink.id, calendarBookingLink.userId],
+      name: "calendar_booking_reservation_link_owner_fk",
+    }).onDelete("no action"),
+    unique("calendar_booking_reservation_request_unique").on(
+      table.linkId,
+      table.requestId
+    ),
+    index("calendar_booking_reservation_owner_busy_idx").on(
+      table.userId,
+      table.status,
+      table.busyStart,
+      table.busyEnd
+    ),
+    index("calendar_booking_reservation_link_created_idx").on(
+      table.linkId,
+      table.createdAt
+    ),
+    check(
+      "calendar_booking_reservation_request_check",
+      sql`${table.requestHash} ~ '^[a-f0-9]{64}$'
+        and length(btrim(${table.requestId})) > 0
+        and length(${table.requestId}) <= 255`
+    ),
+    check(
+      "calendar_booking_reservation_bounds_check",
+      sql`${table.start} < ${table.end}
+        and ${table.busyStart} <= ${table.start}
+        and ${table.busyEnd} >= ${table.end}`
+    ),
+    check(
+      "calendar_booking_reservation_time_check",
+      sql`${table.updatedAt} >= ${table.createdAt}
+        and (${table.leaseUntil} is null or ${table.leaseUntil} > ${table.createdAt})
+        and (${table.effectStartedAt} is null or ${table.effectStartedAt} >= ${table.createdAt})
+        and (${table.confirmedAt} is null or ${table.confirmedAt} >= ${table.effectStartedAt})`
+    ),
+    check(
+      "calendar_booking_reservation_state_check",
+      sql`(
+        ${table.status} = 'reserved'
+        and ${table.leaseToken} is not null and length(btrim(${table.leaseToken})) > 0
+        and ${table.leaseUntil} is not null
+        and ${table.effectStartedAt} is null and ${table.confirmedAt} is null
+        and ${table.eventId} is null
+      ) or (
+        ${table.status} in ('creating', 'uncertain')
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is not null and ${table.confirmedAt} is null
+      ) or (
+        ${table.status} = 'confirmed'
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is not null and ${table.confirmedAt} is not null
+        and ${table.eventId} is not null and length(btrim(${table.eventId})) > 0
+      ) or (
+        ${table.status} in ('failed', 'cancelled')
+        and ${table.leaseToken} is null and ${table.leaseUntil} is null
+        and ${table.effectStartedAt} is null and ${table.confirmedAt} is null
+        and ${table.eventId} is null
+      )`
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4145,6 +4286,8 @@ export const tables = {
   billingCreditUsageEvent,
   billingEntitlementOverride,
   billingSubscription,
+  calendarBookingLink,
+  calendarBookingReservation,
   chat,
   chatMessage,
   connectorCredential,
