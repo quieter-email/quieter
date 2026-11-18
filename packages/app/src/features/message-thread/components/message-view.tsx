@@ -256,6 +256,23 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const importanceLabel = threadIsImportant
     ? "Mark conversation as not important"
     : "Mark conversation as important";
+  const toggleThreadPlacement = canSetThreadPlacement
+    ? () => {
+        void (
+          returnThreadToInbox
+            ? threadActions.onReturnToInbox
+            : threadActions.onMarkDone
+        )?.(message.threadId);
+      }
+    : undefined;
+  const toggleThreadImportance = canSetThreadImportance
+    ? () => {
+        void threadActions.onSetImportance?.(
+          message.threadId,
+          !threadIsImportant
+        );
+      }
+    : undefined;
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -272,6 +289,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
+    onToggleImportance: toggleThreadImportance,
+    onTogglePlacement: toggleThreadPlacement,
   });
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {
@@ -377,19 +396,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               message={hotkeyMessage}
             />
           )}
-          {canSetThreadPlacement && (
+          {toggleThreadPlacement && (
             <IconButtonTooltip label={placementLabel}>
               <Button
                 chrome="toolbar"
                 aria-label={placementLabel}
                 disabled={isActionPending}
-                onClick={() => {
-                  void (
-                    returnThreadToInbox
-                      ? threadActions.onReturnToInbox
-                      : threadActions.onMarkDone
-                  )?.(message.threadId);
-                }}
+                onClick={toggleThreadPlacement}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
@@ -401,19 +414,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               </Button>
             </IconButtonTooltip>
           )}
-          {canSetThreadImportance && (
+          {toggleThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
                 chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}
-                onClick={() => {
-                  void threadActions.onSetImportance?.(
-                    message.threadId,
-                    !threadIsImportant
-                  );
-                }}
+                onClick={toggleThreadImportance}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
