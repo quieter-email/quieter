@@ -614,6 +614,7 @@ export const LabelsWorkspacePanel = ({
                   <DropdownMenuTrigger
                     appearance="icon"
                     aria-label={`Options for ${label.name}`}
+                    className="-me-2"
                     disabled={areLabelActionsDisabled}
                   >
                     <Icon aria-hidden icon={MoreVerticalIcon} />

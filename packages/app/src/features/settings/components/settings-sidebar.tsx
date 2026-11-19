@@ -150,19 +150,16 @@ export const SettingsSidebar = ({
   );
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
-      <div className="mb-3 flex items-center justify-between px-1">
-        <Button
-          className="justify-start"
+      <div className="-mt-px mb-2.75 flex items-center justify-between px-1">
+        <SidebarNavItem
           nativeButton={false}
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
           role="link"
           render={<Link to={from} />}
-          variant="ghost"
-          size="sm"
         >
           <Icon icon={ArrowLeft01Icon} />
           Back to mail
-        </Button>
+        </SidebarNavItem>
         {onRequestClose && (
           <IconButtonTooltip label="Close settings menu">
             <Button

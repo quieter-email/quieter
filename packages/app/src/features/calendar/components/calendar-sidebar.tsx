@@ -8,6 +8,7 @@ import {
   MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { SidebarFooterLinks } from "@quieter/app/features/navigation/components/sidebar-footer-links";
+import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import type { CalendarAccount, CalendarSummary } from "@quieter/calendar";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -232,9 +233,8 @@ const CalendarSidebarContent = ({
   }));
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 py-6">
-      <div className="flex items-center justify-between px-1">
-        <Button
-          className="justify-start"
+      <div className="-my-px flex items-center justify-between px-1">
+        <SidebarNavItem
           nativeButton={false}
           onClick={close}
           render={
@@ -246,12 +246,10 @@ const CalendarSidebarContent = ({
           }
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
           role="link"
-          size="sm"
-          variant="ghost"
         >
           <Icon aria-hidden icon={ArrowLeft01Icon} />
           Back to mail
-        </Button>
+        </SidebarNavItem>
         {close ? (
           <IconButtonTooltip label="Close calendar sidebar">
             <Button

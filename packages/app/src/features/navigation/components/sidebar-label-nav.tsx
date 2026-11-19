@@ -315,6 +315,7 @@ export const SidebarLabelNav = ({
                   />
                 )
               }
+              className="-me-1.25"
               role={embedded ? "button" : "link"}
               size="icon-xs"
               type="button"

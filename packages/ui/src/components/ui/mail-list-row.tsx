@@ -36,7 +36,7 @@ export const mailListRowParts = {
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
-    "relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-3",
+    "relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-2.75",
   trigger:
     "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:

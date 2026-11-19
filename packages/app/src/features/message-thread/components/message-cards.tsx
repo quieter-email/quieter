@@ -354,6 +354,7 @@ const MessageHeaderActions = ({
       <IconButtonTooltip label="Details">
         <Button
           aria-label="Details"
+          className="-me-1.75"
           onClick={onDetails}
           size="icon-sm"
           type="button"

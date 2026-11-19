@@ -136,7 +136,9 @@ export const UnifiedSidebarLabelNav = ({
             <IconButtonTooltip label="Labels options">
               <DropdownMenuTrigger
                 aria-label="Labels options"
-                render={<Button size="icon-xs" variant="ghost" />}
+                render={
+                  <Button className="-me-1.25" size="icon-xs" variant="ghost" />
+                }
               >
                 <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>

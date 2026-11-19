@@ -60,6 +60,7 @@ The catalog below describes each family's design job. Variant names are examples
 | Quiet inline or icon action | Established `ghost` usage, with clear hover and keyboard state |
 | Intentional edged control | `outline`; do not use it as a generic footer fallback |
 | Header action with Detail-like fill | `variant="toolbar"` |
+| Header control geometry independent of fill | `chrome="toolbar"` |
 | Large selectable setup option | `variant="card"` |
 | Compact optional field toggle | `variant="chip"` with `aria-pressed` |
 | Segmented option | `variant="option"` with `aria-pressed` |
@@ -72,7 +73,7 @@ The default button is 32px high with 13px text. The default icon-button box is 3
 
 Use `size="auto"` for multiline actions. `pending` on a normal button preserves its width while showing progress. It is useful for an actual action that must complete. It is not a reason to add a spinner to every boolean preference.
 
-Header controls keep the ordinary control shape. There is no separate header geometry, and a primary header action stays primary.
+`chrome="toolbar"` is a shape choice. A primary header action remains primary with toolbar geometry. Controls inside its popup revert to normal popup control geometry. Do not apply header rounding to every menu item.
 
 ## Cursor behavior
 

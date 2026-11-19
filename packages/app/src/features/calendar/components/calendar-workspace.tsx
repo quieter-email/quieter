@@ -1012,6 +1012,7 @@ const CalendarWorkspaceContent = ({
             </Text>
             <IconButtonTooltip label="Close event details">
               <Button
+                chrome="toolbar"
                 aria-label="Close event details"
                 onClick={closeEvent}
                 size="icon-sm"
@@ -1223,13 +1224,14 @@ const CalendarWorkspaceContent = ({
                 }
               >
                 <Button
+                  chrome="toolbar"
                   aria-label={
                     ui.sidebarCollapsed
                       ? "Show calendar sidebar"
                       : "Hide calendar sidebar"
                   }
                   aria-pressed={!ui.sidebarCollapsed}
-                  className="hidden shrink-0 lg:inline-flex"
+                  className="hidden shrink-0 lg:-ms-1.75 lg:inline-flex"
                   onClick={() => {
                     updatePreferences({
                       sidebarCollapsed: !ui.sidebarCollapsed,
@@ -1273,10 +1275,15 @@ const CalendarWorkspaceContent = ({
                 </Text>
               ) : null}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div
+              className={cn("flex min-w-0 flex-wrap items-center gap-2", {
+                "-me-1.75": preview !== null || online,
+              })}
+            >
               <div className="flex shrink-0 items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
+                    chrome="toolbar"
                     aria-label="Previous date range"
                     onClick={() => {
                       const offset = -{ agenda: 30, day: 1, month: 1, week: 7 }[
@@ -1302,6 +1309,7 @@ const CalendarWorkspaceContent = ({
                 </IconButtonTooltip>
                 <IconButtonTooltip label="Next date range">
                   <Button
+                    chrome="toolbar"
                     aria-label="Next date range"
                     onClick={() => {
                       const offset = { agenda: 30, day: 1, month: 1, week: 7 }[
@@ -1341,6 +1349,7 @@ const CalendarWorkspaceContent = ({
                 value={view}
               >
                 <SelectTrigger
+                  chrome="toolbar"
                   aria-label="Calendar view"
                   className="w-24"
                   size="sm"
@@ -1357,6 +1366,7 @@ const CalendarWorkspaceContent = ({
                 </SelectContent>
               </Select>
               <Button
+                chrome="toolbar"
                 className="shrink-0"
                 onClick={() => {
                   void setMailboxSearch({ calendarDate: now.date });
@@ -1367,6 +1377,7 @@ const CalendarWorkspaceContent = ({
                 Today
               </Button>
               <CalendarTimeZonePicker
+                chrome="toolbar"
                 aria-label="Display time zone"
                 className="max-w-40"
                 onValueChange={(zone) => {
@@ -1385,6 +1396,7 @@ const CalendarWorkspaceContent = ({
                   <PopoverTrigger
                     render={
                       <Button
+                        chrome="toolbar"
                         aria-label="Find events"
                         size="icon-sm"
                         variant={ui.search ? "secondary" : "ghost"}
@@ -1412,6 +1424,7 @@ const CalendarWorkspaceContent = ({
               </Popover>
               <IconButtonTooltip label="Refresh calendars">
                 <Button
+                  chrome="toolbar"
                   aria-label="Refresh calendars"
                   disabled={preview !== null || data.isRefreshing}
                   onClick={() => {

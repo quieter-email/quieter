@@ -357,6 +357,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             <div className={cn("shrink-0", { "lg:hidden": !showDesktopBack })}>
               <IconButtonTooltip label="Back to list">
                 <Button
+                  chrome="toolbar"
                   aria-label="Back to list"
                   onClick={onBackToList}
                   size="icon-sm"
@@ -398,6 +399,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {toggleThreadPlacement && (
             <IconButtonTooltip label={placementLabel}>
               <Button
+                chrome="toolbar"
                 aria-label={placementLabel}
                 disabled={isActionPending}
                 onClick={toggleThreadPlacement}
@@ -415,6 +417,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           {toggleThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
+                chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}
@@ -432,7 +435,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </IconButtonTooltip>
           )}
           {mailboxProvider !== "api" && (
-            <div className="shrink-0">
+            <div className="-me-2.25 shrink-0">
               <MessageActionsDropdown
                 actions={threadActions}
                 isPending={isActionPending}
@@ -448,9 +451,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </div>
           )}
           <AssistantSidebarTrigger
-            className={cn("data-[sidebar-open=true]:-ms-3", {
-              "lg:hidden": !detailOnly,
-            })}
+            className={cn(
+              "data-[sidebar-open=false]:ms-2.25 data-[sidebar-open=true]:-ms-3",
+              {
+                "lg:hidden": !detailOnly,
+              }
+            )}
           />
         </div>
 
