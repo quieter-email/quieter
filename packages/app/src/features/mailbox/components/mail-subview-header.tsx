@@ -44,18 +44,19 @@ export const MailSubviewHeader = ({
         </IconButtonTooltip>
       ) : null}
       {onOpenSidebar ? (
-        <IconButtonTooltip label="Open sidebar">
-          <Button
-            aria-label="Open sidebar"
-            className="lg:hidden"
-            onClick={onOpenSidebar}
-            size="icon"
-            type="button"
-            variant="toolbar"
-          >
-            <Icon aria-hidden icon={SidebarLeftIcon} />
-          </Button>
-        </IconButtonTooltip>
+        <div className="shrink-0 lg:hidden">
+          <IconButtonTooltip label="Open sidebar">
+            <Button
+              aria-label="Open sidebar"
+              onClick={onOpenSidebar}
+              size="icon"
+              type="button"
+              variant="toolbar"
+            >
+              <Icon aria-hidden icon={SidebarLeftIcon} />
+            </Button>
+          </IconButtonTooltip>
+        </div>
       ) : null}
       <Text
         as="h1"
@@ -67,7 +68,7 @@ export const MailSubviewHeader = ({
         {title}
       </Text>
       {children}
-      <AssistantSidebarTrigger />
+      <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
     </div>
   );
 };

@@ -118,7 +118,6 @@ export const DomainDangerSection = ({
           <Button
             disabled={removeMutation.isPending}
             onClick={onRemove}
-            size="sm"
             variant="destructive"
           >
             <Icon

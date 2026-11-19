@@ -8,6 +8,7 @@ import {
   Delete02Icon,
   Loading03Icon,
   MailSend02Icon,
+  MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import {
   ComposeEditor,
@@ -1228,7 +1229,8 @@ const ReadyComposeSurface = ({
                     <ComposeEditorBody
                       chrome="seamless"
                       className={cn("flex-1", {
-                        "[&_.ProseMirror>blockquote]:hidden":
+                        // Collapsing hides the attribution, the quote, and the editor's empty trailing line with it.
+                        "[&_.ProseMirror>blockquote]:hidden [&_.ProseMirror>blockquote~p:last-child:has(>br.ProseMirror-trailingBreak:only-child)]:hidden [&_.ProseMirror>p[data-compose-quote]]:hidden":
                           hasQuotedContent && !showQuotedContent,
                       })}
                       invalid={field.state.meta.errors.length > 0}
@@ -1244,6 +1246,7 @@ const ReadyComposeSurface = ({
                           }
                         >
                           <Button
+                            aria-expanded={showQuotedContent}
                             aria-label={
                               showQuotedContent
                                 ? "Hide quoted message"
@@ -1252,11 +1255,11 @@ const ReadyComposeSurface = ({
                             onClick={() => {
                               setShowQuotedContent((current) => !current);
                             }}
-                            size="sm"
+                            size="xs"
                             type="button"
-                            variant="ghost"
+                            variant="secondary"
                           >
-                            {showQuotedContent ? "Hide quote" : "..."}
+                            <Icon aria-hidden icon={MoreHorizontalIcon} />
                           </Button>
                         </IconButtonTooltip>
                       </div>
