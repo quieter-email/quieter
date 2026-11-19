@@ -740,7 +740,6 @@ const DeleteAccountDialog = () => {
               </DialogCloseButton>
               <Button
                 disabled={deleteAccountMutation.isPending}
-                size="sm"
                 type="submit"
                 variant="destructive"
               >

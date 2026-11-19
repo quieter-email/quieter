@@ -224,11 +224,7 @@ export const OrganizationFormDialog = ({
               <DialogCloseButton disabled={organizationMutation.isPending}>
                 Cancel
               </DialogCloseButton>
-              <Button
-                disabled={organizationMutation.isPending}
-                size="sm"
-                type="submit"
-              >
+              <Button disabled={organizationMutation.isPending} type="submit">
                 {organizationMutation.isPending ? (
                   <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (

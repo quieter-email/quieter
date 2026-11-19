@@ -435,11 +435,7 @@ const CreateApiKeyDialog = ({ organizationId }: { organizationId: string }) => {
                 <DialogCloseButton disabled={createMutation.isPending}>
                   Cancel
                 </DialogCloseButton>
-                <Button
-                  disabled={createMutation.isPending}
-                  size="sm"
-                  type="submit"
-                >
+                <Button disabled={createMutation.isPending} type="submit">
                   {createMutation.isPending ? (
                     <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                   ) : (
@@ -607,7 +603,6 @@ const ResetApiKeyDialog = ({
                 onClick={() => {
                   resetMutation.mutate();
                 }}
-                size="sm"
                 variant="destructive"
               >
                 {resetMutation.isPending ? (
@@ -748,7 +743,6 @@ const DeleteApiKeyDialog = ({
             onClick={() => {
               deleteMutation.mutate();
             }}
-            size="sm"
             variant="destructive"
           >
             {deleteMutation.isPending ? (
