@@ -288,6 +288,7 @@ export const CalendarEventEditor = ({
           ) : null}
           <IconButtonTooltip label="Close event details">
             <Button
+              chrome="toolbar"
               aria-label="Close event details"
               disabled={pending}
               onClick={onClose}

@@ -76,7 +76,7 @@ export const FullPageDialogClose = ({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) => (
   <DialogPrimitive.Close
     className={cn(
-      buttonVariants({ size: "icon", variant: "ghost" }),
+      buttonVariants({ chrome: "toolbar", size: "icon", variant: "ghost" }),
       className
     )}
     {...props}

@@ -67,6 +67,7 @@ export const CalendarEventDetails = ({
           </Text>
           <IconButtonTooltip label="Close event details">
             <Button
+              chrome="toolbar"
               aria-label="Close event details"
               onClick={onClose}
               size="icon-sm"

@@ -170,6 +170,7 @@ export const SnippetWorkspace = ({
         <WorkspaceHeader className="@container">
           <MailSubviewHeader onOpenSidebar={onOpenSidebar} title="Snippets">
             <Button
+              chrome="toolbar"
               onClick={() => {
                 setEditingId(null);
                 setName("");
@@ -190,7 +191,7 @@ export const SnippetWorkspace = ({
             <span className="sr-only" id="snippet-workspace-search-label">
               Search snippets
             </span>
-            <InputGroup>
+            <InputGroup chrome="toolbar">
               <InputAddon
                 aria-hidden
                 className="ml-3 flex shrink-0 items-center"

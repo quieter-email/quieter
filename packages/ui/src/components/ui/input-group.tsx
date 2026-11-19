@@ -5,11 +5,13 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 
 export const InputGroup = ({
+  chrome = "default",
   className,
   surface = "input",
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<"div"> & {
+  chrome?: "default" | "toolbar";
   surface?: "input" | "page" | "panel";
   size?: "default" | "lg";
 }) => (
@@ -20,6 +22,7 @@ export const InputGroup = ({
         "bg-bg": surface === "page",
         "bg-panel": surface === "panel",
         "h-10": size === "lg",
+        "rounded-xl": chrome === "toolbar",
       },
       className
     )}

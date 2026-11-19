@@ -139,6 +139,7 @@ export const ScheduledMessagesWorkspace = ({
             <IconButtonTooltip label="Refresh scheduled messages">
               <Button
                 aria-label="Refresh scheduled messages"
+                chrome="toolbar"
                 disabled={demo || messagesQuery.isFetching}
                 onClick={() => {
                   void refreshMessages();

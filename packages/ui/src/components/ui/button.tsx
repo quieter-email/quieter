@@ -75,6 +75,7 @@ export const buttonVariants = cva(
         className: "active:bg-secondary-active",
         variant: "secondary",
       },
+      { chrome: "toolbar", className: "rounded-xl" },
       {
         className: "aria-pressed:bg-control-active",
         size: "field",
@@ -88,11 +89,16 @@ export const buttonVariants = cva(
     ],
     defaultVariants: {
       auxiliaryPress: false,
+      chrome: "default",
       size: "default",
       variant: "default",
     },
     variants: {
       auxiliaryPress: { false: null, true: null },
+      chrome: {
+        default: null,
+        toolbar: null,
+      },
       focusRing: {
         inset: "focus-visible:ring-inset",
       },
@@ -150,7 +156,7 @@ export const buttonVariants = cva(
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",
         toolbar:
-          "bg-control text-muted-fg hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
+          "rounded-xl bg-control text-muted-fg hover:bg-control-hover hover:text-fg [&_svg]:size-3.5",
       },
     },
   }
@@ -167,6 +173,7 @@ export type ButtonProps = BaseUIButtonProps &
   };
 
 export const Button = ({
+  chrome = "default",
   className,
   focusRing,
   fullWidth = false,
@@ -211,6 +218,7 @@ export const Button = ({
               cn(
                 buttonVariants({
                   auxiliaryPress: isAuxiliaryPress,
+                  chrome,
                   focusRing,
                   fullWidth,
                   size,
@@ -221,6 +229,7 @@ export const Button = ({
           : cn(
               buttonVariants({
                 auxiliaryPress: isAuxiliaryPress,
+                chrome,
                 focusRing,
                 fullWidth,
                 size,

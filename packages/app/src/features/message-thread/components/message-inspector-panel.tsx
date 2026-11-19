@@ -220,6 +220,7 @@ export const ApiSourceAction = ({
   if (apiSource.canCreateMailbox) {
     return (
       <Button
+        chrome="toolbar"
         disabled={isPending}
         onClick={onCreateMailbox}
         size="sm"

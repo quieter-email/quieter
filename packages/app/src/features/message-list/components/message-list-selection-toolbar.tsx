@@ -93,6 +93,7 @@ const MessageListBulkActionButton = ({
 }) => (
   <IconButtonTooltip label={action.label}>
     <Button
+      chrome="toolbar"
       aria-label={action.label}
       disabled={disabled}
       onClick={() => {
@@ -119,8 +120,9 @@ const MessageListBulkLabelsMenu = ({
     trigger={
       <IconButtonTooltip label="Labels">
         <DropdownMenuTrigger
+          chrome="toolbar"
           aria-label="Modify labels"
-          render={<Button size="icon" variant="outline" />}
+          render={<Button chrome="toolbar" size="icon" variant="outline" />}
           disabled={disabled}
           type="button"
         >
@@ -141,8 +143,9 @@ const MessageListBulkOverflowMenu = ({
   <DropdownMenu>
     <IconButtonTooltip label="More actions">
       <DropdownMenuTrigger
+        chrome="toolbar"
         aria-label="Open more actions"
-        render={<Button size="icon" variant="outline" />}
+        render={<Button chrome="toolbar" size="icon" variant="outline" />}
         disabled={disabled}
         type="button"
       >
@@ -277,6 +280,7 @@ export const MessageListSelectionToolbar = ({
 
         <IconButtonTooltip label="Clear selection">
           <Button
+            chrome="toolbar"
             aria-label="Clear selection"
             disabled={disabled}
             onClick={onClearSelection}
