@@ -12,14 +12,9 @@ import {
   vi,
 } from "vite-plus/test";
 
-import {
-  createAiBillingMiddleware,
-  getMailAiRequestBudget,
-  runBilledAiRequest,
-} from "../src/billing";
+import { createAiBillingMiddleware, runBilledAiRequest } from "../src/billing";
 import type { AiRequestDiagnostics } from "../src/billing";
-import { detectMailVerificationCode } from "../src/classify-gmail-message";
-import { createChatModel } from "../src/openrouter";
+import { classifyMailMessage } from "../src/classify-gmail-message";
 import { openRouterStreamMiddleware } from "../src/openrouter-stream";
 import { generateOpenRouterTranscription } from "../src/openrouter-transcription";
 
@@ -52,6 +47,14 @@ const billing: AiBillingContext = {
   organizationId: "team",
   usageKind: "aiChat",
 };
+const mailLabels = [
+  {
+    description: null,
+    id: "label",
+    inclusionCriteria: null,
+    name: "Label",
+  },
+];
 
 describe("paid provider admission and settlement", () => {
   beforeEach(() => {
@@ -148,8 +151,9 @@ describe("paid provider admission and settlement", () => {
               billing,
               format: "wav",
             })
-          : detectMailVerificationCode({
+          : classifyMailMessage({
               billing,
+              labels: mailLabels,
               message: { bodyText: "Synthetic content", id: "message" },
             });
       await expect(request).rejects.toThrow(/Unavailable balance/u);
@@ -163,10 +167,18 @@ describe("paid provider admission and settlement", () => {
       const fetchProvider = vi.fn<typeof fetch>().mockResolvedValue(
         Response.json(
           kind === "transcription"
-            ? { text: "Synthetic transcript", usage: { cost: 0.01 } }
+            ? { text: "Synthetic transcript", usage: { cost: 0.001 } }
             : {
-                answers: { verificationCode: { noul: 0.5, type: "noul" } },
-                usage: { cost: 0.01, input_tokens: 4, output_tokens: 2 },
+                answers: {
+                  category: {
+                    choice: "label0",
+                    confidence: 1,
+                    probabilities: { label0: 1 },
+                    type: "choice",
+                  },
+                  label0: { noul: 0.5, type: "noul" },
+                },
+                usage: { cost: 0.001, input_tokens: 4, output_tokens: 2 },
               }
         )
       );
@@ -178,14 +190,15 @@ describe("paid provider admission and settlement", () => {
           format: "wav",
         });
       } else {
-        await detectMailVerificationCode({
+        await classifyMailMessage({
           billing,
+          labels: mailLabels,
           message: { bodyText: "Synthetic content", id: "message" },
         });
       }
       expect(state.settle).toHaveBeenCalledWith(
         expect.objectContaining({
-          costUsd: 0.01,
+          costUsd: 0.001,
           reservationId: "00000000-0000-0000-0000-000000000001",
         })
       );
@@ -282,14 +295,14 @@ describe("paid provider admission and settlement", () => {
       Response.json({
         data: {
           endpoints: [
-            { context_length: Number.MAX_SAFE_INTEGER, tag: "typesafe" },
+            { context_length: Number.MAX_SAFE_INTEGER, tag: "liquid" },
           ],
         },
       })
     );
     vi.stubGlobal("fetch", provider);
     await expect(
-      detectMailVerificationCode({
+      classifyMailMessage({
         billing: {
           ...billing,
           account: {
@@ -301,6 +314,7 @@ describe("paid provider admission and settlement", () => {
             product: "pro",
           },
         },
+        labels: mailLabels,
         message: { bodyText: "Synthetic content", id: "message" },
       })
     ).rejects.toThrow(/ceiling has changed/u);
@@ -311,34 +325,6 @@ describe("paid provider admission and settlement", () => {
       )
     ).toBeTruthy();
   });
-
-  test.each([
-    { max_tokens: 1_000_000 },
-    { models: ["unbounded-model"] },
-    { plugins: [{ id: "web" }] },
-  ])(
-    "rejects call-level provider options that could bypass the mail spending contract",
-    async (override) => {
-      const provider = vi.fn<typeof fetch>();
-      vi.stubGlobal("fetch", provider);
-      const model = createChatModel("google/gemini-3.1-flash-lite", {
-        billing,
-        mailRequestBudget: await getMailAiRequestBudget(
-          "google/gemini-3.1-flash-lite",
-          { kind: "development" }
-        ),
-      });
-      await expect(
-        model.doGenerate({
-          maxOutputTokens: 100,
-          prompt: [],
-          providerOptions: { openrouter: override },
-        })
-      ).rejects.toThrow(/exceeds.*ceiling/u);
-      expect(provider).not.toHaveBeenCalled();
-      expect(state.reserve).not.toHaveBeenCalled();
-    }
-  );
 
   test("the shared SDK boundary blocks generation before invoking the model", async () => {
     const provider = new MockLanguageModelV4();
