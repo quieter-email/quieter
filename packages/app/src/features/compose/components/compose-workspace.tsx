@@ -757,6 +757,7 @@ const ReadyComposeSurface = ({
           title="New message"
         />
       )}
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the form only blocks implicit submission from its own fields; it never becomes a keyboard target. */}
       <form
         action={async () => {
           if (canSubmitCompose) {
@@ -822,6 +823,19 @@ const ReadyComposeSurface = ({
             } else {
               addAttachmentFiles([...event.dataTransfer.files]);
             }
+          }
+        }}
+        onKeyDown={(event) => {
+          // Enter in a single-line field would implicitly submit the form and
+          // send an unfinished message. The send button and shortcut still send.
+          if (
+            event.key === "Enter" &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            event.target instanceof HTMLInputElement &&
+            event.target.form === event.currentTarget
+          ) {
+            event.preventDefault();
           }
         }}
       >
