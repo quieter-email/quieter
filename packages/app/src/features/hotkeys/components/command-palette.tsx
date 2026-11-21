@@ -16,12 +16,20 @@ import {
 import { Input } from "@quieter/ui/input";
 import { Kbd } from "@quieter/ui/kbd";
 import { detectPlatform } from "@tanstack/hotkeys";
+import type { RegisterableHotkey } from "@tanstack/react-hotkeys";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useSelector } from "@tanstack/react-store";
-import type { Store } from "@tanstack/react-store";
-import { useId, useRef, useState, useSyncExternalStore } from "react";
+import {
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import type { RefObject } from "react";
 
+import type { AppCommand } from "../domain/app-commands";
 import {
   getShortcutDisplay,
   KEYBOARD_SHORTCUTS,
@@ -42,6 +50,14 @@ const shortcutById = new Map(
   KEYBOARD_SHORTCUTS.map((shortcut) => [shortcut.id, shortcut])
 );
 
+const commandPaletteShortcut = shortcutById.get("show-command-palette");
+const commandPaletteHotkey: RegisterableHotkey =
+  commandPaletteShortcut !== undefined &&
+  "keys" in commandPaletteShortcut &&
+  commandPaletteShortcut.keys[0] !== undefined
+    ? commandPaletteShortcut.keys[0]
+    : "Mod+Shift+K";
+
 const subscribeToPlatform = () => () => {
   // The operating system does not change during a page's lifetime.
 };
@@ -53,6 +69,24 @@ const hasBlockingOverlayOutsidePalette = () =>
     ),
   ].some((overlay) => !Object.hasOwn(overlay.dataset, "commandPaletteDialog"));
 
+const getCommandMatchRank = (
+  command: AppCommand,
+  normalizedQuery: string,
+  searchTokens: readonly string[]
+) => {
+  const labelText = command.label.toLocaleLowerCase();
+  if (labelText.startsWith(normalizedQuery)) {
+    return 0;
+  }
+  if (searchTokens.every((token) => labelText.includes(token))) {
+    return 1;
+  }
+  if (searchTokens.some((token) => labelText.includes(token))) {
+    return 2;
+  }
+  return 3;
+};
+
 const CommandPaletteBody = ({
   inputRef,
   onSelectCommand,
@@ -62,35 +96,65 @@ const CommandPaletteBody = ({
   inputRef: RefObject<HTMLInputElement | null>;
   onSelectCommand: (sourceId: string, commandId: string) => void;
   open: boolean;
-  registry: Store<AppCommandRegistry>;
+  registry: AppCommandRegistry;
 }) => {
-  const registrations = useSelector(registry, (state) => state);
+  useSelector(registry.versionStore, (version) => version);
   const platform = useSyncExternalStore(
     subscribeToPlatform,
     detectPlatform,
     () => "windows" as const
   );
   const [query, setQuery] = useState("");
-  const [activeIndex, setActiveIndex] = useState(0);
+  const [activeKey, setActiveKey] = useState<string | null>(null);
   const menuId = useId();
-  const searchTokens = query
-    .trim()
-    .toLocaleLowerCase()
+  const normalizedQuery = query.trim().toLocaleLowerCase();
+  const searchTokens = normalizedQuery
     .split(/\s+/u)
     .filter((token) => token.length > 0);
-  const commands = [...registrations].flatMap(([sourceId, items]) =>
-    items.map((command) => ({ command, sourceId }))
+  const isSearching = searchTokens.length > 0;
+  const allEntries = registry.getEntries().flatMap(([sourceId, items]) =>
+    items.map((command) => ({
+      command,
+      key: `${sourceId}:${command.id}`,
+      sourceId,
+    }))
+  );
+  const primaryIds = new Set(
+    allEntries
+      .filter(({ command }) => command.fallback !== true)
+      .map(({ command }) => command.id)
+  );
+  const commands = allEntries.filter(
+    ({ command }) => command.fallback !== true || !primaryIds.has(command.id)
   );
   const filtered = commands
     .filter(({ command }) => {
-      if (searchTokens.length === 0) {
+      if (!isSearching) {
         return true;
       }
       const haystack =
-        `${command.label} ${command.group} ${command.description ?? ""} ${command.keywords ?? ""}`.toLocaleLowerCase();
+        `${command.label} ${command.group} ${command.keywords ?? ""}`.toLocaleLowerCase();
       return searchTokens.every((token) => haystack.includes(token));
     })
     .toSorted((left, right) => {
+      if (isSearching) {
+        if (left.command.state !== right.command.state) {
+          return left.command.state === "available" ? -1 : 1;
+        }
+        const leftRank = getCommandMatchRank(
+          left.command,
+          normalizedQuery,
+          searchTokens
+        );
+        const rightRank = getCommandMatchRank(
+          right.command,
+          normalizedQuery,
+          searchTokens
+        );
+        if (leftRank !== rightRank) {
+          return leftRank - rightRank;
+        }
+      }
       const leftOrder = COMMAND_GROUP_ORDER.get(left.command.group) ?? 99;
       const rightOrder = COMMAND_GROUP_ORDER.get(right.command.group) ?? 99;
       if (leftOrder !== rightOrder) {
@@ -110,10 +174,19 @@ const CommandPaletteBody = ({
         left.command.id.localeCompare(right.command.id)
       );
     });
-  const highlightedIndex = Math.min(
-    activeIndex,
-    Math.max(0, filtered.length - 1)
+  const activeKeyIndex =
+    activeKey === null
+      ? -1
+      : filtered.findIndex((entry) => entry.key === activeKey);
+  const firstAvailableIndex = filtered.findIndex(
+    (entry) => entry.command.state === "available"
   );
+  let highlightedIndex = 0;
+  if (activeKeyIndex !== -1) {
+    highlightedIndex = activeKeyIndex;
+  } else if (firstAvailableIndex !== -1) {
+    highlightedIndex = firstAvailableIndex;
+  }
 
   const selectCommand = (index: number) => {
     const selected = filtered[index];
@@ -136,7 +209,7 @@ const CommandPaletteBody = ({
           aria-label="Search commands"
           onChange={(event) => {
             setQuery(event.target.value);
-            setActiveIndex(0);
+            setActiveKey(null);
           }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) {
@@ -151,10 +224,13 @@ const CommandPaletteBody = ({
                     (event.key === "ArrowDown" ? 1 : -1) +
                     count) %
                   count;
-                setActiveIndex(next);
+                const nextEntry = filtered[next];
+                if (nextEntry !== undefined) {
+                  setActiveKey(nextEntry.key);
+                }
                 document
-                  .querySelector(`#${CSS.escape(`${menuId}-${next}`)}`)
-                  ?.scrollIntoView({ block: "nearest" });
+                  .querySelector(`[id=${JSON.stringify(`${menuId}-${next}`)}]`)
+                  ?.scrollIntoView?.({ block: "nearest" });
               }
             } else if (event.key === "Enter") {
               event.preventDefault();
@@ -191,7 +267,12 @@ const CommandPaletteBody = ({
           };
         })}
         label="Available commands"
-        onHighlight={setActiveIndex}
+        onHighlight={(index) => {
+          const entry = filtered[index];
+          if (entry !== undefined) {
+            setActiveKey(entry.key);
+          }
+        }}
         onSelect={selectCommand}
         selectionHint="select"
         status={filtered.length === 0 ? "No matching commands." : undefined}
@@ -203,19 +284,34 @@ const CommandPaletteBody = ({
 export const CommandPalette = ({
   registry,
 }: {
-  registry: Store<AppCommandRegistry>;
+  registry: AppCommandRegistry;
 }) => {
   const [open, setOpen] = useState(false);
   const [sessionKey, setSessionKey] = useState(0);
   const inputRef = useRef<HTMLInputElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
+  const skipReturnFocusRef = useRef(false);
+  const dispatchFrameRef = useRef<number | null>(null);
   const pendingCommandRef = useRef<{
     commandId: string;
     sourceId: string;
   } | null>(null);
 
+  const cancelPendingDispatch = () => {
+    if (dispatchFrameRef.current !== null) {
+      cancelAnimationFrame(dispatchFrameRef.current);
+      dispatchFrameRef.current = null;
+    }
+  };
+
+  useLayoutEffect(() => {
+    registry.setOpen(open);
+  }, [open, registry]);
+
+  useEffect(() => cancelPendingDispatch, []);
+
   useHotkey(
-    "Mod+Shift+K",
+    commandPaletteHotkey,
     (event) => {
       if (event.isComposing || event.defaultPrevented) {
         return;
@@ -226,7 +322,10 @@ export const CommandPalette = ({
         }
         event.preventDefault();
         event.stopPropagation();
+        cancelPendingDispatch();
         pendingCommandRef.current = null;
+        skipReturnFocusRef.current = false;
+        registry.setOpen(false);
         setOpen(false);
         return;
       }
@@ -235,11 +334,14 @@ export const CommandPalette = ({
       }
       event.preventDefault();
       event.stopPropagation();
+      cancelPendingDispatch();
       returnFocusRef.current =
         document.activeElement instanceof HTMLElement
           ? document.activeElement
           : null;
       pendingCommandRef.current = null;
+      skipReturnFocusRef.current = false;
+      registry.setOpen(true);
       setSessionKey((current) => current + 1);
       setOpen(true);
     },
@@ -248,7 +350,14 @@ export const CommandPalette = ({
 
   return (
     <Dialog
-      onOpenChange={setOpen}
+      onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          cancelPendingDispatch();
+          skipReturnFocusRef.current = false;
+        }
+        registry.setOpen(nextOpen);
+        setOpen(nextOpen);
+      }}
       onOpenChangeComplete={(isOpen) => {
         if (isOpen) {
           return;
@@ -258,11 +367,13 @@ export const CommandPalette = ({
         if (pending === null) {
           return;
         }
-        requestAnimationFrame(() => {
-          const command = registry
-            .get()
-            .get(pending.sourceId)
-            ?.find((item) => item.id === pending.commandId);
+        cancelPendingDispatch();
+        dispatchFrameRef.current = requestAnimationFrame(() => {
+          dispatchFrameRef.current = null;
+          const command = registry.findCommand(
+            pending.sourceId,
+            pending.commandId
+          );
           if (command?.state === "available") {
             void (async () => {
               try {
@@ -278,11 +389,14 @@ export const CommandPalette = ({
     >
       <DialogContent
         data-command-palette-dialog
-        finalFocus={() =>
-          returnFocusRef.current?.isConnected === true
+        finalFocus={() => {
+          if (skipReturnFocusRef.current) {
+            return false;
+          }
+          return returnFocusRef.current?.isConnected === true
             ? returnFocusRef.current
-            : false
-        }
+            : false;
+        }}
         initialFocus={inputRef}
       >
         <DialogHeader>
@@ -295,7 +409,9 @@ export const CommandPalette = ({
           inputRef={inputRef}
           key={sessionKey}
           onSelectCommand={(sourceId, commandId) => {
+            skipReturnFocusRef.current = true;
             pendingCommandRef.current = { commandId, sourceId };
+            registry.setOpen(false);
             setOpen(false);
           }}
           open={open}

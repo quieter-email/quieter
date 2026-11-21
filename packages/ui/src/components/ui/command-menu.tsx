@@ -51,6 +51,7 @@ export const CommandMenu = ({
         "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-xl": chrome === "popup",
       }
     )}
+    data-blocking-overlay={chrome === "popup" ? "" : undefined}
   >
     <div
       aria-label={label}
@@ -74,18 +75,15 @@ export const CommandMenu = ({
           ) : null}
           <button
             aria-disabled={item.disabledReason === undefined ? undefined : true}
-            aria-describedby={
-              (item.disabledReason ?? item.description)
-                ? `${id}-${index}-description`
-                : undefined
-            }
             aria-selected={index === activeIndex}
             className={cn(menuItemClassName, "w-full", {
-              "opacity-60 active:scale-100": item.disabledReason !== undefined,
+              "active:scale-100 data-disabled:pointer-events-auto":
+                item.disabledReason !== undefined,
               "text-destructive":
                 item.tone === "destructive" &&
                 item.disabledReason === undefined,
             })}
+            data-disabled={item.disabledReason === undefined ? undefined : ""}
             data-highlighted={index === activeIndex ? "" : undefined}
             id={`${id}-${index}`}
             onClick={() => {
@@ -114,7 +112,6 @@ export const CommandMenu = ({
                   className={cn("block text-caption text-muted-fg", {
                     truncate: item.disabledReason === undefined,
                   })}
-                  id={`${id}-${index}-description`}
                 >
                   {item.disabledReason ?? item.description}
                 </span>

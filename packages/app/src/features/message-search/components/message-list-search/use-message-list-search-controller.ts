@@ -40,13 +40,13 @@ import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/bi
 import { toastError } from "@quieter/app/lib/error-toast";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { useElementVisible } from "@quieter/app/lib/use-element-visible";
 import { parseNaturalLanguageMailSearch } from "@quieter/mail/natural-language-search";
 import { isMailSearchFilterSupported } from "@quieter/mail/search";
 import { toast } from "@quieter/ui/toast";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQueries, useQueryClient } from "@tanstack/react-query";
 import {
-  useCallback,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -112,24 +112,7 @@ export const useMessageListSearchController = ({
   searchMailboxes,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
-  const subscribeToSearchVisibility = useCallback((onChange: () => void) => {
-    const field = fieldRef.current;
-    if (typeof ResizeObserver === "undefined" || field === null) {
-      return () => {
-        // ResizeObserver is unavailable outside browser layouts.
-      };
-    }
-    const observer = new ResizeObserver(onChange);
-    observer.observe(field);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-  const isSearchVisible = useSyncExternalStore(
-    subscribeToSearchVisibility,
-    () => (fieldRef.current?.getClientRects().length ?? 0) > 0,
-    () => false
-  );
+  const isSearchVisible = useElementVisible(fieldRef);
   const textInputRef = useRef<HTMLInputElement>(null);
   const segmentRefs = useRef<(HTMLElement | null)[]>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());

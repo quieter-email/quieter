@@ -24,11 +24,25 @@ const mailboxDestinations = [
   shortcutId: KeyboardShortcutId;
 }[];
 
+export const isMailboxSupportedByProvider = (
+  provider: "api" | "gmail" | "managed" | null,
+  mailbox: MailboxCategory | "scheduled"
+) => {
+  if (mailbox === "scheduled") {
+    return provider === "gmail" || provider === "managed";
+  }
+  if (provider === "api") {
+    return mailbox === "sent";
+  }
+  return true;
+};
+
 export const useMailboxCommands = ({
+  activeMailbox,
   canCompose,
   isComposeMailbox,
-  isMailList,
   isMailWorkspace,
+  isScheduledMailbox,
   isSnippetMailbox,
   isWorkspaceReady,
   mailboxes,
@@ -43,10 +57,11 @@ export const useMailboxCommands = ({
   selectedMailboxProvider,
   view,
 }: {
+  activeMailbox: MailboxCategory;
   canCompose: boolean;
   isComposeMailbox: boolean;
-  isMailList: boolean;
   isMailWorkspace: boolean;
+  isScheduledMailbox: boolean;
   isSnippetMailbox: boolean;
   isWorkspaceReady: boolean;
   mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
@@ -62,6 +77,15 @@ export const useMailboxCommands = ({
   view: MailboxWorkspaceView;
 }) => {
   const allInboxesActive = view === "all-inboxes";
+  const hasNonApiMailbox = mailboxes.some(
+    (mailbox) => mailbox.provider !== "api"
+  );
+  const effectiveViewProvider =
+    allInboxesActive && selectedMailboxProvider === "api"
+      ? (mailboxes.find((mailbox) => mailbox.provider !== "api")?.provider ??
+        selectedMailboxProvider)
+      : selectedMailboxProvider;
+
   let mailboxReason: string | null = null;
   if (!isWorkspaceReady) {
     mailboxReason = "Wait for your mailboxes to load.";
@@ -70,6 +94,7 @@ export const useMailboxCommands = ({
   } else if (!isMailWorkspace) {
     mailboxReason = "Open Mail first.";
   }
+
   let composeReason = mailboxReason;
   if (composeReason === null) {
     if (isComposeMailbox) {
@@ -78,6 +103,7 @@ export const useMailboxCommands = ({
       composeReason = "Choose a connected mailbox you can send from.";
     }
   }
+
   let snippetsReason = mailboxReason;
   if (snippetsReason === null) {
     if (isSnippetMailbox) {
@@ -86,31 +112,45 @@ export const useMailboxCommands = ({
       snippetsReason = "Choose a mailbox you can compose from.";
     }
   }
+
+  let allInboxesReason = mailboxReason;
+  if (allInboxesReason === null) {
+    if (!hasNonApiMailbox) {
+      allInboxesReason = "Connect a mailbox to view its Inbox.";
+    } else if (
+      allInboxesActive &&
+      !isComposeMailbox &&
+      !isSnippetMailbox &&
+      !isScheduledMailbox
+    ) {
+      allInboxesReason = "Already viewing All inboxes.";
+    }
+  }
+
   let openMailReason: string | null = null;
   if (!isWorkspaceReady) {
     openMailReason = "Wait for your mailboxes to load.";
   } else if (isMailWorkspace) {
     openMailReason = "Already viewing Mail.";
   }
+
   let openCalendarReason: string | null = null;
   if (!isWorkspaceReady) {
     openCalendarReason = "Wait for your mailboxes to load.";
   } else if (!isMailWorkspace) {
     openCalendarReason = "Already viewing Calendar.";
   }
+
   const commands: AppCommand[] = [
-    ...(!isMailList || !isWorkspaceReady || selectedMailboxId === null
-      ? [
-          {
-            group: "Mail",
-            id: "focus-search",
-            label: "Search mail",
-            reason: mailboxReason ?? "Open a conversation list to search mail.",
-            shortcutId: "focus-search",
-            state: "unavailable",
-          } as const,
-        ]
-      : []),
+    {
+      fallback: true,
+      group: "Mail",
+      id: "focus-search",
+      label: "Search mail",
+      reason: mailboxReason ?? "Open a conversation list to search mail.",
+      shortcutId: "focus-search",
+      state: "unavailable",
+    },
     {
       group: "Mail",
       id: "compose",
@@ -128,11 +168,25 @@ export const useMailboxCommands = ({
         return [];
       }
       const { mailbox, shortcutId } = destination;
-      const reason =
-        mailboxReason ??
-        (selectedMailboxProvider === "api" && mailbox !== "sent"
-          ? "This mailbox only has Sent mail."
-          : null);
+      const isViewingDestination =
+        mailbox === "scheduled"
+          ? isScheduledMailbox && view === "inbox"
+          : !isComposeMailbox &&
+            !isSnippetMailbox &&
+            !isScheduledMailbox &&
+            (view === "inbox" || view === "all-inboxes") &&
+            mailbox === activeMailbox;
+      let reason = mailboxReason;
+      if (reason === null) {
+        if (!isMailboxSupportedByProvider(effectiveViewProvider, mailbox)) {
+          reason =
+            effectiveViewProvider === "api"
+              ? "This mailbox only has Sent mail."
+              : "This view is unavailable for this mailbox.";
+        } else if (isViewingDestination) {
+          reason = `Already viewing ${shortcut.label.replace(/^Go to /u, "")}.`;
+        }
+      }
       return [
         {
           group: "Views",
@@ -154,8 +208,7 @@ export const useMailboxCommands = ({
       group: "Views",
       id: "go-all-inboxes",
       label: "Go to All inboxes",
-      ...(mailboxReason === null &&
-      mailboxes.some((mailbox) => mailbox.provider !== "api")
+      ...(allInboxesReason === null
         ? {
             execute: () => {
               onSelectView("all-inboxes");
@@ -163,7 +216,7 @@ export const useMailboxCommands = ({
             state: "available",
           }
         : {
-            reason: mailboxReason ?? "Connect a mailbox to view its Inbox.",
+            reason: allInboxesReason,
             state: "unavailable",
           }),
     },
@@ -204,6 +257,7 @@ export const useMailboxCommands = ({
         description: mailbox.emailAddress,
         group: "Accounts",
         id: `switch-mailbox-${mailbox.id}`,
+        keywords: mailbox.emailAddress,
         label: `Switch to ${mailbox.displayName || mailbox.emailAddress}`,
         ...(switchReason === null
           ? {
@@ -218,6 +272,14 @@ export const useMailboxCommands = ({
   ];
   useRegisterCommands(
     commands,
-    `${selectedMailboxId ?? "none"}:${isMailWorkspace ? "mail" : "calendar"}:${view}`
+    JSON.stringify([
+      selectedMailboxId ?? "none",
+      isMailWorkspace ? "mail" : "calendar",
+      view,
+      activeMailbox,
+      isComposeMailbox,
+      isSnippetMailbox,
+      isScheduledMailbox,
+    ])
   );
 };

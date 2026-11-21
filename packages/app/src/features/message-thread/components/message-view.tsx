@@ -38,7 +38,6 @@ import { ThreadActionResults } from "@quieter/app/features/message-thread/compon
 import {
   useMessageViewData,
   useMessageViewFocus,
-  useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
 import {
   MessageReminderQuickAction,
@@ -70,6 +69,8 @@ import {
   useRef,
   useState,
 } from "react";
+
+import { useMessageViewHotkeys } from "./use-message-view-hotkeys";
 
 const InlineComposeSurface = lazy(
   async () =>

@@ -8,11 +8,16 @@ import type { PropsWithChildren } from "react";
 import type { AppCommand } from "../domain/app-commands";
 import { CommandPalette } from "./command-palette";
 
-export type AppCommandRegistry = Map<string, readonly AppCommand[]>;
+export type AppCommandRegistry = {
+  deleteSource: (sourceId: string) => void;
+  findCommand: (sourceId: string, commandId: string) => AppCommand | undefined;
+  getEntries: () => readonly (readonly [string, readonly AppCommand[]])[];
+  setOpen: (open: boolean) => void;
+  setSource: (sourceId: string, commands: readonly AppCommand[]) => void;
+  versionStore: Store<number>;
+};
 
-const CommandPaletteContext = createContext<Store<AppCommandRegistry> | null>(
-  null
-);
+const CommandPaletteContext = createContext<AppCommandRegistry | null>(null);
 
 export const useRegisterCommands = (
   commands: readonly AppCommand[],
@@ -28,16 +33,12 @@ export const useRegisterCommands = (
   }
 
   useLayoutEffect(() => {
-    registry.setState((current) => new Map(current).set(sourceId, commands));
+    registry.setSource(sourceId, commands);
   }, [commands, registry, sourceId]);
 
   useLayoutEffect(
     () => () => {
-      registry.setState((current) => {
-        const next = new Map(current);
-        next.delete(sourceId);
-        return next;
-      });
+      registry.deleteSource(sourceId);
     },
     [registry, sourceId]
   );
@@ -66,7 +67,44 @@ export const CommandPaletteProvider = ({
   children,
   onShowKeyboardShortcuts,
 }: PropsWithChildren<{ onShowKeyboardShortcuts: () => void }>) => {
-  const registry = useCreateStore<AppCommandRegistry>(new Map());
+  const versionStore = useCreateStore(0);
+  const stateStore = useCreateStore({
+    entries: new Map<string, readonly AppCommand[]>(),
+    open: false,
+  });
+  const registry = useMemo<AppCommandRegistry>(() => {
+    const notify = () => {
+      versionStore.setState((current) => current + 1);
+    };
+    return {
+      deleteSource: (sourceId) => {
+        const state = stateStore.get();
+        if (state.entries.delete(sourceId) && state.open) {
+          notify();
+        }
+      },
+      findCommand: (sourceId, commandId) =>
+        stateStore
+          .get()
+          .entries.get(sourceId)
+          ?.find((command) => command.id === commandId),
+      getEntries: () => [...stateStore.get().entries],
+      setOpen: (nextOpen) => {
+        stateStore.get().open = nextOpen;
+        if (nextOpen) {
+          notify();
+        }
+      },
+      setSource: (sourceId, commands) => {
+        const state = stateStore.get();
+        state.entries.set(sourceId, commands);
+        if (state.open) {
+          notify();
+        }
+      },
+      versionStore,
+    };
+  }, [stateStore, versionStore]);
 
   return (
     <CommandPaletteContext.Provider value={registry}>

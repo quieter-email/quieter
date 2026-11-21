@@ -513,6 +513,7 @@ export const MessageListSearchView = ({
                   popupSurfaceClassName,
                   "absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-xl p-2"
                 )}
+                data-blocking-overlay=""
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >

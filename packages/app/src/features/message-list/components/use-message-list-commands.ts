@@ -1,5 +1,7 @@
 "use client";
 
+import type { MailboxCategory } from "@quieter/app/lib/mail";
+
 import { useRegisterCommands } from "../../hotkeys/components/command-palette-context";
 import type { AppCommand } from "../../hotkeys/domain/app-commands";
 import type { KeyboardShortcutId } from "../../hotkeys/domain/keyboard-shortcuts";
@@ -23,13 +25,15 @@ const actionKeywords: ReadonlyMap<string, string> = new Map([
 
 export const useMessageListCommands = ({
   actions,
-  canEditLabels,
+  activeMailbox,
   canFocusSearch,
   focusedSubject,
   hasActiveMessage,
   hasFocusedThread,
+  hasLabelTarget,
   hasNextConversation,
   hasPreviousConversation,
+  hasUserLabels,
   isPending,
   isSelecting,
   loadedCount,
@@ -46,13 +50,15 @@ export const useMessageListCommands = ({
   supportsSelection,
 }: {
   actions: readonly MessageListBulkAction[];
-  canEditLabels: boolean;
+  activeMailbox: MailboxCategory;
   canFocusSearch: boolean;
   focusedSubject: string;
   hasActiveMessage: boolean;
   hasFocusedThread: boolean;
+  hasLabelTarget: boolean;
   hasNextConversation: boolean;
   hasPreviousConversation: boolean;
+  hasUserLabels: boolean;
   isPending: boolean;
   isSelecting: boolean;
   loadedCount: number;
@@ -150,6 +156,19 @@ export const useMessageListCommands = ({
     } else if (loadedCount === 0) {
       selectAllReason = "No conversations are loaded.";
     }
+    let labelsReason = actionReason;
+    if (labelsReason === null) {
+      if (!supportsSelection) {
+        labelsReason = "This mailbox does not support labels.";
+      } else if (activeMailbox === "drafts") {
+        labelsReason = "Labels cannot be modified in Drafts.";
+      } else if (!hasLabelTarget) {
+        labelsReason =
+          "Select conversations from one mailbox to modify labels.";
+      } else if (!hasUserLabels) {
+        labelsReason = "Create a label first to label conversations.";
+      }
+    }
     commands.push(
       ...actions.map((action): AppCommand => ({
         description: targetDescription,
@@ -215,16 +234,9 @@ export const useMessageListCommands = ({
         id: "list-labels",
         label: "Modify labels",
         shortcutId: "list-labels",
-        ...(actionReason === null && canEditLabels
+        ...(labelsReason === null
           ? { execute: onOpenLabels, state: "available" }
-          : {
-              reason:
-                actionReason ??
-                (supportsSelection
-                  ? "Choose conversations from one mailbox with labels."
-                  : "This mailbox does not support labels."),
-              state: "unavailable",
-            }),
+          : { reason: labelsReason, state: "unavailable" }),
       }
     );
   }

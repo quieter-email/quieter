@@ -79,10 +79,15 @@ export const useMessageViewHotkeys = ({
       })
     );
   };
+  const normalizedSubject = hotkeyMessage.subject?.trim() || "(No subject)";
   const canCompose =
     canComposeFromMailbox &&
     onComposeDraftRequested !== undefined &&
     activeMailbox !== "drafts";
+  const composeUnavailableReason =
+    activeMailbox === "drafts"
+      ? "Open the draft instead of replying or forwarding."
+      : "Choose a connected mailbox you can send from.";
   const canMarkRead =
     !isActionPending &&
     mailboxActions.canMarkRead &&
@@ -104,7 +109,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         requestComposeAction("reply");
       },
-      reason: "Open a loaded conversation in a mailbox you can reply from.",
+      reason: composeUnavailableReason,
       shortcutId: "detail-reply",
     },
     {
@@ -116,7 +121,7 @@ export const useMessageViewHotkeys = ({
       },
       reason: canCompose
         ? "There are no additional recipients to reply to."
-        : "Open a loaded conversation in a mailbox you can reply from.",
+        : composeUnavailableReason,
       shortcutId: "detail-reply-all",
     },
     {
@@ -124,7 +129,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         requestComposeAction("forward");
       },
-      reason: "Open a loaded conversation in a mailbox you can send from.",
+      reason: composeUnavailableReason,
       shortcutId: "detail-forward",
     },
     {
@@ -206,7 +211,7 @@ export const useMessageViewHotkeys = ({
     }
     return [
       {
-        description: hotkeyMessage.subject,
+        description: normalizedSubject,
         group: "Conversation actions",
         id: shortcut.id,
         keywords: action.keywords,

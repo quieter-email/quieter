@@ -319,8 +319,6 @@ export const useMessageViewData = ({
   };
 };
 
-export { useMessageViewHotkeys } from "./use-message-view-hotkeys";
-
 export const useMessageViewFocus = ({
   focusOnOpen,
   onAutoFocusComplete,

@@ -54,7 +54,7 @@ const isEditableShortcutTarget = (target: EventTarget | null) => {
 };
 
 export const APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR =
-  "[role='dialog'], [role='alertdialog'], [role='menu'][data-open], [data-popup-open][aria-haspopup], [data-popup-open][role='combobox']";
+  "[role='dialog'], [role='alertdialog'], [role='menu'][data-open], [data-popover-popup][data-open], [data-blocking-overlay], [data-popup-open][aria-haspopup], [data-popup-open][role='combobox']";
 
 const hasOpenBlockingOverlay = () =>
   [

@@ -32,12 +32,13 @@ import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import { useElementVisible } from "@quieter/app/lib/use-element-visible";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useCallback, useRef, useState, useSyncExternalStore } from "react";
+import { useRef, useState } from "react";
 
 import { useMessageListCommands } from "./use-message-list-commands";
 
@@ -739,15 +740,17 @@ const useMessageListInteractions = ({
 
   useMessageListCommands({
     actions: bulkActions,
-    canEditLabels: bulkLabels !== null,
+    activeMailbox: props.activeMailbox,
     canFocusSearch,
     focusedSubject: selection.focusedThread?.subject ?? "",
     hasActiveMessage,
     hasFocusedThread: selection.focusedThread !== null,
+    hasLabelTarget: labelMailboxId !== null && labelMailboxActions !== null,
     hasNextConversation:
       activeThreadIndex !== -1 &&
       activeThreadIndex < threadedMessages.length - 1,
     hasPreviousConversation: activeThreadIndex > 0,
+    hasUserLabels: userLabels.length > 0,
     isPending: isBulkActionPending,
     isSelecting,
     loadedCount: threadedMessages.length,
@@ -881,24 +884,7 @@ export const MessageList = (props: MessageListProps) => {
   );
   const listContainerRef = useRef<HTMLDivElement>(null);
   const focusSearchRef = useRef<(() => void) | null>(null);
-  const subscribeToListVisibility = useCallback((onChange: () => void) => {
-    const container = listContainerRef.current;
-    if (typeof ResizeObserver === "undefined" || container === null) {
-      return () => {
-        // ResizeObserver is unavailable outside browser layouts.
-      };
-    }
-    const observer = new ResizeObserver(onChange);
-    observer.observe(container);
-    return () => {
-      observer.disconnect();
-    };
-  }, []);
-  const isListVisible = useSyncExternalStore(
-    subscribeToListVisibility,
-    () => (listContainerRef.current?.getClientRects().length ?? 0) > 0,
-    () => false
-  );
+  const isListVisible = useElementVisible(listContainerRef);
   const isSelecting =
     selection.selectedThreadIds.size > 0 && actionMailboxProvider !== "api";
   const {

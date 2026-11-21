@@ -6,6 +6,7 @@ export type AppCommand = Omit<
   CommandMenuItem,
   "disabledReason" | "shortcut"
 > & {
+  fallback?: true;
   keywords?: string;
   shortcutId?: KeyboardShortcutId;
 } & (
