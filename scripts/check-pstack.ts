@@ -44,6 +44,27 @@ assert.match(
   /^@AGENTS\.md$/mu
 );
 
+const verifyMarkdownLinks = (filePath: string) => {
+  const markdown = readFileSync(filePath, "utf-8").replaceAll(
+    /^(?<fence>`{3,}|~{3,})[^\n]*\n[\s\S]*?^\k<fence>[^\n]*$/gmu,
+    ""
+  );
+  for (const match of markdown.matchAll(
+    /\[[^\]]*\]\((?<target>[^\s)]+)(?:\s+"[^"]*")?\)/gu
+  )) {
+    const target = match.groups?.target;
+    assert.ok(target);
+    if (target === "url" || /^[a-z][a-z\d+.-]*:|^#|[<>]/iu.test(target)) {
+      continue;
+    }
+    const linkedPath = decodeURIComponent(target.split("#")[0] ?? "");
+    assert.ok(
+      existsSync(path.resolve(path.dirname(filePath), linkedPath)),
+      `${filePath} links to missing ${target}.`
+    );
+  }
+};
+
 for (const entry of skills) {
   const { name } = entry;
   assert.equal(entry.skillPath, `skills/${name}/SKILL.md`);
@@ -64,26 +85,14 @@ for (const entry of skills) {
     cwd: directory,
     exclude: ["**/node_modules/**"],
   })) {
-    const absolute = path.join(directory, relative);
-    const markdown = readFileSync(absolute, "utf-8").replaceAll(
-      /^(?<fence>`{3,}|~{3,})[^\n]*\n[\s\S]*?^\k<fence>[^\n]*$/gmu,
-      ""
-    );
-    for (const match of markdown.matchAll(
-      /\[[^\]]*\]\((?<target>[^\s)]+)(?:\s+"[^"]*")?\)/gu
-    )) {
-      const target = match.groups?.target;
-      assert.ok(target);
-      if (target === "url" || /^[a-z][a-z\d+.-]*:|^#|[<>]/iu.test(target)) {
-        continue;
-      }
-      const linkedPath = decodeURIComponent(target.split("#")[0] ?? "");
-      assert.ok(
-        existsSync(path.resolve(path.dirname(absolute), linkedPath)),
-        `${absolute} links to missing ${target}.`
-      );
-    }
+    verifyMarkdownLinks(path.join(directory, relative));
   }
+}
+
+for (const relative of globSync("*.md", {
+  cwd: path.join(root, ".agents/pstack"),
+})) {
+  verifyMarkdownLinks(path.join(root, ".agents/pstack", relative));
 }
 
 for (const name of ["bootstrap.ts", "bun.lock"]) {

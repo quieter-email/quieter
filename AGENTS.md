@@ -5,6 +5,7 @@
 ## Boundaries
 
 - Use pstack for every request unless the user explicitly asks not to use it. Start with [the pstack entry skill](.agents/skills/poteto-mode/SKILL.md) and follow its applicable skills and playbooks.
+- When running in a multi-model host such as T3 Code (`orchestrator_capabilities` and `delegate_task`), follow [repository model preferences](.agents/pstack/preferences.md), [the model policy](.agents/pstack/models.md), and [the client adapter](.agents/pstack/harnesses.md). Use GPT Sol for main implementation, debugging, and deep thinking. Use Claude Opus for frontend work, prose, and synthesis. Use Gemini Neon as the fallback when any model hits rate or usage limits. Use Grok and DeepSeek Flash only for exploration, parallel verification, and throwaway tasks, never for main thinking. Restrict GPT Astra to bounded, short, read-only reviews and expert consultations because its usage is substantial. After substantive changes, run parallel read-only reviews with Opus, Astra, and Neon.
 - Use Vite+ (`vp`) for all dependency installs, package management, and project script execution. Do not invoke the underlying package manager directly.
 - Manage credentials, tokens, encryption keys, and other sensitive configuration through SST Secret resources and linked secret bindings whenever the platform supports it. Do not deploy them as ordinary environment variables or Wrangler configuration values; test-only type-generation fixtures are exempt.
 - Do not make `packages/*` depend on `apps/*`.
