@@ -10,14 +10,17 @@ import type { KeyboardShortcutId } from "../../hotkeys/domain/keyboard-shortcuts
 import type { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 
 const mailboxDestinations = [
+  { mailbox: "important", shortcutId: "go-important" },
   { mailbox: "inbox", shortcutId: "go-inbox" },
-  { mailbox: "sent", shortcutId: "go-sent" },
-  { mailbox: "drafts", shortcutId: "go-drafts" },
+  { mailbox: "done", shortcutId: "go-done" },
   { mailbox: "unread", shortcutId: "go-unread" },
-  { mailbox: "spam", shortcutId: "go-spam" },
+  { mailbox: "sent", shortcutId: "go-sent" },
+  { mailbox: "scheduled", shortcutId: "go-scheduled" },
+  { mailbox: "drafts", shortcutId: "go-drafts" },
   { mailbox: "trash", shortcutId: "go-trash" },
+  { mailbox: "spam", shortcutId: "go-spam" },
 ] as const satisfies readonly {
-  mailbox: MailboxCategory;
+  mailbox: MailboxCategory | "scheduled";
   shortcutId: KeyboardShortcutId;
 }[];
 
@@ -26,6 +29,7 @@ export const useMailboxCommands = ({
   isComposeMailbox,
   isMailList,
   isMailWorkspace,
+  isSnippetMailbox,
   isWorkspaceReady,
   mailboxes,
   onCompose,
@@ -37,23 +41,27 @@ export const useMailboxCommands = ({
   onSelectView,
   selectedMailboxId,
   selectedMailboxProvider,
+  view,
 }: {
   canCompose: boolean;
   isComposeMailbox: boolean;
   isMailList: boolean;
   isMailWorkspace: boolean;
+  isSnippetMailbox: boolean;
   isWorkspaceReady: boolean;
   mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
   onCompose: () => void;
   onManageSnippets: () => void;
   onOpenCalendar: () => void | Promise<void>;
   onOpenMail: () => void | Promise<void>;
-  onSelectMailbox: (mailbox: MailboxCategory) => void;
+  onSelectMailbox: (mailbox: MailboxCategory | "scheduled") => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   selectedMailboxId: string | null;
   selectedMailboxProvider: "api" | "gmail" | "managed" | null;
+  view: MailboxWorkspaceView;
 }) => {
+  const allInboxesActive = view === "all-inboxes";
   let mailboxReason: string | null = null;
   if (!isWorkspaceReady) {
     mailboxReason = "Wait for your mailboxes to load.";
@@ -69,6 +77,26 @@ export const useMailboxCommands = ({
     } else if (!canCompose) {
       composeReason = "Choose a connected mailbox you can send from.";
     }
+  }
+  let snippetsReason = mailboxReason;
+  if (snippetsReason === null) {
+    if (isSnippetMailbox) {
+      snippetsReason = "Already viewing Snippets.";
+    } else if (selectedMailboxProvider === "api") {
+      snippetsReason = "Choose a mailbox you can compose from.";
+    }
+  }
+  let openMailReason: string | null = null;
+  if (!isWorkspaceReady) {
+    openMailReason = "Wait for your mailboxes to load.";
+  } else if (isMailWorkspace) {
+    openMailReason = "Already viewing Mail.";
+  }
+  let openCalendarReason: string | null = null;
+  if (!isWorkspaceReady) {
+    openCalendarReason = "Wait for your mailboxes to load.";
+  } else if (!isMailWorkspace) {
+    openCalendarReason = "Already viewing Calendar.";
   }
   const commands: AppCommand[] = [
     ...(!isMailList || !isWorkspaceReady || selectedMailboxId === null
@@ -143,49 +171,53 @@ export const useMailboxCommands = ({
       group: "Mail",
       id: "manage-snippets",
       label: "Manage snippets",
-      ...(mailboxReason === null && selectedMailboxProvider !== "api"
+      ...(snippetsReason === null
         ? { execute: onManageSnippets, state: "available" }
-        : {
-            reason: mailboxReason ?? "Choose a mailbox you can compose from.",
-            state: "unavailable",
-          }),
+        : { reason: snippetsReason, state: "unavailable" }),
     },
     {
-      execute: onOpenMail,
       group: "Navigation",
       id: "go-mail",
       label: "Go to Mail",
-      state: "available",
+      ...(openMailReason === null
+        ? { execute: onOpenMail, state: "available" }
+        : { reason: openMailReason, state: "unavailable" }),
     },
     {
-      execute: onOpenCalendar,
       group: "Navigation",
       id: "go-calendar",
       label: "Go to Calendar",
-      state: "available",
+      ...(openCalendarReason === null
+        ? { execute: onOpenCalendar, state: "available" }
+        : { reason: openCalendarReason, state: "unavailable" }),
     },
-    ...mailboxes.map((mailbox): AppCommand => ({
-      description: mailbox.emailAddress,
-      group: "Accounts",
-      id: `switch-mailbox-${mailbox.id}`,
-      label: `Switch to ${mailbox.displayName || mailbox.emailAddress}`,
-      ...(isWorkspaceReady && isMailWorkspace
-        ? {
-            execute: () => {
-              onSelectMailboxId(mailbox.id);
-            },
-            state: "available",
-          }
-        : {
-            reason: isWorkspaceReady
-              ? "Open Mail first."
-              : "Wait for your mailboxes to load.",
-            state: "unavailable",
-          }),
-    })),
+    ...mailboxes.map((mailbox): AppCommand => {
+      let switchReason: string | null = null;
+      if (!isWorkspaceReady) {
+        switchReason = "Wait for your mailboxes to load.";
+      } else if (!isMailWorkspace) {
+        switchReason = "Open Mail first.";
+      } else if (!allInboxesActive && mailbox.id === selectedMailboxId) {
+        switchReason = "Already viewing this mailbox.";
+      }
+      return {
+        description: mailbox.emailAddress,
+        group: "Accounts",
+        id: `switch-mailbox-${mailbox.id}`,
+        label: `Switch to ${mailbox.displayName || mailbox.emailAddress}`,
+        ...(switchReason === null
+          ? {
+              execute: () => {
+                onSelectMailboxId(mailbox.id);
+              },
+              state: "available",
+            }
+          : { reason: switchReason, state: "unavailable" }),
+      };
+    }),
   ];
   useRegisterCommands(
     commands,
-    `${selectedMailboxId ?? "none"}:${isMailWorkspace ? "mail" : "calendar"}`
+    `${selectedMailboxId ?? "none"}:${isMailWorkspace ? "mail" : "calendar"}:${view}`
   );
 };

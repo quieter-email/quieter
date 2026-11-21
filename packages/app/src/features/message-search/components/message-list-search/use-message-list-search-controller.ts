@@ -60,8 +60,6 @@ import type {
   SetStateAction,
 } from "react";
 
-import { useRegisterCommands } from "../../../hotkeys/components/command-palette-context";
-
 const initialSearchOverlayState: SearchOverlayState = {
   activeDateFilterIndex: null,
   activeDropdownIndex: null,
@@ -103,6 +101,7 @@ const resolveStateAction = <T>(action: SetStateAction<T>, current: T) => {
 };
 
 export const useMessageListSearchController = ({
+  focusSearchRef,
   isRefreshing,
   mailboxId,
   mailboxProvider,
@@ -115,10 +114,13 @@ export const useMessageListSearchController = ({
   const fieldRef = useRef<HTMLDivElement>(null);
   const subscribeToSearchVisibility = useCallback((onChange: () => void) => {
     const field = fieldRef.current;
-    const observer = new ResizeObserver(onChange);
-    if (field !== null) {
-      observer.observe(field);
+    if (typeof ResizeObserver === "undefined" || field === null) {
+      return () => {
+        // ResizeObserver is unavailable outside browser layouts.
+      };
     }
+    const observer = new ResizeObserver(onChange);
+    observer.observe(field);
     return () => {
       observer.disconnect();
     };
@@ -1070,29 +1072,35 @@ export const useMessageListSearchController = ({
     openSearchDropdown();
     focusTextInput({ toEnd: true });
   };
+  const latestFocusSearchRef = useRef(focusSearch);
 
-  useRegisterCommands(
-    [
-      {
-        group: "Mail",
-        id: "focus-search",
-        label: "Search mail",
-        shortcutId: "focus-search",
-        ...(isSearchVisible
-          ? { execute: focusSearch, state: "available" }
-          : {
-              reason: "Return to the conversation list to search mail.",
-              state: "unavailable",
-            }),
-      },
-    ],
-    mailboxId
-  );
+  useLayoutEffect(() => {
+    latestFocusSearchRef.current = focusSearch;
+  });
+
+  useLayoutEffect((): (() => void) | undefined => {
+    if (focusSearchRef === undefined) {
+      return undefined;
+    }
+    const handle = () => {
+      latestFocusSearchRef.current();
+    };
+    focusSearchRef.current = handle;
+    return () => {
+      if (focusSearchRef.current === handle) {
+        focusSearchRef.current = null;
+      }
+    };
+  }, [focusSearchRef]);
 
   useHotkey(
     "Mod+K",
     (event) => {
-      if (shouldIgnoreAppShortcut(event)) {
+      if (
+        shouldIgnoreAppShortcut(event) ||
+        fieldRef.current === null ||
+        getComputedStyle(fieldRef.current).pointerEvents === "none"
+      ) {
         return;
       }
       focusSearch();

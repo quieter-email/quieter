@@ -2,7 +2,7 @@
 
 import { useCreateStore } from "@tanstack/react-store";
 import type { Store } from "@tanstack/react-store";
-import { createContext, use, useId, useLayoutEffect } from "react";
+import { createContext, use, useId, useLayoutEffect, useMemo } from "react";
 import type { PropsWithChildren } from "react";
 
 import type { AppCommand } from "../domain/app-commands";
@@ -44,8 +44,8 @@ export const useRegisterCommands = (
 };
 
 const KeyboardHelpCommand = ({ onShow }: { onShow: () => void }) => {
-  useRegisterCommands(
-    [
+  const commands = useMemo<readonly AppCommand[]>(
+    () => [
       {
         execute: onShow,
         group: "Global",
@@ -56,8 +56,9 @@ const KeyboardHelpCommand = ({ onShow }: { onShow: () => void }) => {
         state: "available",
       },
     ],
-    "global"
+    [onShow]
   );
+  useRegisterCommands(commands, "global");
   return null;
 };
 

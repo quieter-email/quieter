@@ -27,7 +27,7 @@ const textareaVariants = cva(
         "composer-action": `${composerStyles} pr-12`,
         default: "",
         prompt:
-          "[field-sizing:content] max-h-40 min-h-16 resize-none rounded-none border-0 bg-transparent px-1 py-2 text-body-sm focus-visible:ring-0",
+          "[field-sizing:content] max-h-40 min-h-16 resize-none rounded-none border-0 bg-transparent px-0 py-2 text-body-sm focus-visible:ring-0",
       },
     },
   }

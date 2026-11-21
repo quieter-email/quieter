@@ -1,9 +1,19 @@
 "use client";
 
 import { KeyboardShortcutsDialog } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-dialog";
-import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
+import {
+  shouldIgnoreAppShortcut,
+  trackAppShortcutSequenceContinuations,
+} from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, use, useMemo, useState } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { PropsWithChildren } from "react";
 
 import { CommandPaletteProvider } from "./command-palette-context";
@@ -20,6 +30,8 @@ const KeyboardShortcutsContext =
 export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
 
+  useEffect(() => trackAppShortcutSequenceContinuations(), []);
+
   useHotkey(
     { key: "/", shift: true },
     (event) => {
@@ -33,26 +45,24 @@ export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
     }
   );
 
+  const openKeyboardShortcuts = useCallback(() => {
+    setIsKeyboardShortcutsOpen(true);
+  }, []);
+
   const value = useMemo<KeyboardShortcutsContextValue>(
     () => ({
       closeKeyboardShortcuts: () => {
         setIsKeyboardShortcutsOpen(false);
       },
       isKeyboardShortcutsOpen,
-      openKeyboardShortcuts: () => {
-        setIsKeyboardShortcutsOpen(true);
-      },
+      openKeyboardShortcuts,
     }),
-    [isKeyboardShortcutsOpen]
+    [isKeyboardShortcutsOpen, openKeyboardShortcuts]
   );
 
   return (
     <KeyboardShortcutsContext.Provider value={value}>
-      <CommandPaletteProvider
-        onShowKeyboardShortcuts={() => {
-          value.openKeyboardShortcuts();
-        }}
-      >
+      <CommandPaletteProvider onShowKeyboardShortcuts={openKeyboardShortcuts}>
         {children}
       </CommandPaletteProvider>
       {isKeyboardShortcutsOpen ? (

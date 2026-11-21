@@ -410,7 +410,7 @@ const HtmlMessageBodyContent = ({
 };
 
 const MessageBodyLoadingSkeleton = () => (
-  <output aria-label="Loading message content" className="block space-y-3 p-4">
+  <output aria-label="Loading message content" className="block space-y-3 py-4">
     <div aria-hidden="true" className="animate-pulse space-y-3">
       <div className="h-3.5 w-full rounded-md bg-muted" />
       <div className="h-3.5 w-11/12 rounded-md bg-muted" />
@@ -437,7 +437,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
   return (
     <>
       <CalendarLinkActions links={calendarLinks} />
-      <p className="bg-transparent p-4 font-sans text-body wrap-break-word whitespace-pre-wrap text-fg">
+      <p className="bg-transparent py-4 font-sans text-body wrap-break-word whitespace-pre-wrap text-fg">
         {segments.map((segment) =>
           segment.kind === "link" ? (
             <a

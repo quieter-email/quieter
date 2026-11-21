@@ -256,6 +256,23 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const importanceLabel = threadIsImportant
     ? "Mark conversation as not important"
     : "Mark conversation as important";
+  const toggleThreadPlacement = canSetThreadPlacement
+    ? () => {
+        void (
+          returnThreadToInbox
+            ? threadActions.onReturnToInbox
+            : threadActions.onMarkDone
+        )?.(message.threadId);
+      }
+    : undefined;
+  const toggleThreadImportance = canSetThreadImportance
+    ? () => {
+        void threadActions.onSetImportance?.(
+          message.threadId,
+          !threadIsImportant
+        );
+      }
+    : undefined;
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -267,12 +284,16 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
+    importanceLabel,
     isActionPending,
     mailboxActions,
     mailboxId,
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
+    onToggleImportance: toggleThreadImportance,
+    onTogglePlacement: toggleThreadPlacement,
+    placementLabel,
   });
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {
@@ -378,19 +399,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               message={hotkeyMessage}
             />
           )}
-          {canSetThreadPlacement && (
+          {toggleThreadPlacement && (
             <IconButtonTooltip label={placementLabel}>
               <Button
                 chrome="toolbar"
                 aria-label={placementLabel}
                 disabled={isActionPending}
-                onClick={() => {
-                  void (
-                    returnThreadToInbox
-                      ? threadActions.onReturnToInbox
-                      : threadActions.onMarkDone
-                  )?.(message.threadId);
-                }}
+                onClick={toggleThreadPlacement}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
@@ -402,19 +417,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               </Button>
             </IconButtonTooltip>
           )}
-          {canSetThreadImportance && (
+          {toggleThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
               <Button
                 chrome="toolbar"
                 aria-label={importanceLabel}
                 aria-pressed={threadIsImportant}
                 disabled={isActionPending}
-                onClick={() => {
-                  void threadActions.onSetImportance?.(
-                    message.threadId,
-                    !threadIsImportant
-                  );
-                }}
+                onClick={toggleThreadImportance}
                 size="icon-sm"
                 type="button"
                 variant="ghost"
@@ -428,7 +438,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </IconButtonTooltip>
           )}
           {mailboxProvider !== "api" && (
-            <div className="shrink-0">
+            <div className="-me-2.25 shrink-0">
               <MessageActionsDropdown
                 actions={threadActions}
                 isPending={isActionPending}
@@ -443,9 +453,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             </div>
           )}
-          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
-            <AssistantSidebarTrigger />
-          </div>
+          <AssistantSidebarTrigger
+            className={cn(
+              "data-[sidebar-open=false]:ms-2.25 data-[sidebar-open=true]:-ms-3",
+              {
+                "lg:hidden": !detailOnly,
+              }
+            )}
+          />
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
@@ -573,7 +588,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             )}
 
             {showInlineCompose ? (
-              <div className="px-4 py-4 @sm:px-5 @sm:py-5">
+              <div className="p-4">
                 <LazyMotion features={domMax}>
                   <AnimatePresence initial={false} mode="popLayout">
                     {inlineDraft ? (

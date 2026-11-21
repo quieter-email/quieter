@@ -1,6 +1,4 @@
 /* oxlint-disable eslint/require-await -- Database and provider doubles resolve without external I/O. */
-import type { AiUsageReport } from "@quieter/ai/chat-usage";
-import type { detectMailVerificationCode } from "@quieter/ai/classify-gmail-message";
 import type { extractMailVerificationCode } from "@quieter/ai/extract-verification-code";
 import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import { configureErrorReporter } from "@quieter/observability";
@@ -15,7 +13,6 @@ const fixtures = vi.hoisted(() => ({
   extract: vi.fn<typeof extractMailVerificationCode>(),
   reported: vi.fn<ErrorReporter>(),
   row: null as Row | null,
-  screen: vi.fn<typeof detectMailVerificationCode>(),
 }));
 
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The database double models persistent claims and accumulated usage.
@@ -68,13 +65,6 @@ vi.mock("@quieter/database/client", () => ({
   },
 }));
 vi.mock(
-  import("@quieter/ai/classify-gmail-message"),
-  async (importOriginal) => ({
-    ...(await importOriginal()),
-    detectMailVerificationCode: fixtures.screen,
-  })
-);
-vi.mock(
   import("@quieter/ai/extract-verification-code"),
   async (importOriginal) => ({
     ...(await importOriginal()),
@@ -119,19 +109,11 @@ const input = {
   messageId: "message-1",
   userId: "user-1",
 };
-const screenUsage: AiUsageReport = {
-  cacheWriteTokens: 0,
-  cachedTokens: 0,
-  completionTokens: 3,
-  costUsd: 0.001,
-  promptTokens: 30,
-};
 
 describe("verification code processing retries", () => {
   beforeEach(() => {
     fixtures.row = null;
     fixtures.claimable = true;
-    fixtures.screen.mockReset().mockResolvedValue(0.9);
     fixtures.extract
       .mockReset()
       .mockResolvedValue({ code: null, expiresInSeconds: null, service: null });
@@ -139,43 +121,24 @@ describe("verification code processing retries", () => {
     configureErrorReporter(fixtures.reported);
   });
 
-  test.each(["screen", "extract"] as const)(
-    "keeps admission contention in %s separate from provider failures",
-    async (stage) => {
-      fixtures.screen.mockImplementation(async ({ onUsage }) => {
-        onUsage?.(screenUsage);
-        return 0.9;
-      });
-      fixtures[stage].mockRejectedValue(new AiCreditAdmissionBusyError());
-      const result = await processMailVerificationCode(input);
-      expect(result).toMatchObject({
-        reason: "admission_busy",
-        status: "retry",
-      });
-      expect(fixtures.row).toMatchObject({
-        attemptCount: 0,
-        leaseToken: null,
-        leaseUntil: null,
-        processedAt: null,
-      });
-      expect(Number(fixtures.row?.nextAttemptAt)).toBeGreaterThan(Date.now());
-      expect(Number(fixtures.row?.nextAttemptAt) - Date.now()).toBeLessThan(
-        30_000
-      );
-      expect(fixtures.reported).not.toHaveBeenCalled();
-    }
-  );
-
-  test("preserves completed screening usage when extraction must wait for admission", async () => {
-    fixtures.screen.mockImplementation(async ({ onUsage }) => {
-      onUsage?.(screenUsage);
-      return 0.9;
-    });
+  test("keeps admission contention separate from provider failures", async () => {
     fixtures.extract.mockRejectedValue(new AiCreditAdmissionBusyError());
-    await processMailVerificationCode(input);
-    expect(fixtures.row?.costUsd).toBeGreaterThan(0);
-    expect(fixtures.row?.promptTokens).toBeGreaterThan(0);
-    expect(fixtures.row?.usageReportedAt).toBeNull();
+    const result = await processMailVerificationCode(input);
+    expect(result).toMatchObject({
+      reason: "admission_busy",
+      status: "retry",
+    });
+    expect(fixtures.row).toMatchObject({
+      attemptCount: 0,
+      leaseToken: null,
+      leaseUntil: null,
+      processedAt: null,
+    });
+    expect(Number(fixtures.row?.nextAttemptAt)).toBeGreaterThan(Date.now());
+    expect(Number(fixtures.row?.nextAttemptAt) - Date.now()).toBeLessThan(
+      30_000
+    );
+    expect(fixtures.reported).not.toHaveBeenCalled();
   });
 
   test("keeps provider failures on their existing backoff", async () => {
@@ -203,10 +166,10 @@ describe("verification code processing retries", () => {
       reason: "in_progress",
       status: "retry",
     });
-    expect(fixtures.screen).not.toHaveBeenCalled();
+    expect(fixtures.extract).not.toHaveBeenCalled();
   });
 
-  test("recognizes an already processed event without rerunning screening", async () => {
+  test("recognizes an already processed event without rerunning extraction", async () => {
     fixtures.claimable = false;
     fixtures.row = {
       id: "existing-event",
@@ -216,6 +179,6 @@ describe("verification code processing retries", () => {
     await expect(processMailVerificationCode(input)).resolves.toMatchObject({
       status: "complete",
     });
-    expect(fixtures.screen).not.toHaveBeenCalled();
+    expect(fixtures.extract).not.toHaveBeenCalled();
   });
 });

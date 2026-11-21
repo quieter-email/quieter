@@ -75,7 +75,7 @@ export const ChatContextPicker = ({
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
         disabled={disabled}
-        render={<Button size="compact" variant="ghost" />}
+        render={<Button className="-ms-2.25" size="compact" variant="ghost" />}
       >
         <Icon aria-hidden icon={Attachment01Icon} />
         Attach mail

@@ -6,8 +6,14 @@ export const menuPopupClassName = `${anchoredPopupMotionClassName} ${popupSurfac
 export const menuCompactPopupClassName = "min-w-40 p-0.5 text-caption";
 
 export const menuItemClassName =
-  "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 text-body-sm text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100";
+  "relative flex min-h-7 cursor-default items-center gap-2 rounded-md px-2.5 py-1 text-left text-body-sm text-fg transition-transform duration-100 ease-(--app-motion-ease-out) select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted motion-reduce:transition-none motion-reduce:active:scale-100";
 
 export const menuCompactItemClassName = "min-h-7 gap-1.5 px-2 text-caption";
 
-export const menuSeparatorClassName = "my-1 h-px bg-border";
+export const menuGroupLabelClassName = "px-2.5 py-1 text-caption text-muted-fg";
+
+export const menuCompactGroupLabelClassName = "px-2 py-0.5 text-micro";
+
+export const menuEmptyClassName = "px-3 py-4 text-body-sm text-muted-fg";
+
+export const menuSeparatorClassName = "my-1 h-px bg-fg/10";

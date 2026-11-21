@@ -37,7 +37,7 @@ import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useCallback, useRef, useState, useSyncExternalStore } from "react";
 
 import { useMessageListCommands } from "./use-message-list-commands";
 
@@ -87,8 +87,14 @@ const threadActionSuccessMessage = {
     `${formatConversationCount(threads.length)} removed from Spam.`,
 } as const;
 
+const DONE_BULK_ACTION_IDS: ReadonlySet<string> = new Set([
+  "mark-threads-done",
+  "return-threads-to-inbox",
+]);
+
 type MessageListHotkeyContext = {
   actionHotkeysEnabled: boolean;
+  bulkActions: MessageListBulkAction[];
   canMarkRead: boolean;
   activeMailbox: MailboxCategory;
   activeMessageId: string | null | undefined;
@@ -96,6 +102,7 @@ type MessageListHotkeyContext = {
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
   onDeactivateActiveMessage: MessageListProps["onDeactivateActiveMessage"];
+  openAdjacentThread: (offset: 1 | -1) => void;
   openBulkLabels: () => void;
   openFocusedThread: () => void;
   runActionThreads: (
@@ -115,20 +122,28 @@ const buildMessageListHotkeys = (
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
+      if ((context.activeMessageId?.trim() ?? "") !== "") {
+        context.openAdjacentThread(1);
+        return;
+      }
       context.selection.focusThreadByOffset(1);
     },
     hotkey: "J",
-    options: { enabled: context.listNavigationHotkeysEnabled },
+    options: { enabled: context.threadedMessages.length > 0 },
   },
   {
     callback: (event: KeyboardEvent) => {
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
+      if ((context.activeMessageId?.trim() ?? "") !== "") {
+        context.openAdjacentThread(-1);
+        return;
+      }
       context.selection.focusThreadByOffset(-1);
     },
     hotkey: "K",
-    options: { enabled: context.listNavigationHotkeysEnabled },
+    options: { enabled: context.threadedMessages.length > 0 },
   },
   {
     callback: (event: KeyboardEvent) => {
@@ -267,6 +282,40 @@ const buildMessageListHotkeys = (
     hotkey: "L",
     options: {
       enabled: context.actionHotkeysEnabled && context.userLabels.length > 0,
+    },
+  },
+  {
+    callback: (event: KeyboardEvent) => {
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
+      void context.bulkActions
+        .find((action) => DONE_BULK_ACTION_IDS.has(action.id))
+        ?.onSelect();
+    },
+    hotkey: "E",
+    options: {
+      enabled:
+        context.actionHotkeysEnabled &&
+        context.bulkActions.some((action) =>
+          DONE_BULK_ACTION_IDS.has(action.id)
+        ),
+    },
+  },
+  {
+    callback: (event: KeyboardEvent) => {
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
+      void context.bulkActions
+        .find((action) => action.id === "toggle-importance")
+        ?.onSelect();
+    },
+    hotkey: "I",
+    options: {
+      enabled:
+        context.actionHotkeysEnabled &&
+        context.bulkActions.some((action) => action.id === "toggle-importance"),
     },
   },
 ];
@@ -455,18 +504,24 @@ type MessageListSelection = ReturnType<typeof useMessageListSelection>;
 
 const useMessageListInteractions = ({
   actionMailboxProvider,
+  activeThreadId,
+  canFocusSearch,
   isSelecting,
   labelMailboxActions,
   labelMailboxId,
+  onFocusSearch,
   props,
   selection,
   threadedMessages,
   userLabels,
 }: {
   actionMailboxProvider: MessageListProps["mailboxProvider"];
+  activeThreadId: string | null;
+  canFocusSearch: boolean;
   isSelecting: boolean;
   labelMailboxActions: MessageListProps["mailboxActions"] | null;
   labelMailboxId: string | null;
+  onFocusSearch: () => void;
   props: MessageListProps;
   selection: MessageListSelection;
   threadedMessages: ThreadListEntry[];
@@ -533,28 +588,17 @@ const useMessageListInteractions = ({
 
     setIsBulkLabelsOpen(true);
   };
-  const openFocusedThread = () => {
-    const thread = selection.focusedThread;
-    const context =
-      thread === null
-        ? undefined
-        : props.mailboxContextsByThreadId?.get(thread.threadId);
-    const isPending =
-      thread !== null &&
-      ((context?.pendingActions ?? props.pendingActions).isMessageActionPending(
-        thread.anchorMessage.id
-      ) ||
-        (context?.pendingActions ?? props.pendingActions).isThreadActionPending(
-          thread.threadId
-        ));
+  const markKeyboardOpenedThreadRead = (thread: ThreadListEntry) => {
+    const context = props.mailboxContextsByThreadId?.get(thread.threadId);
+    const pendingActions = context?.pendingActions ?? props.pendingActions;
     if (
-      thread !== null &&
       selection.selectedThreadIds.size === 0 &&
       thread.unreadCount > 0 &&
       (props.mailboxContextsByThreadId
         ? context?.mailboxActions.canMarkRead === true
         : props.mailboxActions.canMarkRead) &&
-      !isPending
+      !pendingActions.isMessageActionPending(thread.anchorMessage.id) &&
+      !pendingActions.isThreadActionPending(thread.threadId)
     ) {
       void (async () => {
         try {
@@ -566,27 +610,80 @@ const useMessageListInteractions = ({
         }
       })();
     }
-    if (props.activeMailbox !== "drafts" && thread !== null) {
-      props.onKeyboardOpenMessage?.();
+  };
+  const openFocusedThread = () => {
+    const thread = selection.focusedThread;
+    if (thread !== null) {
+      markKeyboardOpenedThreadRead(thread);
+      if (props.activeMailbox !== "drafts") {
+        props.onKeyboardOpenMessage?.();
+      }
     }
     selection.openFocusedThread();
   };
+  const activeThreadIndex =
+    activeThreadId === null
+      ? -1
+      : threadedMessages.findIndex(
+          (thread) => thread.threadId === activeThreadId
+        );
+  const openAdjacentThread = (offset: 1 | -1) => {
+    const thread =
+      activeThreadIndex === -1
+        ? undefined
+        : threadedMessages[activeThreadIndex + offset];
+    if (thread === undefined) {
+      return;
+    }
+    markKeyboardOpenedThreadRead(thread);
+    props.onKeyboardOpenMessage?.();
+    selection.openThread(thread);
+  };
 
-  const canMarkRead = getActionThreads(
-    selection.selectedThreads,
-    selection.focusedThread
-  ).every((thread) =>
+  const canMarkRead = actionThreads.every((thread) =>
     props.mailboxContextsByThreadId
       ? props.mailboxContextsByThreadId.get(thread.threadId)?.mailboxActions
           .canMarkRead === true
       : props.mailboxActions.canMarkRead
   );
+  const hasActiveMessage = (props.activeMessageId?.trim() ?? "") !== "";
   const actionHotkeysEnabled =
     actionMailboxProvider !== "api" &&
-    (props.activeMessageId?.trim() ?? "") === "" &&
+    !hasActiveMessage &&
     props.activeMailbox !== "drafts";
   const listNavigationHotkeysEnabled =
-    threadedMessages.length > 0 && (props.activeMessageId?.trim() ?? "") === "";
+    threadedMessages.length > 0 && !hasActiveMessage;
+  const bulkActions = buildMessageListBulkActions({
+    actionThreads,
+    activeMailbox: props.activeMailbox,
+    canMarkRead,
+    canSetImportance:
+      actionThreads.every(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).canSetImportance
+      ) && props.mailboxActions.canSetImportance,
+    canSetPlacement:
+      actionThreads.every(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).canSetPlacement
+      ) && props.mailboxActions.canSetPlacement,
+    mailboxActions: props.mailboxActions,
+    mailboxProvider: actionMailboxProvider,
+    runActionThreads,
+    sharedPlacement: actionThreads.some(
+      (thread) =>
+        (
+          props.mailboxContextsByThreadId?.get(thread.threadId)
+            ?.mailboxActions ?? props.mailboxActions
+        ).placementScope === "shared"
+    ),
+  });
 
   useHotkeys(
     omitDisabledHotkeys(
@@ -594,11 +691,13 @@ const useMessageListInteractions = ({
         actionHotkeysEnabled,
         activeMailbox: props.activeMailbox,
         activeMessageId: props.activeMessageId,
+        bulkActions,
         canMarkRead,
         listNavigationHotkeysEnabled,
         mailboxActions: props.mailboxActions,
         mailboxProvider: actionMailboxProvider,
         onDeactivateActiveMessage: props.onDeactivateActiveMessage,
+        openAdjacentThread,
         openBulkLabels,
         openFocusedThread,
         runActionThreads,
@@ -638,49 +737,30 @@ const useMessageListInteractions = ({
           })),
         };
 
-  const bulkActions = buildMessageListBulkActions({
-    actionThreads,
-    activeMailbox: props.activeMailbox,
-    canMarkRead,
-    canSetImportance:
-      actionThreads.every(
-        (thread) =>
-          (
-            props.mailboxContextsByThreadId?.get(thread.threadId)
-              ?.mailboxActions ?? props.mailboxActions
-          ).canSetImportance
-      ) && props.mailboxActions.canSetImportance,
-    canSetPlacement:
-      actionThreads.every(
-        (thread) =>
-          (
-            props.mailboxContextsByThreadId?.get(thread.threadId)
-              ?.mailboxActions ?? props.mailboxActions
-          ).canSetPlacement
-      ) && props.mailboxActions.canSetPlacement,
-    mailboxActions: props.mailboxActions,
-    mailboxProvider: actionMailboxProvider,
-    runActionThreads,
-    sharedPlacement: actionThreads.some(
-      (thread) =>
-        (
-          props.mailboxContextsByThreadId?.get(thread.threadId)
-            ?.mailboxActions ?? props.mailboxActions
-        ).placementScope === "shared"
-    ),
-  });
   useMessageListCommands({
     actions: bulkActions,
     canEditLabels: bulkLabels !== null,
+    canFocusSearch,
     focusedSubject: selection.focusedThread?.subject ?? "",
+    hasActiveMessage,
     hasFocusedThread: selection.focusedThread !== null,
-    isActive: (props.activeMessageId?.trim() ?? "") === "",
+    hasNextConversation:
+      activeThreadIndex !== -1 &&
+      activeThreadIndex < threadedMessages.length - 1,
+    hasPreviousConversation: activeThreadIndex > 0,
     isPending: isBulkActionPending,
     isSelecting,
     loadedCount: threadedMessages.length,
     onClearSelection: selection.clearSelection,
+    onFocusSearch,
     onOpenFocusedThread: openFocusedThread,
     onOpenLabels: openBulkLabels,
+    onOpenNextConversation: () => {
+      openAdjacentThread(1);
+    },
+    onOpenPreviousConversation: () => {
+      openAdjacentThread(-1);
+    },
     onSelectAll: () => {
       selection.toggleAllLoadedThreads(true);
     },
@@ -689,11 +769,13 @@ const useMessageListInteractions = ({
       props.mailboxId,
       props.selectionScopeKey,
       props.activeMailbox,
+      props.activeMessageId ?? null,
       props.searchQuery,
       selection.focusedThread?.threadId,
       actionThreads.map((thread) => thread.threadId).toSorted(),
     ]),
     selectedCount: selection.selectedThreads.length,
+    supportsSelection: actionMailboxProvider !== "api",
   });
   return {
     bulkActions,
@@ -797,6 +879,26 @@ export const MessageList = (props: MessageListProps) => {
   const userLabels = (labelsByMailboxId.get(labelMailboxId ?? "") ?? []).filter(
     (label) => label.type === "user"
   );
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const focusSearchRef = useRef<(() => void) | null>(null);
+  const subscribeToListVisibility = useCallback((onChange: () => void) => {
+    const container = listContainerRef.current;
+    if (typeof ResizeObserver === "undefined" || container === null) {
+      return () => {
+        // ResizeObserver is unavailable outside browser layouts.
+      };
+    }
+    const observer = new ResizeObserver(onChange);
+    observer.observe(container);
+    return () => {
+      observer.disconnect();
+    };
+  }, []);
+  const isListVisible = useSyncExternalStore(
+    subscribeToListVisibility,
+    () => (listContainerRef.current?.getClientRects().length ?? 0) > 0,
+    () => false
+  );
   const isSelecting =
     selection.selectedThreadIds.size > 0 && actionMailboxProvider !== "api";
   const {
@@ -808,9 +910,14 @@ export const MessageList = (props: MessageListProps) => {
     isBulkActionPending,
   } = useMessageListInteractions({
     actionMailboxProvider,
+    activeThreadId,
+    canFocusSearch: isListVisible,
     isSelecting,
     labelMailboxActions,
     labelMailboxId,
+    onFocusSearch: () => {
+      focusSearchRef.current?.();
+    },
     props,
     selection,
     threadedMessages,
@@ -822,11 +929,15 @@ export const MessageList = (props: MessageListProps) => {
     `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col">
+    <div
+      className="@container flex min-h-0 flex-1 flex-col"
+      ref={listContainerRef}
+    >
       <MessageListHeader
         onOpenSidebar={props.onOpenSidebar}
         search={
           <MessageListSearch
+            focusSearchRef={focusSearchRef}
             isRefreshing={props.isRefreshing}
             mailboxId={props.mailboxId}
             mailboxProvider={props.mailboxProvider}

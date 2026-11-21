@@ -26,7 +26,10 @@ const runThreadAction = async (
     await action();
     toast.success(successMessage);
   } catch (error) {
-    toastError(error, { boundary: "message-actions" });
+    toastError(error, {
+      boundary: "message-actions",
+      fallback: "Could not update message.",
+    });
   }
 };
 
@@ -36,24 +39,32 @@ export const useMessageViewHotkeys = ({
   currentUserEmail,
   hotkeyLinkedDraftMessage,
   hotkeyMessage,
+  importanceLabel,
   isActionPending,
   mailboxActions,
   mailboxId,
   mailboxProvider,
   onBackToList,
   onComposeDraftRequested,
+  onToggleImportance,
+  onTogglePlacement,
+  placementLabel,
 }: {
   activeMailbox: MailboxCategory;
   canComposeFromMailbox: boolean;
   currentUserEmail?: string | null;
   hotkeyLinkedDraftMessage: MessageListItem | undefined;
   hotkeyMessage: MessageListItem;
+  importanceLabel?: string;
   isActionPending: boolean;
   mailboxActions: MailboxActions;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   onBackToList?: () => void;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onToggleImportance?: () => void;
+  onTogglePlacement?: () => void;
+  placementLabel?: string;
 }) => {
   const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
     if (!canComposeFromMailbox || onComposeDraftRequested === undefined) {
@@ -82,6 +93,8 @@ export const useMessageViewHotkeys = ({
   const actions: {
     enabled: boolean;
     execute: () => void | Promise<void>;
+    keywords?: string;
+    label?: string;
     reason: string;
     shortcutId: KeyboardShortcutId;
     tone?: "destructive";
@@ -113,6 +126,26 @@ export const useMessageViewHotkeys = ({
       },
       reason: "Open a loaded conversation in a mailbox you can send from.",
       shortcutId: "detail-forward",
+    },
+    {
+      enabled: !isActionPending && onTogglePlacement !== undefined,
+      execute: () => {
+        onTogglePlacement?.();
+      },
+      keywords: "done archive inbox",
+      label: placementLabel,
+      reason: mailActionReason,
+      shortcutId: "detail-done",
+    },
+    {
+      enabled: !isActionPending && onToggleImportance !== undefined,
+      execute: () => {
+        onToggleImportance?.();
+      },
+      keywords: "important star flag",
+      label: importanceLabel,
+      reason: mailActionReason,
+      shortcutId: "detail-important",
     },
     {
       enabled:
@@ -176,7 +209,8 @@ export const useMessageViewHotkeys = ({
         description: hotkeyMessage.subject,
         group: "Conversation actions",
         id: shortcut.id,
-        label: shortcut.label,
+        keywords: action.keywords,
+        label: action.label ?? shortcut.label,
         shortcutId: shortcut.id,
         tone: action.tone,
         ...(action.enabled

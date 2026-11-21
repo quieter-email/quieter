@@ -44,7 +44,7 @@ export const WorkspaceSection = ({
 );
 
 export const workspaceHeaderVariants = cva(
-  "relative m-0.5 shrink-0 rounded-section bg-section p-3.5"
+  "relative m-0.5 flex min-h-15 shrink-0 flex-col justify-center rounded-section bg-section p-3.5"
 );
 
 export type WorkspaceHeaderProps = ComponentPropsWithoutRef<"header">;
