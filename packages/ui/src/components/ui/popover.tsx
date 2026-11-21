@@ -9,7 +9,7 @@ import {
   anchoredTriggerClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverPortal = PopoverPrimitive.Portal;
@@ -31,7 +31,7 @@ export const PopoverContent = ({
   className,
   collisionPadding,
   side = "bottom",
-  sideOffset = 8,
+  sideOffset = popupSideOffset,
   size = "default",
   scrollable = false,
   ...props

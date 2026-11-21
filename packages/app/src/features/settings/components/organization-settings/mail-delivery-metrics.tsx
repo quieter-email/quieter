@@ -101,7 +101,7 @@ export const MailDeliveryMetrics = ({
                       <TooltipContent>{stat.hint}</TooltipContent>
                     </Tooltip>
                   </dt>
-                  <dd className="text-title-lg text-fg tabular-nums">
+                  <dd className="text-metric text-fg tabular-nums">
                     {stat.value.toLocaleString()}
                   </dd>
                 </div>
@@ -121,7 +121,7 @@ export const MailDeliveryMetrics = ({
               </div>
             </Surface>
           </div>
-          <div className="px-6">
+          <div className="px-4.5">
             <BarChart
               data={data}
               label="Daily sent, delivered, and bounced mail"
@@ -143,7 +143,7 @@ export const MailDeliveryMetrics = ({
             },
           ].map((stat) => (
             <div
-              className="flex flex-wrap items-center gap-2 px-6 py-4"
+              className="flex flex-wrap items-center gap-2 px-4.5 py-4"
               key={stat.label}
             >
               <dt className="flex items-center gap-1 text-caption text-muted-fg">

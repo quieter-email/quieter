@@ -1231,7 +1231,7 @@ const CalendarWorkspaceContent = ({
                       : "Hide calendar sidebar"
                   }
                   aria-pressed={!ui.sidebarCollapsed}
-                  className="hidden shrink-0 lg:inline-flex"
+                  className="hidden shrink-0 lg:-ms-1.75 lg:inline-flex"
                   onClick={() => {
                     updatePreferences({
                       sidebarCollapsed: !ui.sidebarCollapsed,
@@ -1275,7 +1275,11 @@ const CalendarWorkspaceContent = ({
                 </Text>
               ) : null}
             </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div
+              className={cn("flex min-w-0 flex-wrap items-center gap-2", {
+                "-me-1.75": preview !== null || online,
+              })}
+            >
               <div className="flex shrink-0 items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
@@ -1449,7 +1453,7 @@ const CalendarWorkspaceContent = ({
           </div>
         </WorkspaceHeader>
         {data.failures.length > 0 ? (
-          <output className="flex items-center gap-3 border-b border-border px-5 py-2">
+          <output className="flex items-center gap-3 border-b border-border px-4 py-2">
             <p className="flex-1 text-caption text-muted-fg">
               Some calendars could not refresh. Saved events may be out of date.
             </p>
@@ -1465,7 +1469,12 @@ const CalendarWorkspaceContent = ({
             </Button>
           </output>
         ) : null}
-        <div className="flex min-h-0 flex-1" ref={workspaceRef}>
+        <div
+          className={cn("flex min-h-0 flex-1", {
+            "-mt-0.5": data.failures.length === 0,
+          })}
+          ref={workspaceRef}
+        >
           {data.accounts.length === 0 && !requestedEventRef ? (
             <EmptyMessageState
               action={
@@ -1677,7 +1686,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="ml-auto flex w-88 shrink-0 flex-col"
+              className="-ml-0.5 flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div

@@ -210,6 +210,7 @@ export const AssistantSidebar = ({
                   aria-controls={id}
                   aria-expanded={open}
                   aria-label="Collapse assistant sidebar"
+                  className="-me-1.75"
                   onClick={onMinimize}
                   size="icon-sm"
                   type="button"
@@ -221,7 +222,7 @@ export const AssistantSidebar = ({
             </div>
           </WorkspaceHeader>
           <div hidden={tab !== "chat"}>
-            <WorkspaceHeader>
+            <WorkspaceHeader className="mt-0">
               <div className="flex items-center gap-2">
                 <DropdownMenu key={open ? "visible" : "hidden"}>
                   <DropdownMenuTrigger
@@ -245,7 +246,6 @@ export const AssistantSidebar = ({
                   <DropdownMenuContent
                     align="start"
                     className="w-72"
-                    sideOffset={8}
                     data-assistant-panel
                   >
                     <DropdownMenuItem

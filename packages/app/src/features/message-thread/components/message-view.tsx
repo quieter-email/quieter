@@ -435,7 +435,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </IconButtonTooltip>
           )}
           {mailboxProvider !== "api" && (
-            <div className="shrink-0">
+            <div className="-me-2.25 shrink-0">
               <MessageActionsDropdown
                 actions={threadActions}
                 isPending={isActionPending}
@@ -450,9 +450,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             </div>
           )}
-          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
-            <AssistantSidebarTrigger />
-          </div>
+          <AssistantSidebarTrigger
+            className={cn(
+              "data-[sidebar-open=false]:ms-2.25 data-[sidebar-open=true]:-ms-3",
+              {
+                "lg:hidden": !detailOnly,
+              }
+            )}
+          />
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
@@ -580,7 +585,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             )}
 
             {showInlineCompose ? (
-              <div className="px-4 py-4 @sm:px-5 @sm:py-5">
+              <div className="p-4">
                 <LazyMotion features={domMax}>
                   <AnimatePresence initial={false} mode="popLayout">
                     {inlineDraft ? (

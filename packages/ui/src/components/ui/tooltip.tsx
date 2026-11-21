@@ -5,7 +5,7 @@ import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 
 export const TooltipGroup = TooltipPrimitive.Provider;
 export const Tooltip = TooltipPrimitive.Root;
@@ -18,7 +18,7 @@ export const TooltipContent = ({
   children,
   className,
   side = "top",
-  sideOffset = 8,
+  sideOffset = popupSideOffset,
   ...props
 }: ComponentPropsWithoutRef<typeof TooltipPrimitive.Popup> &
   Pick<

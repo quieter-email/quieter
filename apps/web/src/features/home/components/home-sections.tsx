@@ -225,12 +225,15 @@ export const HomeSections = () => (
         </Reveal>
       </section>
       <section aria-labelledby="home-ai-title" className="home-feature home-ai">
-        <Reveal>
-          <h2 className="home-heading" id="home-ai-title">
-            AI for Gmail.
-          </h2>
-        </Reveal>
         <div className="home-ai-layout">
+          <Reveal className="home-feature-heading home-ai-heading">
+            <h2 className="home-heading" id="home-ai-title">
+              AI for Gmail.
+            </h2>
+            <p className="home-description">
+              Ask about your mail and see the emails behind every answer.
+            </p>
+          </Reveal>
           <Reveal className="home-ai-screenshot">
             <ProductScreenshotStage screenshot="assistant" />
           </Reveal>
@@ -280,12 +283,16 @@ export const HomeSections = () => (
       </div>
       <section
         aria-labelledby="home-platform-title"
-        className="home-feature home-platform"
+        className="home-feature home-split"
       >
-        <Reveal>
+        <Reveal className="home-feature-heading">
           <h2 className="home-heading" id="home-platform-title">
             Team and transactional mail.
           </h2>
+          <p className="home-description">
+            Shared mailboxes for your team, and sending from your own domain or
+            the API.
+          </p>
         </Reveal>
         <Reveal className="home-platform-facts" stagger={0.06}>
           {platformFacts.map((fact) => (
@@ -298,10 +305,12 @@ export const HomeSections = () => (
       </section>
       <section
         aria-labelledby="home-apps-title"
-        className="home-connected-apps"
+        className="home-feature home-split home-connected-apps"
       >
-        <Reveal>
-          <h2 id="home-apps-title">Connected apps.</h2>
+        <Reveal className="home-feature-heading">
+          <h2 className="home-heading" id="home-apps-title">
+            Connected apps.
+          </h2>
         </Reveal>
         <Reveal className="home-apps-list" stagger={0.04}>
           {connectedApps.map((app) => {
@@ -312,10 +321,10 @@ export const HomeSections = () => (
                   alt=""
                   aria-hidden
                   className={cn("home-connector-icon", icon.className)}
-                  height={20}
+                  height={24}
                   loading="lazy"
                   src={icon.src}
-                  width={20}
+                  width={24}
                 />
                 <span>{app.name}</span>
               </RevealChild>

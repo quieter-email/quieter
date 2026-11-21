@@ -148,7 +148,7 @@ export const RegisterDomainDialog = ({
               action={async () => {
                 await form.handleSubmit();
               }}
-              className="space-y-5"
+              className="space-y-3"
             >
               <form.Field name="domain">
                 {(field) => (
@@ -201,7 +201,7 @@ export const RegisterDomainDialog = ({
                             htmlFor={`domain-mode-${option.value}`}
                             className={cn(
                               surfaceVariants({ variant: "detail" }),
-                              "flex cursor-pointer gap-3"
+                              "flex cursor-default gap-3"
                             )}
                             key={option.value}
                           >
