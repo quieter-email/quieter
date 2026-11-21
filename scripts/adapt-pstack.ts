@@ -67,7 +67,7 @@ for (const { name } of skills) {
   if (name === "poteto-mode") {
     text = text.replace(
       /## Harness\n[\s\S]*?(?=\n## Writing the reply)/u,
-      "## Harness\n\nFollow [the client adapter](../../pstack/harnesses.md) for Codex, Claude Code, OpenCode Go, Cursor, and Pi. It owns native discovery, delegation, model settings, session access, and optional-tool replacements. Repository policy and the active tool schema take precedence.\n"
+      "## Harness\n\nFollow [the client adapter](../../pstack/harnesses.md) for T3 Code, Codex, Claude Code, Antigravity, OpenCode Go, Cursor, and Pi. It owns native discovery, delegation, model settings, session access, and optional-tool replacements. Repository policy and the active tool schema take precedence.\n"
     );
   }
   if (name === "setup-pstack") {

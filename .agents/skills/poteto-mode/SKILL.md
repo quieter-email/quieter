@@ -94,9 +94,9 @@ Read the leaf skill in full for any principle you apply. Each entry names when i
 
 **Use `subagent_type: "poteto-agent"` for any subagent you spawn inside a playbook step** (code-writing delegates, ad-hoc helpers). The chat that receives `/poteto-mode` runs the playbook. Never spawn a `poteto-agent` to run the playbook itself. Routed workflow skills (`how`, `why`, `interrogate`, `reflect`, `swarm`) set their own `subagent_type` for diverse-model review. Respect what the skill prescribes, don't override to `poteto-agent`.
 
-**Defaults for every `Task` call.** `run_in_background: true`, agent mode (readonly strips MCP), and file pointers rather than inlined context, subject to the native adapter. Select models through [the model policy](../../pstack/models.md), configured by `setup-pstack`. Each code playbook reads its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`). Cross-cutting design, subtle concurrency, and difficult algorithms read `hardest tasks`. Prose and judgment read `judgment and prose`. Routed skills name their own role lines. Unconfigured roles inherit the parent in every harness.
+**Defaults for every `Task` call.** `run_in_background: true`, agent mode (readonly strips MCP), and file pointers rather than inlined context, subject to the native adapter. Select models through [the model policy](../../pstack/models.md), configured by `setup-pstack`. Each code playbook reads its role (`feature, refactoring`, `bug-fix`, `perf-issue`, or `hillclimb`), routing UI and design-system implementation to `frontend` when configured. Cross-cutting design, subtle concurrency, and difficult algorithms read `hardest tasks`. Prose and judgment read `judgment and prose`. Non-critical or disposable chores read `throwaway`. Routed skills name their own role lines. Rate-limited roles read `limit fallback`. Unconfigured roles inherit the parent in every harness.
 
-**Match the model to the job.** Apply the saved role, effort, speed, and release preferences through the model policy. Use only native model IDs and supported controls. Verification reads `swarm workers`. Preserve configured panel sizes and report when the selected models cannot provide model diversity. An optional `expert consultation` follows the model policy's triggers and task-wide allowance. It advises the parent without taking over implementation.
+**Match the model to the job.** Apply the saved provider, role, effort, speed, fallback, and release preferences through the model policy. Use only native model IDs and supported controls. Verification reads `swarm workers`. Keep exploration and throwaway models off main thinking. Preserve configured panel sizes and report when the selected models cannot provide model diversity. When preferences configure a multi-model `interrogate reviewers` panel, run it after substantive changes as parallel, bounded, read-only reviews. An optional `expert consultation` follows the model policy's triggers and task-wide allowance. It advises the parent without taking over implementation.
 
 You own every subagent's work. Review the diff and write your own summary, don't pass through what it said. A second opinion is the same prompt against a different model. Agreement is high-signal.
 
@@ -104,7 +104,7 @@ You own every subagent's work. Review the diff and write your own summary, don't
 
 ## Harness
 
-Follow [the client adapter](../../pstack/harnesses.md) for Codex, Claude Code, OpenCode Go, Cursor, and Pi. It owns native discovery, delegation, model settings, session access, and optional-tool replacements. Repository policy and the active tool schema take precedence.
+Follow [the client adapter](../../pstack/harnesses.md) for T3 Code, Codex, Claude Code, Antigravity, OpenCode Go, Cursor, and Pi. It owns native discovery, delegation, model settings, session access, and optional-tool replacements. Repository policy and the active tool schema take precedence.
 
 ## Writing the reply
 
