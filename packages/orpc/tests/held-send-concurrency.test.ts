@@ -350,7 +350,10 @@ describe.skipIf(!canRunHeldSendDatabase())("held-send concurrency", () => {
 
       test("read-only mailbox readers cannot undo or abandon a send operation", async () => {
         fixture.access.mockResolvedValueOnce({
-          capabilities: getMailboxCapabilities({ provider, role: "reader" }),
+          capabilities: {
+            ...getMailboxCapabilities({ provider, role: "reader" }),
+            canSend: false,
+          },
           contentRevision: 0,
           id: scope.mailboxId,
           organizationId: "organization",
