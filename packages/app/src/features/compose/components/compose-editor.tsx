@@ -124,6 +124,7 @@ export type ComposeEditorHandle = {
   normalizeHtml: (html: string) => string;
   getTextFromHtml: (html: string) => string;
   insertHtml: (html: string) => void;
+  insertAuthoredHtml: (html: string) => boolean;
 };
 
 type ComposeEditorContextValue = {
@@ -294,6 +295,24 @@ export const ComposeEditor = ({
       });
       const size = "type" in content ? content.content.size : content.size;
       return content.textBetween(0, size, "\n\n");
+    },
+    insertAuthoredHtml: (nextHtml) => {
+      if (editor?.isEditable !== true) {
+        return false;
+      }
+      let position = editor.state.doc.content.size;
+      editor.state.doc.descendants((node, offset) => {
+        if (
+          node.type.name === "blockquote" ||
+          node.type.name === "composeSignature" ||
+          typeof node.attrs["data-compose-quote"] === "string"
+        ) {
+          position = Math.min(position, offset);
+          return false;
+        }
+        return true;
+      });
+      return editor.chain().focus().insertContentAt(position, nextHtml).run();
     },
     insertHtml: (nextHtml) => {
       editor?.chain().focus().insertContent(nextHtml).run();

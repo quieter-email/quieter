@@ -151,6 +151,9 @@ const toEvent = (
         endDate: event.end.dateTime.slice(0, 10),
         kind: "all-day",
         startDate: event.start.dateTime.slice(0, 10),
+        timeZone: event.originalStartTimeZone
+          ? originalZone
+          : resolveCalendarTimeZone(event.start.timeZone),
       }
     : {
         end: `${event.end.dateTime.replace(/Z$/u, "")}Z`,

@@ -13,9 +13,18 @@ import {
   calendarUpdateInputSchema,
   calendarUpdateColorInputSchema,
 } from "@quieter/calendar";
+import {
+  calendarAvailabilityInputSchema,
+  calendarAvailabilityResultSchema,
+} from "@quieter/calendar/availability";
 import { z } from "zod";
 
+import { proposeCalendarAvailabilityForUser } from "../calendar/availability";
 import { importCalendarInvitationAttachmentForUser } from "../calendar/invitation-import";
+import {
+  calendarProposalCreateInputSchema,
+  createCalendarProposalEventForUser,
+} from "../calendar/proposals";
 import {
   createCalendarEventForUser,
   deleteCalendarEventForUser,
@@ -44,6 +53,18 @@ export const calendarRouter = {
     .handler(
       async ({ context }) =>
         await listCalendarAccountsForUser({
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  availability: protectedProcedure
+    .input(calendarAvailabilityInputSchema)
+    .output(calendarAvailabilityResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await proposeCalendarAvailabilityForUser({
+          ...input,
           signal: context.signal,
           userId: context.userId,
         })
@@ -79,6 +100,18 @@ export const calendarRouter = {
     .handler(
       async ({ context, input }) =>
         await createCalendarEventForUser({
+          ...input,
+          signal: context.signal,
+          userId: context.userId,
+        })
+    ),
+
+  createFromProposal: protectedProcedure
+    .input(calendarProposalCreateInputSchema)
+    .output(calendarMutationResultSchema)
+    .handler(
+      async ({ context, input }) =>
+        await createCalendarProposalEventForUser({
           ...input,
           signal: context.signal,
           userId: context.userId,
