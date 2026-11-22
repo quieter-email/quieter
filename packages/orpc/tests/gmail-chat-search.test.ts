@@ -452,6 +452,7 @@ describe("Gmail chat search and batch actions", () => {
           messages: [visible],
           nextPageToken: "remaining-native-page",
         });
+      fixtures.countVisible.mockResolvedValue(1);
       fixtures.visible.mockResolvedValue(new Set([visible.threadId]));
 
       const result = await searchGmailForUser({
@@ -522,6 +523,7 @@ describe("Gmail chat search and batch actions", () => {
             nextPageToken: String(next),
           });
         });
+      fixtures.countVisible.mockResolvedValue(1);
       fixtures.visible.mockResolvedValue(new Set());
 
       const result = await searchGmailForUser({
@@ -539,6 +541,26 @@ describe("Gmail chat search and batch actions", () => {
       });
     }
   );
+
+  test("short-circuits Later search without scanning Gmail when no visible snoozes exist", async () => {
+    const list = vi.spyOn(gmail, "listMessagesForAgent");
+    fixtures.countVisible.mockResolvedValue(0);
+
+    const result = await searchGmailForUser({
+      ...mailbox,
+      category: "later",
+      maxResults: 10,
+      query: "subject:invoice",
+    });
+
+    expect(list).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      messages: [],
+      nextPageToken: undefined,
+      resultSizeEstimate: 0,
+      status: "success",
+    });
+  });
 
   test("computes Later overview count from visible snoozes instead of counting all Gmail mail", async () => {
     const profile = vi.spyOn(gmail, "getGmailProfile").mockResolvedValue({
@@ -592,6 +614,14 @@ describe("Gmail chat search and batch actions", () => {
     expect(fixtures.supersede).toHaveBeenCalledWith(
       expect.objectContaining({
         mailboxId: mailbox.mailboxId,
+        retireSnoozes: false,
+        threadIds: ["target-thread"],
+      })
+    );
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        retireSnoozes: true,
         threadIds: ["target-thread"],
       })
     );
@@ -615,6 +645,14 @@ describe("Gmail chat search and batch actions", () => {
       expect.objectContaining({
         mailboxId: mailbox.mailboxId,
         messageIds: ["m1", "m2"],
+        retireSnoozes: false,
+      })
+    );
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        messageIds: ["m1"],
+        retireSnoozes: true,
       })
     );
   });

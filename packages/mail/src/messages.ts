@@ -1,6 +1,7 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
 import type { OtpToken } from "./otp-token";
+import { isMailSnoozeLiveStatus } from "./snooze";
 import type { MailSnoozeState } from "./snooze";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
@@ -210,14 +211,7 @@ export const isMessageInMailbox = (
   if (mailbox === "later") {
     return (
       message.snooze !== undefined &&
-      [
-        "preparing",
-        "active",
-        "returning",
-        "suspended",
-        "failed",
-        "uncertain",
-      ].includes(message.snooze.status) &&
+      isMailSnoozeLiveStatus(message.snooze.status) &&
       labelIds?.some((label) =>
         ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
       ) !== true

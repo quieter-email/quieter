@@ -1,7 +1,7 @@
 {
   "version": "8",
   "dialect": "postgres",
-  "id": "d9cc71d4-dfc9-4eee-960f-8128daed903c",
+  "id": "f86dfeaf-84da-462c-b845-b4d11d5ad592",
   "prevIds": ["079005f5-f206-4d1f-89df-c3ae06c64eb8"],
   "ddl": [
     {
@@ -19377,6 +19377,27 @@
       "entityType": "indexes",
       "schema": "public",
       "table": "mailSnooze"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "mailboxId",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "mail_snooze_operation_mailbox_idx",
+      "entityType": "indexes",
+      "schema": "public",
+      "table": "mailSnoozeOperation"
     },
     {
       "nameExplicit": true,

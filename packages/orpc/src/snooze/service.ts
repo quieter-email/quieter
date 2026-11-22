@@ -460,7 +460,7 @@ export const applyMailSnooze = async ({
           leaseUntil: null,
           mailboxId: input.mailboxId,
           message: null,
-          nextWakeAt: now,
+          nextWakeAt: new Date(now.getTime() + 60_000),
           returnAt: new Date(input.command.returnAt),
           returnOperationId: null,
           returnRequestId: null,
@@ -532,13 +532,21 @@ export const applyMailSnooze = async ({
             continue;
           }
         }
+        const isExhaustedUncertain =
+          current.status === "uncertain" &&
+          current.nextWakeAt === null &&
+          !hasActiveLease;
         if (
           input.command.kind === "return-now" &&
           (current.hiddenMessageIds.length === 0 ||
-            ["preparing", "returning", "uncertain"].includes(current.status) ||
+            current.status === "preparing" ||
+            current.status === "returning" ||
+            (current.status === "uncertain" && !isExhaustedUncertain) ||
             hasActiveLease ||
             (latestIsOwned &&
-              ["pending", "submitting", "uncertain"].includes(latest.status)))
+              (latest.status === "pending" ||
+                latest.status === "submitting" ||
+                (latest.status === "uncertain" && !isExhaustedUncertain))))
         ) {
           rejected.set(target.threadId, {
             code: "CONFLICT",
@@ -585,7 +593,7 @@ export const applyMailSnooze = async ({
           values = {
             actorUserId: context.userId,
             attempts: 0,
-            nextWakeAt: now,
+            nextWakeAt: new Date(now.getTime() + 60_000),
             returnRequestId: randomUUID(),
             status: "returning",
           };
@@ -986,6 +994,7 @@ const confirmObservedPlacement = async (input: {
     await tx
       .update(mailSnooze)
       .set({
+        ...(input.phase === "hide" ? { attempts: 0 } : {}),
         code: null,
         leaseToken: null,
         leaseUntil: null,
@@ -1035,7 +1044,12 @@ export const dispatchMailSnooze = async (
         eq(mailSnooze.mailboxId, scope.mailboxId)
       )
     );
-  if (row === undefined || !isMailSnoozeLiveStatus(row.status)) {
+  if (
+    row === undefined ||
+    !isMailSnoozeLiveStatus(row.status) ||
+    row.status === "suspended" ||
+    row.status === "failed"
+  ) {
     return { nextWakeAt: null };
   }
   if (row.leaseUntil && row.leaseUntil.getTime() > Date.now()) {
@@ -1204,7 +1218,7 @@ export const dispatchMailSnooze = async (
       )
       .limit(1);
     if (dispatchRow.status === "preparing" && operation === undefined) {
-      await applyMailPlacement({
+      const placed = await applyMailPlacement({
         chargeRateLimit: false,
         context,
         input: {
@@ -1225,6 +1239,24 @@ export const dispatchMailSnooze = async (
           version: dispatchRow.version,
         },
       });
+      const [placedTarget] = placed.targets;
+      if (
+        placedTarget?.status === "failed" &&
+        dispatchRow.attempts >= MAX_SNOOZE_DISPATCH_ATTEMPTS
+      ) {
+        await finishSnoozeFailure({
+          code: placedTarget.code ?? "hide_failed",
+          id: dispatchRow.id,
+          leaseToken: claim.token,
+          mailboxId: dispatchRow.mailboxId,
+          message:
+            placedTarget.message ??
+            "This conversation could not be snoozed. Refresh and try again.",
+          nextWakeAt: null,
+          status: "failed",
+          version: dispatchRow.version,
+        });
+      }
     } else {
       let manualRecovery = false;
       if (
@@ -1315,7 +1347,9 @@ export const dispatchMailSnooze = async (
             leaseToken: claim.token,
             mailboxId: dispatchRow.mailboxId,
             message:
-              "This snooze is still being confirmed. Refresh before trying again.",
+              nextWakeAt === null
+                ? "Could not confirm this snooze automatically. Refresh, return to Inbox, or cancel the return."
+                : "This snooze is still being confirmed. Refresh before trying again.",
             nextWakeAt,
             status: "uncertain",
             version: dispatchRow.version,
@@ -1366,7 +1400,9 @@ export const dispatchMailSnooze = async (
             leaseToken: claim.token,
             mailboxId: dispatchRow.mailboxId,
             message:
-              "The return is still being confirmed. Refresh or choose Return to Inbox.",
+              nextWakeAt === null
+                ? "Could not confirm this return automatically. Refresh, return to Inbox, or cancel the return."
+                : "The return is still being confirmed. Refresh or choose Return to Inbox.",
             nextWakeAt,
             status: "uncertain",
             version: dispatchRow.version,
@@ -1591,7 +1627,7 @@ export const dispatchMailSnooze = async (
         "UNAUTHORIZED",
       ].some((code) => code === error.code)
     ) {
-      await finishSnoozeFailure({
+      const updated = await finishSnoozeFailure({
         ...failure,
         id: dispatchRow.id,
         leaseToken: claim.token,
@@ -1599,6 +1635,24 @@ export const dispatchMailSnooze = async (
         status: "suspended",
         version: dispatchRow.version,
       });
+      if (updated) {
+        await db
+          .update(mailSnoozeOperation)
+          .set({
+            code: failure.code,
+            message: failure.message,
+            resultingVersion: dispatchRow.version + 1,
+            status: "failed",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(mailSnoozeOperation.snoozeId, dispatchRow.id),
+              eq(mailSnoozeOperation.resultingVersion, dispatchRow.version),
+              eq(mailSnoozeOperation.status, "pending")
+            )
+          );
+      }
       await publishMailUpdate({
         mailboxId: scope.mailboxId,
         type: "mailbox.changed",
@@ -1615,7 +1669,7 @@ export const dispatchMailSnooze = async (
       return { nextWakeAt: current?.nextWakeAt?.getTime() ?? null };
     }
     if (dispatchRow.attempts >= MAX_SNOOZE_DISPATCH_ATTEMPTS) {
-      await finishSnoozeFailure({
+      const updated = await finishSnoozeFailure({
         ...failure,
         id: dispatchRow.id,
         leaseToken: claim.token,
@@ -1624,6 +1678,24 @@ export const dispatchMailSnooze = async (
         status: "failed",
         version: dispatchRow.version,
       });
+      if (updated) {
+        await db
+          .update(mailSnoozeOperation)
+          .set({
+            code: failure.code,
+            message: failure.message,
+            resultingVersion: dispatchRow.version + 1,
+            status: "failed",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(mailSnoozeOperation.snoozeId, dispatchRow.id),
+              eq(mailSnoozeOperation.resultingVersion, dispatchRow.version),
+              eq(mailSnoozeOperation.status, "pending")
+            )
+          );
+      }
       await publishMailUpdate({
         mailboxId: scope.mailboxId,
         type: "mailbox.changed",

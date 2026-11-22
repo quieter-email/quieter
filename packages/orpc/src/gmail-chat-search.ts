@@ -126,6 +126,25 @@ export const searchGmailForUser = async (
   }
 ): Promise<GmailSearchResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    if (
+      input.scope !== "all_mail" &&
+      input.category === "later" &&
+      (await countVisibleMailSnoozes({
+        mailboxId: input.mailboxId,
+        userId: input.userId,
+      })) === 0
+    ) {
+      return {
+        category: input.category,
+        fetchedAt: new Date().toISOString(),
+        messages: [],
+        nextPageToken: undefined,
+        query: input.query,
+        resultSizeEstimate: 0,
+        scope: input.scope,
+        status: "success",
+      };
+    }
     let { pageToken } = input;
     let pagesScanned = 0;
     while (true) {
@@ -569,6 +588,7 @@ export const modifyMailForUser = async (
     await supersedePendingMailPlacement({
       context: { signal, userId: input.userId },
       mailboxId: input.mailboxId,
+      retireSnoozes: false,
       ...(target === "thread" ? { threadIds: [id] } : { messageId: id }),
     });
   }
@@ -593,6 +613,15 @@ export const modifyMailForUser = async (
       target,
     };
   }
+  if (action === "trash" || action === "untrash") {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      matchHiddenMessageIdsOnly: action === "trash" && target === "message",
+      retireSnoozes: true,
+      ...(target === "thread" ? { threadIds: [id] } : { messageId: id }),
+    });
+  }
   await recordGmailChatAction(input, messageIds);
   return { action, category, id, status: "success", target };
 };
@@ -609,6 +638,7 @@ export const modifyMailBatchForUser = async (
     await supersedePendingMailPlacement({
       context: { signal, userId: input.userId },
       mailboxId: input.mailboxId,
+      retireSnoozes: false,
       ...(target === "thread" ? { threadIds: ids } : { messageIds: ids }),
     });
   }
@@ -732,6 +762,22 @@ export const modifyMailBatchForUser = async (
     reportError(failure, { operation: "mailbox-tool:batch mail action" });
   }
   if (appliedMessageIds.length > 0) {
+    if (action === "trash" || action === "untrash") {
+      const succeededIds = results.flatMap((result) =>
+        result.status === "success" ? [result.id] : []
+      );
+      if (succeededIds.length > 0) {
+        await supersedePendingMailPlacement({
+          context: { signal, userId: input.userId },
+          mailboxId: input.mailboxId,
+          matchHiddenMessageIdsOnly: action === "trash" && target === "message",
+          retireSnoozes: true,
+          ...(target === "thread"
+            ? { threadIds: succeededIds }
+            : { messageIds: succeededIds }),
+        });
+      }
+    }
     await recordGmailChatAction(input, [...new Set(appliedMessageIds)]);
   }
   return {

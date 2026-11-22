@@ -9,6 +9,7 @@ import {
 } from "@quieter/app/lib/mail/inbox-query/data";
 import { formatMailSender } from "@quieter/mail/compose/sender";
 import type { MailCommand } from "@quieter/mail/data-plane";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import type { MailSnoozeCommand, MailSnoozeState } from "@quieter/mail/snooze";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 
@@ -232,6 +233,48 @@ export const createDemoActions = (
   ) => {
     const selected = new Set(ids);
     const update = getMailCommandUpdater(command);
+    if (command.kind === "move" || command.kind === "set-placement") {
+      store.updateSnoozes(({ messages, snoozes }) => {
+        const affectedThreads = new Set<string>();
+        const nextMessages = messages.flatMap((message) => {
+          if (
+            !selected.has(scope === "message" ? message.id : message.threadId)
+          ) {
+            return [message];
+          }
+          affectedThreads.add(message.threadId);
+          return [update(message)];
+        });
+        const nextSchedules = { ...snoozes };
+        for (const threadId of affectedThreads) {
+          const schedule = nextSchedules[threadId];
+          if (
+            schedule !== undefined &&
+            isMailSnoozeLiveStatus(schedule.state.status)
+          ) {
+            nextSchedules[threadId] = {
+              ...schedule,
+              state: {
+                ...schedule.state,
+                status: "superseded",
+                version: schedule.state.version + 1,
+              },
+            };
+          }
+        }
+        return {
+          messages: nextMessages.map((message) => {
+            const schedule = nextSchedules[message.threadId];
+            return schedule === undefined
+              ? message
+              : { ...message, snooze: schedule.state };
+          }),
+          snoozes: nextSchedules,
+        };
+      });
+      await invalidate();
+      return;
+    }
     store.updateMessages((messages) =>
       messages.flatMap((message) => {
         if (

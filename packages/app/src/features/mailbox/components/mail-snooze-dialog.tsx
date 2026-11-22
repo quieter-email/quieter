@@ -31,7 +31,7 @@ import { getReminderPresetTime } from "../../reminders/reminder-time";
 const snoozeStatusLabels: Record<MailSnoozeState["status"], string> = {
   active: "Returns",
   cancelled: "Return canceled, was due",
-  failed: "Could not return",
+  failed: "Snooze needs attention",
   preparing: "Preparing return",
   returned: "Returned, was due",
   returning: "Returning",

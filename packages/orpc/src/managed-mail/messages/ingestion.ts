@@ -229,17 +229,23 @@ const finishIngestion = async (input: {
   receivedAt: Date;
   threadId: string;
 }) => {
-  const [snooze, enqueue] = await Promise.allSettled([
-    handleSnoozeInbound(input),
+  const [enqueue, processing] = await Promise.allSettled([
     enqueueMailAgentMessage({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
       receivedAt: input.receivedAt,
       threadId: input.threadId,
     }),
+    runPostIngestionProcessing(input),
   ]);
+  const [snooze] = await Promise.allSettled([handleSnoozeInbound(input)]);
   if (snooze.status === "rejected") {
     reportError(snooze.reason, { operation: "managed-ingestion-snooze" });
+  }
+  if (processing.status === "rejected") {
+    reportError(processing.reason, {
+      operation: "managed-ingestion-processing",
+    });
   }
   if (enqueue.status === "rejected") {
     throw enqueue.reason;
@@ -256,7 +262,6 @@ const finishIngestion = async (input: {
       threadIds: [input.threadId],
       type: "mailbox.changed",
     }),
-    runPostIngestionProcessing(input),
   ]);
   for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
@@ -265,7 +270,6 @@ const finishIngestion = async (input: {
           "managed-ingestion-reminders",
           "managed-ingestion-memory",
           "managed-ingestion-publish",
-          "managed-ingestion-processing",
         ][index],
       });
     }
@@ -273,6 +277,9 @@ const finishIngestion = async (input: {
   const failed = results.find((result) => result.status === "rejected");
   if (failed) {
     throw failed.reason;
+  }
+  if (processing.status === "rejected") {
+    throw processing.reason;
   }
   if (snooze.status === "rejected") {
     throw snooze.reason;

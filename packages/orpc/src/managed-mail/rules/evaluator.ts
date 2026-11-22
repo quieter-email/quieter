@@ -402,7 +402,10 @@ const advanceRuleRun = async (
             and(
               eq(mailSnooze.mailboxId, run.mailboxId),
               eq(mailSnooze.threadId, message.threadId),
-              inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
+              inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES),
+              mailboxState === "active"
+                ? undefined
+                : sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([message.id])}::jsonb`
             )
           );
         await tx

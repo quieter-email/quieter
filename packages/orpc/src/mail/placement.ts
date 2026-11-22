@@ -86,8 +86,10 @@ const lockPlacementSnooze = async (input: {
 export const supersedePendingMailPlacement = async (input: {
   context: MailRequestContext;
   mailboxId: string;
+  matchHiddenMessageIdsOnly?: boolean;
   messageId?: string;
   messageIds?: string[];
+  retireSnoozes?: boolean;
   threadIds?: string[];
 }) => {
   const requestedMessageIds = [
@@ -134,6 +136,10 @@ export const supersedePendingMailPlacement = async (input: {
     (id) =>
       sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([id])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([id])}::jsonb)`
   );
+  const hiddenMessageConditions = requestedMessageIds.map(
+    (id) =>
+      sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([id])}::jsonb`
+  );
   const targetCondition =
     requestedMessageIds.length === 0
       ? inArray(mailPlacementOperation.threadId, threadIds)
@@ -143,6 +149,7 @@ export const supersedePendingMailPlacement = async (input: {
             : []),
           ...messageConditions
         );
+  const retireSnoozes = input.retireSnoozes !== false;
   await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })
@@ -150,7 +157,7 @@ export const supersedePendingMailPlacement = async (input: {
       .where(eq(mailbox.id, input.mailboxId))
       .for("update");
     const retired =
-      threadIds.length > 0
+      retireSnoozes && threadIds.length > 0
         ? await tx
             .update(mailSnooze)
             .set({
@@ -167,7 +174,11 @@ export const supersedePendingMailPlacement = async (input: {
               and(
                 eq(mailSnooze.mailboxId, input.mailboxId),
                 inArray(mailSnooze.threadId, threadIds),
-                inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
+                inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES),
+                input.matchHiddenMessageIdsOnly === true &&
+                  hiddenMessageConditions.length > 0
+                  ? or(...hiddenMessageConditions)
+                  : undefined
               )
             )
             .returning({ id: mailSnooze.id })
@@ -429,6 +440,38 @@ export const applyMailPlacement = async ({
               )
           );
           if (admittedTargets.length === 0) {
+            if (currentSnooze !== undefined && snooze !== undefined) {
+              const retiredAt = new Date();
+              await tx
+                .update(mailSnooze)
+                .set({
+                  code: "source_changed",
+                  leaseToken: null,
+                  leaseUntil: null,
+                  message:
+                    "This conversation changed and is no longer snoozed.",
+                  nextWakeAt: null,
+                  status: "superseded",
+                  updatedAt: retiredAt,
+                  version: sql`${mailSnooze.version} + 1`,
+                })
+                .where(
+                  and(
+                    eq(mailSnooze.id, currentSnooze.id),
+                    eq(mailSnooze.version, snooze.version),
+                    snooze.leaseToken === null
+                      ? isNull(mailSnooze.leaseToken)
+                      : eq(mailSnooze.leaseToken, snooze.leaseToken)
+                  )
+                );
+              await tx
+                .update(mailbox)
+                .set({
+                  contentRevision: sql`${mailbox.contentRevision} + 1`,
+                  updatedAt: retiredAt,
+                })
+                .where(eq(mailbox.id, input.mailboxId));
+            }
             return { operations: [], ownedIds: new Set<string>() };
           }
           const now = new Date();
@@ -833,6 +876,7 @@ export const applyMailPlacement = async ({
             await tx
               .update(mailSnooze)
               .set({
+                ...(snooze.kind === "snooze-hide" ? { attempts: 0 } : {}),
                 code: null,
                 leaseToken: null,
                 leaseUntil: null,

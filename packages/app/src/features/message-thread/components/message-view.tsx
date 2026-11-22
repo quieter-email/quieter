@@ -525,6 +525,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 mailboxId={mailboxId}
                 message={{
                   ...message,
+                  snooze,
                   threadIsImportant,
                 }}
                 threadLabelIds={threadLabelIds}

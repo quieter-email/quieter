@@ -113,7 +113,14 @@ export const reconcileMailSnoozeSource = async (input: {
       )
       .orderBy(desc(mailPlacementOperation.sequence))
       .limit(1);
-    if (latest?.id !== current.hideOperationId || latest.status !== "applied") {
+    const validPredecessor =
+      (current.returnOperationId === null &&
+        latest?.id === current.hideOperationId &&
+        latest.status === "applied") ||
+      (current.returnOperationId !== null &&
+        latest?.id === current.returnOperationId &&
+        latest.status === "failed");
+    if (!validPredecessor) {
       return { changed: false, row: current };
     }
     const [updated] = await tx

@@ -388,6 +388,9 @@ const buildMessageListBulkActions = ({
   }
 
   const actions: MessageListBulkAction[] = [];
+  const canSnoozeInMailbox =
+    canSetPlacement &&
+    !["drafts", "sent", "spam", "trash"].includes(activeMailbox);
   const allSnoozed =
     actionThreads.length > 0 &&
     actionThreads.every(
@@ -395,12 +398,19 @@ const buildMessageListBulkActions = ({
         thread.anchorMessage.snooze !== undefined &&
         isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status)
     );
-  if (
-    canSetPlacement &&
-    !["drafts", "sent", "spam", "trash"].includes(activeMailbox)
-  ) {
+  const anySnoozed = actionThreads.some(
+    (thread) =>
+      thread.anchorMessage.snooze !== undefined &&
+      isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status)
+  );
+  if (canSnoozeInMailbox) {
     const returnToInbox =
-      activeMailbox === "done" || activeMailbox === "later" || allSnoozed;
+      activeMailbox === "done" ||
+      activeMailbox === "later" ||
+      (allSnoozed &&
+        actionThreads.every(
+          (thread) => !thread.threadLabelIds.includes("INBOX")
+        ));
     actions.push({
       icon: returnToInbox ? InboxIcon : CheckmarkCircle02Icon,
       id: returnToInbox ? "return-threads-to-inbox" : "mark-threads-done",
@@ -454,8 +464,8 @@ const buildMessageListBulkActions = ({
         thread.anchorMessage.snooze?.status === "suspended"
     );
   if (
-    canSetPlacement &&
-    (allReschedulable || (!allSnoozed && allIncomingInbox))
+    canSnoozeInMailbox &&
+    (allReschedulable || (!anySnoozed && allIncomingInbox))
   ) {
     actions.push({
       icon: Clock01Icon,
@@ -465,7 +475,7 @@ const buildMessageListBulkActions = ({
       promoted: true,
     });
   }
-  if (canSetPlacement && allSnoozed) {
+  if (canSnoozeInMailbox && allSnoozed) {
     const keepInDone = actionThreads.every(
       (thread) =>
         thread.anchorMessage.snooze?.status === "active" &&

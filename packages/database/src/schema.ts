@@ -1907,6 +1907,7 @@ export const mailSnoozeOperation = pgTable(
       table.requestId,
       table.threadId
     ),
+    index("mail_snooze_operation_mailbox_idx").on(table.mailboxId),
     index("mail_snooze_operation_snooze_status_idx").on(
       table.snoozeId,
       table.status
