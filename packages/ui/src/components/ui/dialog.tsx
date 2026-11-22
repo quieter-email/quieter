@@ -9,6 +9,7 @@ import { buttonFooterClassName, buttonVariants } from "./button";
 import type { ButtonProps } from "./button";
 import {
   overlayBackdropClassName,
+  overlayCommandPopupClassName,
   overlayDescriptionClassName,
   overlayPopupClassName,
   overlayTitleClassName,
@@ -31,12 +32,20 @@ export const DialogTrigger = ({
 export const DialogContent = ({
   children,
   className,
+  variant = "default",
   ...props
-}: ComponentPropsWithoutRef<typeof DialogPrimitive.Popup>) => (
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Popup> & {
+  variant?: "command" | "default";
+}) => (
   <DialogPortal>
     <DialogPrimitive.Backdrop className={overlayBackdropClassName} />
     <DialogPrimitive.Popup
-      className={cn(overlayPopupClassName, className)}
+      className={cn(
+        variant === "command"
+          ? overlayCommandPopupClassName
+          : overlayPopupClassName,
+        className
+      )}
       {...props}
     >
       {children}
@@ -97,6 +106,17 @@ export const DialogDescription = ({
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Description>) => (
   <DialogPrimitive.Description
     className={cn(overlayDescriptionClassName, className)}
+    {...props}
+  />
+);
+
+// Compact text dismissal for chrome-light dialogs such as the command palette.
+export const DialogClose = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<typeof DialogPrimitive.Close>) => (
+  <DialogPrimitive.Close
+    className={cn(buttonVariants({ size: "xs", variant: "ghost" }), className)}
     {...props}
   />
 );

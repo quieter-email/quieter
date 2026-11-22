@@ -473,6 +473,7 @@ export const MessageListSearchDropdown = ({
               popupSurfaceClassName,
               "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
             )}
+            data-blocking-overlay=""
             data-search-dropdown-content
             onMouseDown={(event) => {
               event.preventDefault();

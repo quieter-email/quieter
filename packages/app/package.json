@@ -303,6 +303,7 @@
     "./lib/return-to": "./src/lib/return-to.ts",
     "./lib/route-apis": "./src/lib/route-apis.ts",
     "./lib/sandbox-mailbox": "./src/lib/sandbox-mailbox.ts",
+    "./lib/use-element-visible": "./src/lib/use-element-visible.ts",
     "./lib/use-ordered-organizations": "./src/lib/use-ordered-organizations.ts",
     "./route-search": "./src/route-search.ts",
     "./runtime": "./src/runtime.ts",

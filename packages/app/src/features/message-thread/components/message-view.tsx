@@ -38,7 +38,6 @@ import { ThreadActionResults } from "@quieter/app/features/message-thread/compon
 import {
   useMessageViewData,
   useMessageViewFocus,
-  useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
 import {
   MessageReminderQuickAction,
@@ -70,6 +69,8 @@ import {
   useRef,
   useState,
 } from "react";
+
+import { useMessageViewHotkeys } from "./use-message-view-hotkeys";
 
 const InlineComposeSurface = lazy(
   async () =>
@@ -284,13 +285,18 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
+    importanceIcon: threadIsImportant ? FlagOffIcon : Flag01Icon,
+    importanceLabel,
     isActionPending,
     mailboxActions,
+    mailboxId,
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
     onToggleImportance: toggleThreadImportance,
     onTogglePlacement: toggleThreadPlacement,
+    placementIcon: returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon,
+    placementLabel,
   });
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {

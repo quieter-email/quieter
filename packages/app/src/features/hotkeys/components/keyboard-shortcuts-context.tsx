@@ -6,7 +6,14 @@ import {
   trackAppShortcutSequenceContinuations,
 } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, use, useEffect, useMemo, useState } from "react";
+import {
+  createContext,
+  use,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { PropsWithChildren } from "react";
 
 type KeyboardShortcutsContextValue = {
@@ -36,17 +43,19 @@ export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
     }
   );
 
+  const openKeyboardShortcuts = useCallback(() => {
+    setIsKeyboardShortcutsOpen(true);
+  }, []);
+
   const value = useMemo<KeyboardShortcutsContextValue>(
     () => ({
       closeKeyboardShortcuts: () => {
         setIsKeyboardShortcutsOpen(false);
       },
       isKeyboardShortcutsOpen,
-      openKeyboardShortcuts: () => {
-        setIsKeyboardShortcutsOpen(true);
-      },
+      openKeyboardShortcuts,
     }),
-    [isKeyboardShortcutsOpen]
+    [isKeyboardShortcutsOpen, openKeyboardShortcuts]
   );
 
   return (
