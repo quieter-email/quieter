@@ -36,21 +36,16 @@
 .home-closing {
   position: relative;
   display: flex;
-  min-height: 100svh;
   align-items: center;
   justify-content: center;
   overflow: hidden;
   padding-inline: 24px;
   background: var(--canvas);
 }
-.home-atmosphere {
-  mask-image: linear-gradient(black 70%, transparent);
-}
-.home-atmosphere-closing {
-  mask-image: linear-gradient(transparent, black 20%, black 70%, transparent);
-}
 .home-hero {
-  padding-block: 120px 96px;
+  --home-hero-fade: min(35svh, 340px);
+  min-height: calc(100svh + var(--home-hero-fade));
+  padding-block: 120px calc(var(--home-hero-fade) + 96px);
 }
 .home-hero-content,
 .home-closing-content {
@@ -99,6 +94,7 @@
   max-width: 384px;
 }
 .home-closing {
+  min-height: calc(100svh + min(50svh, 480px));
   padding-block: 96px;
 }
 .home-closing-content {
@@ -117,7 +113,7 @@
   flex-direction: column;
   gap: 112px;
   margin-inline: auto;
-  padding-block: 104px;
+  padding-block: 40px 32px;
 }
 .home-feature {
   display: flex;
@@ -472,7 +468,7 @@
 }
 @media (min-width: 768px) {
   .home-hero {
-    padding-block: 144px 96px;
+    padding-block: 144px calc(var(--home-hero-fade) + 96px);
   }
   .home-hero-content {
     gap: 24px;
@@ -496,7 +492,7 @@
 @media (min-width: 1024px) {
   .home-features {
     gap: 176px;
-    padding-block: 160px 128px;
+    padding-block: 56px 48px;
   }
   .home-feature {
     gap: 64px;

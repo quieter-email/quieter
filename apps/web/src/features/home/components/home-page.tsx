@@ -14,7 +14,7 @@ import "../home.css";
 
 const Hero = () => (
   <section className="home-hero">
-    <HomeAtmosphericBackground className="home-atmosphere" fadeBottom="black" />
+    <HomeAtmosphericBackground fadeBottom />
     <div className="home-hero-content">
       <h1 className="home-hero-heading">
         <Reveal onMount as="span" className="block">
