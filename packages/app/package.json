@@ -376,7 +376,7 @@
     "better-auth": "catalog:",
     "class-variance-authority": "^0.7.1",
     "css-tree": "^3.2.1",
-    "dompurify": "^3.4.18",
+    "dompurify": "^3.5.0",
     "idb": "^8.0.4",
     "katex": "^0.19.1",
     "motion": "catalog:",
