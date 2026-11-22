@@ -13,6 +13,18 @@ import {
 } from "./stage";
 import type { SecretResources } from "./types";
 
+// postgres.js v4 selects a Workers entry that statically imports the
+// `cloudflare:sockets` runtime built-in. Vite preserves that import in the
+// server bundle, so SST's esbuild pass must leave it external instead of
+// trying to resolve it from node_modules.
+export const cloudflareWorkerBuild: {
+  esbuild: { external: string[] };
+} = {
+  esbuild: {
+    external: ["cloudflare:sockets"],
+  },
+};
+
 export const cloudflareWorkerObservability = {
   enabled: true,
   logs: {

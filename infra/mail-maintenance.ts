@@ -1,7 +1,10 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding } from "./secrets";
 import type { SecretBindings } from "./types";
@@ -18,6 +21,7 @@ export const createMailMaintenanceResources = (
     worker: {
       build: {
         esbuild: {
+          ...cloudflareWorkerBuild.esbuild,
           // SST bundles for Node; browser exports mix AWS SDK stubs with Node runtimeConfig.
           conditions: ["workerd", "worker", "module", "node"],
         },
