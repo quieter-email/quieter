@@ -1,6 +1,17 @@
 "use client";
 
 import {
+  ArrowLeft01Icon,
+  ArrowRightDoubleIcon,
+  Delete01Icon,
+  Delete02Icon,
+  Mail01Icon,
+  MailOpen02Icon,
+  MailReply02Icon,
+  MailReplyAll02Icon,
+} from "@hugeicons/core-free-icons";
+import type { IconSvgElement } from "@hugeicons/react";
+import {
   buildComposeDraftFromMessageAction,
   hasDistinctReplyAllRecipients,
 } from "@quieter/app/features/compose/domain/compose-actions";
@@ -39,6 +50,7 @@ export const useMessageViewHotkeys = ({
   currentUserEmail,
   hotkeyLinkedDraftMessage,
   hotkeyMessage,
+  importanceIcon,
   importanceLabel,
   isActionPending,
   mailboxActions,
@@ -48,6 +60,7 @@ export const useMessageViewHotkeys = ({
   onComposeDraftRequested,
   onToggleImportance,
   onTogglePlacement,
+  placementIcon,
   placementLabel,
 }: {
   activeMailbox: MailboxCategory;
@@ -55,6 +68,7 @@ export const useMessageViewHotkeys = ({
   currentUserEmail?: string | null;
   hotkeyLinkedDraftMessage: MessageListItem | undefined;
   hotkeyMessage: MessageListItem;
+  importanceIcon?: IconSvgElement;
   importanceLabel?: string;
   isActionPending: boolean;
   mailboxActions: MailboxActions;
@@ -64,6 +78,7 @@ export const useMessageViewHotkeys = ({
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
   onToggleImportance?: () => void;
   onTogglePlacement?: () => void;
+  placementIcon?: IconSvgElement;
   placementLabel?: string;
 }) => {
   const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
@@ -98,6 +113,7 @@ export const useMessageViewHotkeys = ({
   const actions: {
     enabled: boolean;
     execute: () => void | Promise<void>;
+    icon?: IconSvgElement;
     keywords?: string;
     label?: string;
     reason: string;
@@ -109,6 +125,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         requestComposeAction("reply");
       },
+      icon: MailReply02Icon,
       reason: composeUnavailableReason,
       shortcutId: "detail-reply",
     },
@@ -119,6 +136,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         requestComposeAction("reply-all");
       },
+      icon: MailReplyAll02Icon,
       reason: canCompose
         ? "There are no additional recipients to reply to."
         : composeUnavailableReason,
@@ -129,6 +147,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         requestComposeAction("forward");
       },
+      icon: ArrowRightDoubleIcon,
       reason: composeUnavailableReason,
       shortcutId: "detail-forward",
     },
@@ -137,6 +156,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         onTogglePlacement?.();
       },
+      icon: placementIcon,
       keywords: "done archive inbox",
       label: placementLabel,
       reason: mailActionReason,
@@ -147,6 +167,7 @@ export const useMessageViewHotkeys = ({
       execute: () => {
         onToggleImportance?.();
       },
+      icon: importanceIcon,
       keywords: "important star flag",
       label: importanceLabel,
       reason: mailActionReason,
@@ -164,6 +185,7 @@ export const useMessageViewHotkeys = ({
           onBackToList?.();
         }, "Conversation moved to Trash.");
       },
+      icon: Delete01Icon,
       reason: mailActionReason,
       shortcutId: "detail-trash",
       tone: "destructive",
@@ -179,6 +201,7 @@ export const useMessageViewHotkeys = ({
           onBackToList?.();
         }, "Conversation marked as Spam.");
       },
+      icon: Delete02Icon,
       reason: mailActionReason,
       shortcutId: "detail-spam",
       tone: "destructive",
@@ -190,6 +213,7 @@ export const useMessageViewHotkeys = ({
           await mailboxActions.markThreadAsRead(hotkeyMessage.threadId);
         }, "Conversation marked as Read.");
       },
+      icon: MailOpen02Icon,
       reason: mailActionReason,
       shortcutId: "detail-mark-read",
     },
@@ -200,6 +224,7 @@ export const useMessageViewHotkeys = ({
           await mailboxActions.markThreadAsUnread(hotkeyMessage.threadId);
         }, "Conversation marked as Unread.");
       },
+      icon: Mail01Icon,
       reason: mailActionReason,
       shortcutId: "detail-mark-unread",
     },
@@ -211,8 +236,8 @@ export const useMessageViewHotkeys = ({
     }
     return [
       {
-        description: normalizedSubject,
         group: "Conversation actions",
+        icon: action.icon,
         id: shortcut.id,
         keywords: action.keywords,
         label: action.label ?? shortcut.label,
@@ -226,6 +251,7 @@ export const useMessageViewHotkeys = ({
   });
   commands.push({
     group: "Navigation",
+    icon: ArrowLeft01Icon,
     id: "detail-back",
     label: "Back to list",
     shortcutId: "detail-back",
@@ -243,7 +269,8 @@ export const useMessageViewHotkeys = ({
       activeMailbox,
       hotkeyMessage.threadId,
       hotkeyMessage.id,
-    ])
+    ]),
+    normalizedSubject
   );
   useHotkeys(
     KEYBOARD_SHORTCUTS.flatMap((shortcut) => {

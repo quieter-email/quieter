@@ -1,18 +1,23 @@
 "use client";
 
+import {
+  Cancel01Icon,
+  Mail01Icon,
+  Search01Icon,
+} from "@hugeicons/core-free-icons";
 import { APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { toastError } from "@quieter/app/lib/error-toast";
+import { Button } from "@quieter/ui/button";
 import { CommandMenu } from "@quieter/ui/command-menu";
 import {
   Dialog,
-  DialogBody,
-  DialogCloseButton,
+  DialogClose,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Kbd } from "@quieter/ui/kbd";
 import { toast } from "@quieter/ui/toast";
@@ -108,6 +113,7 @@ const CommandPaletteBody = ({
   const [query, setQuery] = useState("");
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const menuId = useId();
+  const contextLabel = registry.getContextLabel();
   const normalizedQuery = query.trim().toLocaleLowerCase();
   const searchTokens = normalizedQuery
     .split(/\s+/u)
@@ -207,52 +213,84 @@ const CommandPaletteBody = ({
 
   return (
     <>
-      <DialogBody>
-        <Input
-          aria-activedescendant={
-            filtered.length > 0 ? `${menuId}-${highlightedIndex}` : undefined
-          }
-          aria-autocomplete="list"
-          aria-controls={menuId}
-          aria-expanded={open}
-          aria-label="Search commands"
-          onChange={(event) => {
-            setQuery(event.target.value);
-            setActiveKey(null);
-          }}
-          onKeyDown={(event) => {
-            if (event.nativeEvent.isComposing) {
-              return;
+      <div className="border-b border-fg/10">
+        {contextLabel === undefined ? null : (
+          <div className="flex min-w-0 items-center gap-1.5 px-4 pt-3 text-caption text-muted-fg">
+            <Icon icon={Mail01Icon} size={14} />
+            <span className="truncate">{contextLabel}</span>
+          </div>
+        )}
+        <div className="flex items-center gap-2.5 pr-3 pl-4">
+          <Icon icon={Search01Icon} tone="muted" />
+          <Input
+            aria-activedescendant={
+              filtered.length > 0 ? `${menuId}-${highlightedIndex}` : undefined
             }
-            if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-              event.preventDefault();
-              const count = filtered.length;
-              if (count > 0) {
-                const next =
-                  (highlightedIndex +
-                    (event.key === "ArrowDown" ? 1 : -1) +
-                    count) %
-                  count;
-                const nextEntry = filtered[next];
-                if (nextEntry !== undefined) {
-                  setActiveKey(nextEntry.key);
-                }
-                document
-                  .querySelector(`[id=${JSON.stringify(`${menuId}-${next}`)}]`)
-                  ?.scrollIntoView?.({ block: "nearest" });
+            aria-autocomplete="list"
+            aria-controls={menuId}
+            aria-expanded={open}
+            aria-label="Search commands"
+            chrome="command"
+            className="flex-1"
+            onChange={(event) => {
+              setQuery(event.target.value);
+              setActiveKey(null);
+            }}
+            onKeyDown={(event) => {
+              if (event.nativeEvent.isComposing) {
+                return;
               }
-            } else if (event.key === "Enter") {
-              event.preventDefault();
-              selectCommand(highlightedIndex);
-            }
-          }}
-          placeholder="Search commands..."
-          ref={inputRef}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Input renders an input with an external command listbox.
-          role="combobox"
-          value={query}
-        />
-      </DialogBody>
+              if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+                event.preventDefault();
+                const count = filtered.length;
+                if (count > 0) {
+                  const next =
+                    (highlightedIndex +
+                      (event.key === "ArrowDown" ? 1 : -1) +
+                      count) %
+                    count;
+                  const nextEntry = filtered[next];
+                  if (nextEntry !== undefined) {
+                    setActiveKey(nextEntry.key);
+                  }
+                  document
+                    .querySelector(
+                      `[id=${JSON.stringify(`${menuId}-${next}`)}]`
+                    )
+                    ?.scrollIntoView?.({ block: "nearest" });
+                }
+              } else if (event.key === "Enter") {
+                event.preventDefault();
+                selectCommand(highlightedIndex);
+              }
+            }}
+            placeholder="Type a command or search..."
+            ref={inputRef}
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Input renders an input with an external command listbox.
+            role="combobox"
+            value={query}
+          />
+          {query.length > 0 ? (
+            <IconButtonTooltip label="Clear search">
+              <Button
+                aria-label="Clear search"
+                onClick={() => {
+                  setQuery("");
+                  setActiveKey(null);
+                  inputRef.current?.focus();
+                }}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <Icon icon={Cancel01Icon} />
+              </Button>
+            </IconButtonTooltip>
+          ) : null}
+          <DialogClose aria-label="Close commands" className="sm:hidden">
+            Close
+          </DialogClose>
+        </div>
+      </div>
       <CommandMenu
         activeIndex={highlightedIndex}
         chrome="dialog"
@@ -266,12 +304,28 @@ const CommandPaletteBody = ({
             ...command,
             disabledReason:
               command.state === "unavailable" ? command.reason : undefined,
+            icon:
+              command.icon === undefined ? undefined : (
+                <Icon icon={command.icon} />
+              ),
             id: `${sourceId}-${command.id}`,
             shortcut:
               shortcut === undefined ? undefined : (
-                <Kbd aria-hidden variant="hint">
-                  {getShortcutDisplay(shortcut, platform)[0]?.join(" → ")}
-                </Kbd>
+                <span aria-hidden className="flex shrink-0 items-center gap-1">
+                  {getShortcutDisplay(shortcut, platform)[0]?.map(
+                    (key, keyIndex, steps) => (
+                      <span
+                        className="flex items-center gap-1"
+                        key={steps.slice(0, keyIndex + 1).join(" ")}
+                      >
+                        {keyIndex > 0 ? (
+                          <span className="text-micro text-muted-fg">→</span>
+                        ) : null}
+                        <Kbd size="sm">{key}</Kbd>
+                      </span>
+                    )
+                  )}
+                </span>
               ),
           };
         })}
@@ -413,13 +467,12 @@ export const CommandPalette = ({
             : false;
         }}
         initialFocus={inputRef}
+        variant="command"
       >
-        <DialogHeader>
-          <DialogTitle>Commands</DialogTitle>
-          <DialogDescription>
-            Find an action for your current view.
-          </DialogDescription>
-        </DialogHeader>
+        <DialogTitle className="sr-only">Commands</DialogTitle>
+        <DialogDescription className="sr-only">
+          Find an action for your current view.
+        </DialogDescription>
         <CommandPaletteBody
           inputRef={inputRef}
           key={sessionKey}
@@ -432,9 +485,6 @@ export const CommandPalette = ({
           open={open}
           registry={registry}
         />
-        <DialogFooter>
-          <DialogCloseButton variant="default">Close</DialogCloseButton>
-        </DialogFooter>
       </DialogContent>
     </Dialog>
   );

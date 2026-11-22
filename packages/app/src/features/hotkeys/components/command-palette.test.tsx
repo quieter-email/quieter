@@ -961,6 +961,9 @@ describe("scoped command execution", () => {
       ].filter((item) => item.textContent?.includes("Search mail"));
       expect(searchOptions).toHaveLength(1);
       expect(searchOptions[0]?.getAttribute("aria-disabled")).toBeNull();
+      const dialogText =
+        document.querySelector("[role='dialog']")?.textContent ?? "";
+      expect(dialogText.split("Quarterly plan")).toHaveLength(2);
 
       const doneOption = [
         ...document.querySelectorAll<HTMLButtonElement>("[role='option']"),

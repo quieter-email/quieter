@@ -285,6 +285,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
+    importanceIcon: threadIsImportant ? FlagOffIcon : Flag01Icon,
     importanceLabel,
     isActionPending,
     mailboxActions,
@@ -294,6 +295,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     onComposeDraftRequested: openInlineCompose,
     onToggleImportance: toggleThreadImportance,
     onTogglePlacement: toggleThreadPlacement,
+    placementIcon: returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon,
     placementLabel,
   });
   const openAssistantCompose = useEffectEvent(

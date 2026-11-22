@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { Kbd } from "./kbd";
 import {
   menuEmptyClassName,
   menuGroupLabelClassName,
@@ -55,6 +56,9 @@ export const CommandMenu = ({
     }
   }
 
+  const isDialog = chrome === "dialog";
+  const selectionLabel = selectionHint === "insert" ? "Insert" : "Select";
+
   return (
     <div
       className={cn(
@@ -69,16 +73,20 @@ export const CommandMenu = ({
     >
       <div
         aria-label={label}
-        className={cn("max-h-64 overflow-y-auto", {
-          "p-1": chrome === "popup",
-          "px-1.5 py-1": chrome === "dialog",
+        className={cn("overflow-y-auto", {
+          "max-h-64 p-1": chrome === "popup",
+          "max-h-[min(24rem,56dvh)] overscroll-contain p-1.5": isDialog,
         })}
         id={id}
         // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Suggestions keep editor focus and support rich options.
         role="listbox"
       >
         {items.length === 0 ? (
-          <p className={menuEmptyClassName}>
+          <p
+            className={cn(menuEmptyClassName, {
+              "py-10 text-center": isDialog,
+            })}
+          >
             {status ?? "No matching commands or snippets."}
           </p>
         ) : (
@@ -92,7 +100,14 @@ export const CommandMenu = ({
                 role="group"
               >
                 <div
-                  className={menuGroupLabelClassName}
+                  className={
+                    isDialog
+                      ? cn("px-2.5 pb-1 text-micro font-medium text-muted-fg", {
+                          "pt-1": sectionIndex === 0,
+                          "pt-2.5": sectionIndex > 0,
+                        })
+                      : menuGroupLabelClassName
+                  }
                   id={groupLabelId}
                   role="presentation"
                 >
@@ -104,9 +119,10 @@ export const CommandMenu = ({
                       item.disabledReason === undefined ? undefined : true
                     }
                     aria-selected={index === activeIndex}
-                    className={cn(menuItemClassName, "w-full", {
+                    className={cn(menuItemClassName, "group/command w-full", {
                       "active:scale-100 data-disabled:pointer-events-auto":
                         item.disabledReason !== undefined,
+                      "min-h-9 gap-2.5 rounded-lg px-2.5 py-2": isDialog,
                       "text-destructive":
                         item.tone === "destructive" &&
                         item.disabledReason === undefined,
@@ -134,7 +150,16 @@ export const CommandMenu = ({
                     type="button"
                   >
                     {item.icon === undefined ? null : (
-                      <span className="shrink-0 [&_svg]:size-4">
+                      <span
+                        className={cn("flex shrink-0 [&_svg]:size-4", {
+                          "text-muted-fg group-data-highlighted/command:text-fg":
+                            isDialog &&
+                            !(
+                              item.tone === "destructive" &&
+                              item.disabledReason === undefined
+                            ),
+                        })}
+                      >
                         {item.icon}
                       </span>
                     )}
@@ -158,17 +183,43 @@ export const CommandMenu = ({
           })
         )}
       </div>
-      <div
-        className={cn("border-t border-fg/10 py-2 text-micro text-muted-fg", {
-          "px-3": chrome === "popup",
-          "px-4": chrome === "dialog",
-        })}
-      >
-        {status && items.length > 0 ? (
-          <output className="block">{status}</output>
-        ) : null}
-        <p>↑↓ to browse, Enter to {selectionHint}, Esc to dismiss</p>
-      </div>
+      {isDialog ? (
+        <div
+          className={cn(
+            "flex items-center justify-between gap-4 border-t border-fg/10 bg-section/60 px-4 py-2.5 text-micro text-muted-fg",
+            { "max-sm:hidden": !(status && items.length > 0) }
+          )}
+        >
+          {status && items.length > 0 ? (
+            <output className="min-w-0 truncate">{status}</output>
+          ) : (
+            <span className="flex items-center gap-4">
+              <span className="flex items-center gap-1.5">
+                <span className="flex items-center gap-0.5">
+                  <Kbd size="sm">↑</Kbd>
+                  <Kbd size="sm">↓</Kbd>
+                </span>
+                Navigate
+              </span>
+              <span className="flex items-center gap-1.5">
+                <Kbd size="sm">↵</Kbd>
+                {selectionLabel}
+              </span>
+            </span>
+          )}
+          <span className="flex shrink-0 items-center gap-1.5 max-sm:hidden">
+            <Kbd size="sm">Esc</Kbd>
+            Close
+          </span>
+        </div>
+      ) : (
+        <div className="border-t border-fg/10 px-3 py-2 text-micro text-muted-fg">
+          {status && items.length > 0 ? (
+            <output className="block">{status}</output>
+          ) : null}
+          <p>↑↓ to browse, Enter to {selectionHint}, Esc to dismiss</p>
+        </div>
+      )}
     </div>
   );
 };

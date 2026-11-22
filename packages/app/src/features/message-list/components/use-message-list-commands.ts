@@ -1,5 +1,15 @@
 "use client";
 
+import {
+  ArrowLeft01Icon,
+  ArrowRight01Icon,
+  Cancel01Icon,
+  CheckListIcon,
+  CheckmarkSquare02Icon,
+  MailOpen01Icon,
+  Search01Icon,
+  Tag01Icon,
+} from "@hugeicons/core-free-icons";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 
 import { useRegisterCommands } from "../../hotkeys/components/command-palette-context";
@@ -82,9 +92,11 @@ export const useMessageListCommands = ({
     searchReason = "Clear selection to search mail.";
   }
 
+  let contextLabel: string | undefined;
   const commands: AppCommand[] = [
     {
       group: "Mail",
+      icon: Search01Icon,
       id: "focus-search",
       label: "Search mail",
       shortcutId: "focus-search",
@@ -98,6 +110,7 @@ export const useMessageListCommands = ({
     commands.push(
       {
         group: "Navigation",
+        icon: ArrowRight01Icon,
         id: "detail-next-conversation",
         label: "Next conversation",
         shortcutId: "detail-next-conversation",
@@ -110,6 +123,7 @@ export const useMessageListCommands = ({
       },
       {
         group: "Navigation",
+        icon: ArrowLeft01Icon,
         id: "detail-previous-conversation",
         label: "Previous conversation",
         shortcutId: "detail-previous-conversation",
@@ -125,6 +139,7 @@ export const useMessageListCommands = ({
       commands.push({
         execute: onClearSelection,
         group: "Conversations",
+        icon: Cancel01Icon,
         id: "list-clear-selection",
         label: "Clear selection",
         shortcutId: "list-clear-selection",
@@ -132,11 +147,10 @@ export const useMessageListCommands = ({
       });
     }
   } else {
-    let targetDescription = "No conversation selected";
     if (selectedCount > 0) {
-      targetDescription = `${selectedCount} selected ${selectedCount === 1 ? "conversation" : "conversations"}`;
+      contextLabel = `${selectedCount} selected ${selectedCount === 1 ? "conversation" : "conversations"}`;
     } else if (hasFocusedThread) {
-      targetDescription = `Focused conversation, ${normalizedFocusedSubject}`;
+      contextLabel = normalizedFocusedSubject;
     }
     let actionReason: string | null = null;
     if (isPending) {
@@ -171,8 +185,8 @@ export const useMessageListCommands = ({
     }
     commands.push(
       ...actions.map((action): AppCommand => ({
-        description: targetDescription,
         group: "Conversation actions",
+        icon: action.icon,
         id: action.id,
         keywords: actionKeywords.get(action.id),
         label: action.label,
@@ -183,8 +197,8 @@ export const useMessageListCommands = ({
           : { reason: actionReason, state: "unavailable" }),
       })),
       {
-        description: targetDescription,
         group: "Conversations",
+        icon: MailOpen01Icon,
         id: "list-open-conversation",
         label: "Open conversation",
         shortcutId: "list-open-conversation",
@@ -199,10 +213,8 @@ export const useMessageListCommands = ({
             }),
       },
       {
-        description: hasFocusedThread
-          ? `Focused conversation, ${normalizedFocusedSubject}`
-          : "No conversation focused",
         group: "Conversations",
+        icon: CheckmarkSquare02Icon,
         id: "list-toggle-selection",
         label: "Toggle selection",
         shortcutId: "list-toggle-selection",
@@ -212,6 +224,7 @@ export const useMessageListCommands = ({
       },
       {
         group: "Conversations",
+        icon: CheckListIcon,
         id: "list-select-all",
         label: "Select all loaded conversations",
         shortcutId: "list-select-all",
@@ -221,6 +234,7 @@ export const useMessageListCommands = ({
       },
       {
         group: "Conversations",
+        icon: Cancel01Icon,
         id: "list-clear-selection",
         label: "Clear selection",
         shortcutId: "list-clear-selection",
@@ -229,8 +243,8 @@ export const useMessageListCommands = ({
           : { reason: "No conversations are selected.", state: "unavailable" }),
       },
       {
-        description: targetDescription,
         group: "Conversation actions",
+        icon: Tag01Icon,
         id: "list-labels",
         label: "Modify labels",
         shortcutId: "list-labels",
@@ -240,5 +254,5 @@ export const useMessageListCommands = ({
       }
     );
   }
-  useRegisterCommands(commands, scopeKey);
+  useRegisterCommands(commands, scopeKey, contextLabel);
 };

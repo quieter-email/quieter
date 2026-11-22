@@ -1,12 +1,14 @@
+import type { IconSvgElement } from "@hugeicons/react";
 import type { CommandMenuItem } from "@quieter/ui/command-menu";
 
 import type { KeyboardShortcutId } from "./keyboard-shortcuts";
 
 export type AppCommand = Omit<
   CommandMenuItem,
-  "disabledReason" | "shortcut"
+  "disabledReason" | "icon" | "shortcut"
 > & {
   fallback?: true;
+  icon?: IconSvgElement;
   keywords?: string;
   shortcutId?: KeyboardShortcutId;
 } & (

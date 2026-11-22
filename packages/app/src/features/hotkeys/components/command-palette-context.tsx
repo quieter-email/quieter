@@ -1,5 +1,6 @@
 "use client";
 
+import { KeyboardIcon } from "@hugeicons/core-free-icons";
 import { useCreateStore } from "@tanstack/react-store";
 import type { Store } from "@tanstack/react-store";
 import { createContext, use, useId, useLayoutEffect, useMemo } from "react";
@@ -11,17 +12,27 @@ import { CommandPalette } from "./command-palette";
 export type AppCommandRegistry = {
   deleteSource: (sourceId: string) => void;
   findCommand: (sourceId: string, commandId: string) => AppCommand | undefined;
+  getContextLabel: () => string | undefined;
   getEntries: () => readonly (readonly [string, readonly AppCommand[]])[];
   setOpen: (open: boolean) => void;
-  setSource: (sourceId: string, commands: readonly AppCommand[]) => void;
+  setSource: (
+    sourceId: string,
+    commands: readonly AppCommand[],
+    contextLabel?: string
+  ) => void;
   versionStore: Store<number>;
 };
 
 const CommandPaletteContext = createContext<AppCommandRegistry | null>(null);
 
+/**
+ * `contextLabel` names the conversation or selection the commands act on. The
+ * palette shows it once above the search field instead of on every row.
+ */
 export const useRegisterCommands = (
   commands: readonly AppCommand[],
-  scopeKey: string
+  scopeKey: string,
+  contextLabel?: string
 ) => {
   const registry = use(CommandPaletteContext);
   const registrationId = useId();
@@ -33,8 +44,8 @@ export const useRegisterCommands = (
   }
 
   useLayoutEffect(() => {
-    registry.setSource(sourceId, commands);
-  }, [commands, registry, sourceId]);
+    registry.setSource(sourceId, commands, contextLabel);
+  }, [commands, contextLabel, registry, sourceId]);
 
   useLayoutEffect(
     () => () => {
@@ -50,6 +61,7 @@ const KeyboardHelpCommand = ({ onShow }: { onShow: () => void }) => {
       {
         execute: onShow,
         group: "Global",
+        icon: KeyboardIcon,
         id: "show-keyboard-shortcuts",
         keywords: "help shortcuts keyboard",
         label: "Show keyboard shortcuts",
@@ -69,7 +81,10 @@ export const CommandPaletteProvider = ({
 }: PropsWithChildren<{ onShowKeyboardShortcuts: () => void }>) => {
   const versionStore = useCreateStore(0);
   const stateStore = useCreateStore({
-    entries: new Map<string, readonly AppCommand[]>(),
+    entries: new Map<
+      string,
+      { commands: readonly AppCommand[]; contextLabel: string | undefined }
+    >(),
     open: false,
   });
   const registry = useMemo<AppCommandRegistry>(() => {
@@ -87,17 +102,24 @@ export const CommandPaletteProvider = ({
         stateStore
           .get()
           .entries.get(sourceId)
-          ?.find((command) => command.id === commandId),
-      getEntries: () => [...stateStore.get().entries],
+          ?.commands.find((command) => command.id === commandId),
+      getContextLabel: () =>
+        [...stateStore.get().entries.values()]
+          .map((entry) => entry.contextLabel)
+          .findLast((label) => label !== undefined && label.length > 0),
+      getEntries: () =>
+        [...stateStore.get().entries].map(
+          ([sourceId, entry]) => [sourceId, entry.commands] as const
+        ),
       setOpen: (nextOpen) => {
         stateStore.get().open = nextOpen;
         if (nextOpen) {
           notify();
         }
       },
-      setSource: (sourceId, commands) => {
+      setSource: (sourceId, commands, contextLabel) => {
         const state = stateStore.get();
-        state.entries.set(sourceId, commands);
+        state.entries.set(sourceId, { commands, contextLabel });
         if (state.open) {
           notify();
         }

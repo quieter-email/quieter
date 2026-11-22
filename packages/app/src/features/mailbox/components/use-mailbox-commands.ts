@@ -1,5 +1,22 @@
 "use client";
 
+import {
+  Calendar03Icon,
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  Delete01Icon,
+  Delete02Icon,
+  Edit01Icon,
+  Flag01Icon,
+  InboxIcon,
+  Mail01Icon,
+  MailSend02Icon,
+  MailsIcon,
+  NoteEditIcon,
+  Search01Icon,
+  UserSwitchIcon,
+} from "@hugeicons/core-free-icons";
+import type { IconSvgElement } from "@hugeicons/react";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 
@@ -10,16 +27,17 @@ import type { KeyboardShortcutId } from "../../hotkeys/domain/keyboard-shortcuts
 import type { useMailboxSelection } from "./mailbox-workspace/use-mailbox-selection";
 
 const mailboxDestinations = [
-  { mailbox: "important", shortcutId: "go-important" },
-  { mailbox: "inbox", shortcutId: "go-inbox" },
-  { mailbox: "done", shortcutId: "go-done" },
-  { mailbox: "unread", shortcutId: "go-unread" },
-  { mailbox: "sent", shortcutId: "go-sent" },
-  { mailbox: "scheduled", shortcutId: "go-scheduled" },
-  { mailbox: "drafts", shortcutId: "go-drafts" },
-  { mailbox: "trash", shortcutId: "go-trash" },
-  { mailbox: "spam", shortcutId: "go-spam" },
+  { icon: Flag01Icon, mailbox: "important", shortcutId: "go-important" },
+  { icon: InboxIcon, mailbox: "inbox", shortcutId: "go-inbox" },
+  { icon: CheckmarkCircle02Icon, mailbox: "done", shortcutId: "go-done" },
+  { icon: Mail01Icon, mailbox: "unread", shortcutId: "go-unread" },
+  { icon: MailSend02Icon, mailbox: "sent", shortcutId: "go-sent" },
+  { icon: Clock01Icon, mailbox: "scheduled", shortcutId: "go-scheduled" },
+  { icon: Edit01Icon, mailbox: "drafts", shortcutId: "go-drafts" },
+  { icon: Delete01Icon, mailbox: "trash", shortcutId: "go-trash" },
+  { icon: Delete02Icon, mailbox: "spam", shortcutId: "go-spam" },
 ] as const satisfies readonly {
+  icon: IconSvgElement;
   mailbox: MailboxCategory | "scheduled";
   shortcutId: KeyboardShortcutId;
 }[];
@@ -145,6 +163,7 @@ export const useMailboxCommands = ({
     {
       fallback: true,
       group: "Mail",
+      icon: Search01Icon,
       id: "focus-search",
       label: "Search mail",
       reason: mailboxReason ?? "Open a conversation list to search mail.",
@@ -153,6 +172,7 @@ export const useMailboxCommands = ({
     },
     {
       group: "Mail",
+      icon: Edit01Icon,
       id: "compose",
       label: "Compose",
       shortcutId: "compose",
@@ -167,7 +187,7 @@ export const useMailboxCommands = ({
       if (!destination) {
         return [];
       }
-      const { mailbox, shortcutId } = destination;
+      const { icon, mailbox, shortcutId } = destination;
       const isViewingDestination =
         mailbox === "scheduled"
           ? isScheduledMailbox && view === "inbox"
@@ -190,6 +210,7 @@ export const useMailboxCommands = ({
       return [
         {
           group: "Views",
+          icon,
           id: shortcutId,
           label: shortcut.label,
           shortcutId,
@@ -206,6 +227,7 @@ export const useMailboxCommands = ({
     }),
     {
       group: "Views",
+      icon: MailsIcon,
       id: "go-all-inboxes",
       label: "Go to All inboxes",
       ...(allInboxesReason === null
@@ -222,6 +244,7 @@ export const useMailboxCommands = ({
     },
     {
       group: "Mail",
+      icon: NoteEditIcon,
       id: "manage-snippets",
       label: "Manage snippets",
       ...(snippetsReason === null
@@ -230,6 +253,7 @@ export const useMailboxCommands = ({
     },
     {
       group: "Navigation",
+      icon: InboxIcon,
       id: "go-mail",
       label: "Go to Mail",
       ...(openMailReason === null
@@ -238,6 +262,7 @@ export const useMailboxCommands = ({
     },
     {
       group: "Navigation",
+      icon: Calendar03Icon,
       id: "go-calendar",
       label: "Go to Calendar",
       ...(openCalendarReason === null
@@ -256,6 +281,7 @@ export const useMailboxCommands = ({
       return {
         description: mailbox.emailAddress,
         group: "Accounts",
+        icon: UserSwitchIcon,
         id: `switch-mailbox-${mailbox.id}`,
         keywords: mailbox.emailAddress,
         label: `Switch to ${mailbox.displayName || mailbox.emailAddress}`,
