@@ -220,6 +220,7 @@ export const ScheduledMessagesWorkspace = ({
                 const canCancel =
                   (message.status === "scheduled" &&
                     (!undoHeld || undoAvailable)) ||
+                  message.status === "preparing" ||
                   message.status === "failed" ||
                   message.status === "cancelled";
                 let statusLabel = scheduledStatusLabels[message.status];

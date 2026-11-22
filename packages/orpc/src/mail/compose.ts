@@ -280,17 +280,6 @@ export const composeMailOperations = {
       }
     );
   },
-  sendDraft: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["sendDraft"];
-  }) =>
-    await composeMailOperations.sendMessage({
-      context,
-      input: { mailboxId: input.mailboxId, message: input.draft },
-    }),
   sendMessage: async ({
     context,
     input,

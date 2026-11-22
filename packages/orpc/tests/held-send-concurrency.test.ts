@@ -25,7 +25,10 @@ import {
   getScheduledSendByOperation,
   undoHeldSend,
 } from "../src/scheduled-send/service";
-import { createHeldSendDatabase } from "./held-send-database";
+import {
+  canRunHeldSendDatabase,
+  createHeldSendDatabase,
+} from "./held-send-database";
 
 const fixture = vi.hoisted(() => ({
   access: vi.fn<typeof assertAccessibleMailbox>(),
@@ -89,7 +92,7 @@ let message: Parameters<typeof createHeldSend>[0]["message"];
 const scope = { mailboxId: "mailbox", userId: "owner" };
 const objects = new Map<string, Uint8Array>();
 
-describe("held-send concurrency", () => {
+describe.skipIf(!canRunHeldSendDatabase())("held-send concurrency", () => {
   beforeAll(async () => {
     database = await createHeldSendDatabase();
     fixture.database.mockReturnValue(database.database);
@@ -375,6 +378,46 @@ describe("held-send concurrency", () => {
             sendOperationId: message.sendOperationId,
           })
         ).resolves.toBeNull();
+        expect(fixture.send).not.toHaveBeenCalled();
+      });
+
+      test("undo cancels a preparing send while preparation holds an active lease", async () => {
+        const reading = Promise.withResolvers<"paused">();
+        const resume = Promise.withResolvers<boolean>();
+        const read = fixture.readObject.getMockImplementation();
+        if (read === undefined || message.sendOperationId === undefined) {
+          throw new Error(
+            "The test storage and operation must be initialized."
+          );
+        }
+        fixture.readObject.mockImplementationOnce(async (...input) => {
+          reading.resolve("paused");
+          await resume.promise;
+          return await read(...input);
+        });
+        const creation = createHeldSend({ ...scope, message });
+        const settled = Promise.allSettled([creation]);
+        try {
+          await expect(Promise.race([reading.promise, creation])).resolves.toBe(
+            "paused"
+          );
+          await expect(
+            undoHeldSend({ ...scope, sendOperationId: message.sendOperationId })
+          ).resolves.toMatchObject({
+            draftId: "restored-draft",
+            status: "canceled",
+          });
+        } finally {
+          resume.resolve(true);
+          await settled;
+        }
+        await expect(
+          getHeldSend({ ...scope, sendOperationId: message.sendOperationId })
+        ).resolves.toMatchObject({
+          canUndo: false,
+          draftId: "restored-draft",
+          status: "canceled",
+        });
         expect(fixture.send).not.toHaveBeenCalled();
       });
 

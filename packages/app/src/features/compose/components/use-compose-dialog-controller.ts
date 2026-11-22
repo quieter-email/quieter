@@ -257,6 +257,7 @@ export const useComposeDialogController = ({
   useLayoutEffect(() => {
     currentMailboxIdRef.current = mailboxId;
   }, [mailboxId]);
+  const heldReceiptRef = useRef<string | null>(null);
   const heldTerminalRef = useRef<{
     sendOperationId: string;
     completion: Exclude<HeldCompletion, { kind: "undo" }>;
@@ -377,11 +378,39 @@ export const useComposeDialogController = ({
     });
   };
 
-  const closeDialog = (afterClose?: () => void, preserveRecovery = false) => {
-    if (preserveRecovery) {
+  const isServerOwnedHold = () => {
+    const draft = activeDraftRef.current;
+    const currentMailboxId = currentMailboxIdRef.current;
+    if (
+      !currentMailboxId ||
+      !draft.sendOperationId ||
+      draft.holdAttempt !== true ||
+      draft.sendUncertain !== true ||
+      draft.heldDraftHasNewerEdits === true
+    ) {
+      return false;
+    }
+    return (
+      heldReceiptRef.current === draft.sendOperationId ||
+      !!queryClient.getQueryData(
+        orpc.mail.getHeldSend.queryOptions({
+          input: {
+            mailboxId: currentMailboxId,
+            sendOperationId: draft.sendOperationId,
+          },
+        }).queryKey
+      )
+    );
+  };
+
+  const closeDialog = (
+    afterClose?: () => void,
+    recoveryMode: "complete" | "completed" | "preserve" = "complete"
+  ) => {
+    if (recoveryMode === "preserve") {
       // oxlint-disable-next-line no-use-before-define -- This handler runs after recovery initializes.
       recovery.checkpoint();
-    } else {
+    } else if (recoveryMode === "complete") {
       // oxlint-disable-next-line no-use-before-define -- This handler runs after recovery initializes.
       void recovery.complete(activeDraftRef.current);
     }
@@ -496,7 +525,7 @@ export const useComposeDialogController = ({
     } else if (scheduled.status === "sending") {
       toast("This message is sending.");
     } else if (scheduled.status === "cancelled") {
-      toast.success("This scheduled send was cancelled. Check Drafts.");
+      toast.success("This scheduled send was canceled. Check Drafts.");
     } else {
       toast.success(
         `Scheduled for ${new Intl.DateTimeFormat(undefined, {
@@ -742,6 +771,19 @@ export const useComposeDialogController = ({
       }
     }
   });
+  const releaseServerOwnedHold = useEffectEvent(() => {
+    if (!draftClosedRef.current && isServerOwnedHold()) {
+      void recovery.complete(activeDraftRef.current);
+    }
+  });
+  // Layout cleanup runs before the recovery hook's passive flush, so a hold the
+  // server already owns is not checkpointed again on the way out.
+  useLayoutEffect(
+    () => () => {
+      releaseServerOwnedHold();
+    },
+    []
+  );
   useEffect(() => {
     mountedRef.current = true;
     return () => {
@@ -1223,7 +1265,9 @@ export const useComposeDialogController = ({
           activeDraftRef.current.assistantUnsaved === true
         ) {
           navigationCleanupRef.current = false;
-          recovery.checkpoint();
+          if (!isServerOwnedHold()) {
+            recovery.checkpoint();
+          }
           return false;
         }
         const persisted = await persistCurrentDraft();
@@ -1290,7 +1334,7 @@ export const useComposeDialogController = ({
         activeDraftRef.current.sendUncertain === true ||
         activeDraftRef.current.assistantUnsaved === true
       ) {
-        closeDialog(afterClose, true);
+        closeDialog(afterClose, isServerOwnedHold() ? "complete" : "preserve");
         return;
       }
       const persisted = await persistCurrentDraft();
@@ -1490,7 +1534,7 @@ export const useComposeDialogController = ({
           if (!isCurrentHeldTask(task)) {
             return { kind: "complete" };
           }
-          closeDialog();
+          closeDialog(undefined, "completed");
           toast.success(
             draft.heldDraftHasNewerEdits === true
               ? "Message sent. Your newer edits are recoverable after closing the composer."
@@ -1633,6 +1677,7 @@ export const useComposeDialogController = ({
     ) {
       return;
     }
+    heldReceiptRef.current = receipt.sendOperationId;
     if (heldTaskRef.current !== null) {
       if (receipt.status === "accepted" || receipt.status === "canceled") {
         const result = await heldTaskRef.current.promise;
@@ -1660,14 +1705,29 @@ export const useComposeDialogController = ({
       sendUncertain: true,
     });
     recovery.retainHeldDraft();
-    void queryClient.invalidateQueries({
-      queryKey: orpc.mail.getHeldSend.queryOptions({
-        input: {
-          mailboxId: receipt.mailboxId,
-          sendOperationId: receipt.sendOperationId,
-        },
-      }).queryKey,
-    });
+    const heldKey = orpc.mail.getHeldSend.queryOptions({
+      input: {
+        mailboxId: receipt.mailboxId,
+        sendOperationId: receipt.sendOperationId,
+      },
+    }).queryKey;
+    void (async () => {
+      try {
+        await Promise.all([
+          queryClient.getQueryData(heldKey)?.status === receipt.status
+            ? undefined
+            : queryClient.invalidateQueries({ queryKey: heldKey }),
+          refreshCachedMailboxQueries(queryClient, receipt.mailboxId, "drafts"),
+          queryClient.invalidateQueries({
+            queryKey: orpc.scheduledSends.list.queryOptions({
+              input: { mailboxId: receipt.mailboxId },
+            }).queryKey,
+          }),
+        ]);
+      } catch (error) {
+        toastError(error, { boundary: "compose-held-refresh" });
+      }
+    })();
     if (receipt.status === "accepted" || receipt.status === "canceled") {
       const result = await finishHeldOperation(
         receipt.status === "accepted"
@@ -1726,14 +1786,17 @@ export const useComposeDialogController = ({
             held
           );
         }
-        if (held?.status === "canceled" || held?.status === "accepted") {
+        if (
+          held === null ||
+          (held.status === "canceled" && held.draftId === null)
+        ) {
+          await restoreHeldMessage();
+        } else if (held.status === "canceled" || held.status === "accepted") {
           await finishHeldOperation(
             held.status === "accepted"
               ? { kind: "accepted" }
               : { draftId: held.draftId, kind: "canceled" }
           );
-        } else if (held === null) {
-          await restoreHeldMessage();
         }
         return;
       }
@@ -1841,14 +1904,21 @@ export const useComposeDialogController = ({
     }),
     enabled:
       !!mailboxId &&
+      !!state.draft.sendOperationId &&
       state.draft.holdAttempt === true &&
       state.draft.sendUncertain === true,
-    refetchInterval: (query) =>
-      ["accepted", "canceled", "failed"].includes(
-        query.state.data?.status ?? ""
-      )
-        ? false
-        : 1000,
+    refetchInterval: (query) => {
+      if (
+        query.state.status === "error" ||
+        query.state.data === null ||
+        ["accepted", "canceled", "failed"].includes(
+          query.state.data?.status ?? ""
+        )
+      ) {
+        return false;
+      }
+      return query.state.data?.status === "uncertain" ? 15_000 : 1000;
+    },
     retry: false,
   });
 

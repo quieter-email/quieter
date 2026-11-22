@@ -46,6 +46,7 @@ export const mailRouter = {
     .input(mailInputSchemas.getDraft)
     .handler(queriesMailOperations.getDraft),
   getHeldSend: protectedProcedure
+    .route({ method: "GET" })
     .input(mailInputSchemas.getComposeSendStatus)
     .handler(
       async ({ context, input }) =>

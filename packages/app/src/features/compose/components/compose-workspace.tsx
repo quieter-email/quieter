@@ -131,7 +131,6 @@ import {
   useRef,
   useState,
 } from "react";
-import type { KeyboardEvent } from "react";
 
 import { HeldSendNotice } from "./held-send-notice";
 
@@ -211,17 +210,6 @@ const composeRecipientMotion = {
   transition: { duration: 0.16, ease: "easeOut" },
 } as const;
 
-const handleComposeHeaderKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-  // Safari may clear isComposing before the IME confirmation key event.
-  // oxlint-disable-next-line typescript/no-deprecated
-  if (event.nativeEvent.isComposing || event.keyCode === 229) {
-    return;
-  }
-  if (event.key === "Enter" && !event.ctrlKey && !event.metaKey) {
-    event.preventDefault();
-  }
-};
-
 const ComposeFormField = ({
   handleUserDraftChange,
   disabled,
@@ -242,7 +230,6 @@ const ComposeFormField = ({
             aria-invalid={!!error}
             chrome="composer"
             disabled={disabled}
-            onKeyDown={handleComposeHeaderKeyDown}
             onBlur={() => {
               field.handleBlur();
             }}
@@ -462,6 +449,15 @@ const ReadyComposeSurface = ({
     !state.isFinishing &&
     !switchingSender &&
     !!mailboxId;
+  const focusEditorAfterRestoreRef = useRef(false);
+  // The Undo button unmounts once the draft is editable again, so focus returns
+  // to the body after the editor has re-enabled itself.
+  useEffect(() => {
+    if (canEditBody && focusEditorAfterRestoreRef.current) {
+      focusEditorAfterRestoreRef.current = false;
+      composeEditorRef.current?.focus();
+    }
+  }, [canEditBody]);
   const audioBusy =
     audioRecorder.isStarting ||
     audioRecorder.isRecording ||
@@ -477,10 +473,13 @@ const ReadyComposeSurface = ({
     !audioBusy;
   const holding =
     state.draft.holdAttempt === true && state.draft.sendUncertain === true;
+  const heldStatus = compose.heldSendQuery.data?.status;
   const canRestoreHeld =
     compose.heldSendQuery.data?.canUndo === true ||
-    compose.heldSendQuery.data?.status === "failed" ||
-    compose.heldSendQuery.data?.status === "canceled";
+    heldStatus === "failed" ||
+    heldStatus === "canceled";
+  const showSendButton =
+    !holding || (heldStatus !== "held" && heldStatus !== "preparing");
   const isInline = variant === "inline";
   let sendButtonLabel = state.draft.scheduleAttempt ? "Scheduling…" : "Send";
   if (state.draft.sendUncertain === true) {
@@ -855,6 +854,11 @@ const ReadyComposeSurface = ({
           }
         }}
         onKeyDown={(event) => {
+          // Safari may clear isComposing before the IME confirmation key event.
+          // oxlint-disable-next-line typescript/no-deprecated
+          if (event.nativeEvent.isComposing || event.keyCode === 229) {
+            return;
+          }
           // Enter in a single-line field would implicitly submit the form and
           // send an unfinished message. The send button and shortcut still send.
           if (
@@ -1201,7 +1205,6 @@ const ReadyComposeSurface = ({
                                 chrome="composer"
                                 data-compose-recipient-field
                                 disabled={!canEditBody}
-                                onKeyDown={handleComposeHeaderKeyDown}
                                 placeholder="Add recipients"
                                 onBlur={() => {
                                   recipientField.handleBlur();
@@ -1407,58 +1410,55 @@ const ReadyComposeSurface = ({
                       chrome="footer"
                       leading={
                         <div className="flex items-center gap-1">
-                          {holding ? (
+                          {holding && canRestoreHeld ? (
                             <ToolbarButton
-                              disabled={
-                                state.isFinishing ||
-                                (compose.heldSendQuery.data?.canUndo !== true &&
-                                  compose.heldSendQuery.data?.status !==
-                                    "failed" &&
-                                  compose.heldSendQuery.data?.status !==
-                                    "canceled")
-                              }
+                              disabled={state.isFinishing}
                               onClick={() => {
+                                focusEditorAfterRestoreRef.current = true;
                                 void compose.restoreHeldMessage();
                               }}
                               type="button"
                               variant="primary"
                             >
-                              {compose.heldSendQuery.data?.status ===
-                                "failed" ||
-                              compose.heldSendQuery.data?.status === "canceled"
+                              {heldStatus === "failed" ||
+                              heldStatus === "canceled"
                                 ? "Return to draft"
                                 : "Undo send"}
                             </ToolbarButton>
                           ) : null}
-                          <ToolbarButton
-                            disabled={!canSubmitCompose}
-                            onClick={
-                              state.draft.sendUncertain === true
-                                ? () => {
-                                    void compose.checkSendDelivery();
-                                  }
-                                : undefined
-                            }
-                            type={
-                              state.draft.sendUncertain === true
-                                ? "button"
-                                : "submit"
-                            }
-                            variant={
-                              holding && canRestoreHeld ? "default" : "primary"
-                            }
-                          >
-                            {state.draft.saveStatus === "sending" ? (
-                              <Icon animation="spin" icon={Loading03Icon} />
-                            ) : (
-                              <Icon icon={MailSend02Icon} />
-                            )}
-                            {sendButtonLabel}
-                            <ShortcutHint
-                              className="ml-2 hidden @sm:inline-flex"
-                              shortcutId="compose-send"
-                            />
-                          </ToolbarButton>
+                          {showSendButton ? (
+                            <ToolbarButton
+                              disabled={!canSubmitCompose}
+                              onClick={
+                                state.draft.sendUncertain === true
+                                  ? () => {
+                                      void compose.checkSendDelivery();
+                                    }
+                                  : undefined
+                              }
+                              type={
+                                state.draft.sendUncertain === true
+                                  ? "button"
+                                  : "submit"
+                              }
+                              variant={
+                                holding && canRestoreHeld
+                                  ? "default"
+                                  : "primary"
+                              }
+                            >
+                              {state.draft.saveStatus === "sending" ? (
+                                <Icon animation="spin" icon={Loading03Icon} />
+                              ) : (
+                                <Icon icon={MailSend02Icon} />
+                              )}
+                              {sendButtonLabel}
+                              <ShortcutHint
+                                className="ml-2 hidden @sm:inline-flex"
+                                shortcutId="compose-send"
+                              />
+                            </ToolbarButton>
+                          ) : null}
                           {state.draft.assistantUnsaved === true &&
                           state.draft.sendUncertain !== true ? (
                             <ToolbarButton

@@ -1,4 +1,4 @@
-import { execFile } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
 import { setTimeout } from "node:timers/promises";
 import { promisify } from "node:util";
 
@@ -7,6 +7,18 @@ import postgres from "postgres";
 
 // oxlint-disable-next-line typescript/strict-void-return -- Node promisify accepts execFile even though it also returns a ChildProcess.
 const execute = promisify(execFile);
+
+export const canRunHeldSendDatabase = () => {
+  if (process.env.CI === "true") {
+    return true;
+  }
+  try {
+    execFileSync("docker", ["info"], { stdio: "ignore", timeout: 5000 });
+    return true;
+  } catch {
+    return false;
+  }
+};
 
 export const createHeldSendDatabase = async () => {
   const container = `quieter-held-send-${crypto.randomUUID()}`;

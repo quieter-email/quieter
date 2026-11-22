@@ -21,7 +21,8 @@ export type ScheduledSendPayload = z.infer<typeof scheduledSendPayloadSchema>;
 type ComposeMessage = z.infer<typeof composeMessageInputSchema>;
 
 export const captureScheduledSendPayload = async (
-  message: ComposeMessage
+  message: ComposeMessage,
+  deliveryKind: "scheduled" | "undo" = "scheduled"
 ): Promise<ScheduledSendPayload> => {
   const files = [...message.attachments, ...message.inlineImages];
   let totalBytes = 0;
@@ -29,7 +30,9 @@ export const captureScheduledSendPayload = async (
     if (!(asset.file instanceof File)) {
       throw new ORPCError("BAD_REQUEST", {
         message:
-          "An attachment is missing. Attach the file again before scheduling.",
+          deliveryKind === "undo"
+            ? "An attachment is missing. Attach the file again before sending."
+            : "An attachment is missing. Attach the file again before scheduling.",
       });
     }
     totalBytes += asset.file.size;
@@ -40,7 +43,10 @@ export const captureScheduledSendPayload = async (
       1024 * 1024
   ) {
     throw new ORPCError("BAD_REQUEST", {
-      message: "This message is too large to schedule.",
+      message:
+        deliveryKind === "undo"
+          ? "This message is too large to send."
+          : "This message is too large to schedule.",
     });
   }
   const [attachments, inlineImages] = await Promise.all([

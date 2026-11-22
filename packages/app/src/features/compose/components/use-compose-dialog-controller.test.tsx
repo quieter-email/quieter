@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import "fake-indexeddb/auto";
+import { setTimeout as waitFor } from "node:timers/promises";
+
 import type { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { createEmptyComposeDraft } from "@quieter/app/features/compose/domain/draft";
@@ -89,6 +91,7 @@ vi.mock(import("@quieter/app/lib/orpc"), async (importOriginal) => {
       sendMessage: boundary.sendMessage,
       undoSend: boundary.undoSend,
     },
+    scheduledSends: actual.rpc.scheduledSends,
   };
   return { ...actual, orpc: createTanstackQueryUtils(rpc), rpc };
 });
@@ -230,6 +233,17 @@ const receiptFor = (
     undoUntil: new Date(Date.now() + 10_000).toISOString(),
     ...overrides,
   };
+};
+
+const listHeldRecords = async (sendOperationId: string) => {
+  const records = await draftRecoveryJournal
+    .session("user", boundary.sessionId)
+    .list({ mailboxId: "mailbox", userId: "user" });
+  return records.filter(
+    (record) =>
+      restoreComposeDraft(record.payload, record.editorId).sendOperationId ===
+      sendOperationId
+  );
 };
 
 const flush = async (change: () => void) => {
@@ -1288,6 +1302,124 @@ describe("compose controller", () => {
         saveStatus: "saved",
       });
       expect(controller.form.state.values.subject).toBe(restored.subject);
+    });
+
+    it.each(["close", "navigate"])(
+      "does not leave a recovery copy after a %s during a confirmed hold",
+      async (action) => {
+        await mount();
+        const receipt = receiptFor();
+        await act(async () => {
+          await readCompose().applyHeldReceipt(receipt);
+        });
+        await vi.waitFor(async () => {
+          await expect(
+            listHeldRecords(receipt.sendOperationId)
+          ).resolves.toHaveLength(1);
+        });
+        let blocked: unknown;
+        await act(async () => {
+          const finishing: Promise<unknown> | undefined =
+            action === "close"
+              ? controller.closeComposeDialog()
+              : boundary.navigate?.();
+          blocked = await finishing;
+        });
+        expect(blocked).toBe(action === "navigate" ? false : undefined);
+        if (action === "navigate") {
+          await flush(() => {
+            root.render(null);
+          });
+        }
+        await vi.waitFor(async () => {
+          await expect(
+            listHeldRecords(receipt.sendOperationId)
+          ).resolves.toHaveLength(0);
+          await expect(
+            draftRecoveryJournal
+              .session("user", boundary.sessionId)
+              .listRecoverable({ mailboxId: "mailbox", userId: "user" })
+          ).resolves.toHaveLength(0);
+        });
+      }
+    );
+
+    it("keeps a recovery copy when closing an unconfirmed send admission", async () => {
+      boundary.sendMessage.mockRejectedValueOnce(new Error("Network lost"));
+      boundary.getHeldSend.mockReturnValue(
+        Promise.withResolvers<
+          Awaited<ReturnType<typeof rpc.mail.getHeldSend>>
+        >().promise
+      );
+      await mount();
+      const { sendOperationId } = readCompose().read();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(controller.state.draft).toMatchObject({
+        holdAttempt: true,
+        sendUncertain: true,
+      });
+      await act(async () => {
+        await controller.closeComposeDialog();
+      });
+      expect(controller.state.open).toBeFalsy();
+      await vi.waitFor(async () => {
+        await expect(
+          listHeldRecords(sendOperationId ?? "")
+        ).resolves.toHaveLength(1);
+      });
+    });
+
+    it.each([
+      ["missing", null],
+      ["unreadable", new Error("Unavailable")],
+    ])("stops polling a %s held send", async (_label, outcome) => {
+      await mount();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receiptFor());
+      });
+      if (outcome === null) {
+        boundary.getHeldSend.mockResolvedValue(null);
+      } else {
+        boundary.getHeldSend.mockRejectedValue(outcome);
+      }
+      await act(async () => {
+        await client.invalidateQueries();
+      });
+      const calls = boundary.getHeldSend.mock.calls.length;
+      await act(async () => {
+        await waitFor(1500);
+      });
+      expect(boundary.getHeldSend).toHaveBeenCalledTimes(calls);
+    });
+
+    it("restores a canceled send without a restored draft through Check delivery", async () => {
+      await mount();
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+      });
+      boundary.getHeldSend.mockResolvedValue({
+        canUndo: false,
+        draftId: null,
+        errorMessage: null,
+        id: "held",
+        mailboxId: "mailbox",
+        sendOperationId: receipt.sendOperationId,
+        status: "canceled",
+        undoUntil: null,
+      });
+      await act(async () => {
+        await controller.checkSendDelivery();
+      });
+      expect(boundary.undoSend).toHaveBeenCalledOnce();
+      expect(controller.state.draft).toMatchObject({
+        draftId: "restored",
+        sendUncertain: false,
+      });
+      expect(controller.form.state.values.subject).toBe("Canonical");
+      expect(boundary.toastError).not.toHaveBeenCalled();
     });
   });
 
