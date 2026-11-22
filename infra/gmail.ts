@@ -3,7 +3,10 @@ import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 import type { createAppDatabase } from "./database";
 import { GMAIL_PROCESSING_REGION } from "./gmail-processing-region";
 import type { createMailUpdateResources } from "./mail-updates";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
@@ -75,6 +78,7 @@ export const createGmailResources = (
     const gmailProcessingWorker = new sst.cloudflare.Worker(
       "GmailProcessingWorker",
       {
+        build: cloudflareWorkerBuild,
         compatibility: {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],
@@ -138,6 +142,7 @@ export const createGmailResources = (
     const gmailRealtimeWorker = new sst.cloudflare.Worker(
       "GmailRealtimeWorker",
       {
+        build: cloudflareWorkerBuild,
         compatibility: {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],
@@ -264,6 +269,7 @@ export const createGmailResources = (
       {
         schedules: ["*/15 * * * *"],
         worker: {
+          build: cloudflareWorkerBuild,
           compatibility: {
             date: COMPATIBILITY_DATE,
             flags: ["nodejs_compat"],

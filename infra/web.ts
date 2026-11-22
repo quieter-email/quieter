@@ -8,7 +8,10 @@ import { webReleasePlanSchema } from "@quieter/env/deployment";
 import { z } from "zod";
 
 import type { createAppDatabase } from "./database";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import {
   appOrigin,
   deploymentEnvironment,
@@ -171,6 +174,7 @@ export const createWeb = (
                   path.join(directory, paths.assets)
                 ),
             },
+            build: cloudflareWorkerBuild,
             compatibility: {
               date: COMPATIBILITY_DATE,
               flags: ["nodejs_compat"],
@@ -243,6 +247,7 @@ export const createWeb = (
     path: webSitePath,
     transform: {
       server(args) {
+        args.build = cloudflareWorkerBuild;
         args.compatibility = {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],

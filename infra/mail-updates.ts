@@ -1,7 +1,10 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
 import { appOrigin, deploymentEnvironment, production, stage } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
@@ -24,6 +27,7 @@ export const createMailUpdateResources = (
     className: "ScheduledSend",
   });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
+    build: cloudflareWorkerBuild,
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
     environment: {
