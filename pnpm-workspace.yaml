@@ -18,6 +18,9 @@ peerDependencyRules:
     # the workspace TypeScript. The plugin runs on Oxlint's own AST and the
     # combination is verified working; this only silences the resolver.
     typescript: "7.0.2"
+    # drizzle-kit 1.0.0-rc.6 declares optional peer oxc-parser ^0.157.0 while
+    # the workspace runs 0.159.0 matching Vite+ 1.7's Oxc parser line.
+    "oxc-parser": "0.159.0"
     # Optional UI peers are unused by the isolated Worker test runner.
     "@vitest/ui": "4.1.11 || 5.0.4"
     "@vitest/browser-preview": "4.1.11 || 5.0.4"
@@ -66,8 +69,8 @@ catalog:
   "@tanstack/zod-adapter": "^1.167.0"
   "@t3-oss/env-core": "0.13.11"
   "@vitejs/plugin-react": "^6.1.2"
-  "drizzle-kit": "1.0.0-rc.5-ab785fc"
-  "drizzle-orm": "1.0.0-rc.5-ab785fc"
+  "drizzle-kit": "1.0.0-rc.6"
+  "drizzle-orm": "1.0.0-rc.6"
   "fast-xml-parser": "5.11.2"
   "motion": "^14.2.0"
   "react": "^19.3.0"
