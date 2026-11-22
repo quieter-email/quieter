@@ -10,8 +10,9 @@ import atmosphericShaderSource from "./atmospheric-background.wgsl";
 /**
  * Atmospheric background — soft light fields + curved highlight ridges with
  * noise-driven mood. Charcoal / navy / off-white, quiet grain (no flickering
- * vignette). QUIETER-176. Opt in on branded surfaces; `fadeTop` / `fadeBottom`
- * settle into black or elevated at hard section cuts.
+ * vignette). QUIETER-176. Opt in on branded surfaces. Renders premultiplied
+ * light over the parent's own surface; `fadeTop` / `fadeBottom` dissolve the
+ * field to transparent at section seams.
  *
  * Perf: full visual fidelity (DPR <= 2). Per-frame globals run once on the CPU;
  * WebGPU init + RAF only while near the viewport.
@@ -20,13 +21,6 @@ import atmosphericShaderSource from "./atmospheric-background.wgsl";
 const REVEAL_MS = 3000;
 /** Start compiling slightly before scroll-in so below-fold sections are ready. */
 const VISIBLE_ROOT_MARGIN = "120px 0px";
-
-/** Matches dark `--bg` (oklch 0.145). */
-// sRGB channels for the app canvas; --bg is oklch(0.125) => #060606.
-const CANVAS_RGB = [0.0252, 0.0252, 0.0252] as const;
-const BLACK_RGB = [0, 0, 0] as const;
-
-type FadeTarget = "black" | "canvas";
 
 type AtmosphericBackgroundProps = {
   interactive?: boolean;
@@ -38,16 +32,13 @@ type AtmosphericBackgroundProps = {
   intensity?: number;
   /** When false, freezes motion (also auto for prefers-reduced-motion). Default true. */
   animate?: boolean;
-  /** Fade the top edge into this band color (hard cut to the section above). */
-  fadeTop?: FadeTarget;
-  /** Fade the bottom edge into this band color (hard cut to the section below). */
-  fadeBottom?: FadeTarget;
+  /** Dissolve the top edge into the surface behind it. */
+  fadeTop?: boolean;
+  /** Dissolve the bottom edge into the surface behind it. */
+  fadeBottom?: boolean;
   /** Deep red atmosphere (errors). Default false. */
   danger?: boolean;
 };
-
-const fadeTargetRgb = (target: FadeTarget | undefined) =>
-  target === "canvas" ? CANVAS_RGB : BLACK_RGB;
 
 const f32 = Math.fround;
 
@@ -160,8 +151,6 @@ type AtmosphericShaderParams = {
   seed: [number, number, number];
   fadeTop: number;
   fadeBottom: number;
-  fadeColorTop: readonly [number, number, number];
-  fadeColorBottom: readonly [number, number, number];
   danger: number;
   closing: number;
   mood: number;
@@ -201,7 +190,6 @@ export const AtmosphericBackground = ({
 }: AtmosphericBackgroundProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [ready, setReady] = useState(false);
-  const underlay = fadeBottom === "canvas" ? "bg-bg" : "bg-black";
   const [session] = useReducer(
     (current: AtmosphericSession) => current,
     undefined,
@@ -361,8 +349,6 @@ export const AtmosphericBackground = ({
         return;
       }
       initializing = true;
-      const [br, bg, bb] = fadeTargetRgb(fadeBottom);
-      const [tr, tg, tb] = fadeTargetRgb(fadeTop);
       try {
         const nextGpu = await init({ powerPreference: "high-performance" });
         if (cancelled) {
@@ -372,6 +358,7 @@ export const AtmosphericBackground = ({
 
         gpuContext = nextGpu;
         const nextSurface = surface(nextGpu, canvas, {
+          clearColor: [0, 0, 0, 0],
           dpr: [1, 2],
           label: "atmospheric-background",
         });
@@ -389,10 +376,8 @@ export const AtmosphericBackground = ({
           cosC,
           danger: danger === true ? 1 : 0,
           drift: [initialGlobals.drift, initialGlobals.drift2],
-          fadeBottom: fadeBottom ? 1 : 0,
-          fadeColorBottom: [br, bg, bb],
-          fadeColorTop: [tr, tg, tb],
-          fadeTop: fadeTop ? 1 : 0,
+          fadeBottom: fadeBottom === true ? 1 : 0,
+          fadeTop: fadeTop === true ? 1 : 0,
           grain,
           hardness: initialGlobals.hardness,
           intensity,
@@ -496,7 +481,6 @@ export const AtmosphericBackground = ({
       aria-hidden
       className={cn(
         "pointer-events-none absolute inset-0 overflow-hidden",
-        underlay,
         className
       )}
     >
