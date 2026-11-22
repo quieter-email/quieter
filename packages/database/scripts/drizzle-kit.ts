@@ -55,7 +55,7 @@ export const runKitMigrate = (
     packageDirectory,
     "node_modules",
     "drizzle-kit",
-    "bin.cjs"
+    "bin.js"
   );
   if (!existsSync(kitBinPath)) {
     throw new Error("drizzle-kit is not installed in packages/database.");

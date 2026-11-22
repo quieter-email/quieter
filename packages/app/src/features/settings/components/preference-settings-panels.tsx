@@ -226,12 +226,14 @@ export const DevelopmentSettingsPanel = () => {
 
 export const DevelopmentSettingsUnavailable = () => (
   <SettingsSection title="Development">
-    <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
-      <div className="flex items-start gap-3">
-        <Icon aria-hidden tone="muted" className="mt-0.5" icon={CodeIcon} />
-        <p className="text-body text-muted-fg">
-          Local demo mailbox options are only available in development builds.
-        </p>
+    <SettingsCard>
+      <div className={settingsSurfaceVariants({ variant: "body" })}>
+        <div className="flex items-start gap-3">
+          <Icon aria-hidden tone="muted" className="mt-0.5" icon={CodeIcon} />
+          <p className="text-body text-muted-fg">
+            Local demo mailbox options are only available in development builds.
+          </p>
+        </div>
       </div>
     </SettingsCard>
   </SettingsSection>

@@ -67,15 +67,15 @@ export const createBillingCheckoutMetadata = (input: {
   userId: string;
 }) => ({
   customerMetadata: {
-    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
     [BILLING_METADATA_SCOPE]: "account",
     [BILLING_METADATA_USER_ID]: input.userId,
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
   },
   metadata: {
-    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
-    [BILLING_METADATA_SCOPE]: "account",
     [BILLING_METADATA_PRODUCT]: input.product,
+    [BILLING_METADATA_SCOPE]: "account",
     [BILLING_METADATA_USER_ID]: input.userId,
+    quieterEnvironment: serverEnv.QUIETER_DEPLOYMENT_ENV,
   },
 });
 

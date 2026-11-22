@@ -81,14 +81,14 @@ for (const entry of entries.toSorted((left, right) =>
         .digest("hex");
   }
 }
-const workerDirectory = "v0/workers/default";
+const workerDirectory = "v1/workers/default";
 const markerPath = `${workerDirectory}/assets/assets/build-id.txt`;
 const markerText = await readFile(
   path.join(outputDirectory, markerPath),
   "utf-8"
 );
 if (
-  !files["v0/config.json"] ||
+  !files["v1/config.json"] ||
   !files[`${workerDirectory}/worker.config.json`] ||
   !files[markerPath] ||
   markerText.trim() !== buildId

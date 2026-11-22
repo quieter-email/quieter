@@ -110,12 +110,10 @@ export const useMailboxDetailMutations = (
         getMailboxesQueryKey(),
         (current) => patchMailboxFlag(current, input.mailboxId, patch)
       );
-      queryClient.setQueryData<ManagedDetailsQueryData>(
-        detailsKey,
-        (current) =>
-          current === undefined
-            ? current
-            : { ...current, mailbox: { ...current.mailbox, ...patch } }
+      queryClient.setQueryData<ManagedDetailsQueryData>(detailsKey, (current) =>
+        current === undefined
+          ? current
+          : { ...current, mailbox: { ...current.mailbox, ...patch } }
       );
 
       return { previousDetails, previousList };

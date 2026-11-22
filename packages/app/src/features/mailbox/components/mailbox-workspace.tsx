@@ -41,7 +41,7 @@ import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Text } from "@quieter/ui/text";
-import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
@@ -738,7 +738,7 @@ const useMailboxWorkspaceHotkeys = ({
     { enabled: isWorkspaceReady, ignoreInputs: true }
   );
 
-  useHotkeySequence(
+  useHotkey(
     ["G", "I"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -747,7 +747,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "T"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -756,7 +756,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "D"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -765,7 +765,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "U"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -774,7 +774,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "S"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -783,7 +783,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "R"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -792,7 +792,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "M"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -801,7 +801,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "E"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -810,7 +810,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "C"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {

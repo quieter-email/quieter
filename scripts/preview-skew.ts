@@ -17,7 +17,7 @@ const projectRoot = path.resolve(import.meta.dirname, "..");
 const [currentArgument, previousOrPort, portArgument] = process.argv.slice(2);
 if (currentArgument === "--help" || currentArgument === "-h") {
   process.stdout.write(
-    "Usage: vp run dev:skew <current-output-directory> [previous-output-directory] [port]\nSnapshots must contain v0/workers/default with its bundle, assets, and worker.config.json.\n"
+    "Usage: vp run dev:skew <current-output-directory> [previous-output-directory] [port]\nSnapshots must contain v1/workers/default with its bundle, assets, and worker.config.json.\n"
   );
 } else {
   if (!currentArgument) {
@@ -39,7 +39,7 @@ if (currentArgument === "--help" || currentArgument === "-h") {
 
   const readSnapshot = async (argument: string) => {
     const directory = await realpath(path.resolve(projectRoot, argument));
-    const worker = path.join(directory, "v0/workers/default");
+    const worker = path.join(directory, "v1/workers/default");
     const configuration = z
       .object({
         manifest: z.object({ mainModule: z.string().min(1) }),

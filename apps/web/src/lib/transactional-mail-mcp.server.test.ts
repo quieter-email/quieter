@@ -78,9 +78,9 @@ const mcpRequest = (body: Record<string, unknown>) =>
   new Request(`https://quieter.email${MCP_API_PATH}`, {
     body: JSON.stringify(body),
     headers: {
+      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
       accept: "application/json, text/event-stream",
       "content-type": "application/json",
-      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
     },
     method: "POST",
   });
@@ -337,9 +337,9 @@ describe("transactional mail MCP endpoint", () => {
       new Request(`https://quieter.email${MCP_API_PATH}`, {
         body: "{}",
         headers: {
+          [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
           "content-length": String(26 * 1024 * 1024),
           "content-type": "application/json",
-          [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
         },
         method: "POST",
       })

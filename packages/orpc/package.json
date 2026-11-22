@@ -78,7 +78,7 @@
     "@types/html-to-text": "^9.0.4",
     "@types/node": "catalog:",
     "drizzle-orm": "catalog:",
-    "postgres": "^3.4.9",
+    "postgres": "^4.1.1",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:",
