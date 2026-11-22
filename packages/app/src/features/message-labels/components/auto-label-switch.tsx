@@ -64,7 +64,7 @@ export const AutoLabelSwitch = ({
 
   return (
     <SettingsInsetRow>
-      <label className="min-w-0 flex-1 cursor-pointer" htmlFor={id}>
+      <label className="min-w-0 flex-1 cursor-default" htmlFor={id}>
         <span className="block text-body text-fg">Auto-label new mail</span>
       </label>
       <Switch

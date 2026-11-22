@@ -8,6 +8,7 @@ import {
   Delete02Icon,
   Loading03Icon,
   MailSend02Icon,
+  MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import {
   ComposeEditor,
@@ -785,6 +786,7 @@ const ReadyComposeSurface = ({
           title="New message"
         />
       )}
+      {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the form only blocks implicit submission from its own fields; it never becomes a keyboard target. */}
       <form
         action={async () => {
           if (canSubmitCompose) {
@@ -850,6 +852,19 @@ const ReadyComposeSurface = ({
             } else {
               addAttachmentFiles([...event.dataTransfer.files]);
             }
+          }
+        }}
+        onKeyDown={(event) => {
+          // Enter in a single-line field would implicitly submit the form and
+          // send an unfinished message. The send button and shortcut still send.
+          if (
+            event.key === "Enter" &&
+            !event.ctrlKey &&
+            !event.metaKey &&
+            event.target instanceof HTMLInputElement &&
+            event.target.form === event.currentTarget
+          ) {
+            event.preventDefault();
           }
         }}
       >
@@ -1258,7 +1273,8 @@ const ReadyComposeSurface = ({
                     <ComposeEditorBody
                       chrome="seamless"
                       className={cn("flex-1", {
-                        "[&_.ProseMirror>blockquote]:hidden":
+                        // Collapsing hides the attribution, the quote, and the editor's empty trailing line with it.
+                        "[&_.ProseMirror>blockquote]:hidden [&_.ProseMirror>blockquote~p:last-child:has(>br.ProseMirror-trailingBreak:only-child)]:hidden [&_.ProseMirror>p[data-compose-quote]]:hidden":
                           hasQuotedContent && !showQuotedContent,
                       })}
                       invalid={field.state.meta.errors.length > 0}
@@ -1274,6 +1290,7 @@ const ReadyComposeSurface = ({
                           }
                         >
                           <Button
+                            aria-expanded={showQuotedContent}
                             aria-label={
                               showQuotedContent
                                 ? "Hide quoted message"
@@ -1282,11 +1299,11 @@ const ReadyComposeSurface = ({
                             onClick={() => {
                               setShowQuotedContent((current) => !current);
                             }}
-                            size="sm"
+                            size="xs"
                             type="button"
-                            variant="ghost"
+                            variant="secondary"
                           >
-                            {showQuotedContent ? "Hide quote" : "..."}
+                            <Icon aria-hidden icon={MoreHorizontalIcon} />
                           </Button>
                         </IconButtonTooltip>
                       </div>

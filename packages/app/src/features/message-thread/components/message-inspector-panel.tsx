@@ -28,6 +28,12 @@ import { Text } from "@quieter/ui/text";
 import { useQuery } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 
+// Providers report the date as a raw header or an ISO timestamp.
+const sentAtFormatter = new Intl.DateTimeFormat(undefined, {
+  dateStyle: "medium",
+  timeStyle: "short",
+});
+
 export const MessageInspectorPanel = ({
   deliveryEnabled,
   mailboxId,
@@ -67,6 +73,10 @@ export const MessageInspectorPanel = ({
       </Text>
     );
   } else if (inspector !== undefined) {
+    const sentAt =
+      inspector.date === undefined || inspector.date === null
+        ? undefined
+        : new Date(inspector.date);
     inspectorBody = (
       <>
         <section className="space-y-3">
@@ -80,7 +90,13 @@ export const MessageInspectorPanel = ({
               { label: "Cc", value: inspector.cc },
               { label: "Bcc", value: inspector.bcc },
               { label: "Reply-to", value: inspector.replyTo },
-              { label: "Date", value: inspector.date },
+              {
+                label: "Date",
+                value:
+                  sentAt === undefined || Number.isNaN(sentAt.getTime())
+                    ? inspector.date
+                    : sentAtFormatter.format(sentAt),
+              },
             ].map((row) =>
               (row.value?.trim() ?? "") === "" ? null : (
                 <div className="contents" key={`${row.label}-${row.value}`}>

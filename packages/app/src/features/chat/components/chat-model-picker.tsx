@@ -53,7 +53,9 @@ export const ChatModelPicker = ({
       <PopoverTrigger
         aria-label="Choose model"
         disabled={disabled}
-        render={<Button className="max-w-full" size="sm" variant="ghost" />}
+        render={
+          <Button className="-ms-2.75 max-w-full" size="sm" variant="ghost" />
+        }
       >
         {selectedModel ? (
           <ModelLabLogo lab={selectedModel.group} />

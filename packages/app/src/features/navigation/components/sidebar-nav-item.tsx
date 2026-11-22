@@ -34,6 +34,7 @@ export const SidebarNavItem = ({
   onFocus,
   onMouseEnter,
   onMouseLeave,
+  size = "sm",
   trailing,
   variant = "ghost",
   ...buttonProps
@@ -56,6 +57,7 @@ export const SidebarNavItem = ({
       className={cn(sidebarNavButtonVariants(), className)}
       onBlur={onBlur}
       onFocus={onFocus}
+      size={size}
       variant={variant}
       {...buttonProps}
     >

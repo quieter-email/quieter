@@ -1,9 +1,12 @@
 "use client";
 
 import { KeyboardShortcutsDialog } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-dialog";
-import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
+import {
+  shouldIgnoreAppShortcut,
+  trackAppShortcutSequenceContinuations,
+} from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, use, useMemo, useState } from "react";
+import { createContext, use, useEffect, useMemo, useState } from "react";
 import type { PropsWithChildren } from "react";
 
 type KeyboardShortcutsContextValue = {
@@ -17,6 +20,8 @@ const KeyboardShortcutsContext =
 
 export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
+
+  useEffect(() => trackAppShortcutSequenceContinuations(), []);
 
   useHotkey(
     { key: "/", shift: true },

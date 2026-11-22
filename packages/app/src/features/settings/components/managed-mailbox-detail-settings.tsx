@@ -77,7 +77,7 @@ const ManagedMailboxIntelligenceRow = ({
         <label
           className={cn(
             settingsSurfaceVariants({ variant: "insetRow" }),
-            "cursor-pointer gap-3"
+            "cursor-default gap-3"
           )}
           htmlFor={autoLabelSwitchId}
         >
@@ -495,7 +495,7 @@ export const ManagedMailboxDetailSettings = ({
             <label
               className={cn(
                 settingsSurfaceVariants({ variant: "insetRow" }),
-                "cursor-pointer gap-3"
+                "cursor-default gap-3"
               )}
               htmlFor={includeApiMessagesSwitchId}
             >

@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react";
 
+import { popupSideOffset } from "./popup-surface";
 import { Tooltip, TooltipContent, TooltipTrigger } from "./tooltip";
 
 type IconButtonTooltipProps = {
@@ -13,7 +14,7 @@ type IconButtonTooltipProps = {
 export const IconButtonTooltip = ({
   children,
   label,
-  sideOffset = 6,
+  sideOffset = popupSideOffset,
 }: IconButtonTooltipProps) => (
   <Tooltip>
     <TooltipTrigger className="inline-flex" render={<span />}>

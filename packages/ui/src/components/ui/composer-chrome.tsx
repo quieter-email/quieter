@@ -21,7 +21,7 @@ export const PromptComposerFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section p-2 shadow-sm",
+      "flex min-w-0 flex-col gap-1 rounded-section border border-transparent bg-section px-3.25 py-2 shadow-sm",
       className
     )}
     {...props}
