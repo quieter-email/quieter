@@ -3,13 +3,6 @@
 import { getConnectorIcon } from "@quieter/app/lib/connector-icons";
 import { BILLING_PRODUCTS, GMAIL_MAILBOX_LIMITS } from "@quieter/billing/plans";
 import { getManagedUsageRates } from "@quieter/billing/ses-pricing";
-import {
-  Accordion,
-  AccordionHeader,
-  AccordionItem,
-  AccordionPanel,
-  AccordionTrigger,
-} from "@quieter/ui/accordion";
 import { cn } from "@quieter/ui/cn";
 
 import { HomeAtmosphericBackground } from "./lazy-webgl-backgrounds";
@@ -141,37 +134,20 @@ const Pricing = () => (
       ))}
     </Reveal>
     <Reveal className="home-pricing-notes">
-      <p>Gmail limits are per team. Additional usage billed separately.</p>
       <p>
-        Managed mail from ${rates.messagesPerThousandUsd.toFixed(2)} per 1,000
-        messages.
+        Gmail limits are per team. Usage beyond included credits is billed
+        separately.
       </p>
-      <div className="home-usage-rates">
-        <Accordion>
-          <AccordionItem value="usage-rates">
-            <AccordionHeader>
-              <AccordionTrigger>Usage rates</AccordionTrigger>
-            </AccordionHeader>
-            <AccordionPanel>
-              <div className="flex flex-col gap-3">
-                <p>
-                  Outbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1,000
-                  recipient deliveries, plus $
-                  {rates.attachmentDataPerGbUsd.toFixed(2)} per GB of
-                  attachments.
-                </p>
-                <p>
-                  Inbound: ${rates.messagesPerThousandUsd.toFixed(2)} per 1,000
-                  messages, plus $
-                  {rates.inboundProcessingPerThousandUsd.toFixed(2)} per 1,000
-                  256 KB units of data, including attachments.
-                </p>
-                <p>Usage beyond your included credits is billed separately.</p>
-              </div>
-            </AccordionPanel>
-          </AccordionItem>
-        </Accordion>
-      </div>
+      <p>
+        Outbound managed mail is ${rates.messagesPerThousandUsd.toFixed(2)} per
+        1,000 recipient deliveries, plus $
+        {rates.attachmentDataPerGbUsd.toFixed(2)} per GB of attachments.
+      </p>
+      <p>
+        Inbound managed mail is ${rates.messagesPerThousandUsd.toFixed(2)} per
+        1,000 messages, plus ${rates.inboundProcessingPerThousandUsd.toFixed(2)}{" "}
+        per 1,000 256 KB data units, including attachments.
+      </p>
     </Reveal>
   </section>
 );
