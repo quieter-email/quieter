@@ -120,6 +120,7 @@ type ComposeEditorProps = {
 };
 
 export type ComposeEditorHandle = {
+  focus: () => void;
   getDocument: () => unknown;
   normalizeHtml: (html: string) => string;
   getTextFromHtml: (html: string) => string;
@@ -280,6 +281,9 @@ export const ComposeEditor = ({
   });
 
   useImperativeHandle(ref, () => ({
+    focus: () => {
+      editor?.commands.focus();
+    },
     getDocument: () =>
       editor ? { content: editor.getJSON(), version: 1 } : null,
     getTextFromHtml: (value) => {

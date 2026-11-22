@@ -362,6 +362,7 @@ export const user = pgTable("user", {
   onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   termsAcceptedAt: timestamp("termsAcceptedAt"),
   timeFormat: text("timeFormat").$type<"12h" | "24h">(),
+  undoSendEnabled: boolean("undoSendEnabled"),
   updatedAt: timestamp("updatedAt").notNull(),
   weekStartsOn: integer("weekStartsOn").$type<0 | 1 | 2 | 3 | 4 | 5 | 6>(),
 });
@@ -4054,6 +4055,10 @@ export const scheduledMailSend = pgTable(
   "scheduledMailSend",
   {
     createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    deliveryKind: text("deliveryKind")
+      .$type<"scheduled" | "undo">()
+      .default("scheduled")
+      .notNull(),
     draftRemovedAt: timestamp("draftRemovedAt", { withTimezone: true }),
     errorMessage: text("errorMessage"),
     id: text("id").primaryKey(),
@@ -4106,6 +4111,10 @@ export const scheduledMailSend = pgTable(
       .where(
         sql`${table.status} in ('preparing', 'scheduled', 'sending', 'failed', 'uncertain')`
       ),
+    check(
+      "scheduled_mail_send_delivery_kind_check",
+      sql`${table.deliveryKind} in ('scheduled', 'undo')`
+    ),
     check(
       "scheduled_mail_send_status_check",
       sql`${table.status} in ('preparing', 'scheduled', 'sending', 'sent', 'failed', 'uncertain', 'cancelled')`

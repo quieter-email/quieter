@@ -26,7 +26,8 @@ export const withScheduledSendAttemptLock = async <Result>(
 
 export const assertScheduledSendAttemptActive = async (
   scope: ScheduledSendAttempt,
-  database: DatabaseExecutor = db
+  database: DatabaseExecutor = db,
+  deliveryKind: "scheduled" | "undo" = "scheduled"
 ) => {
   const [abandoned] = await database
     .select({ sendOperationId: scheduledMailSendAbandonment.sendOperationId })
@@ -42,7 +43,10 @@ export const assertScheduledSendAttemptActive = async (
   if (abandoned !== undefined) {
     throw new ORPCError("CONFLICT", {
       data: { scheduleAttemptAbandoned: true },
-      message: "This scheduling attempt was cancelled. Choose a new send time.",
+      message:
+        deliveryKind === "undo"
+          ? "This send attempt was canceled. Return to your draft before sending again."
+          : "This scheduling attempt was canceled. Choose a new send time.",
     });
   }
 };

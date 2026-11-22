@@ -12,6 +12,7 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { buttonVariants } from "./button";
 import { Icon } from "./icon";
 import { popupSurfaceClassName } from "./popup-surface";
 import { DEFAULT_TOAST_TIMEOUT, toastManager } from "./toast";
@@ -93,7 +94,11 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
     >
       <Toast.Content className="flex items-start gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100">
         <ToastIcon type={item.type} />
-        <div className="grid min-w-0 flex-1 gap-1 pr-6">
+        <div
+          className={cn("grid min-w-0 flex-1 gap-1", {
+            "pr-6": item.actionProps === undefined,
+          })}
+        >
           {item.title !== null &&
           item.title !== undefined &&
           item.title !== "" ? (
@@ -105,6 +110,17 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
             <Toast.Description className="text-body text-muted-fg" />
           ) : null}
         </div>
+        {item.actionProps === undefined ? null : (
+          // The negative block margin keeps the action inside the title line;
+          // the end margin clears the absolutely positioned dismiss button.
+          <Toast.Action
+            className={cn(
+              buttonVariants({ size: "sm", variant: "secondary" }),
+              "-my-1 mr-7"
+            )}
+            disabled={item.actionProps.disabled}
+          />
+        )}
         <Toast.Close
           aria-label="Dismiss"
           className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active motion-reduce:transition-none motion-reduce:active:scale-100"

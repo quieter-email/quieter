@@ -16,6 +16,7 @@ import {
 import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -66,6 +67,7 @@ import {
   Suspense,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -163,6 +165,44 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         block: "nearest",
       });
     });
+  };
+  // Undo can finish after the inline composer closed, so the restore callback
+  // reads the latest thread state instead of its closure.
+  const restoreTargetRef = useRef({
+    inlineDraft,
+    mailboxId,
+    mounted: false,
+    openInlineCompose,
+    threadId: message.threadId,
+  });
+  useLayoutEffect(() => {
+    restoreTargetRef.current = {
+      inlineDraft,
+      mailboxId,
+      mounted: true,
+      openInlineCompose,
+      threadId: message.threadId,
+    };
+  });
+  useEffect(
+    () => () => {
+      restoreTargetRef.current.mounted = false;
+    },
+    []
+  );
+  const restoreUndoneSend: RestoreUndoneDraft = (draft, draftMailboxId) => {
+    const target = restoreTargetRef.current;
+    if (
+      !target.mounted ||
+      target.inlineDraft !== null ||
+      target.mailboxId !== draftMailboxId ||
+      (draft.replyContext?.threadId ?? draft.draftAnchor?.sourceThreadId) !==
+        target.threadId
+    ) {
+      return false;
+    }
+    target.openInlineCompose(draft);
+    return true;
   };
   const suggestReply = useMutation(orpc.ai.suggestReply.mutationOptions());
   const requestSuggestedReply = () => {
@@ -647,6 +687,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                               setActionDraft(null);
                             }}
                             onManageSnippets={onManageSnippets}
+                            onRestoreUndoneSend={restoreUndoneSend}
                             persistDrafts={composePersistDrafts}
                             senderEmail={currentUserEmail}
                             senderMailbox={composeSenderMailbox}
