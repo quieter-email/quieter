@@ -1543,6 +1543,11 @@ export const useComposeDialogController = ({
           await Promise.all([
             refreshCachedMailboxQueries(queryClient, task.mailboxId, "drafts"),
             refreshCachedMailboxQueries(queryClient, task.mailboxId, "sent"),
+            queryClient.invalidateQueries({
+              queryKey: orpc.scheduledSends.list.queryOptions({
+                input: { mailboxId: task.mailboxId },
+              }).queryKey,
+            }),
             refreshThread(draft),
           ]).catch((error: unknown) => {
             toastError(error, { boundary: "compose-confirmed-send-refresh" });
@@ -1615,11 +1620,14 @@ export const useComposeDialogController = ({
         ) {
           toast("Your newer edits are recoverable after closing the composer.");
         }
-        await refreshCachedMailboxQueries(
-          queryClient,
-          task.mailboxId,
-          "drafts"
-        ).catch((error: unknown) => {
+        await Promise.all([
+          refreshCachedMailboxQueries(queryClient, task.mailboxId, "drafts"),
+          queryClient.invalidateQueries({
+            queryKey: orpc.scheduledSends.list.queryOptions({
+              input: { mailboxId: task.mailboxId },
+            }).queryKey,
+          }),
+        ]).catch((error: unknown) => {
           toastError(error, { boundary: "compose-restored-draft-refresh" });
         });
         return { kind: "complete" };
@@ -1908,12 +1916,40 @@ export const useComposeDialogController = ({
       state.draft.holdAttempt === true &&
       state.draft.sendUncertain === true,
     refetchInterval: (query) => {
+      if (query.state.status === "error") {
+        const error: unknown = query.state.error;
+        const status =
+          typeof error === "object" &&
+          error !== null &&
+          "status" in error &&
+          typeof error.status === "number"
+            ? error.status
+            : undefined;
+        const code =
+          typeof error === "object" &&
+          error !== null &&
+          "code" in error &&
+          typeof error.code === "string"
+            ? error.code
+            : undefined;
+        const clientError =
+          (status !== undefined && status >= 400 && status < 500) ||
+          code === "BAD_REQUEST" ||
+          code === "UNAUTHORIZED" ||
+          code === "FORBIDDEN" ||
+          code === "NOT_FOUND" ||
+          code === "CONFLICT";
+        if (clientError || query.state.errorUpdateCount >= 5) {
+          return false;
+        }
+        return 3000;
+      }
       if (
-        query.state.status === "error" ||
         query.state.data === null ||
-        ["accepted", "canceled", "failed"].includes(
-          query.state.data?.status ?? ""
-        )
+        query.state.data?.status === "accepted" ||
+        query.state.data?.status === "failed" ||
+        (query.state.data?.status === "canceled" &&
+          query.state.data.draftId !== null)
       ) {
         return false;
       }
@@ -1926,7 +1962,8 @@ export const useComposeDialogController = ({
     const held = heldSendQuery.data;
     if (
       held?.sendOperationId !== activeDraftRef.current.sendOperationId ||
-      (held?.status !== "accepted" && held?.status !== "canceled")
+      (held?.status !== "accepted" &&
+        (held?.status !== "canceled" || held.draftId === null))
     ) {
       return;
     }
@@ -1939,7 +1976,8 @@ export const useComposeDialogController = ({
   useEffect(() => {
     if (
       heldSendQuery.data?.status === "accepted" ||
-      heldSendQuery.data?.status === "canceled"
+      (heldSendQuery.data?.status === "canceled" &&
+        heldSendQuery.data.draftId !== null)
     ) {
       void finishHeldSend();
     }

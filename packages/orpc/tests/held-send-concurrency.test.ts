@@ -174,6 +174,12 @@ describe.skipIf(!canRunHeldSendDatabase())("held-send concurrency", () => {
           },
         ];
         const held = await createHeldSend({ ...scope, message });
+        const [precision] = await database.client<{ subMs: number }[]>`
+          SELECT (EXTRACT(MICROSECONDS FROM "sendAt")::integer % 1000) AS "subMs"
+          FROM "scheduledMailSend"
+          WHERE id = ${held.id}
+        `;
+        expect(precision?.subMs).toBe(0);
         const operation = { ...scope, sendOperationId: held.sendOperationId };
         await expect(undoHeldSend(operation)).resolves.toMatchObject({
           draftId: "restored-draft",
@@ -340,6 +346,26 @@ describe.skipIf(!canRunHeldSendDatabase())("held-send concurrency", () => {
         });
         expect(fixture.send).not.toHaveBeenCalled();
         expect(fixture.saveDraft).not.toHaveBeenCalled();
+      });
+
+      test("read-only mailbox readers cannot undo or abandon a send operation", async () => {
+        fixture.access.mockResolvedValueOnce({
+          capabilities: getMailboxCapabilities({ provider, role: "reader" }),
+          contentRevision: 0,
+          id: scope.mailboxId,
+          organizationId: "organization",
+          provider,
+        });
+        await expect(
+          undoHeldSend({
+            ...scope,
+            sendOperationId: message.sendOperationId ?? "",
+          })
+        ).rejects.toMatchObject({ code: "FORBIDDEN" });
+        const abandonments = await database.client`
+          SELECT "sendOperationId" FROM "scheduledMailSendAbandonment"
+        `;
+        expect(abandonments).toHaveLength(0);
       });
 
       test("an undo arriving during snapshot storage fences the late enqueue", async () => {

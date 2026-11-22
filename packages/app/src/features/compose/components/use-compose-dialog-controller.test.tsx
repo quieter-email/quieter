@@ -1373,8 +1373,8 @@ describe("compose controller", () => {
 
     it.each([
       ["missing", null],
-      ["unreadable", new Error("Unavailable")],
-    ])("stops polling a %s held send", async (_label, outcome) => {
+      ["forbidden", Object.assign(new Error("Forbidden"), { status: 403 })],
+    ])("stops polling a %s held send immediately", async (_label, outcome) => {
       await mount();
       await act(async () => {
         await readCompose().applyHeldReceipt(receiptFor());
@@ -1392,6 +1392,47 @@ describe("compose controller", () => {
         await waitFor(1500);
       });
       expect(boundary.getHeldSend).toHaveBeenCalledTimes(calls);
+    });
+
+    it("keeps polling a canceled held send until its restored draft is ready", async () => {
+      await mount();
+      const receipt = receiptFor();
+      await act(async () => {
+        await readCompose().applyHeldReceipt(receipt);
+      });
+      boundary.getHeldSend.mockResolvedValueOnce({
+        canUndo: false,
+        draftId: null,
+        errorMessage: null,
+        id: "held",
+        mailboxId: "mailbox",
+        sendOperationId: receipt.sendOperationId,
+        status: "canceled",
+        undoUntil: null,
+      });
+      boundary.getHeldSend.mockResolvedValue({
+        canUndo: false,
+        draftId: "restored",
+        errorMessage: null,
+        id: "held",
+        mailboxId: "mailbox",
+        sendOperationId: receipt.sendOperationId,
+        status: "canceled",
+        undoUntil: null,
+      });
+      await act(async () => {
+        await client.invalidateQueries();
+      });
+      await vi.waitFor(
+        () => {
+          expect(controller.state.draft).toMatchObject({
+            draftId: "restored",
+            sendUncertain: false,
+          });
+        },
+        { timeout: 3000 }
+      );
+      expect(boundary.toastError).not.toHaveBeenCalled();
     });
 
     it("restores a canceled send without a restored draft through Check delivery", async () => {

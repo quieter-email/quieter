@@ -5,7 +5,7 @@ import {
   scheduledMailSend,
   scheduledMailSendAbandonment,
 } from "@quieter/database/schema";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
 
 export const assertComposeSendAttemptActive = async (input: {
   mailboxId: string;
@@ -19,11 +19,15 @@ export const assertComposeSendAttemptActive = async (input: {
     .where(
       and(
         eq(scheduledMailSend.mailboxId, input.mailboxId),
-        eq(scheduledMailSend.sendOperationId, input.sendOperationId)
+        eq(scheduledMailSend.userId, input.userId),
+        eq(scheduledMailSend.sendOperationId, input.sendOperationId),
+        input.scheduledSendId
+          ? ne(scheduledMailSend.id, input.scheduledSendId)
+          : undefined
       )
     )
     .limit(1);
-  if (delivery !== undefined && delivery.id !== input.scheduledSendId) {
+  if (delivery !== undefined) {
     throw new ORPCError("CONFLICT", {
       message:
         "This send attempt is already recorded. Check its delivery status before sending again.",
@@ -95,6 +99,9 @@ export const assertComposeNotScheduled = async (input: {
           "failed",
           "uncertain",
         ]),
+        input.scheduledSendId
+          ? ne(scheduledMailSend.id, input.scheduledSendId)
+          : undefined,
         or(
           eq(scheduledMailSend.sourceLocalId, input.localId),
           input.draftId
@@ -107,7 +114,7 @@ export const assertComposeNotScheduled = async (input: {
       )
     )
     .limit(1);
-  if (reserved !== undefined && reserved.id !== input.scheduledSendId) {
+  if (reserved !== undefined) {
     throw new ORPCError("CONFLICT", {
       data: { scheduledSendConflict: true },
       message:

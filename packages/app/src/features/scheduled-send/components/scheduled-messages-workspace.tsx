@@ -111,7 +111,10 @@ export const ScheduledMessagesWorkspace = ({
     refetchInterval: (query) =>
       query.state.data?.some(
         (message) =>
-          message.deliveryKind === "undo" && message.status === "scheduled"
+          message.deliveryKind === "undo" &&
+          (message.status === "preparing" ||
+            message.status === "scheduled" ||
+            message.status === "sending")
       ) === true
         ? 1000
         : 15_000,
@@ -225,7 +228,11 @@ export const ScheduledMessagesWorkspace = ({
                   message.status === "cancelled";
                 let statusLabel = scheduledStatusLabels[message.status];
                 if (undoHeld && message.status === "scheduled") {
-                  statusLabel = undoAvailable ? "Held" : "Sending";
+                  if (message.errorMessage === null) {
+                    statusLabel = undoAvailable ? "Held" : "Sending";
+                  } else {
+                    statusLabel = "Retrying";
+                  }
                 }
                 let cancelLabel = "Cancel send";
                 if (
@@ -269,11 +276,10 @@ export const ScheduledMessagesWorkspace = ({
                             {new Intl.DateTimeFormat(undefined, {
                               dateStyle: "medium",
                               timeStyle: "short",
-                              timeZone: message.timeZone,
+                              timeZone: undoHeld ? undefined : message.timeZone,
                             }).format(new Date(message.sendAt))}
                           </time>
-                          {", "}
-                          {message.timeZone}
+                          {undoHeld ? null : `, ${message.timeZone}`}
                         </Text>
                         {message.status === "scheduled" && !undoHeld ? null : (
                           <Pill

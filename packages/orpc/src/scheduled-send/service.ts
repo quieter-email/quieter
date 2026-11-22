@@ -13,7 +13,7 @@ import type {
 } from "@quieter/mail/scheduled-send";
 import type { ScheduledSendScope } from "@quieter/mail/scheduled-send-ticket";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, isNull, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { publishMailUpdate } from "../mail-updates";
@@ -73,7 +73,8 @@ const toSummary = (row: ScheduledSend) => ({
   canUndo:
     row.deliveryKind === "undo" &&
     (row.status === "preparing" ||
-      (row.status === "scheduled" && row.sendAt.getTime() > Date.now())),
+      (row.status === "scheduled" &&
+        (row.sendAt.getTime() > Date.now() || row.errorMessage !== null))),
   deliveryKind: row.deliveryKind,
   errorMessage: row.errorMessage,
   id: row.id,
@@ -192,6 +193,20 @@ const finishPreparation = async (row: ScheduledSend) => {
     await assertCanSchedule(row);
     const payload = await readPayload(row);
     if (payload.draftId) {
+      const [stillClaimed] = await db
+        .select({ id: scheduledMailSend.id })
+        .from(scheduledMailSend)
+        .where(
+          and(
+            eq(scheduledMailSend.id, row.id),
+            eq(scheduledMailSend.status, "preparing"),
+            eq(scheduledMailSend.leaseToken, claimed.token)
+          )
+        )
+        .limit(1);
+      if (stillClaimed === undefined) {
+        return await getScopedSend(row);
+      }
       await composeMailOperations.deleteDraft({
         context: { userId: row.userId },
         input: {
@@ -211,8 +226,8 @@ const finishPreparation = async (row: ScheduledSend) => {
               errorMessage: null,
               leaseToken: null,
               leaseUntil: null,
-              nextWakeAt: sql`clock_timestamp() + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
-              sendAt: sql`clock_timestamp() + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
+              nextWakeAt: sql`date_trunc('milliseconds', clock_timestamp()) + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
+              sendAt: sql`date_trunc('milliseconds', clock_timestamp()) + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
               status: "scheduled",
               updatedAt: new Date(),
             }
@@ -352,7 +367,9 @@ const createScheduledSendWithinLock = async (
         message: "Scheduled message not found.",
       });
     }
-    await requestScheduledSendWake(current);
+    if (current.status !== "failed" && current.payloadRetiredAt === null) {
+      await requestScheduledSendWake(current);
+    }
     return toSummary(current);
   }
   const delivery = await composeMailOperations.getComposeSendStatus({
@@ -532,7 +549,9 @@ const createScheduledSendWithinLock = async (
       message: "Scheduled message not found.",
     });
   }
-  await requestScheduledSendWake(current);
+  if (current.status !== "failed" && current.payloadRetiredAt === null) {
+    await requestScheduledSendWake(current);
+  }
   return toSummary(current);
 };
 
@@ -658,7 +677,7 @@ export const recoverScheduledSendAttempt = async (scope: {
   userId: string;
   sendOperationId: string;
 }) => {
-  await assertAccessibleMailbox(scope);
+  await assertCanSchedule(scope);
   return await withScheduledSendAttemptLock(scope, async (database) => {
     const [scheduled] = await database
       .select()
@@ -742,7 +761,10 @@ export const rescheduleSend = async (
   return toSummary(updated);
 };
 
-const restoreCancelledSend = async (row: ScheduledSend) => {
+const restoreCancelledSend = async (
+  row: ScheduledSend,
+  options?: { reuseOriginalDraft?: boolean }
+) => {
   if (row.payloadRetiredAt !== null) {
     return row;
   }
@@ -754,14 +776,54 @@ const restoreCancelledSend = async (row: ScheduledSend) => {
   }
   try {
     const payload = await readPayload(row);
-    const draft = restoreScheduledSendPayload(payload, {
-      localId: `${row.id}:restore`,
-      sendOperationId: row.id,
-    });
-    const restored = await composeMailOperations.saveDraft({
-      context: { userId: row.userId },
-      input: { draft, mailboxId: row.mailboxId },
-    });
+    let restoredDraftId: string | null = null;
+    if (
+      options?.reuseOriginalDraft === true &&
+      row.draftRemovedAt === null &&
+      payload.draftId
+    ) {
+      try {
+        const existingDraft = await queriesMailOperations.getDraft({
+          context: { userId: row.userId },
+          input: { draftId: payload.draftId, mailboxId: row.mailboxId },
+        });
+        if (existingDraft.baseRevision === payload.baseRevision) {
+          restoredDraftId = payload.draftId;
+        }
+      } catch {
+        // Fall back to restoring from the stored snapshot when the original draft cannot be verified.
+      }
+    }
+    if (restoredDraftId === null) {
+      const draft = restoreScheduledSendPayload(payload, {
+        localId: `${row.id}:restore`,
+        sendOperationId: row.id,
+      });
+      const restored = await composeMailOperations.saveDraft({
+        context: { userId: row.userId },
+        input: { draft, mailboxId: row.mailboxId },
+      });
+      restoredDraftId = restored.draftId;
+      if (
+        row.draftRemovedAt === null &&
+        payload.draftId &&
+        restoredDraftId !== payload.draftId
+      ) {
+        try {
+          await composeMailOperations.deleteDraft({
+            context: { userId: row.userId },
+            input: {
+              baseRevision: payload.baseRevision,
+              draftId: payload.draftId,
+              mailboxId: row.mailboxId,
+            },
+            requireExistingDraft: false,
+          });
+        } catch {
+          // Best-effort cleanup of the superseded source draft; leave any concurrently edited draft untouched.
+        }
+      }
+    }
     const [completed] = await db
       .update(scheduledMailSend)
       .set({
@@ -770,7 +832,7 @@ const restoreCancelledSend = async (row: ScheduledSend) => {
         leaseUntil: null,
         nextWakeAt: null,
         payloadRetiredAt: new Date(),
-        restoredDraftId: restored.draftId,
+        restoredDraftId,
         updatedAt: new Date(),
       })
       .where(
@@ -818,7 +880,7 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
       draftId: restored?.restoredDraftId ?? row.restoredDraftId,
     };
   }
-  const cancelled = await db.transaction(async (database) => {
+  const cancellation = await db.transaction(async (database) => {
     const [locked] = await database
       .select()
       .from(scheduledMailSend)
@@ -831,8 +893,10 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
       )
       .for("update");
     if (locked?.status === "cancelled") {
-      return locked;
+      return { hadActivePreparationLease: false, row: locked };
     }
+    const hadActivePreparationLease =
+      locked?.status === "preparing" && locked.leaseToken !== null;
     const [updated] = await database
       .update(scheduledMailSend)
       .set({
@@ -855,6 +919,10 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
             ? or(
                 eq(scheduledMailSend.status, "preparing"),
                 eq(scheduledMailSend.status, "failed"),
+                and(
+                  eq(scheduledMailSend.status, "scheduled"),
+                  isNotNull(scheduledMailSend.errorMessage)
+                ),
                 sql`${scheduledMailSend.sendAt} > clock_timestamp()`
               )
             : undefined,
@@ -866,17 +934,21 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
         )
       )
       .returning();
-    return updated;
+    return updated === undefined
+      ? undefined
+      : { hadActivePreparationLease, row: updated };
   });
-  if (cancelled === undefined) {
+  if (cancellation === undefined) {
     throw new ORPCError("CONFLICT", {
       message:
         "This message has started sending and can no longer be canceled. Check Sent for its delivery status.",
     });
   }
-  const restored = await restoreCancelledSend(cancelled);
+  const restored = await restoreCancelledSend(cancellation.row, {
+    reuseOriginalDraft: !cancellation.hadActivePreparationLease,
+  });
   return {
-    ...toSummary(restored ?? cancelled),
+    ...toSummary(restored ?? cancellation.row),
     draftId: restored?.restoredDraftId ?? null,
   };
 };
@@ -955,7 +1027,7 @@ export const dispatchScheduledSend = async (
     }
     const targetWakeAt =
       current.status === "scheduled"
-        ? current.sendAt.getTime()
+        ? Math.max(current.sendAt.getTime(), current.nextWakeAt?.getTime() ?? 0)
         : (current.nextWakeAt?.getTime() ?? null);
     return {
       nextWakeAt:

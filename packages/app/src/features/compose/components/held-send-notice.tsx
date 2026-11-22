@@ -14,20 +14,9 @@ const heldMessages = {
   uncertain: "Confirming delivery. Check Sent before sending another copy.",
 } satisfies Record<HeldSend["status"], string>;
 
-export const HeldSendNotice = ({
-  held,
-}: {
-  held: HeldSend | null | undefined;
-}) => {
-  const undoUntil =
-    held?.status === "held" && held.undoUntil !== null
-      ? Date.parse(held.undoUntil)
-      : null;
+const HeldCountdown = ({ undoUntil }: { undoUntil: number }) => {
   const [now, setNow] = useState(() => Date.now());
-  useEffect((): (() => void) | undefined => {
-    if (undoUntil === null) {
-      return undefined;
-    }
+  useEffect((): (() => void) => {
     const timer = setInterval(() => {
       const current = Date.now();
       setNow(current);
@@ -39,7 +28,32 @@ export const HeldSendNotice = ({
       clearInterval(timer);
     };
   }, [undoUntil]);
+  const remaining = Math.ceil((undoUntil - now) / 1000);
+  if (remaining <= 0) {
+    return heldMessages.held;
+  }
+  return (
+    <>
+      <span aria-hidden="true">{`Sending in ${remaining}s.`}</span>
+      <span className="sr-only">Sending soon. You can still undo.</span>
+    </>
+  );
+};
 
+export const HeldSendNotice = ({
+  held,
+  isError = false,
+}: {
+  held: HeldSend | null | undefined;
+  isError?: boolean;
+}) => {
+  if (isError) {
+    return (
+      <Text as="div" aria-live="polite" size="sm" tone="muted">
+        Could not check delivery status. Use Check delivery to try again.
+      </Text>
+    );
+  }
   if (held === undefined || held === null) {
     return (
       <Text as="div" aria-live="polite" size="sm" tone="muted">
@@ -49,19 +63,23 @@ export const HeldSendNotice = ({
       </Text>
     );
   }
-  const remaining =
-    undoUntil === null || held.errorMessage !== null
-      ? 0
-      : Math.ceil((undoUntil - now) / 1000);
+  const undoUntil =
+    held.status === "held" &&
+    held.undoUntil !== null &&
+    held.errorMessage === null
+      ? Date.parse(held.undoUntil)
+      : null;
+  const message =
+    held.errorMessage ??
+    (held.status === "canceled" && held.draftId === null
+      ? "Sending canceled. Returning your message to Drafts…"
+      : heldMessages[held.status]);
   return (
     <Text as="div" aria-live="polite" size="sm" tone="muted">
-      {remaining > 0 ? (
-        <>
-          <span aria-hidden="true">{`Sending in ${remaining}s.`}</span>
-          <span className="sr-only">Sending soon. You can still undo.</span>
-        </>
+      {undoUntil === null ? (
+        message
       ) : (
-        (held.errorMessage ?? heldMessages[held.status])
+        <HeldCountdown key={undoUntil} undoUntil={undoUntil} />
       )}
     </Text>
   );

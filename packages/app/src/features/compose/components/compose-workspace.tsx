@@ -474,12 +474,17 @@ const ReadyComposeSurface = ({
   const holding =
     state.draft.holdAttempt === true && state.draft.sendUncertain === true;
   const heldStatus = compose.heldSendQuery.data?.status;
+  const heldQueryError = compose.heldSendQuery.isError;
   const canRestoreHeld =
     compose.heldSendQuery.data?.canUndo === true ||
     heldStatus === "failed" ||
     heldStatus === "canceled";
   const showSendButton =
-    !holding || (heldStatus !== "held" && heldStatus !== "preparing");
+    !holding ||
+    heldQueryError ||
+    (heldStatus !== "held" &&
+      heldStatus !== "preparing" &&
+      heldStatus !== "failed");
   const isInline = variant === "inline";
   let sendButtonLabel = state.draft.scheduleAttempt ? "Scheduling…" : "Send";
   if (state.draft.sendUncertain === true) {
@@ -739,7 +744,7 @@ const ReadyComposeSurface = ({
       }
     },
     {
-      enabled: canSubmitCompose,
+      enabled: canSubmitCompose && showSendButton,
       ignoreInputs: false,
     }
   );
@@ -1580,7 +1585,10 @@ const ReadyComposeSurface = ({
           </form.Field>
 
           {holding ? (
-            <HeldSendNotice held={compose.heldSendQuery.data} />
+            <HeldSendNotice
+              held={compose.heldSendQuery.data}
+              isError={heldQueryError}
+            />
           ) : null}
           {senderUnavailable ? (
             <Text as="div" role="alert" tone="destructive">

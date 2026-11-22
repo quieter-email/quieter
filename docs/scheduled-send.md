@@ -32,7 +32,7 @@ If the original draft disappears during transfer, scheduling stops for review an
 
 ## Assistant-held drafts
 
-The composer bridge accepts held-send receipts separately from saved-draft receipts. A held receipt carries the current mailbox, the composer's local draft identity and revision, and its permanent send operation ID. The restored draft ID identifies the server draft returned by cancellation. It never replaces the local identity used to match receipts.
+The composer bridge prepares for assistant-held receipts separately from saved-draft receipts. Assistant `sendMail` currently sends immediately until wired to `createHeldSend` and `ComposeBridge`. A held receipt carries the current mailbox, the composer's local draft identity and revision, and its permanent send operation ID. The restored draft ID identifies the server draft returned by cancellation. It never replaces the local identity used to match receipts.
 
 The existing held-send query owns status, the deadline and `canUndo`. Receipt admission freezes the matching composer without replacing its visible content. Repeated updates for the same operation remain valid after local revision changes. Successful cancellation loads and prepares the complete restored draft before making the composer editable with a fresh operation ID. A canceled result without an available restored draft stays read-only for retry. A definitively abandoned, never-admitted operation restores its local snapshot instead.
 

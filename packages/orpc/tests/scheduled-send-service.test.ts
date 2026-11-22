@@ -17,6 +17,7 @@ import {
   cancelScheduledSend,
   createScheduledSend,
   dispatchScheduledSend,
+  recoverScheduledSendAttempt,
   validateScheduledSendTime,
 } from "../src/scheduled-send/service";
 
@@ -278,10 +279,10 @@ describe("scheduled send execution", () => {
     expect(cancelUpdate?.[0]).toContain('"scheduledMailSend"."status" = ');
   });
 
-  test("clamps nextWakeAt forward when claimSend loses to a clock mismatch", async () => {
+  test("clamps nextWakeAt forward and respects backoff when claimSend loses a race", async () => {
     row.deliveryKind = "undo";
     row.sendAt = new Date(Date.now() - 500);
-    row.nextWakeAt = row.sendAt;
+    row.nextWakeAt = new Date(Date.now() + 60_000);
     // oxlint-disable-next-line eslint/require-await -- The driver simulates a rejected claim update while the row remains scheduled.
     fixture.query.mockImplementation(async (query) => {
       if (query.startsWith("select")) {
@@ -295,10 +296,120 @@ describe("scheduled send execution", () => {
       }
       return { rows: [] };
     });
-    const before = Date.now();
     const result = await dispatchScheduledSend(scope);
-    expect(result.nextWakeAt).toBeGreaterThanOrEqual(before + 1000);
+    expect(result.nextWakeAt).toBe(row.nextWakeAt.getTime());
     expect(fixture.send).not.toHaveBeenCalled();
+  });
+
+  test("truncates undo preparation timestamps to milliseconds so later claims match", async () => {
+    row.deliveryKind = "undo";
+    row.status = "preparing";
+    row.draftRemovedAt = null;
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    await dispatchScheduledSend(scope);
+    const prepareUpdate = fixture.query.mock.calls.find(
+      ([query]) =>
+        query.startsWith('update "scheduledMailSend"') &&
+        query.includes("date_trunc('milliseconds', clock_timestamp())")
+    );
+    expect(prepareUpdate).toBeDefined();
+  });
+
+  test("allows canceling a retrying undo send whose initial hold deadline passed before submission", async () => {
+    row.deliveryKind = "undo";
+    row.status = "scheduled";
+    row.sendAt = new Date(Date.now() - 60_000);
+    row.errorMessage =
+      "Sending could not start. Your message is saved and will retry shortly.";
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.saveDraft.mockResolvedValue({ draftId: "restored-draft" });
+    const result = await cancelScheduledSend(scope);
+    expect(result.status).toBe("cancelled");
+    expect(result.draftId).toBe("restored-draft");
+    const cancelUpdate = fixture.query.mock.calls.find(
+      ([query]) =>
+        query.startsWith('update "scheduledMailSend"') &&
+        query.includes('"errorMessage" is not null')
+    );
+    expect(cancelUpdate).toBeDefined();
+  });
+
+  test("reuses an intact original draft when canceling a failed preparation without creating a duplicate", async () => {
+    row.status = "failed";
+    row.draftRemovedAt = null;
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          baseRevision: "rev-1",
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          draftId: "original-draft",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.originalDraft.mockResolvedValue({
+      baseRevision: "rev-1",
+      messageId: "internal-draft",
+    });
+    const result = await cancelScheduledSend(scope);
+    expect(result.status).toBe("cancelled");
+    expect(result.draftId).toBe("original-draft");
+    expect(fixture.saveDraft).not.toHaveBeenCalled();
+  });
+
+  test("rejects attempt recovery for read-only mailbox readers", async () => {
+    fixture.access.mockResolvedValueOnce({
+      capabilities: getMailboxCapabilities({
+        provider: "managed",
+        role: "reader",
+      }),
+      contentRevision: 0,
+      id: "mailbox",
+      organizationId: "org",
+      provider: "managed",
+    });
+    await expect(
+      recoverScheduledSendAttempt({
+        mailboxId: scope.mailboxId,
+        sendOperationId: row.sendOperationId,
+        userId: scope.userId,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   test("keeps an uncertain submission reserved when access is later revoked", async () => {
