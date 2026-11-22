@@ -154,12 +154,7 @@ const Pricing = () => (
 
 const Closing = () => (
   <section className="home-closing">
-    <HomeAtmosphericBackground
-      className="home-atmosphere home-atmosphere-closing"
-      fadeBottom="black"
-      fadeTop="black"
-      variant="closing"
-    />
+    <HomeAtmosphericBackground fadeBottom fadeTop variant="closing" />
     <div className="home-closing-content">
       <Reveal as="h2" className="home-closing-heading" stagger={0.06}>
         <RevealChild as="span">Email can do more without</RevealChild>{" "}

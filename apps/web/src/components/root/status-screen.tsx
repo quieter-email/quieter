@@ -62,7 +62,7 @@ export const StatusScreen = ({
   <main className="dark relative flex min-h-dvh flex-col overflow-hidden bg-black text-fg">
     <div aria-hidden className="absolute inset-0">
       <Suspense fallback={null}>
-        <StatusAtmosphere fadeBottom="black" fadeTop="black" danger={danger} />
+        <StatusAtmosphere danger={danger} />
       </Suspense>
     </div>
 
