@@ -2,14 +2,18 @@
 
 import {
   CheckmarkCircle02Icon,
+  Delete01Icon,
   Delete02Icon,
   FileAttachmentIcon,
+  InboxIcon,
   LayoutRightIcon,
   Mail01Icon,
+  MailReply02Icon,
   MoreVerticalIcon,
   Refresh01Icon,
   Search01Icon,
   Tick01Icon,
+  UserSwitchIcon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
@@ -49,6 +53,7 @@ import {
   CollapsibleTrigger,
 } from "@quieter/ui/collapsible";
 import { useColorMode } from "@quieter/ui/color-mode";
+import { CommandMenu } from "@quieter/ui/command-menu";
 import {
   ComposerActionBar,
   ComposerDictationControl,
@@ -617,6 +622,7 @@ export const DesignSystemShowcase = () => {
   const [entrancePreview, setEntrancePreview] = useState(0);
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
+  const [commandIndex, setCommandIndex] = useState(0);
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
   );
@@ -665,6 +671,81 @@ export const DesignSystemShowcase = () => {
             <ThemePicker />
           </div>
         </header>
+
+        <Section
+          description="The command palette lists grouped actions with leading icons, compact keycaps and reasons for unavailable actions. Editor suggestions use the popup chrome of the same component."
+          title="Command menu"
+        >
+          <div className="overflow-hidden rounded-panel border border-fg/10 bg-panel">
+            <CommandMenu
+              activeIndex={commandIndex}
+              chrome="dialog"
+              id="showcase-commands"
+              items={[
+                {
+                  group: "Conversation actions",
+                  icon: <Icon icon={MailReply02Icon} />,
+                  id: "reply",
+                  label: "Reply",
+                  shortcut: (
+                    <Kbd aria-hidden size="sm">
+                      R
+                    </Kbd>
+                  ),
+                },
+                {
+                  disabledReason: "Wait for the current action to finish.",
+                  group: "Conversation actions",
+                  icon: <Icon icon={CheckmarkCircle02Icon} />,
+                  id: "done",
+                  label: "Mark conversation Done",
+                  shortcut: (
+                    <Kbd aria-hidden size="sm">
+                      E
+                    </Kbd>
+                  ),
+                },
+                {
+                  group: "Conversation actions",
+                  icon: <Icon icon={Delete01Icon} />,
+                  id: "trash",
+                  label: "Move to Trash",
+                  shortcut: (
+                    <Kbd aria-hidden size="sm">
+                      #
+                    </Kbd>
+                  ),
+                  tone: "destructive",
+                },
+                {
+                  group: "Views",
+                  icon: <Icon icon={InboxIcon} />,
+                  id: "inbox",
+                  label: "Go to Inbox",
+                  shortcut: (
+                    <span aria-hidden className="flex items-center gap-1">
+                      <Kbd size="sm">G</Kbd>
+                      <span className="text-micro text-muted-fg">→</span>
+                      <Kbd size="sm">I</Kbd>
+                    </span>
+                  ),
+                },
+                {
+                  description: "alex@example.com",
+                  group: "Accounts",
+                  icon: <Icon icon={UserSwitchIcon} />,
+                  id: "switch",
+                  label: "Switch to Work",
+                },
+              ]}
+              onHighlight={setCommandIndex}
+              onSelect={() => {
+                toast("Example command selected");
+              }}
+              selectionHint="select"
+            />
+          </div>
+        </Section>
 
         <Section
           description="A quiet map for long threads. Move toward the marks to feel the pull, then get closer to preview a message."
@@ -1931,6 +2012,13 @@ export const DesignSystemShowcase = () => {
               <Kbd>Ctrl</Kbd>
               <span className="text-micro text-muted-fg">+</span>
               <Kbd>K</Kbd>
+            </div>
+          </Row>
+          <Row label="Compact keycaps">
+            <div className="flex items-center gap-1">
+              <Kbd size="sm">G</Kbd>
+              <span className="text-micro text-muted-fg">→</span>
+              <Kbd size="sm">I</Kbd>
             </div>
           </Row>
           <Row label="Inline shortcut hints">

@@ -40,6 +40,7 @@ import { USER_BILLING_QUERY_KEY } from "@quieter/app/features/settings/domain/bi
 import { toastError } from "@quieter/app/lib/error-toast";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { useElementVisible } from "@quieter/app/lib/use-element-visible";
 import { parseNaturalLanguageMailSearch } from "@quieter/mail/natural-language-search";
 import { isMailSearchFilterSupported } from "@quieter/mail/search";
 import { toast } from "@quieter/ui/toast";
@@ -100,6 +101,7 @@ const resolveStateAction = <T>(action: SetStateAction<T>, current: T) => {
 };
 
 export const useMessageListSearchController = ({
+  focusSearchRef,
   isRefreshing,
   mailboxId,
   mailboxProvider,
@@ -110,6 +112,7 @@ export const useMessageListSearchController = ({
   searchMailboxes,
 }: MessageListSearchProps) => {
   const fieldRef = useRef<HTMLDivElement>(null);
+  const isSearchVisible = useElementVisible(fieldRef);
   const textInputRef = useRef<HTMLInputElement>(null);
   const segmentRefs = useRef<(HTMLElement | null)[]>([]);
   const dateTokenRefs = useRef(new Map<number, HTMLDivElement>());
@@ -1048,16 +1051,45 @@ export const useMessageListSearchController = ({
     };
   };
 
+  const focusSearch = () => {
+    openSearchDropdown();
+    focusTextInput({ toEnd: true });
+  };
+  const latestFocusSearchRef = useRef(focusSearch);
+
+  useLayoutEffect(() => {
+    latestFocusSearchRef.current = focusSearch;
+  });
+
+  useLayoutEffect((): (() => void) | undefined => {
+    if (focusSearchRef === undefined) {
+      return undefined;
+    }
+    const handle = () => {
+      latestFocusSearchRef.current();
+    };
+    focusSearchRef.current = handle;
+    return () => {
+      if (focusSearchRef.current === handle) {
+        focusSearchRef.current = null;
+      }
+    };
+  }, [focusSearchRef]);
+
   useHotkey(
     "Mod+K",
     (event) => {
-      if (shouldIgnoreAppShortcut(event)) {
+      if (
+        shouldIgnoreAppShortcut(event) ||
+        fieldRef.current === null ||
+        getComputedStyle(fieldRef.current).pointerEvents === "none"
+      ) {
         return;
       }
-      openSearchDropdown();
-      focusTextInput({ toEnd: true });
+      focusSearch();
     },
     {
+      enabled: isSearchVisible,
       ignoreInputs: true,
     }
   );
