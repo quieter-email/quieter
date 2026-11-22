@@ -1,4 +1,8 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
+import {
+  GMAIL_CATCHUP_WORK_CONCURRENCY,
+  GMAIL_FRESH_WORK_CONCURRENCY,
+} from "@quieter/cloudflare/gmail-processing-config";
 
 import type { createAppDatabase } from "./database";
 import { GMAIL_PROCESSING_REGION } from "./gmail-processing-region";
@@ -231,8 +235,16 @@ export const createGmailResources = (
       type: "worker",
     });
     for (const [name, queue, maxConcurrency] of [
-      ["GmailFreshProcessingConsumer", gmailFreshProcessingQueue, 4],
-      ["GmailCatchupProcessingConsumer", gmailCatchupProcessingQueue, 2],
+      [
+        "GmailFreshProcessingConsumer",
+        gmailFreshProcessingQueue,
+        GMAIL_FRESH_WORK_CONCURRENCY,
+      ],
+      [
+        "GmailCatchupProcessingConsumer",
+        gmailCatchupProcessingQueue,
+        GMAIL_CATCHUP_WORK_CONCURRENCY,
+      ],
     ] as const) {
       // oxlint-disable-next-line no-new -- Pulumi registers each independent consumer with the realtime Worker.
       new cloudflare.QueueConsumer(name, {

@@ -132,7 +132,7 @@ For Pro mailboxes:
 
 1. Gmail sends an authenticated notification to the Cloudflare ingress.
 2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox, transient failure, or remaining history page returns a retryable response to Google so backlog work continues.
-3. Up to four messages from a history page are processed concurrently; mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
+3. Up to eight queued messages from history recovery or catch-up are processed concurrently, while fresh mail keeps its separate admission path and preempts catch-up claims. Mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
 5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The minute mail-maintenance worker retries managed code extraction and removes old processing records that contain no code.
 

@@ -34,7 +34,7 @@ export default withSentryReporting({
           processManagedRuleBackfills(),
           retryPendingManagedVerificationCodes(),
           cleanupMailboxVerificationCodes(),
-          drainMailAgentRuns({ limit: 2 }),
+          drainMailAgentRuns({ concurrency: 4, limit: 8 }),
           processPendingMailImportance({ limit: 20 }),
           reconcileReminderSchedules({ limit: 20 }),
           processReminderJobs({ limit: 4 }),

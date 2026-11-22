@@ -22,7 +22,7 @@ import {
 import { reportError } from "@quieter/observability";
 import { dynamicTool, isStepCount, Output, ToolLoopAgent } from "ai";
 import type { ToolSet } from "ai";
-import { and, asc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
+import { and, desc, eq, gt, inArray, isNull, lt, or, sql } from "drizzle-orm";
 import { convert } from "html-to-text";
 import { z } from "zod";
 
@@ -162,7 +162,7 @@ const claimNextRun = async (): Promise<ClaimedRun | null> =>
           )
         )
       )
-      .orderBy(asc(mailboxAgentRun.createdAt))
+      .orderBy(desc(mailboxAgentRun.createdAt))
       .limit(1)
       .for("update", { skipLocked: true });
     if (candidate === undefined) {
@@ -1109,20 +1109,35 @@ const executeRun = async (run: ClaimedRun) => {
   }
 };
 
-export const drainMailAgentRuns = async (input: { limit?: number } = {}) => {
-  let processed = 0;
-  for (
-    let index = 0;
-    index < Math.min(3, Math.max(1, input.limit ?? 2));
-    index += 1
-  ) {
-    const run = await claimNextRun();
-    if (run === null) {
-      break;
-    }
-    await executeRun(run);
-    processed += 1;
+export const drainMailAgentRuns = async (
+  input: { concurrency?: number; limit?: number } = {}
+) => {
+  const limit = Math.min(12, Math.max(1, input.limit ?? 2));
+  const concurrency = Math.min(limit, Math.max(1, input.concurrency ?? 2));
+  let claimed = 0;
+  const outcomes = await Promise.allSettled(
+    Array.from({ length: concurrency }, async () => {
+      while (true) {
+        if (claimed >= limit) {
+          return;
+        }
+        claimed += 1;
+        const run = await claimNextRun();
+        if (run === null) {
+          claimed -= 1;
+          return;
+        }
+        await executeRun(run);
+      }
+    })
+  );
+  const failure = outcomes.find(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected"
+  );
+  if (failure !== undefined) {
+    throw failure.reason;
   }
+  const processed = claimed;
   const pendingUsage = await db
     .select()
     .from(mailboxAgentRun)

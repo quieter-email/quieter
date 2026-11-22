@@ -1,4 +1,8 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import {
+  GMAIL_CATCHUP_WORK_CONCURRENCY,
+  GMAIL_FRESH_WORK_CONCURRENCY,
+} from "@quieter/mail/gmail-work";
 import type { GmailPubSubNotificationMessage } from "@quieter/orpc/gmail-pubsub";
 import { z } from "zod";
 
@@ -211,7 +215,10 @@ export const processGmailJob = async (
           const schedulingStartedAt = performance.now();
           try {
             await scheduleGmailMessageWorkWakes({
-              immediateWakeCount: Math.max(1, Math.min(4, discovery.queued)),
+              immediateWakeCount: Math.max(
+                1,
+                Math.min(GMAIL_FRESH_WORK_CONCURRENCY, discovery.queued)
+              ),
               mailboxId: discovery.mailboxId,
               onWake: () => {
                 wakeCallCount += 1;
@@ -371,7 +378,10 @@ export const processGmailJob = async (
         const schedules = await Promise.allSettled(
           (["fresh", "catchup"] as const).map(async (priority) => {
             await scheduleGmailMessageWorkWakes({
-              immediateWakeCount: priority === "fresh" ? 4 : 2,
+              immediateWakeCount:
+                priority === "fresh"
+                  ? GMAIL_FRESH_WORK_CONCURRENCY
+                  : GMAIL_CATCHUP_WORK_CONCURRENCY,
               mailboxId: result.mailboxId,
               priority,
             });

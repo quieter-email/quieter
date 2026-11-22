@@ -52,7 +52,7 @@
         "dead_letter_queue": "quieter-local-gmail-processing-dead-letter",
         "max_batch_size": 1,
         "max_batch_timeout": 0,
-        "max_concurrency": 2,
+        "max_concurrency": 8,
         "max_retries": 100,
         "retry_delay": 60,
       },

@@ -3,7 +3,8 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./compatibility-date": "./src/compatibility-date.ts"
+    "./compatibility-date": "./src/compatibility-date.ts",
+    "./gmail-processing-config": "./src/gmail-processing-config.ts"
   },
   "scripts": {
     "dev": "wrangler dev --config wrangler.local.jsonc --config wrangler.processing.local.jsonc --persist-to ../../.wrangler/state",

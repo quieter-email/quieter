@@ -7,6 +7,7 @@ import {
   mailbox,
   organization,
 } from "@quieter/database/schema";
+import { GMAIL_FRESH_WORK_CONCURRENCY } from "@quieter/mail/gmail-work";
 import {
   and,
   asc,
@@ -165,7 +166,7 @@ export const claimGmailMessageWork = async (input: {
           throw new Error("Gmail work admission did not return its capacity.");
         }
         ({ now } = capacity);
-        if (capacity.activeLeases >= 4) {
+        if (capacity.activeLeases >= GMAIL_FRESH_WORK_CONCURRENCY) {
           return {
             activeLeases: capacity.activeLeases,
             retryAt: new Date(now.getTime() + 5000),

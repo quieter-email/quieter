@@ -1,4 +1,5 @@
 import { serverEnv } from "@quieter/env/server";
+import { GMAIL_FRESH_WORK_CONCURRENCY } from "@quieter/mail/gmail-work";
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
@@ -17,7 +18,10 @@ import { withSentryReporting } from "./worker-runtime";
 
 export { GmailFreshExecutor } from "./gmail-fresh-executor";
 
-const executorNames = ["fresh-v1-0", "fresh-v1-1", "fresh-v1-2", "fresh-v1-3"];
+const executorNames = Array.from(
+  { length: GMAIL_FRESH_WORK_CONCURRENCY },
+  (_, index) => `fresh-v1-${index}`
+);
 const deliveryKeySchema = z.string().min(1).max(256).optional();
 
 const acceptFreshWake = async (
