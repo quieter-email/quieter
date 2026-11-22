@@ -45,6 +45,8 @@ import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
+const MESSAGE_PAGE_SIZE = 15;
+const OTHER_MESSAGE_PAGE_SIZE = 25;
 
 type MessagesQueryKey = ReturnType<typeof getMessagesQueryKey>;
 
@@ -64,9 +66,10 @@ const messagesQueryPersister: QueryPersister<
 
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
-  signal?: AbortSignal;
   preserveHistoryId?: string;
+  preserveUnrefreshedPages?: boolean;
   refreshThreads?: boolean;
+  signal?: AbortSignal;
 };
 
 const fetchMessagesPage = async (
@@ -76,10 +79,12 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal
 ) => {
+  const maxResults =
+    pageToken === undefined ? MESSAGE_PAGE_SIZE : OTHER_MESSAGE_PAGE_SIZE;
   if (isManagedSandboxMailboxId(mailboxId)) {
     return listManagedDemoMessages({
       category: mailbox,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     });
@@ -89,7 +94,7 @@ const fetchMessagesPage = async (
     return listDemoMessages({
       category: mailbox,
       mailboxId,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     });
@@ -99,7 +104,7 @@ const fetchMessagesPage = async (
     {
       category: mailbox,
       mailboxId,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     },
@@ -196,42 +201,43 @@ const refreshMessagesPages = async (
   const refreshedPageParams: (string | undefined)[] = [];
   const oldHistoryId =
     options.preserveHistoryId ?? currentMessages?.pages[0]?.historyId;
+  const preserveUnrefreshedPages = options.preserveUnrefreshedPages !== false;
   let pageToken: string | undefined;
+  let withheldContinuationToken: string | undefined;
 
   const publish = (complete: boolean) => {
     operation.assertCurrent();
     const pages = refreshedPages.map((page, index) => ({
       ...page,
       ...(index === 0 && !complete ? { historyId: oldHistoryId } : {}),
-      ...(index === refreshedPages.length - 1 && !complete
-        ? { nextPageToken: undefined }
-        : {}),
     }));
     if (options.preserveHistoryId !== undefined) {
       pages[0].historyId = options.preserveHistoryId;
     }
-    const enriched = mergeRefreshedMailboxPagesIntoQueryData(
-      currentMessages,
-      pages,
-      refreshedPageParams
-    );
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
       (data) => {
         const merged = mergeRefreshedMailboxPagesIntoQueryData(
           data,
-          enriched.pages,
-          refreshedPageParams
+          pages,
+          refreshedPageParams,
+          { preserveUnrefreshedPages }
         );
-        return {
-          ...merged,
-          pages: merged.pages.map((page, index) =>
-            index === 0
-              ? { ...page, refreshing: complete ? undefined : true }
-              : page
-          ),
-        };
+        const lastPageIndex = merged.pages.length - 1;
+        withheldContinuationToken = complete
+          ? undefined
+          : (merged.pages[lastPageIndex]?.nextPageToken ?? undefined);
+        const publishedPages: MessagesQueryData["pages"] = merged.pages.map(
+          (page, index) => ({
+            ...page,
+            ...(index === 0 ? { refreshing: complete ? undefined : true } : {}),
+            ...(!complete && index === lastPageIndex
+              ? { nextPageToken: undefined }
+              : {}),
+          })
+        );
+        return { ...merged, pages: publishedPages };
       }
     );
   };
@@ -256,8 +262,9 @@ const refreshMessagesPages = async (
           pages: data.pages.map((page, index) => ({
             ...page,
             ...(index === 0 ? { refreshing: undefined } : {}),
-            ...(index === data.pages.length - 1
-              ? { nextPageToken: pageToken }
+            ...(index === data.pages.length - 1 &&
+            withheldContinuationToken !== undefined
+              ? { nextPageToken: withheldContinuationToken }
               : {}),
           })),
         };

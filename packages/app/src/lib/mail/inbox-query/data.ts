@@ -100,7 +100,8 @@ export const mergeMessagePreservingLoadedDetails = (
 export const mergeRefreshedMailboxPagesIntoQueryData = (
   previous: MessagesQueryData | undefined,
   refreshedPages: ListMessagesPageResult[],
-  refreshedPageParams: (string | undefined)[]
+  refreshedPageParams: (string | undefined)[],
+  options: { preserveUnrefreshedPages?: boolean } = {}
 ): MessagesQueryData => {
   if (previous === undefined || previous.pages.length === 0) {
     return { pageParams: refreshedPageParams, pages: refreshedPages };
@@ -116,7 +117,45 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
         : message;
     }),
   }));
-  return { pageParams: refreshedPageParams, pages };
+  const lastRefreshedPage = refreshedPages.at(-1);
+  if (
+    options.preserveUnrefreshedPages === false ||
+    refreshedPages.length >= previous.pages.length ||
+    (lastRefreshedPage?.nextPageToken ?? "") === ""
+  ) {
+    return { pageParams: refreshedPageParams, pages };
+  }
+
+  const preservedMessageIds = new Set(
+    pages.flatMap((page) => page.messages.map((message) => message.id))
+  );
+  const preservedPages: ListMessagesPageResult[] = [];
+  for (const page of previous.pages.slice(refreshedPages.length)) {
+    const messages = page.messages.filter(
+      (message) => !preservedMessageIds.has(message.id)
+    );
+    for (const message of messages) {
+      preservedMessageIds.add(message.id);
+    }
+    preservedPages.push({ ...page, messages });
+  }
+  while (preservedPages.at(-1)?.messages.length === 0) {
+    preservedPages.pop();
+  }
+  if (preservedPages.length === 0) {
+    return { pageParams: refreshedPageParams, pages };
+  }
+
+  return {
+    pageParams: [
+      ...refreshedPageParams,
+      ...previous.pageParams.slice(
+        refreshedPages.length,
+        refreshedPages.length + preservedPages.length
+      ),
+    ],
+    pages: [...pages, ...preservedPages],
+  };
 };
 
 export const updateFirstPageHistoryId = (
@@ -414,7 +453,7 @@ export const applyThreadLabelChangesLocally = (
   });
 };
 
-const getMessageSortTimestamp = (
+export const getMessageSortTimestamp = (
   message: Pick<MessageListItem, "date" | "internalDate">
 ): number => {
   const source = message.internalDate ?? message.date;
