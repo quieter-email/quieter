@@ -41,7 +41,13 @@ import {
 } from "./gmail-mailbox-access";
 import { writeGmailCapturedMessage } from "./mail-capture";
 import { learnAiMemoryFromMailAction } from "./mail/feedback";
-import { filterMailSnoozeVisibility } from "./snooze/queries";
+import { supersedePendingMailPlacement } from "./mail/placement";
+import {
+  countVisibleMailSnoozes,
+  filterMailSnoozeVisibility,
+} from "./snooze/queries";
+
+const MAX_VISIBILITY_SCAN_PAGES = 5;
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -121,6 +127,7 @@ export const searchGmailForUser = async (
 ): Promise<GmailSearchResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
     let { pageToken } = input;
+    let pagesScanned = 0;
     while (true) {
       const result = await listMessagesForAgent(accessToken, {
         mailbox: input.scope === "all_mail" ? undefined : input.category,
@@ -130,6 +137,7 @@ export const searchGmailForUser = async (
         signal: input.signal,
       });
       let { messages } = result;
+      pagesScanned += 1;
       if (
         input.scope !== "all_mail" &&
         (input.category === "done" || input.category === "later")
@@ -142,7 +150,11 @@ export const searchGmailForUser = async (
           userId: input.userId,
         });
         messages = messages.filter((message) => visible.has(message.threadId));
-        if (messages.length === 0 && result.nextPageToken) {
+        if (
+          messages.length === 0 &&
+          result.nextPageToken &&
+          pagesScanned < MAX_VISIBILITY_SCAN_PAGES
+        ) {
           pageToken = result.nextPageToken;
           continue;
         }
@@ -553,6 +565,13 @@ export const modifyMailForUser = async (
 ): Promise<ModifyMailResult> => {
   const { action, category, id, signal, target } = input;
   const change = gmailChatMailChanges[action];
+  if (action === "trash" || action === "untrash") {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      ...(target === "thread" ? { threadIds: [id] } : { messageId: id }),
+    });
+  }
   const run = await openAuthorizedGmailChatRequests(input);
   const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
   const receipt = await run(async (accessToken) => {
@@ -585,8 +604,15 @@ export const modifyMailBatchForUser = async (
 ): Promise<ModifyMailBatchResult> => {
   const { action, category, signal, target } = input;
   signal?.throwIfAborted();
-  const run = await openAuthorizedGmailChatRequests(input);
   const ids = [...new Set(input.ids)];
+  if ((action === "trash" || action === "untrash") && ids.length > 0) {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      ...(target === "thread" ? { threadIds: ids } : { messageIds: ids }),
+    });
+  }
+  const run = await openAuthorizedGmailChatRequests(input);
   const change = gmailChatMailChanges[action];
   const results: ModifyMailBatchResult["results"] = [];
   const appliedMessageIds: string[] = [];
@@ -723,6 +749,27 @@ export const getMailboxOverviewForUser = async (
   input: GmailChatRequest & { category: MailboxCategory }
 ): Promise<MailboxOverviewResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    if (input.category === "later") {
+      const [profile, categoryMessages] = await Promise.all([
+        getGmailProfile(accessToken, input.signal),
+        countVisibleMailSnoozes({
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        }),
+      ]);
+      return {
+        ...(categoryMessages === 0
+          ? { attachmentMessages: 0, starredMessages: 0, unreadMessages: 0 }
+          : {}),
+        category: input.category,
+        categoryMessages,
+        emailAddress: profile.emailAddress,
+        fetchedAt: new Date().toISOString(),
+        status: "success",
+        totalMessages: profile.messagesTotal,
+        totalThreads: profile.threadsTotal,
+      };
+    }
     const [
       profile,
       categoryMessages,

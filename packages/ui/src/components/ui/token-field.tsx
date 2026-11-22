@@ -4,7 +4,9 @@ import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
+import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
 import { pillVariants } from "./pill";
+import { popupSurfaceClassName } from "./popup-surface";
 import {
   indexEditable,
   placeCaret,
@@ -96,22 +98,21 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md squircle",
+      popupSurfaceClassName,
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl p-1 squircle",
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}
     role="listbox"
   >
     {tokens.length === 0 ? (
-      <p className="px-2.5 py-2 text-body text-muted-fg">{emptyMessage}</p>
+      <p className={menuEmptyClassName}>{emptyMessage}</p>
     ) : (
       tokens.map((token, position) => (
         <button
           aria-selected={position === activeIndex}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-body text-fg squircle",
-            { "bg-muted": position === activeIndex }
-          )}
+          className={cn(menuItemClassName, "w-full")}
+          data-highlighted={position === activeIndex ? "" : undefined}
           id={optionId(position)}
           key={token.id}
           onClick={() => {

@@ -51,7 +51,7 @@ export const AutoLabelEditor = ({
         <DialogBody className="min-h-0 overflow-y-auto">
           <form
             aria-label={`Auto-label ${label.name}`}
-            className="flex min-h-0 flex-col gap-4"
+            className="flex min-h-0 flex-col gap-3"
             onSubmit={(event) => {
               event.preventDefault();
               setShowErrors(true);

@@ -226,7 +226,7 @@ export const CalendarInvitationDialog = ({
             Choose where to add {attachment.fileName}.
           </DialogDescription>
         </DialogHeader>
-        <DialogBody spacing="4">
+        <DialogBody spacing="3">
           <Field>
             <FieldLabel>Calendar</FieldLabel>
             <Select

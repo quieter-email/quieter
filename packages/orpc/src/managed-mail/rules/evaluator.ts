@@ -4,6 +4,8 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   mailbox,
+  mailPlacementOperation,
+  mailSnooze,
   managedMailAttachment,
   managedMailLabel,
   managedMailMessage,
@@ -17,8 +19,9 @@ import { managedMailboxRuleConditionGroupSchema } from "@quieter/mail/mailbox-or
 import type { ManagedMailboxRuleAction } from "@quieter/mail/mailbox-organization";
 import { parseRawMailAttachments } from "@quieter/mail/raw-message";
 import { structuredMailSearchSchema } from "@quieter/mail/search";
+import { MAIL_SNOOZE_LIVE_STATUSES } from "@quieter/mail/snooze";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
@@ -373,10 +376,51 @@ const advanceRuleRun = async (
             trash: "trash",
           } as const
         )[action.destination];
+        const movedAt = new Date();
         await tx
           .update(managedMailMessage)
-          .set({ mailboxState, updatedAt: new Date() })
+          .set({ mailboxState, updatedAt: movedAt })
           .where(eq(managedMailMessage.id, message.id));
+        await tx
+          .select({ id: mailbox.id })
+          .from(mailbox)
+          .where(eq(mailbox.id, run.mailboxId))
+          .for("update");
+        await tx
+          .update(mailSnooze)
+          .set({
+            code: "newer_intent",
+            leaseToken: null,
+            leaseUntil: null,
+            message: null,
+            nextWakeAt: null,
+            status: "superseded",
+            updatedAt: movedAt,
+            version: sql`${mailSnooze.version} + 1`,
+          })
+          .where(
+            and(
+              eq(mailSnooze.mailboxId, run.mailboxId),
+              eq(mailSnooze.threadId, message.threadId),
+              inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
+            )
+          );
+        await tx
+          .update(mailPlacementOperation)
+          .set({
+            code: "newer_intent",
+            message:
+              "A newer action changed this conversation. Refresh to see its current state.",
+            status: "superseded",
+            updatedAt: movedAt,
+          })
+          .where(
+            and(
+              eq(mailPlacementOperation.mailboxId, run.mailboxId),
+              eq(mailPlacementOperation.threadId, message.threadId),
+              inArray(mailPlacementOperation.status, ["pending", "submitting"])
+            )
+          );
         message.mailboxState = mailboxState;
         changed = true;
       } else if (action.kind === "set-labels") {

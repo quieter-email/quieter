@@ -168,7 +168,6 @@ export const LeaveOrganizationDialog = ({
               </DialogCloseButton>
               <Button
                 disabled={leaveOrganizationMutation.isPending}
-                size="sm"
                 type="submit"
                 variant="destructive"
               >
@@ -331,7 +330,6 @@ export const DeleteOrganizationDialog = ({
               </DialogCloseButton>
               <Button
                 disabled={deleteOrganizationMutation.isPending}
-                size="sm"
                 type="submit"
                 variant="destructive"
               >

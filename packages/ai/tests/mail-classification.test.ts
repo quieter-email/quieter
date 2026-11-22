@@ -1,10 +1,7 @@
 import type { AiBillingContext } from "@quieter/billing/ai-reservation";
 import { afterEach, describe, expect, test, vi } from "vite-plus/test";
 
-import {
-  classifyMailMessage,
-  detectMailVerificationCode,
-} from "../src/classify-gmail-message";
+import { classifyMailMessage } from "../src/classify-gmail-message";
 
 const billing: AiBillingContext = {
   account: null,
@@ -78,24 +75,6 @@ describe("mail classification decisions", () => {
         message: { id: "message" },
       })
     ).rejects.toThrow(/incomplete/u);
-  });
-
-  test("does not silently reject mail when the screening decision is missing", async () => {
-    vi.stubGlobal(
-      "fetch",
-      vi.fn<typeof fetch>().mockResolvedValue(
-        Response.json({
-          answers: {},
-          usage: { cost: 0.001, input_tokens: 200, output_tokens: 0 },
-        })
-      )
-    );
-    await expect(
-      detectMailVerificationCode({
-        billing,
-        message: { id: "message" },
-      })
-    ).rejects.toThrow(/no decision/u);
   });
 });
 

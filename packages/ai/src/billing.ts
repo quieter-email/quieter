@@ -16,23 +16,14 @@ export const providerUsageResponseSchema = z.object({
 });
 
 const mailRequestBudgets = {
-  "google/gemini-3.1-flash-lite": {
-    contextLength: 1_048_576,
-    maxOutputTokens: 100,
-    maximumCostUsd: (1_048_576 * 0.25 + 100 * 1.5) / 1_000_000,
-    model: "google/gemini-3.1-flash-lite",
-    provider: {
-      max_price: { completion: 1.5, prompt: 0.25, request: 0 },
-      only: ["google-vertex"],
-    },
-  },
-  "typesafe/jev-1.13": {
-    contextLength: 262_144,
-    maximumCostUsd: (262_144 * 0.042) / 1_000_000,
-    model: "typesafe/jev-1.13",
+  "liquid/d1.2-ultra": {
+    contextLength: 65_536,
+    maximumCostUsd: (65_536 * 0.042) / 1_000_000,
+    model: "liquid/d1.2-ultra",
     provider: {
       max_price: { completion: 0, prompt: 0.042, request: 0 },
-      only: ["typesafe"],
+      only: ["liquid"],
+      zdr: true,
     },
   },
 } as const;

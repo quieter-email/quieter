@@ -5,8 +5,9 @@ import type { ComponentProps } from "react";
 
 import { cn } from "../../lib/cn";
 import { Input } from "./input";
+import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 
 export type AutocompleteProps = Pick<
   ComponentProps<typeof Input>,
@@ -56,7 +57,7 @@ export const Autocomplete = ({
         align="start"
         className="isolate z-50"
         collisionPadding={8}
-        sideOffset={4}
+        sideOffset={popupSideOffset}
       >
         <AutocompletePrimitive.Popup
           className={cn(
@@ -65,13 +66,15 @@ export const Autocomplete = ({
             "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
           )}
         >
-          <AutocompletePrimitive.Empty className="px-3 py-4 text-body-sm text-muted-fg empty:p-0">
+          <AutocompletePrimitive.Empty
+            className={cn(menuEmptyClassName, "empty:p-0")}
+          >
             {emptyMessage}
           </AutocompletePrimitive.Empty>
           <AutocompletePrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
             {(option: string) => (
               <AutocompletePrimitive.Item
-                className="flex min-h-8 cursor-default items-center rounded-md px-2 py-1.5 text-body-sm text-fg select-none data-highlighted:bg-muted"
+                className={menuItemClassName}
                 key={option}
                 value={option}
               >

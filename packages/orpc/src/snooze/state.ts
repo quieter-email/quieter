@@ -10,14 +10,7 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { publishMailUpdate } from "../mail-updates";
 import { assertAccessibleMailbox } from "../mailbox/service";
 
-export const MAIL_SNOOZE_LIVE_STATUSES = [
-  "preparing",
-  "active",
-  "returning",
-  "suspended",
-  "failed",
-  "uncertain",
-] as const;
+export { MAIL_SNOOZE_LIVE_STATUSES } from "@quieter/mail/snooze";
 
 export const serializeMailSnoozeState = (
   row: typeof mailSnooze.$inferSelect
@@ -33,14 +26,17 @@ export const serializeMailSnoozeState = (
   version: row.version,
 });
 
-export const getMailSnoozeStates = async (input: {
+export const getMailSnoozeStateEntries = async (input: {
   userId: string;
   mailboxId: string;
   threadIds: string[];
 }) => {
   await assertAccessibleMailbox(input);
   if (input.threadIds.length === 0) {
-    return new Map<string, MailSnoozeState>();
+    return new Map<
+      string,
+      { knownIncomingMessageIds: readonly string[]; state: MailSnoozeState }
+    >();
   }
   const rows = await db
     .select()
@@ -52,7 +48,24 @@ export const getMailSnoozeStates = async (input: {
       )
     );
   return new Map(
-    rows.map((row) => [row.threadId, serializeMailSnoozeState(row)])
+    rows.map((row) => [
+      row.threadId,
+      {
+        knownIncomingMessageIds: row.knownIncomingMessageIds,
+        state: serializeMailSnoozeState(row),
+      },
+    ])
+  );
+};
+
+export const getMailSnoozeStates = async (input: {
+  userId: string;
+  mailboxId: string;
+  threadIds: string[];
+}) => {
+  const entries = await getMailSnoozeStateEntries(input);
+  return new Map(
+    [...entries.entries()].map(([threadId, entry]) => [threadId, entry.state])
   );
 };
 

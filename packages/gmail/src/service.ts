@@ -1850,41 +1850,46 @@ export const listMessagesWithDetails = async (
     signal?: AbortSignal;
   }
 ): Promise<ListMessagesPageResult> => {
-  const list = await listThreads(accessToken, options);
-  const threads = await getGmailThreadsListMetadata(
-    accessToken,
-    list.threads.map((thread) => thread.id),
-    options?.signal
-  );
-  const messages = await projectGmailConversationRows(
-    accessToken,
-    threads,
-    options?.mailbox,
-    options?.signal
-  );
-  if (
-    options?.mailbox === "done" &&
-    messages.length === 0 &&
-    list.nextPageToken
-  ) {
-    return await listMessagesWithDetails(accessToken, {
-      ...options,
-      pageToken: list.nextPageToken,
-    });
+  let pageToken = options?.pageToken;
+  let pagesScanned = 0;
+  while (true) {
+    options?.signal?.throwIfAborted();
+    const list = await listThreads(accessToken, { ...options, pageToken });
+    const threads = await getGmailThreadsListMetadata(
+      accessToken,
+      list.threads.map((thread) => thread.id),
+      options?.signal
+    );
+    const messages = await projectGmailConversationRows(
+      accessToken,
+      threads,
+      options?.mailbox,
+      options?.signal
+    );
+    pagesScanned += 1;
+    if (
+      options?.mailbox === "done" &&
+      messages.length === 0 &&
+      list.nextPageToken !== undefined &&
+      pagesScanned < 5
+    ) {
+      pageToken = list.nextPageToken;
+      continue;
+    }
+    let historyId = threads.find((thread) =>
+      isNonEmptyString(thread?.historyId)
+    )?.historyId;
+    if (historyId === undefined) {
+      const profile = await getGmailProfile(accessToken, options?.signal);
+      ({ historyId } = profile);
+    }
+    return {
+      historyId,
+      messages,
+      nextPageToken: list.nextPageToken,
+      resultSizeEstimate: list.resultSizeEstimate,
+    };
   }
-  let historyId = threads.find((thread) =>
-    isNonEmptyString(thread?.historyId)
-  )?.historyId;
-  if (historyId === undefined) {
-    const profile = await getGmailProfile(accessToken, options?.signal);
-    ({ historyId } = profile);
-  }
-  return {
-    historyId,
-    messages,
-    nextPageToken: list.nextPageToken,
-    resultSizeEstimate: list.resultSizeEstimate,
-  };
 };
 
 /** Live, compact mailbox search for agent tools. Skips thread summaries and avatar lookups. */

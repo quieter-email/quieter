@@ -1849,7 +1849,9 @@ export const mailSnooze = pgTable(
       table.mailboxId,
       table.threadId
     ),
-    index("mail_snooze_next_wake_idx").on(table.nextWakeAt),
+    index("mail_snooze_next_wake_idx")
+      .on(table.nextWakeAt)
+      .where(sql`${table.nextWakeAt} is not null`),
     index("mail_snooze_mailbox_status_return_idx").on(
       table.mailboxId,
       table.status,
@@ -1904,6 +1906,10 @@ export const mailSnoozeOperation = pgTable(
       table.mailboxId,
       table.requestId,
       table.threadId
+    ),
+    index("mail_snooze_operation_snooze_status_idx").on(
+      table.snoozeId,
+      table.status
     ),
     check(
       "mail_snooze_operation_expected_version_check",

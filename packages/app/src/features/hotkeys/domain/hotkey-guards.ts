@@ -27,7 +27,7 @@ const editableSelector = [
 const getElementTarget = (target: EventTarget | null) =>
   target instanceof Element ? target : null;
 
-export const isAppShortcutSequenceContinuation = (
+const isAppShortcutSequenceContinuation = (
   event: KeyboardEvent,
   now = Date.now()
 ) => {
@@ -58,7 +58,33 @@ const hasOpenBlockingDialog = () =>
     "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
   );
 
+const sequenceContinuationEvents = new WeakSet<KeyboardEvent>();
+
+const recordContinuation = (event: KeyboardEvent) => {
+  if (isAppShortcutSequenceContinuation(event)) {
+    sequenceContinuationEvents.add(event);
+  }
+};
+
+/**
+ * Snapshots sequence progress before any hotkey manager handles the event.
+ *
+ * The hotkey and sequence managers each listen on `document`, so whichever
+ * attached first runs first. When the sequence manager wins, it completes and
+ * resets `G I` before the single-key `I` handler can see the partial match.
+ * A window capture listener always runs before both.
+ */
+export const trackAppShortcutSequenceContinuations = () => {
+  window.addEventListener("keydown", recordContinuation, { capture: true });
+  return () => {
+    window.removeEventListener("keydown", recordContinuation, {
+      capture: true,
+    });
+  };
+};
+
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>
   isEditableShortcutTarget(event.target) ||
   hasOpenBlockingDialog() ||
+  sequenceContinuationEvents.has(event) ||
   isAppShortcutSequenceContinuation(event);

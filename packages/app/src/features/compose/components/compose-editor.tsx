@@ -775,7 +775,7 @@ export const ComposeEditorToolbar = ({
         ) : null}
       </div>
       {trailing === undefined ? null : (
-        <div className="ml-auto flex min-w-0 items-center gap-1">
+        <div className="-me-2.25 ml-auto flex min-w-0 items-center gap-1">
           {trailing}
         </div>
       )}

@@ -3,13 +3,8 @@ import { performance } from "node:perf_hooks";
 import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
-import { chatModelSchema } from "../packages/ai/src/chat-models.ts";
-import {
-  classifyMailMessage,
-  detectMailVerificationCode,
-} from "../packages/ai/src/classify-gmail-message.ts";
+import { classifyMailMessage } from "../packages/ai/src/classify-gmail-message.ts";
 import { extractMailVerificationCode } from "../packages/ai/src/extract-verification-code.ts";
-import { VERIFICATION_CODE_MODEL } from "../packages/ai/src/model-config.ts";
 
 if (
   serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" ||
@@ -55,9 +50,7 @@ const samples = [
   },
 ];
 const extractionTimings: number[] = [];
-const model = chatModelSchema.parse(process.argv[2] ?? VERIFICATION_CODE_MODEL);
 let correct = 0;
-let extractionCalls = 0;
 let costUsd = 0;
 const reportedCosts: number[] = [];
 for (const [index, sample] of samples.entries()) {
@@ -68,30 +61,18 @@ for (const [index, sample] of samples.entries()) {
     id: `synthetic-${index}`,
     subject: "Account message",
   };
-  const probability = await detectMailVerificationCode({
+  const result = await extractMailVerificationCode({
     billing: { kind: "development" },
     message,
     onUsage: (usage) => {
       reportedCosts.push(usage.costUsd ?? 0);
     },
   });
-  const shouldExtract = probability >= 0.2;
-  const result = shouldExtract
-    ? await extractMailVerificationCode({
-        billing: { kind: "development" },
-        message,
-        model,
-        onUsage: (usage) => {
-          reportedCosts.push(usage.costUsd ?? 0);
-        },
-      })
-    : { code: null };
-  extractionCalls += Number(shouldExtract);
   const elapsed = Math.round(performance.now() - start);
   extractionTimings.push(elapsed);
   correct += Number(result.code === sample.expected);
   process.stdout.write(
-    `Screened extraction ${index + 1}: ${elapsed}ms, ${shouldExtract ? "extracted" : "skipped"}, ${result.code === sample.expected ? "correct" : "mismatch"}\n`
+    `Extraction ${index + 1}: ${elapsed}ms, ${result.code === sample.expected ? "correct" : "mismatch"}\n`
   );
 }
 const start = performance.now();
@@ -135,7 +116,7 @@ process.stdout.write(
 const sorted = extractionTimings.toSorted((a, b) => a - b);
 costUsd += reportedCosts.reduce((sum, cost) => sum + cost, 0);
 process.stdout.write(
-  `Screened extraction: ${correct}/${samples.length} correct, ${extractionCalls} extractor calls, median ${sorted[Math.floor(sorted.length / 2)]}ms, max ${sorted.at(-1)}ms. Total provider cost: $${costUsd.toFixed(6)}.\n`
+  `Extraction: ${correct}/${samples.length} correct, median ${sorted[Math.floor(sorted.length / 2)]}ms, max ${sorted.at(-1)}ms. Total provider cost: $${costUsd.toFixed(6)}.\n`
 );
 if (correct !== samples.length || !labelCorrect) {
   process.exitCode = 1;

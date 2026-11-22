@@ -278,7 +278,7 @@ const MessageRowSelectionButton = ({
 
 const MessageRowDetails = ({
   wideCompactRows,
-  action,
+  actions,
   badge,
   date,
   deliveryStatus,
@@ -292,7 +292,7 @@ const MessageRowDetails = ({
   unread,
   verificationCode,
 }: {
-  action?: ReactNode;
+  actions?: ReactNode;
   badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -308,6 +308,7 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
+    actions={actions}
     active={isActive}
     badge={badge}
     layout={wideCompactRows === true ? "adaptive" : "stacked"}
@@ -327,7 +328,6 @@ const MessageRowDetails = ({
           messageCount={thread.messageCount}
           title={getMessageRowCountsTitle(thread)}
         />
-        {action}
       </>
     }
     sender={senderLabel}
@@ -475,42 +475,46 @@ const MessageRowSurface = ({
     thread,
     unread,
   });
+  const rowMailboxContext = mailboxContextsByThreadId?.get(thread.threadId);
+  const rowMailboxActions = rowMailboxContext?.mailboxActions ?? mailboxActions;
+  const rowMailboxProvider =
+    rowMailboxContext?.mailboxProvider ?? mailboxProvider;
   const threadActions = createMailboxThreadMessageActionHandlers({
-    mailboxActions,
+    mailboxActions: rowMailboxActions,
     onOpenDraft,
-    supportsFolders: mailboxProvider === "gmail",
-    supportsLabels: mailboxProvider !== "api",
-    supportsReadState: mailboxProvider !== "api",
-    supportsUnsubscribe: mailboxProvider === "gmail",
+    supportsFolders: rowMailboxProvider === "gmail",
+    supportsLabels: rowMailboxProvider !== "api",
+    supportsReadState: rowMailboxProvider !== "api",
+    supportsUnsubscribe: rowMailboxProvider === "gmail",
   });
   const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
-  const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
-    activeMailbox
-  );
-  const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${mailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
-  const placementAction =
-    canChangePlacement &&
-    (returnsToInbox
-      ? threadActions.onReturnToInbox !== undefined
-      : threadActions.onMarkDone !== undefined) ? (
+  const placementAction = returnsToInbox
+    ? threadActions.onReturnToInbox
+    : threadActions.onMarkDone;
+  const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${rowMailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
+  const rowActions =
+    placementAction !== undefined &&
+    !["drafts", "spam", "trash", "sent"].includes(activeMailbox) ? (
       <IconButtonTooltip label={placementLabel}>
         <Button
           aria-label={placementLabel}
-          className="pointer-events-auto"
+          disabled={isActionPending}
+          fullWidth
           onClick={() => {
-            void (
-              returnsToInbox
-                ? threadActions.onReturnToInbox
-                : threadActions.onMarkDone
-            )?.(thread.threadId);
+            void placementAction(thread.threadId);
           }}
-          pending={isActionPending}
-          variant="pill"
+          size="xs"
+          variant="row-action"
         >
           <Icon
             aria-hidden
             icon={returnsToInbox ? InboxIcon : CheckmarkCircle02Icon}
           />
+          {wideCompactRows === true && (
+            <span className="hidden @3xl:inline">
+              {returnsToInbox ? "Inbox" : "Done"}
+            </span>
+          )}
         </Button>
       </IconButtonTooltip>
     ) : undefined;
@@ -611,7 +615,7 @@ const MessageRowSurface = ({
           />
           <MessageRowDetails
             wideCompactRows={wideCompactRows}
-            action={placementAction}
+            actions={rowActions}
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}

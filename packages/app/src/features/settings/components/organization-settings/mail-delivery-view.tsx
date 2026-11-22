@@ -223,7 +223,9 @@ export const MailDeliveryView = ({
       {canManage ? (
         <section className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-body text-fg">Overview</h2>
+            <Text as="h2" size="sm" truncate weight="medium">
+              Overview
+            </Text>
             <div className="flex min-w-0 flex-wrap items-center gap-2">
               {managedMailboxes.length > 0 ? (
                 <Select

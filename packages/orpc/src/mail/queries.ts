@@ -62,10 +62,13 @@ import {
 import { loadDraftReminderIntent } from "../reminders/draft-state";
 import {
   attachMailSnoozeStates,
+  countVisibleMailSnoozes,
   filterMailSnoozeVisibility,
   listMailSnoozePage,
 } from "../snooze/queries";
 import type { MailInputs } from "./inputs";
+
+const MAX_VISIBILITY_SCAN_PAGES = 5;
 
 const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
   mailboxId: string,
@@ -98,6 +101,7 @@ const listLaterMessages = async (input: {
   pageToken?: string;
 }): Promise<ListMessagesPageResult> => {
   let { pageToken } = input;
+  let pagesScanned = 0;
   while (true) {
     input.context.signal?.throwIfAborted();
     const scheduled = await listMailSnoozePage({
@@ -107,6 +111,20 @@ const listLaterMessages = async (input: {
       userId: input.context.userId,
     });
     const threadIds = scheduled.snoozes.map((snooze) => snooze.threadId);
+    pagesScanned += 1;
+    if (threadIds.length === 0) {
+      if (
+        scheduled.nextPageToken === undefined ||
+        pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+      ) {
+        return {
+          messages: [],
+          nextPageToken: scheduled.nextPageToken,
+        };
+      }
+      pageToken = scheduled.nextPageToken;
+      continue;
+    }
     const page =
       input.provider === "managed"
         ? await listManagedMessages({
@@ -147,7 +165,11 @@ const listLaterMessages = async (input: {
       const message = rows.get(threadId);
       return message && visible.has(threadId) ? [message] : [];
     });
-    if (ordered.length > 0 || scheduled.nextPageToken === undefined) {
+    if (
+      ordered.length > 0 ||
+      scheduled.nextPageToken === undefined ||
+      pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+    ) {
       return {
         historyId:
           input.provider === "gmail" && page.historyId
@@ -540,6 +562,7 @@ export const queriesMailOperations = {
     }
     if (selectedMailbox.provider === "managed") {
       let { pageToken } = input;
+      let pagesScanned = 0;
       while (true) {
         context.signal?.throwIfAborted();
         const page = await listManagedMessages({
@@ -561,7 +584,12 @@ export const queriesMailOperations = {
         const filtered = messages.filter((message) =>
           visible.has(message.threadId)
         );
-        if (filtered.length > 0 || page.nextPageToken === undefined) {
+        pagesScanned += 1;
+        if (
+          filtered.length > 0 ||
+          page.nextPageToken === undefined ||
+          pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+        ) {
           return { ...page, messages: filtered };
         }
         pageToken = page.nextPageToken;
@@ -619,7 +647,17 @@ export const queriesMailOperations = {
         }),
       };
     }
+    if (input.category === "later") {
+      const visibleSnoozeCount = await countVisibleMailSnoozes({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (visibleSnoozeCount === 0) {
+        return { messages: [] };
+      }
+    }
     let { pageToken } = input;
+    let pagesScanned = 0;
     while (true) {
       context.signal?.throwIfAborted();
       const currentPageToken = pageToken;
@@ -660,7 +698,12 @@ export const queriesMailOperations = {
       const filtered = messages.filter((message) =>
         visible.has(message.threadId)
       );
-      if (filtered.length > 0 || page.nextPageToken === undefined) {
+      pagesScanned += 1;
+      if (
+        filtered.length > 0 ||
+        page.nextPageToken === undefined ||
+        pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+      ) {
         return {
           ...page,
           historyId: page.historyId

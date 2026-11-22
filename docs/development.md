@@ -328,7 +328,7 @@ Do not hand-edit:
 
 ## Incoming mail AI verification
 
-Run `vp run mail:benchmark` after local setup to exercise the real Jev code screen, code extractor, and label classifier using synthetic messages. It requires a separate, budget-limited development OpenRouter key and rejects uncapped keys or non-local configuration. It prints correctness, elapsed time, extractor-call counts, and cost without printing message content or codes. An optional model argument supports comparisons, for example `vp run mail:benchmark google/gemini-3.1-flash-lite`.
+Run `vp run mail:benchmark` after local setup to exercise the real decision-model code extractor and label classifier using synthetic messages. It requires a separate, budget-limited development OpenRouter key and rejects uncapped keys or non-local configuration. It prints correctness, elapsed time, extractor-call counts, and cost without printing message content or codes. An optional model argument supports comparisons, for example `vp run mail:benchmark google/gemini-3.1-flash-lite`.
 
 On October 1, 2026, all five synthetic code cases passed for each tested model. Gemini 2.5 Flash Lite had a 651 ms median and 796 ms maximum, compared with 1,009 ms / 1,108 ms for Gemini 3.5 Flash and 1,241 ms / 1,615 ms for Gemini 3.1 Flash Lite. The 2.5 run, including one Jev classification, cost $0.000180. This small sample measures model requests, not mail arrival through Google/SES, message loading, database writes, or browser refresh. A one-second end-to-end target needs measurements in the deployed mail path and cannot be guaranteed by these results.
 

@@ -114,7 +114,6 @@ export const SettingsSidebar = ({
       active={selected}
       key={title}
       aria-current={selected ? "page" : undefined}
-      className="justify-start text-left"
       nativeButton={false}
       onClick={onRequestClose}
       onFocus={() => {
@@ -144,7 +143,6 @@ export const SettingsSidebar = ({
         />
       }
       variant="ghost"
-      size="sm"
     >
       <Icon icon={SETTINGS_ICONS[title] ?? Settings01Icon} tone="default" />
       {title}
@@ -152,19 +150,16 @@ export const SettingsSidebar = ({
   );
   return (
     <div className="relative z-10 flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-6">
-      <div className="mb-3 flex items-center justify-between px-1">
-        <Button
-          className="justify-start"
+      <div className="-mt-px mb-2.75 flex items-center justify-between px-1">
+        <SidebarNavItem
           nativeButton={false}
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
           role="link"
           render={<Link to={from} />}
-          variant="ghost"
-          size="sm"
         >
           <Icon icon={ArrowLeft01Icon} />
           Back to mail
-        </Button>
+        </SidebarNavItem>
         {onRequestClose && (
           <IconButtonTooltip label="Close settings menu">
             <Button
@@ -184,7 +179,9 @@ export const SettingsSidebar = ({
       ) : (
         <nav aria-label="Settings" className="space-y-4 p-1">
           <div className="space-y-0">
-            <p className="px-2 py-1 text-caption text-muted-fg">Personal</p>
+            <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
+              Personal
+            </p>
             {PERSONAL_ITEMS.map((item) =>
               navigationLink(
                 item.title,
@@ -205,7 +202,7 @@ export const SettingsSidebar = ({
             {internalNavigation}
           </div>
           <div className="space-y-0">
-            <p className="px-2 py-1 text-caption text-muted-fg">
+            <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
               Team settings
             </p>
             <DropdownMenu>

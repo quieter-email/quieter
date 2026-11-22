@@ -9,7 +9,9 @@ import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Input } from "./input";
 import { InputAddon, InputGroup } from "./input-group";
+import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 import { selectTriggerVariants } from "./select";
 import type { SelectTriggerProps } from "./select";
 
@@ -103,16 +105,17 @@ export const SearchableSelect = ({
           align="start"
           className="isolate z-50"
           collisionPadding={8}
-          sideOffset={4}
+          sideOffset={popupSideOffset}
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel}
             className={cn(
               anchoredPopupMotionClassName,
-              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md"
+              popupSurfaceClassName,
+              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
             )}
           >
-            <div className="shrink-0 border-b border-border p-2">
+            <div className="shrink-0 border-b border-fg/10 p-2">
               <InputGroup>
                 <InputAddon
                   aria-hidden
@@ -127,13 +130,13 @@ export const SearchableSelect = ({
                 />
               </InputGroup>
             </div>
-            <ComboboxPrimitive.Empty className="text-center text-body-sm text-muted-fg">
-              <p className="px-3 py-4">{emptyMessage}</p>
+            <ComboboxPrimitive.Empty>
+              <p className={menuEmptyClassName}>{emptyMessage}</p>
             </ComboboxPrimitive.Empty>
             <ComboboxPrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
               {(option: SearchableSelectOption) => (
                 <ComboboxPrimitive.Item
-                  className="relative flex min-h-8 cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-body-sm text-fg select-none data-highlighted:bg-muted"
+                  className={cn(menuItemClassName, "pr-8")}
                   key={option.value}
                   value={option.value}
                 >
@@ -145,7 +148,7 @@ export const SearchableSelect = ({
                       </span>
                     ) : null}
                   </span>
-                  <ComboboxPrimitive.ItemIndicator className="absolute right-2 flex size-4 items-center justify-center text-primary">
+                  <ComboboxPrimitive.ItemIndicator className="absolute right-2.5 flex size-4 items-center justify-center text-primary">
                     <CheckIcon className="size-4" />
                   </ComboboxPrimitive.ItemIndicator>
                 </ComboboxPrimitive.Item>
