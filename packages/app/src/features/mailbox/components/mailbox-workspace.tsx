@@ -12,6 +12,7 @@ import {
 import { useMailboxSelection } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-workspace-ui-state";
 import {
+  loadCalendarWorkspace,
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -23,6 +24,7 @@ import {
 import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
+import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
 import {
   chatsQueryOptions,
   getChatQueryKey,
@@ -44,22 +46,17 @@ import { useLocation } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
+import {
+  isMailboxSupportedByProvider,
+  useMailboxCommands,
+} from "./use-mailbox-commands";
+
 type MailboxWorkspaceProps = {
   user: {
     id?: string | null;
     email?: string | null;
     name?: string | null;
   };
-};
-
-const isMailboxSupportedByProvider = (
-  provider: "api" | "gmail" | "managed" | null,
-  mailbox: MailboxCategory
-) => {
-  if (provider === "api") {
-    return mailbox === "sent";
-  }
-  return true;
 };
 
 const useChatActions = ({
@@ -446,7 +443,7 @@ const useMailboxWorkspaceActions = ({
   isComposeMailbox: boolean;
   isScheduledMailbox: boolean;
   isSnippetMailbox: boolean;
-  mailboxes: { id: string; provider: string }[];
+  mailboxes: { id: string; provider: Exclude<MailboxProvider, null> }[];
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
   query: string | null;
   queryClient: ReturnType<typeof useQueryClient>;
@@ -528,23 +525,28 @@ const useMailboxWorkspaceActions = ({
   };
 
   const selectMailboxFromHotkey = (mailbox: MailboxCategory | "scheduled") => {
-    if (mailbox === "scheduled") {
-      if (
-        selectedMailboxProvider === "gmail" ||
-        selectedMailboxProvider === "managed"
-      ) {
-        void setMailboxSearch({
-          mailbox: "scheduled",
-          messageId: null,
-          query: null,
-          threadId: null,
-          view: "inbox",
-          workspace: null,
-        });
-      }
+    const effectiveProvider =
+      allInboxesActive && selectedMailboxProvider === "api"
+        ? (mailboxes.find((item) => item.provider !== "api")?.provider ??
+          selectedMailboxProvider)
+        : selectedMailboxProvider;
+    if (!isMailboxSupportedByProvider(effectiveProvider, mailbox)) {
       return;
     }
-    if (!isMailboxSupportedByProvider(selectedMailboxProvider, mailbox)) {
+    if (mailbox === "scheduled") {
+      void setMailboxSearch({
+        mailbox: "scheduled",
+        mailboxId:
+          allInboxesActive && selectedMailboxProvider === "api"
+            ? (mailboxes.find((item) => item.provider !== "api")?.id ??
+              selectedMailboxId)
+            : undefined,
+        messageId: null,
+        query: null,
+        threadId: null,
+        view: "inbox",
+        workspace: null,
+      });
       return;
     }
     selectMailbox(mailbox);
@@ -770,6 +772,15 @@ const useMailboxWorkspaceHotkeys = ({
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
         selectMailboxFromHotkey("done");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkeySequence(
+    ["G", "L"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("later");
       }
     },
     { enabled, ignoreInputs: true }
@@ -1018,12 +1029,13 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
     writableMailboxes[0]?.id ??
     null;
+  const canComposeNew =
+    view === "all-inboxes"
+      ? writableMailboxes.length > 0
+      : newComposeMailboxId !== null &&
+        newComposeMailboxId === selectedMailboxId;
   const composeWorkspace = useMailboxWorkspaceCompose({
-    canComposeNew:
-      view === "all-inboxes"
-        ? writableMailboxes.length > 0
-        : newComposeMailboxId !== null &&
-          newComposeMailboxId === selectedMailboxId,
+    canComposeNew,
     isComposeMailbox,
     newComposeMailboxId,
     selectedMailboxId,
@@ -1079,6 +1091,44 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     selectMailboxFromHotkey: workspaceActions.selectMailboxFromHotkey,
     selectedMailboxId,
     selectedMailboxProvider,
+  });
+
+  useMailboxCommands({
+    activeMailbox,
+    canCompose: canComposeNew,
+    isComposeMailbox,
+    isMailWorkspace: workspace !== "calendar",
+    isScheduledMailbox,
+    isSnippetMailbox,
+    isWorkspaceReady,
+    mailboxes,
+    onCompose: workspaceActions.createComposeDraft,
+    onManageSnippets: workspaceActions.manageSnippets,
+    onOpenCalendar: async () => {
+      const calendarUserId = user.id ?? user.email ?? "preview";
+      void loadCalendarWorkspace();
+      if (calendarUserId !== "preview" && previewPersona === null) {
+        void Promise.allSettled([
+          queryClient.query(calendarAccountsQueryOptions(calendarUserId)),
+        ]);
+      }
+      await setMailboxSearch(
+        {
+          mailboxId: selectedMailboxId,
+          workspace: "calendar",
+        },
+        { replace: false }
+      );
+    },
+    onOpenMail: async () => {
+      await setMailboxSearch({ workspace: null }, { replace: false });
+    },
+    onSelectMailbox: workspaceActions.selectMailboxFromHotkey,
+    onSelectMailboxId: workspaceActions.selectMailboxId,
+    onSelectView: workspaceActions.selectView,
+    selectedMailboxId,
+    selectedMailboxProvider,
+    view,
   });
 
   const {

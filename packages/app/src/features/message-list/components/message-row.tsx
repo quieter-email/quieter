@@ -26,6 +26,7 @@ import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -353,7 +354,8 @@ const MessageRowDetails = ({
     }
     subjectTrailing={
       <>
-        {thread.anchorMessage.snooze ? (
+        {thread.anchorMessage.snooze !== undefined &&
+        isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status) ? (
           <div className="max-w-60 min-w-0 truncate">
             <MailSnoozeStatus snooze={thread.anchorMessage.snooze} />
           </div>
@@ -488,9 +490,20 @@ const MessageRowSurface = ({
     supportsUnsubscribe: rowMailboxProvider === "gmail",
   });
   const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
-  const placementAction = returnsToInbox
+  const { onApplySnooze } = threadActions;
+  const returnsSnoozeNow =
+    returnsToInbox &&
+    onApplySnooze !== undefined &&
+    thread.anchorMessage.snooze !== undefined &&
+    isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status);
+  let placementAction = returnsToInbox
     ? threadActions.onReturnToInbox
     : threadActions.onMarkDone;
+  if (returnsSnoozeNow) {
+    placementAction = async (threadId: string) => {
+      await onApplySnooze(threadId, { kind: "return-now" });
+    };
+  }
   const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${rowMailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
   const rowActions =
     placementAction !== undefined &&

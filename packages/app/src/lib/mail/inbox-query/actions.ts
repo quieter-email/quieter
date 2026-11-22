@@ -13,6 +13,7 @@ import {
   getMailCommandUpdater,
   applyThreadLabelChangesLocally,
   mergeMessagePreservingLoadedDetails,
+  removeMessagesFromQueryData,
   removeMessagesFromThreadData,
   updateMessageInThreadData,
   updateMessagesInThreadData,
@@ -30,6 +31,7 @@ import {
   applyResolvedThreadMetadataToCaches,
   findMessageInCachedMailboxQueries,
   findMessagesInCachedMailboxQueries,
+  getCachedMessagesQueries,
   persistQueryKeys,
   removeMessagesFromCachedMailboxQueries,
 } from "@quieter/app/lib/mail/inbox-query/query-cache";
@@ -61,15 +63,50 @@ export const applySnoozeInMailbox = async (
 ) => {
   const requestId = crypto.randomUUID();
   let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
+  // Snoozed conversations leave the Inbox; Later membership needs the
+  // server-assigned schedule, so it is left to the refetch below.
+  const leaveInbox = (threadIds: Set<string>) => {
+    for (const cachedQuery of getCachedMessagesQueries(
+      queryClient,
+      mailboxId
+    )) {
+      if (cachedQuery.mailbox !== "inbox") {
+        continue;
+      }
+      const nextData = removeMessagesFromQueryData(
+        cachedQuery.data,
+        (message) => threadIds.has(message.threadId)
+      );
+      if (nextData !== cachedQuery.data) {
+        queryClient.setQueryData(cachedQuery.queryKey, nextData);
+      }
+    }
+  };
   try {
     await runMailMutation(queryClient, {
-      execute: async (): Promise<undefined> => {
+      apply:
+        command.kind === "snooze"
+          ? () => {
+              leaveInbox(new Set(targets.map((target) => target.threadId)));
+            }
+          : undefined,
+      execute: async () => {
         result = await rpc.mail.applySnooze({
           command,
           mailboxId,
           requestId,
           targets,
         });
+        const applied = new Set(
+          command.kind === "snooze"
+            ? result.targets
+                .filter((target) => target.status === "applied")
+                .map((target) => target.threadId)
+            : []
+        );
+        return () => {
+          leaveInbox(applied);
+        };
       },
       mailboxId,
       targets: targets.map((target) => target.threadId),
@@ -79,6 +116,9 @@ export const applySnoozeInMailbox = async (
       queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
       queryClient.invalidateQueries({
         queryKey: getMailboxThreadQueriesKey(mailboxId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: getGmailUnreadCountsQueryKey(),
       }),
     ]);
   }

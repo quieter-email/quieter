@@ -53,9 +53,16 @@ const isEditableShortcutTarget = (target: EventTarget | null) => {
   return !!element?.closest(editableSelector);
 };
 
-const hasOpenBlockingDialog = () =>
-  !!document.querySelector(
-    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
+export const APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR =
+  "[role='dialog'], [role='alertdialog'], [role='menu'][data-open], [data-popover-popup][data-open], [data-blocking-overlay], [data-popup-open][aria-haspopup], [data-popup-open][role='combobox']";
+
+const hasOpenBlockingOverlay = () =>
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR
+    ),
+  ].some(
+    (overlay) => !Object.hasOwn(overlay.dataset, "keyboardShortcutsDialog")
   );
 
 const sequenceContinuationEvents = new WeakSet<KeyboardEvent>();
@@ -85,6 +92,6 @@ export const trackAppShortcutSequenceContinuations = () => {
 
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>
   isEditableShortcutTarget(event.target) ||
-  hasOpenBlockingDialog() ||
+  hasOpenBlockingOverlay() ||
   sequenceContinuationEvents.has(event) ||
   isAppShortcutSequenceContinuation(event);

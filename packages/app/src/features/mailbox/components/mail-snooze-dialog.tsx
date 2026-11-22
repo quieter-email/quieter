@@ -6,10 +6,7 @@ import {
   calendarWallTimeToInstant,
   getZonedDateTimeFields,
 } from "@quieter/calendar/time";
-import {
-  MAIL_SNOOZE_LIVE_STATUSES,
-  mailSnoozeCommandSchema,
-} from "@quieter/mail/snooze";
+import { mailSnoozeCommandSchema } from "@quieter/mail/snooze";
 import type { MailSnoozeCommand, MailSnoozeState } from "@quieter/mail/snooze";
 import { Button } from "@quieter/ui/button";
 import { DatePicker } from "@quieter/ui/date-picker";
@@ -31,13 +28,9 @@ import type { SubmitEvent } from "react";
 import { CalendarTimeZonePicker } from "../../calendar/components/calendar-time-zone-picker";
 import { getReminderPresetTime } from "../../reminders/reminder-time";
 
-export const snoozeLiveStatuses = new Set<MailSnoozeState["status"]>(
-  MAIL_SNOOZE_LIVE_STATUSES
-);
-
 const snoozeStatusLabels: Record<MailSnoozeState["status"], string> = {
   active: "Returns",
-  cancelled: "Return cancelled, was due",
+  cancelled: "Return canceled, was due",
   failed: "Could not return",
   preparing: "Preparing return",
   returned: "Returned, was due",
@@ -48,7 +41,7 @@ const snoozeStatusLabels: Record<MailSnoozeState["status"], string> = {
 };
 
 export const MailSnoozeStatus = ({ snooze }: { snooze: MailSnoozeState }) => (
-  <Text as="p" size="caption" tone="muted">
+  <Text as="span" size="caption" tone="muted">
     {snooze.status === "active" && isSandboxMailboxId(snooze.mailboxId)
       ? "Preview return"
       : snoozeStatusLabels[snooze.status]}{" "}
@@ -237,9 +230,6 @@ const MailSnoozeEditor = ({
             variant="ghost"
           />
         </div>
-        <Text as="p" size="caption" tone="muted">
-          Time zone: {timeZone}
-        </Text>
         {validationError ? (
           <Text as="p" role="alert" size="caption" tone="destructive">
             {validationError}

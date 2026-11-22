@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   Flag01Icon,
   Delete01Icon,
@@ -29,6 +30,7 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -46,8 +48,6 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
-
-import { snoozeLiveStatuses } from "../../mailbox/components/mail-snooze-dialog";
 
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
@@ -279,7 +279,7 @@ const createFolderEntries = (
   const hasInbox = props.threadLabelIds.includes("INBOX");
   const hasSnooze =
     props.message.snooze !== undefined &&
-    snoozeLiveStatuses.has(props.message.snooze.status);
+    isMailSnoozeLiveStatus(props.message.snooze.status);
   const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
     props.mailbox
   );
@@ -322,7 +322,7 @@ const createFolderEntries = (
       (props.message.threadInboxIncomingMessageIds?.length ?? 0) === 0;
     entries.push({
       disabled: isBusy,
-      icon: CheckmarkCircle02Icon,
+      icon: CancelCircleIcon,
       id: "cancel-snooze",
       label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
       onAction: () => {

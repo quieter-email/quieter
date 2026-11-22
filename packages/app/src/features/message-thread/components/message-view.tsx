@@ -39,7 +39,6 @@ import { ThreadActionResults } from "@quieter/app/features/message-thread/compon
 import {
   useMessageViewData,
   useMessageViewFocus,
-  useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
 import {
   MessageReminderQuickAction,
@@ -50,6 +49,8 @@ import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -75,8 +76,8 @@ import {
 import {
   MailSnoozeDialog,
   MailSnoozeStatus,
-  snoozeLiveStatuses,
 } from "../../mailbox/components/mail-snooze-dialog";
+import { useMessageViewHotkeys } from "./use-message-view-hotkeys";
 
 const InlineComposeSurface = lazy(
   async () =>
@@ -254,7 +255,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       .toSorted((left, right) => right.version - left.version)
       .at(0) ?? message.snooze;
   const hasSnooze =
-    snooze !== undefined && snoozeLiveStatuses.has(snooze.status);
+    snooze !== undefined && isMailSnoozeLiveStatus(snooze.status);
   const canSnooze =
     canSetThreadPlacement &&
     ((hasSnooze &&
@@ -319,13 +320,18 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
+    importanceIcon: threadIsImportant ? FlagOffIcon : Flag01Icon,
+    importanceLabel,
     isActionPending,
     mailboxActions,
+    mailboxId,
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
     onToggleImportance: toggleThreadImportance,
     onTogglePlacement: toggleThreadPlacement,
+    placementIcon: returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon,
+    placementLabel,
   });
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {
@@ -394,13 +400,14 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             command,
             expectedVersion
           );
-          if (command.kind === "snooze") {
-            onBackToList?.();
+          if (command.kind === "snooze" && onBackToList) {
+            setSnoozeOpen(false);
+            onBackToList();
           }
         }}
         onOpenChange={setSnoozeOpen}
         open={snoozeOpen}
-        preview={composeDemoMode === true || composeManagedDemoMode === true}
+        preview={isSandboxMailboxId(mailboxId)}
         reschedule={hasSnooze}
         shared={sharedPlacement}
       />
@@ -558,11 +565,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           className="mt-3"
           mailboxId={mailboxId}
         />
-        {snooze === undefined ? null : (
+        {hasSnooze ? (
           <div className="mt-2">
             <MailSnoozeStatus snooze={snooze} />
           </div>
-        )}
+        ) : null}
       </WorkspaceHeader>
 
       <div className="flex min-h-0 flex-1">
