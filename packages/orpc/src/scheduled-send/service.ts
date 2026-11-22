@@ -13,7 +13,7 @@ import type {
 } from "@quieter/mail/scheduled-send";
 import type { ScheduledSendScope } from "@quieter/mail/scheduled-send-ticket";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, isNull, lte, or, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNotNull, isNull, or, sql } from "drizzle-orm";
 import type { z } from "zod";
 
 import { publishMailUpdate } from "../mail-updates";
@@ -39,6 +39,7 @@ import { requestScheduledSendWake } from "./wake";
 type ScheduledSend = typeof scheduledMailSend.$inferSelect;
 const LEASE_MS = 2 * 60_000;
 const RECONCILE_MS = 5 * 60_000;
+const UNDO_SEND_WINDOW_MS = 5000;
 
 export const validateScheduledSendTime = (
   sendAt: string,
@@ -69,9 +70,16 @@ export const validateScheduledSendTime = (
 };
 
 const toSummary = (row: ScheduledSend) => ({
+  canUndo:
+    row.deliveryKind === "undo" &&
+    (row.status === "preparing" ||
+      (row.status === "scheduled" &&
+        (row.sendAt.getTime() > Date.now() || row.errorMessage !== null))),
+  deliveryKind: row.deliveryKind,
   errorMessage: row.errorMessage,
   id: row.id,
   mailboxId: row.mailboxId,
+  restoredDraftId: row.restoredDraftId,
   sendAt: row.sendAt.toISOString(),
   sendOperationId: row.sendOperationId,
   status: row.status,
@@ -79,6 +87,40 @@ const toSummary = (row: ScheduledSend) => ({
   timeZone: row.timeZone,
   to: row.to,
 });
+
+const heldStatus = {
+  cancelled: "canceled",
+  failed: "failed",
+  preparing: "preparing",
+  scheduled: "held",
+  sending: "dispatching",
+  sent: "accepted",
+  uncertain: "uncertain",
+} as const;
+
+const toHeldSummary = (row: ReturnType<typeof toSummary>) => {
+  let remainingMs = 0;
+  if (row.canUndo) {
+    remainingMs =
+      row.status === "preparing"
+        ? UNDO_SEND_WINDOW_MS
+        : Math.max(0, Date.parse(row.sendAt) - Date.now());
+  }
+  return {
+    canUndo: row.canUndo,
+    draftId: row.restoredDraftId,
+    errorMessage: row.errorMessage,
+    id: row.id,
+    mailboxId: row.mailboxId,
+    remainingMs,
+    sendOperationId: row.sendOperationId,
+    status:
+      row.status === "scheduled" && !row.canUndo
+        ? ("dispatching" as const)
+        : heldStatus[row.status],
+    undoUntil: row.status === "preparing" ? null : row.sendAt,
+  };
+};
 
 const assertCanSchedule = async (scope: {
   userId: string;
@@ -139,9 +181,12 @@ const claimSend = async (row: ScheduledSend) => {
         eq(scheduledMailSend.id, row.id),
         eq(scheduledMailSend.status, row.status),
         eq(scheduledMailSend.sendAt, row.sendAt),
+        row.deliveryKind === "undo" && row.status === "scheduled"
+          ? sql`${scheduledMailSend.sendAt} <= clock_timestamp()`
+          : undefined,
         or(
           isNull(scheduledMailSend.leaseUntil),
-          lte(scheduledMailSend.leaseUntil, now)
+          sql`${scheduledMailSend.leaseUntil} <= clock_timestamp()`
         )
       )
     )
@@ -158,6 +203,20 @@ const finishPreparation = async (row: ScheduledSend) => {
     await assertCanSchedule(row);
     const payload = await readPayload(row);
     if (payload.draftId) {
+      const [stillClaimed] = await db
+        .select({ id: scheduledMailSend.id })
+        .from(scheduledMailSend)
+        .where(
+          and(
+            eq(scheduledMailSend.id, row.id),
+            eq(scheduledMailSend.status, "preparing"),
+            eq(scheduledMailSend.leaseToken, claimed.token)
+          )
+        )
+        .limit(1);
+      if (stillClaimed === undefined) {
+        return await getScopedSend(row);
+      }
       await composeMailOperations.deleteDraft({
         context: { userId: row.userId },
         input: {
@@ -170,20 +229,35 @@ const finishPreparation = async (row: ScheduledSend) => {
     }
     const [prepared] = await db
       .update(scheduledMailSend)
-      .set({
-        draftRemovedAt: new Date(),
-        errorMessage: null,
-        leaseToken: null,
-        leaseUntil: null,
-        nextWakeAt: new Date(
-          Math.min(row.sendAt.getTime(), Date.now() + 60_000)
-        ),
-        status: "scheduled",
-        updatedAt: new Date(),
-      })
+      .set(
+        row.deliveryKind === "undo"
+          ? {
+              draftRemovedAt: new Date(),
+              errorMessage: null,
+              leaseToken: null,
+              leaseUntil: null,
+              nextWakeAt: sql`date_trunc('milliseconds', clock_timestamp()) + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
+              sendAt: sql`date_trunc('milliseconds', clock_timestamp()) + (${UNDO_SEND_WINDOW_MS} * interval '1 millisecond')`,
+              status: "scheduled",
+              updatedAt: new Date(),
+            }
+          : {
+              draftRemovedAt: new Date(),
+              errorMessage: null,
+              leaseToken: null,
+              leaseUntil: null,
+              nextWakeAt: new Date(
+                Math.min(row.sendAt.getTime(), Date.now() + 60_000)
+              ),
+              sendAt: row.sendAt,
+              status: "scheduled",
+              updatedAt: new Date(),
+            }
+      )
       .where(
         and(
           eq(scheduledMailSend.id, row.id),
+          eq(scheduledMailSend.status, "preparing"),
           eq(scheduledMailSend.leaseToken, claimed.token)
         )
       )
@@ -193,12 +267,14 @@ const finishPreparation = async (row: ScheduledSend) => {
   } catch (error) {
     const expected =
       error instanceof ORPCError && error.status >= 400 && error.status < 500;
+    const fallbackMessage =
+      row.deliveryKind === "undo"
+        ? "Sending could not finish. Your message is saved."
+        : "Scheduling could not finish. Your message is saved.";
     await db
       .update(scheduledMailSend)
       .set({
-        errorMessage: expected
-          ? error.message
-          : "Scheduling could not finish. Your message is saved.",
+        errorMessage: expected ? error.message : fallbackMessage,
         leaseToken: null,
         leaseUntil: null,
         nextWakeAt: expected ? null : new Date(Date.now() + 60_000),
@@ -214,12 +290,16 @@ const finishPreparation = async (row: ScheduledSend) => {
     if (!expected) {
       reportError(error, { operation: "scheduled-send-prepare" });
     }
+    await notifyMailbox(row.mailboxId);
     return await getScopedSend(row);
   }
 };
 
 const createScheduledSendWithinLock = async (
-  input: z.infer<typeof createScheduledSendSchema> & { userId: string }
+  input: z.infer<typeof createScheduledSendSchema> & {
+    userId: string;
+    deliveryKind: ScheduledSend["deliveryKind"];
+  }
 ) => {
   const selectedMailbox = await assertCanSchedule(input);
   const sendOperationId =
@@ -241,9 +321,12 @@ const createScheduledSendWithinLock = async (
     userId: input.userId,
   };
   if (existing === undefined) {
-    await assertScheduledSendAttemptActive(attempt);
+    await assertScheduledSendAttemptActive(attempt, db, input.deliveryKind);
   }
-  const payload = await captureScheduledSendPayload(input.message);
+  const payload = await captureScheduledSendPayload(
+    input.message,
+    input.deliveryKind
+  );
   const requestHash = hashRequest({
     attachments: payload.attachments.map(
       ({ content, contentId, isInline, mimeType, name }) => ({
@@ -274,10 +357,15 @@ const createScheduledSendWithinLock = async (
     subject: payload.subject,
   });
   if (existing !== undefined) {
-    if (existing.requestHash !== requestHash) {
+    if (
+      existing.requestHash !== requestHash ||
+      existing.deliveryKind !== input.deliveryKind
+    ) {
       throw new ORPCError("CONFLICT", {
         message:
-          "This message already has a schedule. Open Scheduled to change it.",
+          input.deliveryKind === "undo"
+            ? "This message already has a pending send. Open Scheduled to check it."
+            : "This message already has a schedule. Open Scheduled to change it.",
       });
     }
     const current =
@@ -289,7 +377,9 @@ const createScheduledSendWithinLock = async (
         message: "Scheduled message not found.",
       });
     }
-    await requestScheduledSendWake(current);
+    if (current.status !== "failed" && current.payloadRetiredAt === null) {
+      await requestScheduledSendWake(current);
+    }
     return toSummary(current);
   }
   const delivery = await composeMailOperations.getComposeSendStatus({
@@ -299,13 +389,18 @@ const createScheduledSendWithinLock = async (
   if (delivery.status !== "rejected") {
     throw new ORPCError("CONFLICT", {
       message:
-        "This message already has a send attempt. Check Sent before scheduling it.",
+        input.deliveryKind === "undo"
+          ? "This message already has a send attempt. Check Sent before sending it again."
+          : "This message already has a send attempt. Check Sent before scheduling it.",
     });
   }
-  const sendAt = validateScheduledSendTime(
-    input.sendAt,
-    payload.followUpReminder?.dueAt
-  );
+  const sendAt =
+    input.deliveryKind === "undo"
+      ? new Date(Date.now() + UNDO_SEND_WINDOW_MS)
+      : validateScheduledSendTime(
+          input.sendAt,
+          payload.followUpReminder?.dueAt
+        );
   if (input.message.draftId) {
     const source = await queriesMailOperations.getDraft({
       context: { userId: input.userId },
@@ -353,7 +448,9 @@ const createScheduledSendWithinLock = async (
     if (priorSend.length > 0) {
       throw new ORPCError("CONFLICT", {
         message:
-          "This draft already has a send attempt. Check Sent before scheduling it.",
+          input.deliveryKind === "undo"
+            ? "This draft already has a send attempt. Check Sent before sending it again."
+            : "This draft already has a send attempt. Check Sent before scheduling it.",
       });
     }
   }
@@ -374,7 +471,10 @@ const createScheduledSendWithinLock = async (
       .limit(1);
     if (savedAlias !== undefined) {
       throw new ORPCError("CONFLICT", {
-        message: "This draft changed elsewhere. Reopen it before scheduling.",
+        message:
+          input.deliveryKind === "undo"
+            ? "This draft changed elsewhere. Reopen it before sending."
+            : "This draft changed elsewhere. Reopen it before scheduling.",
       });
     }
   }
@@ -390,11 +490,16 @@ const createScheduledSendWithinLock = async (
   const inserted = await withScheduledSendAttemptLock(
     attempt,
     async (database) => {
-      await assertScheduledSendAttemptActive(attempt, database);
+      await assertScheduledSendAttemptActive(
+        attempt,
+        database,
+        input.deliveryKind
+      );
       const [created] = await database
         .insert(scheduledMailSend)
         .values({
           createdAt: new Date(),
+          deliveryKind: input.deliveryKind,
           id,
           mailboxId: input.mailboxId,
           nextWakeAt: new Date(Date.now() + 60_000),
@@ -433,7 +538,17 @@ const createScheduledSendWithinLock = async (
     if (concurrent === undefined) {
       throw new ORPCError("CONFLICT", {
         message:
-          "This draft already has a scheduled send. Open Scheduled to change it.",
+          input.deliveryKind === "undo"
+            ? "This draft already has a pending send. Open Scheduled to check it."
+            : "This draft already has a scheduled send. Open Scheduled to change it.",
+      });
+    }
+    if (
+      concurrent.requestHash !== requestHash ||
+      concurrent.deliveryKind !== input.deliveryKind
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message: "This message already has a different send attempt.",
       });
     }
     return toSummary(concurrent);
@@ -444,12 +559,17 @@ const createScheduledSendWithinLock = async (
       message: "Scheduled message not found.",
     });
   }
-  await requestScheduledSendWake(current);
+  if (current.status !== "failed" && current.payloadRetiredAt === null) {
+    await requestScheduledSendWake(current);
+  }
   return toSummary(current);
 };
 
-export const createScheduledSend = async (
-  input: z.infer<typeof createScheduledSendSchema> & { userId: string }
+const createMailDelivery = async (
+  input: z.infer<typeof createScheduledSendSchema> & {
+    userId: string;
+    deliveryKind: ScheduledSend["deliveryKind"];
+  }
 ) => {
   const selectedMailbox = await assertCanSchedule(input);
   const sourceDraftId = await resolveComposeSourceDraftId({
@@ -463,7 +583,10 @@ export const createScheduledSend = async (
     !input.message.draftId
   ) {
     throw new ORPCError("CONFLICT", {
-      message: "This draft changed elsewhere. Reopen it before scheduling.",
+      message:
+        input.deliveryKind === "undo"
+          ? "This draft changed elsewhere. Reopen it before sending."
+          : "This draft changed elsewhere. Reopen it before scheduling.",
     });
   }
   try {
@@ -484,10 +607,33 @@ export const createScheduledSend = async (
     throw new ORPCError("INTERNAL_SERVER_ERROR", {
       data: { deliveryUncertain: true },
       message:
-        "The scheduling result could not be confirmed. Check Scheduled before sending again.",
+        input.deliveryKind === "undo"
+          ? "Delivery could not be confirmed. Check Sent or Scheduled before sending again."
+          : "The scheduling result could not be confirmed. Check Scheduled before sending again.",
     });
   }
 };
+
+export const createScheduledSend = async (
+  input: z.infer<typeof createScheduledSendSchema> & { userId: string }
+) => await createMailDelivery({ ...input, deliveryKind: "scheduled" });
+
+export const createHeldSend = async (
+  input: Pick<
+    z.infer<typeof createScheduledSendSchema>,
+    "mailboxId" | "message"
+  > & {
+    userId: string;
+  }
+) =>
+  toHeldSummary(
+    await createMailDelivery({
+      ...input,
+      deliveryKind: "undo",
+      sendAt: new Date(Date.now() + UNDO_SEND_WINDOW_MS).toISOString(),
+      timeZone: "UTC",
+    })
+  );
 
 export const listScheduledSends = async (scope: {
   mailboxId: string;
@@ -541,7 +687,7 @@ export const recoverScheduledSendAttempt = async (scope: {
   userId: string;
   sendOperationId: string;
 }) => {
-  await assertAccessibleMailbox(scope);
+  await assertCanSchedule(scope);
   return await withScheduledSendAttemptLock(scope, async (database) => {
     const [scheduled] = await database
       .select()
@@ -565,12 +711,26 @@ export const recoverScheduledSendAttempt = async (scope: {
   });
 };
 
+export const getHeldSend = async (scope: {
+  mailboxId: string;
+  userId: string;
+  sendOperationId: string;
+}) => {
+  const row = await getScheduledSendByOperation(scope);
+  if (row !== null && row.deliveryKind !== "undo") {
+    throw new ORPCError("CONFLICT", {
+      message: "This operation belongs to a scheduled message.",
+    });
+  }
+  return row === null ? null : toHeldSummary(row);
+};
+
 export const rescheduleSend = async (
   input: z.infer<typeof rescheduleSendSchema> & { userId: string }
 ) => {
   await assertCanSchedule(input);
   const row = await getScopedSend(input);
-  if (row === null) {
+  if (row === null || row.deliveryKind !== "scheduled") {
     throw new ORPCError("NOT_FOUND", {
       message: "Scheduled message not found.",
     });
@@ -596,7 +756,7 @@ export const rescheduleSend = async (
         inArray(scheduledMailSend.status, ["scheduled", "failed"]),
         or(
           isNull(scheduledMailSend.leaseUntil),
-          lte(scheduledMailSend.leaseUntil, new Date())
+          sql`${scheduledMailSend.leaseUntil} <= clock_timestamp()`
         )
       )
     )
@@ -611,7 +771,10 @@ export const rescheduleSend = async (
   return toSummary(updated);
 };
 
-const restoreCancelledSend = async (row: ScheduledSend) => {
+const restoreCancelledSend = async (
+  row: ScheduledSend,
+  options?: { reuseOriginalDraft?: boolean }
+) => {
   if (row.payloadRetiredAt !== null) {
     return row;
   }
@@ -623,14 +786,54 @@ const restoreCancelledSend = async (row: ScheduledSend) => {
   }
   try {
     const payload = await readPayload(row);
-    const draft = restoreScheduledSendPayload(payload, {
-      localId: `${row.id}:restore`,
-      sendOperationId: row.id,
-    });
-    const restored = await composeMailOperations.saveDraft({
-      context: { userId: row.userId },
-      input: { draft, mailboxId: row.mailboxId },
-    });
+    let restoredDraftId: string | null = null;
+    if (
+      options?.reuseOriginalDraft === true &&
+      row.draftRemovedAt === null &&
+      payload.draftId
+    ) {
+      try {
+        const existingDraft = await queriesMailOperations.getDraft({
+          context: { userId: row.userId },
+          input: { draftId: payload.draftId, mailboxId: row.mailboxId },
+        });
+        if (existingDraft.baseRevision === payload.baseRevision) {
+          restoredDraftId = payload.draftId;
+        }
+      } catch {
+        // Fall back to restoring from the stored snapshot when the original draft cannot be verified.
+      }
+    }
+    if (restoredDraftId === null) {
+      const draft = restoreScheduledSendPayload(payload, {
+        localId: `${row.id}:restore`,
+        sendOperationId: row.id,
+      });
+      const restored = await composeMailOperations.saveDraft({
+        context: { userId: row.userId },
+        input: { draft, mailboxId: row.mailboxId },
+      });
+      restoredDraftId = restored.draftId;
+      if (
+        row.draftRemovedAt === null &&
+        payload.draftId &&
+        restoredDraftId !== payload.draftId
+      ) {
+        try {
+          await composeMailOperations.deleteDraft({
+            context: { userId: row.userId },
+            input: {
+              baseRevision: payload.baseRevision,
+              draftId: payload.draftId,
+              mailboxId: row.mailboxId,
+            },
+            requireExistingDraft: false,
+          });
+        } catch {
+          // Best-effort cleanup of the superseded source draft; leave any concurrently edited draft untouched.
+        }
+      }
+    }
     const [completed] = await db
       .update(scheduledMailSend)
       .set({
@@ -639,7 +842,7 @@ const restoreCancelledSend = async (row: ScheduledSend) => {
         leaseUntil: null,
         nextWakeAt: null,
         payloadRetiredAt: new Date(),
-        restoredDraftId: restored.draftId,
+        restoredDraftId,
         updatedAt: new Date(),
       })
       .where(
@@ -656,7 +859,7 @@ const restoreCancelledSend = async (row: ScheduledSend) => {
       .update(scheduledMailSend)
       .set({
         errorMessage:
-          "Sending is cancelled. Your message is saved here until it can return to Drafts.",
+          "Sending is canceled. Your message is saved here until it can return to Drafts.",
         leaseToken: null,
         leaseUntil: null,
         nextWakeAt: new Date(Date.now() + 60_000),
@@ -687,36 +890,101 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
       draftId: restored?.restoredDraftId ?? row.restoredDraftId,
     };
   }
-  const [cancelled] = await db
-    .update(scheduledMailSend)
-    .set({
-      errorMessage: null,
-      nextWakeAt: new Date(Date.now() + 60_000),
-      status: "cancelled",
-      updatedAt: new Date(),
-    })
-    .where(
-      and(
-        eq(scheduledMailSend.id, row.id),
-        inArray(scheduledMailSend.status, ["preparing", "scheduled", "failed"]),
-        or(
-          isNull(scheduledMailSend.leaseUntil),
-          lte(scheduledMailSend.leaseUntil, new Date())
+  const cancellation = await db.transaction(async (database) => {
+    const [locked] = await database
+      .select()
+      .from(scheduledMailSend)
+      .where(
+        and(
+          eq(scheduledMailSend.id, scope.id),
+          eq(scheduledMailSend.mailboxId, scope.mailboxId),
+          eq(scheduledMailSend.userId, scope.userId)
         )
       )
-    )
-    .returning();
-  if (cancelled === undefined) {
+      .for("update");
+    if (locked?.status === "cancelled") {
+      return { hadActivePreparationLease: false, row: locked };
+    }
+    const hadActivePreparationLease =
+      locked?.status === "preparing" && locked.leaseToken !== null;
+    const [updated] = await database
+      .update(scheduledMailSend)
+      .set({
+        errorMessage: null,
+        leaseToken: null,
+        leaseUntil: null,
+        nextWakeAt: new Date(Date.now() + 60_000),
+        status: "cancelled",
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(scheduledMailSend.id, row.id),
+          inArray(scheduledMailSend.status, [
+            "preparing",
+            "scheduled",
+            "failed",
+          ]),
+          row.deliveryKind === "undo"
+            ? or(
+                eq(scheduledMailSend.status, "preparing"),
+                eq(scheduledMailSend.status, "failed"),
+                and(
+                  eq(scheduledMailSend.status, "scheduled"),
+                  isNotNull(scheduledMailSend.errorMessage)
+                ),
+                sql`${scheduledMailSend.sendAt} > clock_timestamp()`
+              )
+            : undefined,
+          or(
+            eq(scheduledMailSend.status, "preparing"),
+            isNull(scheduledMailSend.leaseUntil),
+            sql`${scheduledMailSend.leaseUntil} <= clock_timestamp()`
+          )
+        )
+      )
+      .returning();
+    return updated === undefined
+      ? undefined
+      : { hadActivePreparationLease, row: updated };
+  });
+  if (cancellation === undefined) {
     throw new ORPCError("CONFLICT", {
       message:
-        "This message has started sending and can no longer be cancelled. Check Sent for its delivery status.",
+        row.deliveryKind === "undo"
+          ? "Too late to undo. This message is already sending."
+          : "This message has started sending and can no longer be canceled. Check Sent for its delivery status.",
     });
   }
-  const restored = await restoreCancelledSend(cancelled);
+  const restored = await restoreCancelledSend(cancellation.row, {
+    reuseOriginalDraft: !cancellation.hadActivePreparationLease,
+  });
   return {
-    ...toSummary(restored ?? cancelled),
+    ...toSummary(restored ?? cancellation.row),
     draftId: restored?.restoredDraftId ?? null,
   };
+};
+
+export const undoHeldSend = async (scope: {
+  mailboxId: string;
+  userId: string;
+  sendOperationId: string;
+}) => {
+  const recovered = await recoverScheduledSendAttempt(scope);
+  if (recovered.status === "abandoned") {
+    return { draftId: null, status: "abandoned" as const };
+  }
+  if (recovered.scheduled.deliveryKind !== "undo") {
+    throw new ORPCError("CONFLICT", {
+      message: "This operation belongs to a scheduled message.",
+    });
+  }
+  const cancelled = await cancelScheduledSend({
+    id: recovered.scheduled.id,
+    mailboxId: scope.mailboxId,
+    userId: scope.userId,
+  });
+  return { draftId: cancelled.draftId, status: "canceled" as const };
 };
 
 export const dispatchScheduledSend = async (
@@ -761,7 +1029,24 @@ export const dispatchScheduledSend = async (
   const claimed = await claimSend(row);
   if (claimed === null) {
     const current = await getScopedSend(scope);
-    return { nextWakeAt: current?.nextWakeAt?.getTime() ?? null };
+    if (
+      current === null ||
+      current.status === "sent" ||
+      current.status === "failed" ||
+      current.payloadRetiredAt !== null
+    ) {
+      return { nextWakeAt: null };
+    }
+    const targetWakeAt =
+      current.status === "scheduled"
+        ? Math.max(current.sendAt.getTime(), current.nextWakeAt?.getTime() ?? 0)
+        : (current.nextWakeAt?.getTime() ?? null);
+    return {
+      nextWakeAt:
+        targetWakeAt === null
+          ? null
+          : Math.max(targetWakeAt, Date.now() + 1000),
+    };
   }
   const wasSubmitted = row.status === "sending" || row.status === "uncertain";
   const { token } = claimed;
@@ -806,7 +1091,9 @@ export const dispatchScheduledSend = async (
           .update(scheduledMailSend)
           .set({
             errorMessage:
-              "Sending did not complete. Choose a new time or return this message to Drafts.",
+              row.deliveryKind === "undo"
+                ? "Sending did not complete. Return this message to Drafts to try again."
+                : "Sending did not complete. Choose a new time or return this message to Drafts.",
             leaseToken: null,
             leaseUntil: null,
             nextWakeAt: null,
@@ -858,6 +1145,7 @@ export const dispatchScheduledSend = async (
       .where(
         and(
           eq(scheduledMailSend.id, row.id),
+          eq(scheduledMailSend.status, row.status),
           eq(scheduledMailSend.leaseToken, token)
         )
       )

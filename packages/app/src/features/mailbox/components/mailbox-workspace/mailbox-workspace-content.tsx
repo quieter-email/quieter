@@ -14,6 +14,7 @@ import {
 } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
@@ -119,6 +120,7 @@ type MailboxWorkspaceContentProps = {
   onComposeNewMail: () => void;
   onManageSnippets: () => void;
   onMobileOpenChange: (open: boolean) => void;
+  onRestoreUndoneSend: RestoreUndoneDraft;
   onOpenSidebar: () => void;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onSearch: (query: string) => void;
@@ -461,6 +463,7 @@ const MailboxWorkspaceContentInner = ({
   onComposeDraftRequested,
   onComposeNewMail,
   onManageSnippets,
+  onRestoreUndoneSend,
   onMobileOpenChange,
   onOpenSidebar,
   onReorderMailboxSwitcher,
@@ -689,6 +692,7 @@ const MailboxWorkspaceContentInner = ({
           managedDemoMode={isManagedDemoMode}
           mailboxId={composeMailbox?.id ?? null}
           onClose={onCloseSubview}
+          onRestoreUndoneSend={onRestoreUndoneSend}
           onSwitchSenderMailbox={onComposeSenderSwitch}
           onManageSnippets={onManageSnippets}
           onOpenSidebar={onOpenSidebar}

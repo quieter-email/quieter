@@ -1177,6 +1177,26 @@ export const DesignSystemShowcase = () => {
             Try success pulse
           </Button>
         </Section>
+        <Section title="Toasts">
+          <Row label="Undo action">
+            <Button
+              onClick={() => {
+                toast.success("Message sent.", {
+                  action: {
+                    label: "Undo",
+                    onClick: () => {
+                      toast.success("Send undone.");
+                    },
+                  },
+                });
+              }}
+              type="button"
+              variant="secondary"
+            >
+              Show Undo toast
+            </Button>
+          </Row>
+        </Section>
         <Section title="Buttons">
           <Row label="Variants">
             <Button type="button">Primary</Button>
