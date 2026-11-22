@@ -362,6 +362,7 @@ export const user = pgTable("user", {
   onboardingCompletedAt: timestamp("onboardingCompletedAt"),
   termsAcceptedAt: timestamp("termsAcceptedAt"),
   timeFormat: text("timeFormat").$type<"12h" | "24h">(),
+  undoSendEnabled: boolean("undoSendEnabled"),
   updatedAt: timestamp("updatedAt").notNull(),
   weekStartsOn: integer("weekStartsOn").$type<0 | 1 | 2 | 3 | 4 | 5 | 6>(),
 });

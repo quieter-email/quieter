@@ -133,6 +133,7 @@ import {
 } from "react";
 
 import { HeldSendNotice } from "./held-send-notice";
+import type { RestoreUndoneDraft } from "./held-send-toast";
 
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
@@ -156,6 +157,7 @@ export type ComposeSurfaceProps = {
   onClose: () => void;
   onManageSnippets?: () => void;
   onOpenSidebar?: () => void;
+  onRestoreUndoneSend?: RestoreUndoneDraft;
   onSenderSwitch?: (
     mailboxId: string,
     currentDraft: ComposeDraftState,
@@ -319,6 +321,7 @@ const ReadyComposeSurface = ({
   onClose,
   onManageSnippets,
   onOpenSidebar,
+  onRestoreUndoneSend,
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
@@ -387,6 +390,7 @@ const ReadyComposeSurface = ({
       composeEditorRef.current?.normalizeHtml(html) ?? html,
     onClose,
     onRecipientProblem: focusComposeRecipientField,
+    onRestoreUndoneSend,
     persistDrafts,
     signature,
   });
@@ -1888,6 +1892,7 @@ export const ComposeWorkspace = ({
   onClose,
   onManageSnippets,
   onOpenSidebar,
+  onRestoreUndoneSend,
   onSwitchSenderMailbox,
   persistDrafts,
   senderEmail,
@@ -2005,6 +2010,7 @@ export const ComposeWorkspace = ({
               }
             : undefined
         }
+        onRestoreUndoneSend={onRestoreUndoneSend}
         onSenderSwitch={async (
           nextMailboxId,
           currentDraft,

@@ -1,7 +1,12 @@
+import type { db } from "@quieter/database/client";
+import { user } from "@quieter/database/schema";
+import { eq } from "drizzle-orm";
+
 import { getMailCaptureStatus } from "../mail-capture";
-import { withMailUpdate } from "../mail-updates";
+import { publishMailUpdate, withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
+import type { MailInputs } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
@@ -13,6 +18,50 @@ import {
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
+
+const dispatchOrdinaryMail = async ({
+  context,
+  mailboxId,
+  message,
+}: {
+  context: {
+    db: typeof db;
+    signal?: AbortSignal;
+    userId: string;
+  };
+  mailboxId: string;
+  message: MailInputs["sendMessage"]["message"];
+}) => {
+  const [preferences] = await context.db
+    .select({ undoSendEnabled: user.undoSendEnabled })
+    .from(user)
+    .where(eq(user.id, context.userId))
+    .limit(1);
+  if (preferences?.undoSendEnabled === false) {
+    const sendOperationId = message.sendOperationId ?? message.localId;
+    const sent = await composeMailOperations.sendMessage({
+      context,
+      input: { mailboxId, message },
+    });
+    await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
+    return {
+      canUndo: false,
+      draftId: null,
+      errorMessage: null,
+      id: sent.id,
+      mailboxId,
+      remainingMs: 0,
+      sendOperationId,
+      status: "accepted" as const,
+      undoUntil: null,
+    };
+  }
+  return await createHeldSend({
+    mailboxId,
+    message,
+    userId: context.userId,
+  });
+};
 
 export const mailRouter = {
   ...mailboxProcedures,
@@ -106,18 +155,20 @@ export const mailRouter = {
     .handler(withMailUpdate(composeMailOperations.saveDraft)),
   sendDraft: protectedProcedure.input(mailInputSchemas.sendDraft).handler(
     async ({ context, input }) =>
-      await createHeldSend({
+      await dispatchOrdinaryMail({
+        context,
         mailboxId: input.mailboxId,
         message: input.draft,
-        userId: context.userId,
       })
   ),
-  sendMessage: protectedProcedure
-    .input(mailInputSchemas.sendMessage)
-    .handler(
-      async ({ context, input }) =>
-        await createHeldSend({ ...input, userId: context.userId })
-    ),
+  sendMessage: protectedProcedure.input(mailInputSchemas.sendMessage).handler(
+    async ({ context, input }) =>
+      await dispatchOrdinaryMail({
+        context,
+        mailboxId: input.mailboxId,
+        message: input.message,
+      })
+  ),
   syncMailbox: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.syncMailbox)

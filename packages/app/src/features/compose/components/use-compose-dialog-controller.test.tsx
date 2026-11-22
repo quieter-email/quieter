@@ -14,6 +14,7 @@ import type {
 } from "@quieter/app/lib/mail/inbox-query/index";
 import type { rpc } from "@quieter/app/lib/orpc";
 import type { RouterOutputs } from "@quieter/orpc";
+import { toast } from "@quieter/ui/toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { UseBlockerOpts } from "@tanstack/react-router";
 import { act, useLayoutEffect } from "react";
@@ -27,6 +28,7 @@ import {
   vi,
 } from "vite-plus/test";
 
+import type { RestoreUndoneDraft } from "./held-send-toast";
 import { useComposeDialogController } from "./use-compose-dialog-controller";
 import type {
   ComposeDialogController,
@@ -226,13 +228,35 @@ const receiptFor = (
     canUndo: true,
     draftId: draft.draftId,
     draftRevision: draft.draftRevision,
+    errorMessage: null,
     mailboxId: "mailbox",
+    remainingMs: 5000,
     restoredDraftId: null,
     sendOperationId: draft.sendOperationId,
-    status: "held",
-    undoUntil: new Date(Date.now() + 10_000).toISOString(),
+    status: "preparing",
+    undoUntil: null,
     ...overrides,
   };
+};
+
+const sendResult = (
+  overrides: Partial<RouterOutputs["mail"]["sendMessage"]>
+) => {
+  boundary.sendMessage.mockImplementationOnce(
+    async (input) =>
+      await Promise.resolve({
+        canUndo: true,
+        draftId: null,
+        errorMessage: null,
+        id: "held",
+        mailboxId: input.mailboxId,
+        remainingMs: 5000,
+        sendOperationId: input.message.sendOperationId ?? crypto.randomUUID(),
+        status: "held",
+        undoUntil: new Date(Date.now() + 5000).toISOString(),
+        ...overrides,
+      })
+  );
 };
 
 const listHeldRecords = async (sendOperationId: string) => {
@@ -281,7 +305,11 @@ const canonicalDraft = (): RouterOutputs["mail"]["getDraft"] => ({
   subject: "Canonical",
 });
 
-const mount = async (draft = initial(), initialDraftNeedsSave = false) => {
+const mount = async (
+  draft = initial(),
+  initialDraftNeedsSave = false,
+  onRestoreUndoneSend?: RestoreUndoneDraft
+) => {
   const Fixture = ({ mailboxId }: { mailboxId: string }) => {
     const value = useComposeDialogController({
       editorReady: true,
@@ -292,6 +320,7 @@ const mount = async (draft = initial(), initialDraftNeedsSave = false) => {
       initialDraftNeedsSave,
       mailboxId,
       normalizeHtml: (html) => html,
+      onRestoreUndoneSend,
     });
     useLayoutEffect(() => {
       controller = value;
@@ -329,9 +358,10 @@ describe("compose controller", () => {
           errorMessage: null,
           id: "held",
           mailboxId: input.mailboxId,
+          remainingMs: 5000,
           sendOperationId: input.sendOperationId,
-          status: "held",
-          undoUntil: new Date(Date.now() + 10_000).toISOString(),
+          status: "preparing",
+          undoUntil: null,
         })
     );
     boundary.getDraft.mockResolvedValue(canonicalDraft());
@@ -373,9 +403,10 @@ describe("compose controller", () => {
           errorMessage: null,
           id: "held",
           mailboxId: input.mailboxId,
+          remainingMs: 5000,
           sendOperationId: input.message.sendOperationId ?? crypto.randomUUID(),
           status: "held",
-          undoUntil: new Date().toISOString(),
+          undoUntil: new Date(Date.now() + 5000).toISOString(),
         })
     );
     client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
@@ -524,6 +555,7 @@ describe("compose controller", () => {
         errorMessage: null,
         id: "held",
         mailboxId: "mailbox",
+        remainingMs: 0,
         sendOperationId: receipt.sendOperationId,
         status: "accepted",
         undoUntil: null,
@@ -1406,6 +1438,7 @@ describe("compose controller", () => {
         errorMessage: null,
         id: "held",
         mailboxId: "mailbox",
+        remainingMs: 0,
         sendOperationId: receipt.sendOperationId,
         status: "canceled",
         undoUntil: null,
@@ -1416,6 +1449,7 @@ describe("compose controller", () => {
         errorMessage: null,
         id: "held",
         mailboxId: "mailbox",
+        remainingMs: 0,
         sendOperationId: receipt.sendOperationId,
         status: "canceled",
         undoUntil: null,
@@ -1447,6 +1481,7 @@ describe("compose controller", () => {
         errorMessage: null,
         id: "held",
         mailboxId: "mailbox",
+        remainingMs: 0,
         sendOperationId: receipt.sendOperationId,
         status: "canceled",
         undoUntil: null,
@@ -1462,6 +1497,168 @@ describe("compose controller", () => {
       expect(controller.form.state.values.subject).toBe("Canonical");
       expect(boundary.toastError).not.toHaveBeenCalled();
     });
+  });
+
+  describe("ordinary send handoff", () => {
+    it("closes the composer once the server holds the send and leaves delivery to the server after the Undo window", async () => {
+      sendResult({ remainingMs: 40 });
+      await mount();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(controller.state.open).toBeFalsy();
+      expect(
+        vi
+          .mocked(toast.success)
+          .mock.calls.find(([, options]) => options?.action !== undefined)?.[1]
+      ).toMatchObject({ duration: 40 });
+      await act(async () => {
+        await waitFor(120);
+      });
+      expect(boundary.undoSend).not.toHaveBeenCalled();
+    });
+
+    it("reopens the restored draft through the host when Undo succeeds", async () => {
+      const restore = vi.fn<RestoreUndoneDraft>().mockReturnValue(true);
+      await mount(initial(), false, restore);
+      const { sendOperationId } = readCompose().read();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      await act(async () => {
+        vi.mocked(toast.success)
+          .mock.calls.find(([, options]) => options?.action !== undefined)?.[1]
+          ?.action?.onClick();
+        await vi.waitFor(() => {
+          expect(restore).toHaveBeenCalledOnce();
+        });
+      });
+      expect(boundary.undoSend).toHaveBeenCalledWith({
+        mailboxId: "mailbox",
+        sendOperationId,
+      });
+      expect(restore.mock.calls[0]).toMatchObject([
+        { draftId: "restored", subject: "Canonical" },
+        "mailbox",
+      ]);
+      expect(boundary.toastError).not.toHaveBeenCalled();
+    });
+
+    it("keeps the send and reports the conflict when Undo arrives after the deadline", async () => {
+      const restore = vi.fn<RestoreUndoneDraft>().mockReturnValue(true);
+      const tooLate = Object.assign(new Error("Too late"), { status: 409 });
+      boundary.undoSend.mockRejectedValueOnce(tooLate);
+      await mount(initial(), false, restore);
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      await act(async () => {
+        vi.mocked(toast.success)
+          .mock.calls.find(([, options]) => options?.action !== undefined)?.[1]
+          ?.action?.onClick();
+        await vi.waitFor(() => {
+          expect(boundary.toastError).toHaveBeenCalledWith(
+            tooLate,
+            expect.any(Object)
+          );
+        });
+      });
+      expect(boundary.getDraft).not.toHaveBeenCalled();
+      expect(restore).not.toHaveBeenCalled();
+      expect(controller.state.open).toBeFalsy();
+    });
+
+    it("closes with a plain confirmation when the server sends immediately", async () => {
+      sendResult({
+        canUndo: false,
+        id: "sent",
+        remainingMs: 0,
+        status: "accepted",
+        undoUntil: null,
+      });
+      await mount();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(controller.state.open).toBeFalsy();
+      expect(toast.success).toHaveBeenCalledOnce();
+      expect(
+        vi.mocked(toast.success).mock.calls[0]?.[1]?.action
+      ).toBeUndefined();
+    });
+
+    it("keeps a preparing send open and hands it off once the server holds it", async () => {
+      sendResult({ status: "preparing", undoUntil: null });
+      await mount();
+      const { sendOperationId } = readCompose().read();
+      await act(async () => {
+        await controller.form.handleSubmit();
+      });
+      expect(controller.state).toMatchObject({
+        draft: { holdAttempt: true, sendUncertain: true },
+        open: true,
+      });
+      expect(
+        vi
+          .mocked(toast.success)
+          .mock.calls.find(([, options]) => options?.action !== undefined)?.[1]
+      ).toBeUndefined();
+      boundary.getHeldSend.mockResolvedValue({
+        canUndo: true,
+        draftId: null,
+        errorMessage: null,
+        id: "held",
+        mailboxId: "mailbox",
+        remainingMs: 3000,
+        sendOperationId: sendOperationId ?? "",
+        status: "held",
+        undoUntil: new Date(Date.now() + 3000).toISOString(),
+      });
+      await vi.waitFor(
+        () => {
+          expect(controller.state.open).toBeFalsy();
+        },
+        { timeout: 3000 }
+      );
+      expect(
+        vi
+          .mocked(toast.success)
+          .mock.calls.find(([, options]) => options?.action !== undefined)?.[1]
+      ).toMatchObject({ duration: 3000 });
+    });
+
+    it.each(["failed", "uncertain"] as const)(
+      "keeps a %s send in the composer for recovery",
+      async (status) => {
+        sendResult({ canUndo: false, status, undoUntil: null });
+        boundary.getHeldSend.mockImplementation(
+          async (input) =>
+            await Promise.resolve({
+              canUndo: false,
+              draftId: null,
+              errorMessage: null,
+              id: "held",
+              mailboxId: input.mailboxId,
+              remainingMs: 0,
+              sendOperationId: input.sendOperationId,
+              status,
+              undoUntil: null,
+            })
+        );
+        await mount();
+        await act(async () => {
+          await controller.form.handleSubmit();
+        });
+        await act(async () => {
+          await client.refetchQueries();
+        });
+        expect(controller.state).toMatchObject({
+          draft: { sendUncertain: true },
+          open: true,
+        });
+        expect(toast.success).not.toHaveBeenCalled();
+      }
+    );
   });
 
   describe("assistant proposal persistence", () => {

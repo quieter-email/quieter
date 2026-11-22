@@ -80,6 +80,8 @@ import {
 } from "react";
 
 import { recoverComposeSchedule } from "../domain/scheduled-recovery";
+import { showHeldSendToast } from "./held-send-toast";
+import type { RestoreUndoneDraft } from "./held-send-toast";
 
 type ComposeDraftUpdate =
   | ComposeDraftState
@@ -106,7 +108,12 @@ export type PreparedComposeSenderSwitch = {
 
 export type ComposeHeldReceipt = Pick<
   NonNullable<RouterOutputs["mail"]["getHeldSend"]>,
-  "sendOperationId" | "status" | "canUndo" | "undoUntil"
+  | "sendOperationId"
+  | "status"
+  | "canUndo"
+  | "errorMessage"
+  | "remainingMs"
+  | "undoUntil"
 > & {
   mailboxId: string;
   draftId: string;
@@ -129,7 +136,39 @@ type HeldCompletion =
   | { kind: "undo" }
   | { kind: "abandoned" }
   | { kind: "accepted" }
-  | { kind: "canceled"; draftId: string | null };
+  | { kind: "canceled"; draftId: string | null }
+  | { kind: "held"; canUndo: boolean; remainingMs: number };
+
+type HeldStatusSnapshot = Pick<
+  ComposeHeldReceipt,
+  "canUndo" | "errorMessage" | "remainingMs" | "status"
+> & { draftId: string | null };
+
+// Held and dispatching sends belong to the server once confirmed: the composer
+// closes and a toast offers Undo. Other states keep the composer open.
+const heldCompletionFor = (
+  held: HeldStatusSnapshot
+): Exclude<HeldCompletion, { kind: "undo" | "abandoned" }> | null => {
+  if (held.status === "accepted") {
+    return { kind: "accepted" };
+  }
+  if (held.status === "canceled") {
+    return held.draftId === null
+      ? null
+      : { draftId: held.draftId, kind: "canceled" };
+  }
+  if (
+    (held.status === "held" || held.status === "dispatching") &&
+    held.errorMessage === null
+  ) {
+    return {
+      canUndo: held.status === "held" && held.canUndo,
+      kind: "held",
+      remainingMs: held.remainingMs,
+    };
+  }
+  return null;
+};
 
 const SUPPRESSED_RECIPIENT_MESSAGE =
   "This message includes a recipient that can no longer receive mail from this team.";
@@ -173,6 +212,7 @@ export const useComposeDialogController = ({
   getTextFromHtml,
   onClose,
   onRecipientProblem,
+  onRestoreUndoneSend,
   persistDrafts = true,
   signature,
 }: {
@@ -189,6 +229,7 @@ export const useComposeDialogController = ({
   getTextFromHtml: (html: string) => string;
   onClose?: () => void;
   onRecipientProblem?: () => void;
+  onRestoreUndoneSend?: RestoreUndoneDraft;
   persistDrafts?: boolean;
   signature?: { html: string | null; text: string | null };
 }) => {
@@ -1529,17 +1570,24 @@ export const useComposeDialogController = ({
             return { kind: "complete" };
           }
         }
-        if (terminal.kind === "accepted") {
+        if (terminal.kind === "accepted" || terminal.kind === "held") {
           await recovery.complete(draft, () => isCurrentHeldTask(task));
           if (!isCurrentHeldTask(task)) {
             return { kind: "complete" };
           }
           closeDialog(undefined, "completed");
-          toast.success(
-            draft.heldDraftHasNewerEdits === true
-              ? "Message sent. Your newer edits are recoverable after closing the composer."
-              : "Message sent."
-          );
+          showHeldSendToast({
+            canUndo: terminal.kind === "held" && terminal.canUndo,
+            description:
+              draft.heldDraftHasNewerEdits === true
+                ? "Your newer edits were kept for recovery."
+                : undefined,
+            mailboxId: task.mailboxId,
+            onRestore: onRestoreUndoneSend,
+            queryClient,
+            remainingMs: terminal.kind === "held" ? terminal.remainingMs : 0,
+            sendOperationId: task.sendOperationId,
+          });
           await Promise.all([
             refreshCachedMailboxQueries(queryClient, task.mailboxId, "drafts"),
             refreshCachedMailboxQueries(queryClient, task.mailboxId, "sent"),
@@ -1686,8 +1734,12 @@ export const useComposeDialogController = ({
       return;
     }
     heldReceiptRef.current = receipt.sendOperationId;
+    const completion = heldCompletionFor({
+      ...receipt,
+      draftId: receipt.restoredDraftId,
+    });
     if (heldTaskRef.current !== null) {
-      if (receipt.status === "accepted" || receipt.status === "canceled") {
+      if (completion !== null) {
         const result = await heldTaskRef.current.promise;
         if (result.kind === "failed") {
           throw result.error;
@@ -1697,8 +1749,7 @@ export const useComposeDialogController = ({
     }
     if (
       heldTerminalRef.current?.sendOperationId === receipt.sendOperationId &&
-      receipt.status !== "accepted" &&
-      receipt.status !== "canceled"
+      completion === null
     ) {
       return;
     }
@@ -1736,12 +1787,8 @@ export const useComposeDialogController = ({
         toastError(error, { boundary: "compose-held-refresh" });
       }
     })();
-    if (receipt.status === "accepted" || receipt.status === "canceled") {
-      const result = await finishHeldOperation(
-        receipt.status === "accepted"
-          ? { kind: "accepted" }
-          : { draftId: receipt.restoredDraftId, kind: "canceled" }
-      );
+    if (completion !== null) {
+      const result = await finishHeldOperation(completion);
       if (result.kind === "failed") {
         throw result.error;
       }
@@ -1794,17 +1841,14 @@ export const useComposeDialogController = ({
             held
           );
         }
+        const completion = held === null ? null : heldCompletionFor(held);
         if (
           held === null ||
           (held.status === "canceled" && held.draftId === null)
         ) {
           await restoreHeldMessage();
-        } else if (held.status === "canceled" || held.status === "accepted") {
-          await finishHeldOperation(
-            held.status === "accepted"
-              ? { kind: "accepted" }
-              : { draftId: held.draftId, kind: "canceled" }
-          );
+        } else if (completion !== null) {
+          await finishHeldOperation(completion);
         }
         return;
       }
@@ -1961,29 +2005,23 @@ export const useComposeDialogController = ({
   const finishHeldSend = useEffectEvent(async () => {
     const held = heldSendQuery.data;
     if (
-      held?.sendOperationId !== activeDraftRef.current.sendOperationId ||
-      (held?.status !== "accepted" &&
-        (held?.status !== "canceled" || held.draftId === null))
+      !held ||
+      held.sendOperationId !== activeDraftRef.current.sendOperationId ||
+      (held.status === "canceled" && held.draftId === null)
     ) {
       return;
     }
-    await finishHeldOperation(
-      held.status === "accepted"
-        ? { kind: "accepted" }
-        : { draftId: held.draftId, kind: "canceled" }
-    );
+    const completion = heldCompletionFor(held);
+    if (completion !== null) {
+      await finishHeldOperation(completion);
+    }
   });
   useEffect(() => {
-    if (
-      heldSendQuery.data?.status === "accepted" ||
-      (heldSendQuery.data?.status === "canceled" &&
-        heldSendQuery.data.draftId !== null)
-    ) {
-      void finishHeldSend();
-    }
+    void finishHeldSend();
   }, [
     heldSendQuery.data?.status,
     heldSendQuery.data?.draftId,
+    heldSendQuery.data?.errorMessage,
     heldSendQuery.data?.sendOperationId,
   ]);
 

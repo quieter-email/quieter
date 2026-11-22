@@ -1,6 +1,7 @@
 "use client";
 
 import { LoadingPage } from "@quieter/app/components/loading-page";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
@@ -240,8 +241,41 @@ const useMailboxWorkspaceCompose = ({
     }
   };
 
+  // Undo can finish after the composer has closed and this host re-rendered,
+  // so the restore callback reads the latest state instead of its closure.
+  const restoreTargetRef = useRef({
+    isComposeMailbox,
+    mounted: false,
+    openComposeWorkspace,
+  });
+  useLayoutEffect(() => {
+    restoreTargetRef.current = {
+      isComposeMailbox,
+      mounted: true,
+      openComposeWorkspace,
+    };
+  });
+  useEffect(
+    () => () => {
+      restoreTargetRef.current.mounted = false;
+    },
+    []
+  );
+  const handleRestoreUndoneSend: RestoreUndoneDraft = (
+    draft,
+    draftMailboxId
+  ) => {
+    const target = restoreTargetRef.current;
+    if (!target.mounted || target.isComposeMailbox) {
+      return false;
+    }
+    target.openComposeWorkspace(draft, draftMailboxId);
+    return true;
+  };
+
   return {
     composeSession,
+    handleRestoreUndoneSend,
     launchedMailtoRef,
     openComposeWorkspace,
     switchComposeSenderMailbox,
@@ -1176,6 +1210,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         await composeWorkspace.switchComposeSenderMailbox(nextMailboxId);
         workspaceActions.resetDraftChatKey();
       }}
+      onRestoreUndoneSend={composeWorkspace.handleRestoreUndoneSend}
       onConnectGmail={() => {
         void connectGmail();
       }}

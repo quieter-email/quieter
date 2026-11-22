@@ -6,6 +6,7 @@ import { protectedProcedure } from "./base";
 
 const preferencesSelection = {
   timeFormat: user.timeFormat,
+  undoSendEnabled: user.undoSendEnabled,
   weekStartsOn: user.weekStartsOn,
 };
 
@@ -23,6 +24,7 @@ export const accountPreferencesRouter = {
       }
       return {
         timeFormat: preferences.timeFormat ?? "24h",
+        undoSendEnabled: preferences.undoSendEnabled ?? true,
         weekStartsOn: preferences.weekStartsOn ?? 1,
       };
     }),
@@ -31,6 +33,7 @@ export const accountPreferencesRouter = {
       z
         .object({
           timeFormat: z.enum(["12h", "24h"]).optional(),
+          undoSendEnabled: z.boolean().optional(),
           weekStartsOn: z
             .union([
               z.literal(0),
@@ -45,7 +48,9 @@ export const accountPreferencesRouter = {
         })
         .refine(
           (input) =>
-            input.timeFormat !== undefined || input.weekStartsOn !== undefined,
+            input.timeFormat !== undefined ||
+            input.undoSendEnabled !== undefined ||
+            input.weekStartsOn !== undefined,
           "Choose a preference to update."
         )
     )
@@ -60,6 +65,7 @@ export const accountPreferencesRouter = {
       }
       return {
         timeFormat: preferences.timeFormat ?? "24h",
+        undoSendEnabled: preferences.undoSendEnabled ?? true,
         weekStartsOn: preferences.weekStartsOn ?? 1,
       };
     }),

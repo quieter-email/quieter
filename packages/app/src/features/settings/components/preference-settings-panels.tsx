@@ -41,6 +41,7 @@ import { ThemePicker } from "@quieter/ui/theme-picker";
 
 import { DateTimeSettings } from "./date-time-settings";
 import { DefaultMailboxSetting } from "./default-mailbox-setting";
+import { SendingSettings } from "./sending-settings";
 import {
   SettingsCard,
   SettingsRow,
@@ -58,6 +59,7 @@ export const PreferencesSettingsPanel = () => {
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <DefaultMailboxSetting />
       <DateTimeSettings />
+      <SendingSettings />
       <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow action={<ThemePicker />} title="Theme" />

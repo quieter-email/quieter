@@ -39,7 +39,7 @@ import { requestScheduledSendWake } from "./wake";
 type ScheduledSend = typeof scheduledMailSend.$inferSelect;
 const LEASE_MS = 2 * 60_000;
 const RECONCILE_MS = 5 * 60_000;
-const UNDO_SEND_WINDOW_MS = 10_000;
+const UNDO_SEND_WINDOW_MS = 5000;
 
 export const validateScheduledSendTime = (
   sendAt: string,
@@ -98,19 +98,29 @@ const heldStatus = {
   uncertain: "uncertain",
 } as const;
 
-const toHeldSummary = (row: ReturnType<typeof toSummary>) => ({
-  canUndo: row.canUndo,
-  draftId: row.restoredDraftId,
-  errorMessage: row.errorMessage,
-  id: row.id,
-  mailboxId: row.mailboxId,
-  sendOperationId: row.sendOperationId,
-  status:
-    row.status === "scheduled" && !row.canUndo
-      ? ("dispatching" as const)
-      : heldStatus[row.status],
-  undoUntil: row.status === "preparing" ? null : row.sendAt,
-});
+const toHeldSummary = (row: ReturnType<typeof toSummary>) => {
+  let remainingMs = 0;
+  if (row.canUndo) {
+    remainingMs =
+      row.status === "preparing"
+        ? UNDO_SEND_WINDOW_MS
+        : Math.max(0, Date.parse(row.sendAt) - Date.now());
+  }
+  return {
+    canUndo: row.canUndo,
+    draftId: row.restoredDraftId,
+    errorMessage: row.errorMessage,
+    id: row.id,
+    mailboxId: row.mailboxId,
+    remainingMs,
+    sendOperationId: row.sendOperationId,
+    status:
+      row.status === "scheduled" && !row.canUndo
+        ? ("dispatching" as const)
+        : heldStatus[row.status],
+    undoUntil: row.status === "preparing" ? null : row.sendAt,
+  };
+};
 
 const assertCanSchedule = async (scope: {
   userId: string;
@@ -941,7 +951,9 @@ export const cancelScheduledSend = async (scope: ScheduledSendScope) => {
   if (cancellation === undefined) {
     throw new ORPCError("CONFLICT", {
       message:
-        "This message has started sending and can no longer be canceled. Check Sent for its delivery status.",
+        row.deliveryKind === "undo"
+          ? "Too late to undo. This message is already sending."
+          : "This message has started sending and can no longer be canceled. Check Sent for its delivery status.",
     });
   }
   const restored = await restoreCancelledSend(cancellation.row, {
