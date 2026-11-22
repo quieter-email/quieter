@@ -23,7 +23,7 @@
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",
     "drizzle-orm": "catalog:",
-    "jose": "6.2.12",
+    "jose": "6.2.18",
     "zod": "catalog:"
   },
   "devDependencies": {

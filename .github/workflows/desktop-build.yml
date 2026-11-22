@@ -33,7 +33,7 @@ jobs:
         id: sizes
         shell: bash
         run: vp run @quieter/desktop#release:size --revision "${{ github.sha }}" --github-output "$GITHUB_OUTPUT"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: quieter-${{ matrix.os }}
           path: ${{ steps.sizes.outputs.artifact_paths }}
