@@ -29,7 +29,7 @@ const postSitePassword = async (request: Request) => {
     request,
   });
   if (!(response instanceof Response)) {
-    throw new Error("Site password handler did not return a response");
+    throw new TypeError("Site password handler did not return a response");
   }
   return response;
 };

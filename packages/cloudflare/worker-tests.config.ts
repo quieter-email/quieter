@@ -1,4 +1,4 @@
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
@@ -31,6 +31,9 @@ export default defineConfig({
     }),
   ],
   test: {
+    // Vitest 5.1 defaults fsModuleCache to true, causing @cloudflare/vitest-plugin
+    // to inline all warm modules into one WebSocket frame past workerd's 32 MiB cap.
+    fsModuleCache: false,
     include: ["tests/**/*.test.ts"],
   },
 });

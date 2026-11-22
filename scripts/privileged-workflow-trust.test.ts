@@ -83,10 +83,9 @@ describe("privileged workflow trust", () => {
         }
       );
       const allowed = status === "ahead" || status === "identical";
-      const result = await Promise.resolve(execution).then(
-        () => "authorized",
-        () => "rejected"
-      );
+      const result = await Promise.resolve(execution)
+        .then(() => "authorized")
+        .catch(() => "rejected");
       expect(result).toBe(allowed ? "authorized" : "rejected");
       expect(Object.fromEntries(outputs)).toStrictEqual(
         allowed ? { sha: "immutable-event-sha", tag: "" } : {}
@@ -195,10 +194,9 @@ describe("privileged workflow trust", () => {
           },
         }
       );
-      const result = await Promise.resolve(execution).then(
-        () => "authorized",
-        () => "rejected"
-      );
+      const result = await Promise.resolve(execution)
+        .then(() => "authorized")
+        .catch(() => "rejected");
       expect(result).toBe(allowed ? "authorized" : "rejected");
       expect(Object.fromEntries(outputs)).toStrictEqual(
         allowed ? { sha: "release-sha", tag: branch } : {}

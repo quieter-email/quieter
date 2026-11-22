@@ -45,23 +45,25 @@ export const MailboxDetailSettingsView = ({
         <SettingsPageHeader title="Mailbox unavailable">
           This mailbox is no longer available to your account.
         </SettingsPageHeader>
-        <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
-          <Button
-            onClick={() => {
-              runDetached(async () => {
-                await navigate({
-                  replace: true,
-                  search: (previous) => ({ ...previous, mailboxId: "" }),
-                  to: ".",
+        <SettingsCard>
+          <div className={settingsSurfaceVariants({ variant: "body" })}>
+            <Button
+              onClick={() => {
+                runDetached(async () => {
+                  await navigate({
+                    replace: true,
+                    search: (previous) => ({ ...previous, mailboxId: "" }),
+                    to: ".",
+                  });
                 });
-              });
-            }}
-            size="sm"
-            type="button"
-            variant="outline"
-          >
-            View mailboxes
-          </Button>
+              }}
+              size="sm"
+              type="button"
+              variant="outline"
+            >
+              View mailboxes
+            </Button>
+          </div>
         </SettingsCard>
       </div>
     );

@@ -400,14 +400,13 @@ describe("organization subscription reconciliation", () => {
         await expect(definitive).resolves.toMatchObject({
           code: "SERVICE_UNAVAILABLE",
         });
-        const nextOutcome = await getOrganizationSubscription(
-          "organization-a"
-        ).then(
-          (account) => account?.product,
-          (error: unknown) =>
-            z.object({ code: z.literal("SERVICE_UNAVAILABLE") }).parse(error)
-              .code
-        );
+        const nextOutcome = await getOrganizationSubscription("organization-a")
+          .then((account) => account?.product)
+          .catch(
+            (error: unknown) =>
+              z.object({ code: z.literal("SERVICE_UNAVAILABLE") }).parse(error)
+                .code
+          );
         expect(nextOutcome).toBe(
           webhookRefresh ? "pro" : "SERVICE_UNAVAILABLE"
         );

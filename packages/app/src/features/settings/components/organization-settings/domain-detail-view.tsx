@@ -284,13 +284,15 @@ export const DomainDetailView = ({
   }
   if (isError || !domain) {
     return (
-      <SettingsCard
-        className={cn(
-          settingsSurfaceVariants({ variant: "body" }),
-          "text-body text-destructive"
-        )}
-      >
-        {error?.message ?? "Domain not found."}
+      <SettingsCard>
+        <div
+          className={cn(
+            settingsSurfaceVariants({ variant: "body" }),
+            "text-body text-destructive"
+          )}
+        >
+          {error?.message ?? "Domain not found."}
+        </div>
       </SettingsCard>
     );
   }

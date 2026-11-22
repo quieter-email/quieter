@@ -34,7 +34,7 @@ class WebTanStackStart extends sst.cloudflare.TanStackStart {
   // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
   protected override buildPlan(outputPath: $util.Output<string>) {
     return outputPath.apply(async (directory) => {
-      const workerDirectory = ".cloudflare/output/v0/workers/default";
+      const workerDirectory = ".cloudflare/output/v1/workers/default";
       const config = z
         .object({ manifest: z.object({ mainModule: z.string().min(1) }) })
         .parse(

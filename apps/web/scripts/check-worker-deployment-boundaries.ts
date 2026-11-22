@@ -4,7 +4,7 @@ import { gzipSync } from "node:zlib";
 
 const serverDirectory = path.resolve(
   import.meta.dirname,
-  "../.cloudflare/output/v0/workers/default/bundle"
+  "../.cloudflare/output/v1/workers/default/bundle"
 );
 const serverFiles = await readdir(serverDirectory, { recursive: true });
 const boundaries: {

@@ -37,12 +37,12 @@ describe("prepared SST build", () => {
         path.join(directory, "fixture.cjs"),
         `
 const fs = require('node:fs');
-fs.mkdirSync('.cloudflare/output/v0/workers/default/assets/assets', {recursive: true});
-fs.mkdirSync('.cloudflare/output/v0/workers/default/bundle', {recursive: true});
-fs.writeFileSync('.cloudflare/output/v0/workers/default/assets/assets/build-id.txt', 'test-build');
-fs.writeFileSync('.cloudflare/output/v0/config.json', '{}');
-fs.writeFileSync('.cloudflare/output/v0/workers/default/worker.config.json', '{}');
-fs.writeFileSync('.cloudflare/output/v0/workers/default/bundle/index.js', 'original');
+fs.mkdirSync('.cloudflare/output/v1/workers/default/assets/assets', {recursive: true});
+fs.mkdirSync('.cloudflare/output/v1/workers/default/bundle', {recursive: true});
+fs.writeFileSync('.cloudflare/output/v1/workers/default/assets/assets/build-id.txt', 'test-build');
+fs.writeFileSync('.cloudflare/output/v1/config.json', '{}');
+fs.writeFileSync('.cloudflare/output/v1/workers/default/worker.config.json', '{}');
+fs.writeFileSync('.cloudflare/output/v1/workers/default/bundle/index.js', 'original');
 fs.appendFileSync('build-calls.txt', 'built\\n');
 `
       );
@@ -82,7 +82,7 @@ fs.appendFileSync('build-calls.txt', 'built\\n');
       expect(deploy.status).toBe(0);
       const markerPath = path.join(
         cwd,
-        ".cloudflare/output/v0/workers/default/assets/assets/build-id.txt"
+        ".cloudflare/output/v1/workers/default/assets/assets/build-id.txt"
       );
       await rm(markerPath);
       expect(
@@ -90,14 +90,14 @@ fs.appendFileSync('build-calls.txt', 'built\\n');
       ).not.toBe(0);
       await writeFile(markerPath, "test-build");
       await writeFile(
-        path.join(cwd, ".cloudflare/output/v0/workers/default/bundle/index.js"),
+        path.join(cwd, ".cloudflare/output/v1/workers/default/bundle/index.js"),
         "changed"
       );
       expect(
         spawnSync(process.execPath, [script, "deploy"], options).status
       ).not.toBe(0);
       await writeFile(
-        path.join(cwd, ".cloudflare/output/v0/workers/default/bundle/index.js"),
+        path.join(cwd, ".cloudflare/output/v1/workers/default/bundle/index.js"),
         "original"
       );
       await writeFile(configPath, '{"vars":{"stage":"other"}}');

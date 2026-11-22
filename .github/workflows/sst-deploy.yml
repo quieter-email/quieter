@@ -213,7 +213,7 @@ jobs:
 
       - name: Prepare web asset directories
         # Refresh can still read the previous release's asset path during migration.
-        run: mkdir -p apps/web/dist/client apps/web/.cloudflare/output/v0/workers/default/assets
+        run: mkdir -p apps/web/dist/client apps/web/.cloudflare/output/v0/workers/default/assets apps/web/.cloudflare/output/v1/workers/default/assets
 
       - name: Refresh SST state
         if: steps.drift-check.outputs.refresh == 'true'

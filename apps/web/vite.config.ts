@@ -110,12 +110,12 @@ export default defineConfig(({ command, mode }) => {
       sourcemaps: {
         assets:
           outputDirectory === "client"
-            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.js"]
-            : ["./.cloudflare/output/v0/workers/default/bundle/**/*.js"],
+            ? ["./.cloudflare/output/v1/workers/default/assets/**/*.js"]
+            : ["./.cloudflare/output/v1/workers/default/bundle/**/*.js"],
         // SST still needs server maps when packaging the Worker.
         filesToDeleteAfterUpload:
           outputDirectory === "client"
-            ? ["./.cloudflare/output/v0/workers/default/assets/**/*.map"]
+            ? ["./.cloudflare/output/v1/workers/default/assets/**/*.map"]
             : [],
       },
       telemetry: false,
@@ -159,7 +159,8 @@ export default defineConfig(({ command, mode }) => {
       wgslVitePlugin(),
       cloudflare({
         // SST checks this file for its generated config; cf loads the adapter separately.
-        config: (worker) => {
+        config: (loadedConfig) => {
+          const { worker } = loadedConfig;
           if (isDev) {
             const localValues = loadEnv(mode, workspaceRoot, "");
             for (const [name, binding] of Object.entries(worker.env ?? {})) {
@@ -197,6 +198,7 @@ export default defineConfig(({ command, mode }) => {
               );
             }
           }
+          return loadedConfig;
         },
         persistState: { path: `${workspaceRoot}/.wrangler/state` },
         remoteBindings: false,

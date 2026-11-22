@@ -1,12 +1,9 @@
 // @vitest-environment jsdom
-import {
-  shouldIgnoreAppShortcut,
-  trackAppShortcutSequenceContinuations,
-} from "@quieter/app/features/hotkeys/domain/hotkey-guards";
-import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
+import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vite-plus/test";
+import { beforeEach, describe, expect, it } from "vite-plus/test";
 
 const fired: string[] = [];
 
@@ -24,10 +21,12 @@ const SingleKey = () => {
 };
 
 const GoSequence = () => {
-  useHotkeySequence(
+  useHotkey(
     ["G", "I"],
-    () => {
-      fired.push("sequence");
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        fired.push("sequence");
+      }
     },
     { ignoreInputs: true }
   );
@@ -47,15 +46,8 @@ const press = (key: string) => {
 };
 
 describe("app shortcut sequence guard", () => {
-  let stopTracking: () => void;
-
   beforeEach(() => {
     fired.length = 0;
-    stopTracking = trackAppShortcutSequenceContinuations();
-  });
-
-  afterEach(() => {
-    stopTracking();
   });
 
   it.each([
