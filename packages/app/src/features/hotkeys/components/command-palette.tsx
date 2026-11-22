@@ -15,6 +15,7 @@ import {
 } from "@quieter/ui/dialog";
 import { Input } from "@quieter/ui/input";
 import { Kbd } from "@quieter/ui/kbd";
+import { toast } from "@quieter/ui/toast";
 import { detectPlatform } from "@tanstack/hotkeys";
 import type { RegisterableHotkey } from "@tanstack/react-hotkeys";
 import { useHotkey } from "@tanstack/react-hotkeys";
@@ -127,53 +128,61 @@ const CommandPaletteBody = ({
   const commands = allEntries.filter(
     ({ command }) => command.fallback !== true || !primaryIds.has(command.id)
   );
-  const filtered = commands
-    .filter(({ command }) => {
-      if (!isSearching) {
-        return true;
-      }
-      const haystack =
-        `${command.label} ${command.group} ${command.keywords ?? ""}`.toLocaleLowerCase();
-      return searchTokens.every((token) => haystack.includes(token));
-    })
-    .toSorted((left, right) => {
-      if (isSearching) {
-        if (left.command.state !== right.command.state) {
-          return left.command.state === "available" ? -1 : 1;
-        }
-        const leftRank = getCommandMatchRank(
-          left.command,
-          normalizedQuery,
-          searchTokens
-        );
-        const rightRank = getCommandMatchRank(
-          right.command,
-          normalizedQuery,
-          searchTokens
-        );
-        if (leftRank !== rightRank) {
-          return leftRank - rightRank;
-        }
-      }
-      const leftOrder = COMMAND_GROUP_ORDER.get(left.command.group) ?? 99;
-      const rightOrder = COMMAND_GROUP_ORDER.get(right.command.group) ?? 99;
-      if (leftOrder !== rightOrder) {
-        return leftOrder - rightOrder;
-      }
-      const groupCompare = left.command.group.localeCompare(
-        right.command.group
-      );
-      if (groupCompare !== 0) {
-        return groupCompare;
-      }
+  const matched = commands.filter(({ command }) => {
+    if (!isSearching) {
+      return true;
+    }
+    const haystack =
+      `${command.label} ${command.group} ${command.keywords ?? ""}`.toLocaleLowerCase();
+    return searchTokens.every((token) => haystack.includes(token));
+  });
+  const availableGroups = new Set(
+    matched
+      .filter(({ command }) => command.state === "available")
+      .map(({ command }) => command.group)
+  );
+  const filtered = matched.toSorted((left, right) => {
+    if (isSearching) {
       if (left.command.state !== right.command.state) {
         return left.command.state === "available" ? -1 : 1;
       }
-      return (
-        left.command.label.localeCompare(right.command.label) ||
-        left.command.id.localeCompare(right.command.id)
+      const leftRank = getCommandMatchRank(
+        left.command,
+        normalizedQuery,
+        searchTokens
       );
-    });
+      const rightRank = getCommandMatchRank(
+        right.command,
+        normalizedQuery,
+        searchTokens
+      );
+      if (leftRank !== rightRank) {
+        return leftRank - rightRank;
+      }
+    } else {
+      const leftHasAvailable = availableGroups.has(left.command.group);
+      const rightHasAvailable = availableGroups.has(right.command.group);
+      if (leftHasAvailable !== rightHasAvailable) {
+        return leftHasAvailable ? -1 : 1;
+      }
+    }
+    const leftOrder = COMMAND_GROUP_ORDER.get(left.command.group) ?? 99;
+    const rightOrder = COMMAND_GROUP_ORDER.get(right.command.group) ?? 99;
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+    const groupCompare = left.command.group.localeCompare(right.command.group);
+    if (groupCompare !== 0) {
+      return groupCompare;
+    }
+    if (left.command.state !== right.command.state) {
+      return left.command.state === "available" ? -1 : 1;
+    }
+    return (
+      left.command.label.localeCompare(right.command.label) ||
+      left.command.id.localeCompare(right.command.id)
+    );
+  });
   const activeKeyIndex =
     activeKey === null
       ? -1
@@ -382,6 +391,12 @@ export const CommandPalette = ({
                 toastError(error, { boundary: "command-palette" });
               }
             })();
+          } else {
+            toast.info(
+              command?.state === "unavailable"
+                ? command.reason
+                : "Action cancelled because the view changed."
+            );
           }
         });
       }}

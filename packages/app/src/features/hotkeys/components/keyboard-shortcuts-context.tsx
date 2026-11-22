@@ -16,8 +16,6 @@ import {
 } from "react";
 import type { PropsWithChildren } from "react";
 
-import { CommandPaletteProvider } from "./command-palette-context";
-
 type KeyboardShortcutsContextValue = {
   closeKeyboardShortcuts: () => void;
   isKeyboardShortcutsOpen: boolean;
@@ -62,9 +60,7 @@ export const KeyboardShortcutsProvider = ({ children }: PropsWithChildren) => {
 
   return (
     <KeyboardShortcutsContext.Provider value={value}>
-      <CommandPaletteProvider onShowKeyboardShortcuts={openKeyboardShortcuts}>
-        {children}
-      </CommandPaletteProvider>
+      {children}
       {isKeyboardShortcutsOpen ? (
         <KeyboardShortcutsDialog
           onOpenChange={setIsKeyboardShortcutsOpen}

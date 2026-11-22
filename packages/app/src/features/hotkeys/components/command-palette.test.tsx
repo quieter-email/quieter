@@ -14,6 +14,7 @@ import {
   ContextMenuTrigger,
 } from "@quieter/ui/context-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
+import { toast } from "@quieter/ui/toast";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import { act } from "react";
 import { createRoot } from "react-dom/client";
@@ -26,6 +27,7 @@ import {
   CommandPaletteProvider,
   useRegisterCommands,
 } from "./command-palette-context";
+import { KeyboardShortcutsProvider } from "./keyboard-shortcuts-context";
 
 vi.stubGlobal("IS_REACT_ACT_ENVIRONMENT", true);
 
@@ -289,6 +291,7 @@ describe("scoped command execution", () => {
     const previous = vi.fn<() => void>();
     const current = vi.fn<() => void>();
     const showHelp = vi.fn<() => void>();
+    const infoSpy = vi.spyOn(toast, "info").mockReturnValue("");
     const render = (scope: string, execute: () => void) => {
       root.render(
         <HotkeysProvider>
@@ -325,6 +328,9 @@ describe("scoped command execution", () => {
       await vi.waitFor(() => {
         expect(document.querySelector("[role='dialog']")).toBeNull();
       });
+      await vi.waitFor(() => {
+        expect(infoSpy).toHaveBeenCalledOnce();
+      });
       expect(previous).not.toHaveBeenCalled();
       expect(current).not.toHaveBeenCalled();
       act(() => {
@@ -347,6 +353,7 @@ describe("scoped command execution", () => {
       });
       expect(previous).not.toHaveBeenCalled();
     } finally {
+      infoSpy.mockRestore();
       act(() => {
         root.unmount();
       });
@@ -670,6 +677,9 @@ describe("scoped command execution", () => {
         "[role='option'][aria-selected='true']"
       );
       expect(initialSelected?.textContent).toContain("Compose");
+      const firstRenderedOption =
+        document.querySelector<HTMLButtonElement>("[role='option']");
+      expect(firstRenderedOption?.textContent).toContain("Compose");
 
       const input =
         document.querySelector<HTMLInputElement>("[role='combobox']");
@@ -988,6 +998,43 @@ describe("scoped command execution", () => {
       expect(fallbackSearchOptions[0]?.getAttribute("aria-disabled")).toBe(
         "true"
       );
+      expect(
+        document.querySelectorAll("[role='listbox'] > [role='group']").length
+      ).toBeGreaterThan(0);
+    } finally {
+      act(() => {
+        root.unmount();
+      });
+      container.remove();
+    }
+  });
+
+  test("stays inactive on routes outside the main workspace view", () => {
+    const container = document.createElement("div");
+    document.body.append(container);
+    const root = createRoot(container);
+    try {
+      act(() => {
+        root.render(
+          <HotkeysProvider>
+            <KeyboardShortcutsProvider>
+              <main>Settings route</main>
+            </KeyboardShortcutsProvider>
+          </HotkeysProvider>
+        );
+      });
+      act(() => {
+        document.dispatchEvent(
+          new KeyboardEvent("keydown", {
+            bubbles: true,
+            ctrlKey: true,
+            key: "K",
+            shiftKey: true,
+          })
+        );
+      });
+      expect(document.querySelector("[role='combobox']")).toBeNull();
+      expect(document.querySelector("[role='dialog']")).toBeNull();
     } finally {
       act(() => {
         root.unmount();

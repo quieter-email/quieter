@@ -1,5 +1,6 @@
 "use client";
 
+import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { MailboxWorkspace } from "@quieter/app/features/mailbox/components/mailbox-workspace";
 import { getCalendarQueryKey } from "@quieter/app/lib/calendar-query";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -9,6 +10,8 @@ import { toast } from "@quieter/ui/toast";
 import { useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "@tanstack/react-router";
 import { useEffect, useRef } from "react";
+
+import { CommandPaletteProvider } from "../../hotkeys/components/command-palette-context";
 
 type InboxPageClientProps = {
   gmailError?: { message: string; status: number } | null;
@@ -20,6 +23,7 @@ type InboxPageClientProps = {
 };
 
 export const InboxPageClient = ({ gmailError, user }: InboxPageClientProps) => {
+  const { openKeyboardShortcuts } = useKeyboardShortcuts();
   const navigate = useNavigate({ from: "/" });
   const queryClient = useQueryClient();
   const gmail = inboxRouteApi.useSearch({ select: (search) => search.gmail });
@@ -60,5 +64,9 @@ export const InboxPageClient = ({ gmailError, user }: InboxPageClientProps) => {
     });
   }, [gmail, gmailError, navigate, queryClient, userId]);
 
-  return <MailboxWorkspace user={user} />;
+  return (
+    <CommandPaletteProvider onShowKeyboardShortcuts={openKeyboardShortcuts}>
+      <MailboxWorkspace user={user} />
+    </CommandPaletteProvider>
+  );
 };
