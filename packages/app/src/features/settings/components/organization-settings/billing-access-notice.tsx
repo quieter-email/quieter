@@ -10,30 +10,32 @@ export const BillingAccessNotice = ({
 }: {
   organizationId: string;
 }) => (
-  <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
-    <p className={settingsSurfaceVariants({ variant: "title" })}>
-      Sending and API access are paused
-    </p>
-    <p className={settingsSurfaceVariants({ variant: "value" })}>
-      The team billing account needs an active plan. Your domains, keys, and
-      existing mail are kept. Incoming mail continues for configured inboxes.
-      You can remove domains and keys below.
-    </p>
-    <Button
-      render={
-        <Link
-          to="/settings"
-          search={{
-            organizationId,
-            organizationView: "billing",
-            tab: "organization",
-          }}
-        />
-      }
-      size="sm"
-      variant="outline"
-    >
-      View usage & limits
-    </Button>
+  <SettingsCard>
+    <div className={settingsSurfaceVariants({ variant: "body" })}>
+      <p className={settingsSurfaceVariants({ variant: "title" })}>
+        Sending and API access are paused
+      </p>
+      <p className={settingsSurfaceVariants({ variant: "value" })}>
+        The team billing account needs an active plan. Your domains, keys, and
+        existing mail are kept. Incoming mail continues for configured inboxes.
+        You can remove domains and keys below.
+      </p>
+      <Button
+        render={
+          <Link
+            to="/settings"
+            search={{
+              organizationId,
+              organizationView: "billing",
+              tab: "organization",
+            }}
+          />
+        }
+        size="sm"
+        variant="outline"
+      >
+        View usage & limits
+      </Button>
+    </div>
   </SettingsCard>
 );

@@ -1190,10 +1190,10 @@ const CalendarWorkspaceContent = ({
         preview={preview !== null}
         pendingConnection={ui.pendingConnection}
         onUpdateCalendarColor={async (calendar, color) =>
-          await data.colorMutation.mutateAsync({ calendar, color }).then(
-            () => true,
-            () => false
-          )
+          await data.colorMutation
+            .mutateAsync({ calendar, color })
+            .then(() => true)
+            .catch(() => false)
         }
         pendingCalendarColorKey={
           data.colorMutation.isPending
