@@ -11,12 +11,6 @@ const createPreloadableWorkspaceLoader = <Module>(
   return loadWorkspace;
 };
 
-export const loadChatView = createPreloadableWorkspaceLoader(async () => {
-  const { ChatView: Component } =
-    await import("@quieter/app/features/chat/components/chat-view");
-  return { default: Component };
-});
-
 export const loadComposeWorkspace = createPreloadableWorkspaceLoader(
   async () => {
     const { ComposeWorkspace: Component } =
