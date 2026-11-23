@@ -19,7 +19,7 @@ export const surfaceVariants = cva("", {
     },
     {
       chrome: "inset",
-      className: "inset-ring inset-ring-detail-edge/60",
+      className: "inset-ring inset-ring-detail-edge/30",
       variant: "detail",
     },
   ],
@@ -45,9 +45,9 @@ export const surfaceVariants = cva("", {
     },
     variant: {
       detail: "rounded-md bg-detail",
-      panel: "rounded-panel bg-panel inset-ring inset-ring-panel-edge/60",
+      panel: "rounded-panel bg-panel inset-ring inset-ring-panel-edge/30",
       section:
-        "rounded-section bg-section inset-ring inset-ring-section-edge/60",
+        "rounded-section bg-section inset-ring inset-ring-section-edge/30",
       selection: "rounded-md bg-selection",
     },
   },

@@ -110,9 +110,9 @@ export const SettingsCard = ({
       {
         "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
-        "rounded-md bg-detail outline -outline-offset-1 outline-detail-edge/60":
+        "rounded-md bg-detail outline -outline-offset-1 outline-detail-edge/30":
           variant === "detail",
-        "rounded-section bg-section outline -outline-offset-1 outline-section-edge/60":
+        "rounded-section bg-section outline -outline-offset-1 outline-section-edge/30":
           variant !== "detail",
       },
       className
