@@ -300,7 +300,7 @@ export const CalendarEventEditor = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="mb-2 min-h-0 flex-1 overflow-y-auto">
+      <div className="mb-2 min-h-0 flex-1 scroll-fade-y overflow-y-auto">
         <fieldset className="min-w-0 space-y-2 px-2" disabled={pending}>
           {state.problem ? (
             <p className="px-4 py-2 text-body-sm text-destructive" role="alert">

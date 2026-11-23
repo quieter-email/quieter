@@ -78,7 +78,7 @@ export const CalendarEventDetails = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="mb-2 min-h-0 flex-1 space-y-2 overflow-y-auto px-2">
+      <div className="mb-2 min-h-0 flex-1 scroll-fade-y space-y-2 overflow-y-auto px-2">
         <Surface variant="section">
           <div className="flex flex-col gap-4">
             <div className="space-y-2">

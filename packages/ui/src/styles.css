@@ -496,6 +496,62 @@
   }
 }
 
+@property --scroll-fade-y-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-fade-y-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-y-start {
+  from {
+    --scroll-fade-y-start: 0px;
+  }
+  to {
+    --scroll-fade-y-start: calc(var(--spacing) * 4);
+  }
+}
+
+@keyframes scroll-fade-y-end {
+  from {
+    --scroll-fade-y-end: calc(var(--spacing) * 4);
+  }
+  to {
+    --scroll-fade-y-end: 0px;
+  }
+}
+
+/* Fades a vertical scroll container's edge only while content is hidden past
+   it; each fade grows with the hidden distance, up to 1rem. Without overflow
+   the scroll timeline is inactive, so both fades stay 0 and nothing is masked.
+   Scroll padding keeps focused controls clear of the fades. Browsers without
+   scroll-driven animations keep the plain scroll edge. */
+@utility scroll-fade-y {
+  @supports (animation-timeline: scroll()) {
+    scroll-padding-block: calc(var(--spacing) * 4);
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black var(--scroll-fade-y-start),
+      black calc(100% - var(--scroll-fade-y-end)),
+      transparent 100%
+    );
+    animation-name: scroll-fade-y-start, scroll-fade-y-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self block);
+    animation-range:
+      0 calc(var(--spacing) * 4),
+      calc(100% - var(--spacing) * 4) 100%;
+  }
+}
+
 @keyframes toast-shake-odd {
   0%,
   100% {
