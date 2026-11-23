@@ -93,6 +93,7 @@ export const mailDispatchEvent = pgTable(
     createdAt: timestamp("createdAt")
       .notNull()
       .default(sql`timezone('UTC', now())`),
+    dispatchAfter: timestamp("dispatchAfter"),
     id: text("id")
       .primaryKey()
       .default(sql`gen_random_uuid()::text`),
@@ -104,6 +105,11 @@ export const mailDispatchEvent = pgTable(
     index("mail_dispatch_event_shard_created_idx").on(
       table.shard,
       table.createdAt,
+      table.id
+    ),
+    index("mail_dispatch_event_shard_due_idx").on(
+      table.shard,
+      sql`coalesce(${table.dispatchAfter}, ${table.createdAt})`,
       table.id
     ),
   ]

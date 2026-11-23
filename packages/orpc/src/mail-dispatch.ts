@@ -6,9 +6,12 @@ import {
   mailDispatchEvent,
   mailDispatchSettings,
 } from "@quieter/database/schema";
-import { mailDispatchEventSchema } from "@quieter/mail/dispatch";
+import {
+  MAIL_DISPATCH_BATCH_SIZE,
+  mailDispatchEventSchema,
+} from "@quieter/mail/dispatch";
 import type { MailDispatchEvent } from "@quieter/mail/dispatch";
-import { and, asc, eq, gt, sql } from "drizzle-orm";
+import { and, asc, eq, gt, inArray, sql } from "drizzle-orm";
 
 export const enqueueMailDispatch = async (
   tx: DatabaseExecutor,
@@ -20,18 +23,46 @@ export const enqueueMailDispatch = async (
   return outcome?.queued;
 };
 
-export const getMailDispatchEvent = async (eventId: string) => {
-  const [stored] = await db
-    .select({ payload: mailDispatchEvent.payload })
-    .from(mailDispatchEvent)
-    .where(eq(mailDispatchEvent.id, eventId));
-  return stored === undefined
-    ? null
-    : mailDispatchEventSchema.safeParse(stored.payload);
+export const claimMailDispatchEvents = async (
+  scope: { eventIds: string[] } | { shard: number }
+) => {
+  const now = sql`timezone('UTC', now())`;
+  const dueAt = sql`coalesce(${mailDispatchEvent.dispatchAfter}, ${mailDispatchEvent.createdAt})`;
+  const claimed = db.$with("claimed").as(
+    db
+      .select({ id: mailDispatchEvent.id })
+      .from(mailDispatchEvent)
+      .where(
+        and(
+          "eventIds" in scope
+            ? inArray(mailDispatchEvent.id, scope.eventIds)
+            : eq(mailDispatchEvent.shard, scope.shard),
+          sql`${dueAt} <= ${now}`
+        )
+      )
+      .orderBy(asc(dueAt), asc(mailDispatchEvent.id))
+      .limit(MAIL_DISPATCH_BATCH_SIZE)
+      .for("update", { skipLocked: true })
+  );
+  return await db
+    .with(claimed)
+    .update(mailDispatchEvent)
+    .set({ dispatchAfter: sql`${now} + interval '2 minutes'` })
+    .where(
+      inArray(mailDispatchEvent.id, db.select({ id: claimed.id }).from(claimed))
+    )
+    .returning({
+      id: mailDispatchEvent.id,
+      payload: mailDispatchEvent.payload,
+    });
 };
 
-export const completeMailDispatchEvent = async (eventId: string) => {
-  await db.delete(mailDispatchEvent).where(eq(mailDispatchEvent.id, eventId));
+export const completeMailDispatchEvents = async (eventIds: string[]) => {
+  if (eventIds.length > 0) {
+    await db
+      .delete(mailDispatchEvent)
+      .where(inArray(mailDispatchEvent.id, eventIds));
+  }
 };
 
 export const enrollGmailDispatch = async () => {

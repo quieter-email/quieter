@@ -18,7 +18,8 @@ import type { SecretBindings, SecretResources } from "./types";
 export const createMailUpdateResources = (
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  mailDispatchUrl: string
 ) => {
   const domain = production
     ? "updates.quieter.email"
@@ -38,6 +39,7 @@ export const createMailUpdateResources = (
     domain,
     environment: {
       BETTER_AUTH_URL: appOrigin,
+      MAIL_DISPATCH_URL: mailDispatchUrl,
       MAIL_UPDATES_URL: `wss://${domain}/mail/live`,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
       QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: getEnvironmentValue(

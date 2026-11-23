@@ -11,7 +11,6 @@ export default defineConfig({
       "src/deployment.ts",
       "src/desktop.ts",
       "src/local-doctor.ts",
-      "src/mail-event-relay.ts",
       "src/public.ts",
       "src/server.ts",
       "src/sst.ts",

@@ -7,6 +7,7 @@ import {
   cloudflareWorkerObservability,
 } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
+import { mailDispatchDomain } from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailDispatchWorker = (input: {
@@ -20,6 +21,7 @@ export const createMailDispatchWorker = (input: {
   const worker = new sst.cloudflare.Worker("MailDispatchWorker", {
     build: cloudflareWorkerBuild,
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
+    domain: mailDispatchDomain,
     handler: "packages/cloudflare/src/mail-dispatch-worker.ts",
     link: [
       input.appDatabase,
@@ -56,5 +58,15 @@ export const createMailDispatchWorker = (input: {
     },
     url: true,
   });
-  return worker.url.apply((url) => (url ? `${url}/mail/dispatch/event` : ""));
+  const { accountId, scriptName } = worker.nodes.worker;
+  return new cloudflare.WorkersCronTrigger("MailDispatchRepair", {
+    accountId: accountId.apply((id) => {
+      if (id === undefined) {
+        throw new Error("Mail dispatch Worker is missing its account ID.");
+      }
+      return id;
+    }),
+    schedules: [{ cron: "*/5 * * * *" }],
+    scriptName,
+  });
 };

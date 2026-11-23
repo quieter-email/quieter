@@ -1,13 +1,15 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  mailDispatchEventSchema,
   mailDispatchPath,
   mailDispatchRequestSchema,
 } from "@quieter/mail/dispatch";
+import type { MailDispatchEvent } from "@quieter/mail/dispatch";
 import { verifyMailPayload } from "@quieter/mail/updates";
 import {
-  completeMailDispatchEvent,
+  claimMailDispatchEvents,
+  completeMailDispatchEvents,
   enrollGmailDispatch,
-  getMailDispatchEvent,
 } from "@quieter/orpc/mail-dispatch";
 import { listMailUpdateRecipients } from "@quieter/orpc/mail-updates";
 
@@ -21,7 +23,149 @@ import {
   withSentryReporting,
 } from "./worker-runtime";
 
-export const handleMailDispatch = async (request: Request, env: Env) => {
+const dispatchEvent = async (
+  env: Env,
+  event: MailDispatchEvent,
+  eventId: string
+) => {
+  switch (event.kind) {
+    case "gmail": {
+      if (env.GmailProcessingWorker === undefined) {
+        break;
+      }
+      const outcome = await sendGmailProcessingJob(env, {
+        dueAt: event.dueAt,
+        kind: "dispatch-wake",
+        mailboxId: event.mailboxId,
+        tasks: event.tasks,
+      });
+      if (outcome.action !== "ack") {
+        throw new Error("Mailbox event wake was deferred.");
+      }
+      break;
+    }
+    case "gmail-enrollment": {
+      if (env.GmailProcessingWorker !== undefined) {
+        await enrollGmailDispatch();
+      }
+      break;
+    }
+    case "live": {
+      const currentRecipients = await listMailUpdateRecipients(
+        event.update.mailboxId
+      );
+      const { recipientUserIds } = event;
+      const recipients =
+        recipientUserIds === undefined
+          ? currentRecipients
+          : currentRecipients.filter((recipient) =>
+              recipientUserIds.includes(recipient)
+            );
+      await broadcastMailUpdate(env, event.update, recipients);
+      break;
+    }
+    case "maintenance":
+    case "maintenance-enrollment": {
+      const response =
+        event.kind === "maintenance"
+          ? await env.MAIL_MAINTENANCE.fetch(
+              "https://maintenance.internal/internal/maintenance/dispatch",
+              {
+                body: JSON.stringify({
+                  dueAt: event.dueAt,
+                  scopeKey: event.scopeKey,
+                  task: event.task,
+                }),
+                headers: { "content-type": "application/json" },
+                method: "POST",
+              }
+            )
+          : await env.MAIL_MAINTENANCE.fetch(
+              "https://maintenance.internal/internal/maintenance/bootstrap",
+              { method: "POST" }
+            );
+      if (
+        event.kind === "maintenance" &&
+        (response.status === 400 || response.status === 413)
+      ) {
+        reportWorkerError(new Error("Invalid mail maintenance event."), {
+          eventId,
+          route: mailDispatchPath,
+          status: response.status,
+        });
+      } else if (!response.ok) {
+        throw new Error("Mail maintenance did not accept work.");
+      }
+      break;
+    }
+    default: {
+      const unsupported: never = event;
+      throw new Error(`Unsupported mail dispatch event ${String(unsupported)}`);
+    }
+  }
+};
+
+const drainMailDispatch = async (
+  env: Env,
+  scope: Parameters<typeof claimMailDispatchEvents>[0]
+) => {
+  const events = await claimMailDispatchEvents(scope);
+  let delivered = 0;
+  const concurrency = 8;
+  for (let offset = 0; offset < events.length; offset += concurrency) {
+    const completed = await Promise.all(
+      events
+        .slice(offset, offset + concurrency)
+        .map(async ({ id, payload }) => {
+          try {
+            const parsed = mailDispatchEventSchema.safeParse(payload);
+            if (parsed.success) {
+              await dispatchEvent(env, parsed.data, id);
+            } else {
+              reportWorkerError(
+                new Error("Invalid stored mail dispatch event."),
+                {
+                  eventId: id,
+                  route: mailDispatchPath,
+                }
+              );
+            }
+            return [id];
+          } catch (error) {
+            reportWorkerError(error, { eventId: id, route: mailDispatchPath });
+            return [];
+          }
+        })
+    );
+    const completedIds = completed.flat();
+    // oxlint-disable-next-line no-await-in-loop -- Record successful deliveries before the next wave.
+    await completeMailDispatchEvents(completedIds);
+    delivered += completedIds.length;
+  }
+  return { claimed: events.length, delivered };
+};
+
+export const repairMailDispatch = async (env: Env) => {
+  await withRequestDatabaseClient(async () => {
+    for (let page = 0; page < 16; page += 1) {
+      // oxlint-disable-next-line no-await-in-loop -- Enrollment can add work to another shard.
+      const results = await Promise.all(
+        [0, 1, 2, 3].map(
+          async (shard) => await drainMailDispatch(env, { shard })
+        )
+      );
+      if (results.every(({ claimed }) => claimed === 0)) {
+        return;
+      }
+    }
+  });
+};
+
+export const handleMailDispatch = async (
+  request: Request,
+  env: Env,
+  ctx?: Pick<ExecutionContext, "waitUntil">
+) => {
   const url = new URL(request.url);
   if (
     request.method !== "POST" ||
@@ -32,7 +176,7 @@ export const handleMailDispatch = async (request: Request, env: Env) => {
   }
 
   try {
-    const body = await readBoundedJson(request, 1024);
+    const body = await readBoundedJson(request, 4096);
     if (
       !(await verifyMailPayload(
         JSON.stringify(body),
@@ -51,102 +195,26 @@ export const handleMailDispatch = async (request: Request, env: Env) => {
     ) {
       return new Response(null, { status: 400 });
     }
-    const { eventId } = payload.data;
-
-    await withRequestDatabaseClient(async () => {
-      const stored = await getMailDispatchEvent(eventId);
-      if (stored === null) {
-        return;
-      }
-      if (!stored.success) {
-        reportWorkerError(new Error("Invalid stored mail dispatch event."), {
-          eventId,
-          route: mailDispatchPath,
-        });
-        await completeMailDispatchEvent(eventId);
-        return;
-      }
-      const event = stored.data;
-      switch (event.kind) {
-        case "gmail": {
-          if (env.GmailProcessingWorker === undefined) {
-            break;
+    const delivery = withRequestDatabaseClient(
+      async () =>
+        await drainMailDispatch(env, { eventIds: payload.data.eventIds })
+    );
+    if (ctx !== undefined) {
+      ctx.waitUntil(
+        (async () => {
+          try {
+            await delivery;
+          } catch (error) {
+            reportWorkerError(error, { route: mailDispatchPath });
           }
-          const outcome = await sendGmailProcessingJob(env, {
-            dueAt: event.dueAt,
-            kind: "dispatch-wake",
-            mailboxId: event.mailboxId,
-            tasks: event.tasks,
-          });
-          if (outcome.action !== "ack") {
-            throw new Error("Mailbox event wake was deferred.");
-          }
-          break;
-        }
-        case "gmail-enrollment": {
-          if (env.GmailProcessingWorker !== undefined) {
-            await enrollGmailDispatch();
-          }
-          break;
-        }
-        case "live": {
-          const currentRecipients = await listMailUpdateRecipients(
-            event.update.mailboxId
-          );
-          const { recipientUserIds } = event;
-          const recipients =
-            recipientUserIds === undefined
-              ? currentRecipients
-              : currentRecipients.filter((recipient) =>
-                  recipientUserIds.includes(recipient)
-                );
-          await broadcastMailUpdate(env, event.update, recipients);
-          break;
-        }
-        case "maintenance":
-        case "maintenance-enrollment": {
-          const response =
-            event.kind === "maintenance"
-              ? await env.MAIL_MAINTENANCE.fetch(
-                  "https://maintenance.internal/internal/maintenance/dispatch",
-                  {
-                    body: JSON.stringify({
-                      dueAt: event.dueAt,
-                      scopeKey: event.scopeKey,
-                      task: event.task,
-                    }),
-                    headers: { "content-type": "application/json" },
-                    method: "POST",
-                  }
-                )
-              : await env.MAIL_MAINTENANCE.fetch(
-                  "https://maintenance.internal/internal/maintenance/bootstrap",
-                  { method: "POST" }
-                );
-          if (
-            event.kind === "maintenance" &&
-            (response.status === 400 || response.status === 413)
-          ) {
-            reportWorkerError(new Error("Invalid mail maintenance event."), {
-              eventId,
-              route: mailDispatchPath,
-              status: response.status,
-            });
-          } else if (!response.ok) {
-            throw new Error("Mail maintenance did not accept work.");
-          }
-          break;
-        }
-        default: {
-          const unsupported: never = event;
-          throw new Error(
-            `Unsupported mail dispatch event ${String(unsupported)}`
-          );
-        }
-      }
-      await completeMailDispatchEvent(eventId);
+        })()
+      );
+      return new Response(null, { status: 202 });
+    }
+    const outcome = await delivery;
+    return new Response(null, {
+      status: outcome.claimed === outcome.delivered ? 204 : 503,
     });
-    return new Response(null, { status: 204 });
   } catch (error) {
     return requestErrorResponse(error, mailDispatchPath);
   }
@@ -154,4 +222,7 @@ export const handleMailDispatch = async (request: Request, env: Env) => {
 
 export default withSentryReporting({
   fetch: handleMailDispatch,
+  async scheduled(_event, env) {
+    await repairMailDispatch(env);
+  },
 } satisfies ExportedHandler<Env>);

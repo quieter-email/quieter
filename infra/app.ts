@@ -2,7 +2,6 @@ import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
 import { createMailDispatchWorker } from "./mail-dispatch";
-import { createMailEventRelay } from "./mail-event-relay";
 import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createMailUpdateResources } from "./mail-updates";
 import { createDeploymentContext } from "./runtime";
@@ -24,7 +23,8 @@ export const createInfrastructure = async (input: {
   const updates = createMailUpdateResources(
     secretBindings,
     secretResources,
-    appDatabase
+    appDatabase,
+    context.releaseEnvironment.MAIL_DISPATCH_URL
   );
   const mailMaintenance = createMailMaintenanceResources(
     context,
@@ -42,22 +42,22 @@ export const createInfrastructure = async (input: {
   if (
     context.env.QUIETER_GMAIL_EVENTS_ENABLED === true &&
     (!context.gmailPubSubEnabled ||
-      context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED !== true)
+      context.env.QUIETER_MAIL_DISPATCH_ENABLED !== true)
   ) {
     throw new Error(
-      "Gmail event cutover requires Gmail Pub/Sub and the mail event relay."
+      "Gmail event cutover requires Gmail Pub/Sub and the mail dispatch Worker."
     );
   }
   if (
     context.env.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED === true &&
-    context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED !== true
+    context.env.QUIETER_MAIL_DISPATCH_ENABLED !== true
   ) {
     throw new Error(
-      "Mail maintenance event cutover requires the mail event relay."
+      "Mail maintenance event cutover requires the mail dispatch Worker."
     );
   }
-  if (context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED === true) {
-    const dispatchUrl = createMailDispatchWorker({
+  if (context.env.QUIETER_MAIL_DISPATCH_ENABLED === true) {
+    createMailDispatchWorker({
       appDatabase,
       gmailProcessor: gmail.processingWorker,
       maintenanceScript: mailMaintenance.worker.nodes.worker.scriptName,
@@ -65,11 +65,6 @@ export const createInfrastructure = async (input: {
       secretResources,
       updates,
     });
-    createMailEventRelay(
-      dispatchUrl,
-      requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET")
-        .value
-    );
   }
   const mail = await createMailResources(context, secretResources, updates.url);
   const web = createWeb(

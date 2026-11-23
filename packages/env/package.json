@@ -19,11 +19,6 @@
       "development": "./src/local-doctor.ts",
       "default": "./dist/local-doctor.js"
     },
-    "./mail-event-relay": {
-      "types": "./src/mail-event-relay.ts",
-      "development": "./src/mail-event-relay.ts",
-      "default": "./dist/mail-event-relay.js"
-    },
     "./public": {
       "types": "./src/public.ts",
       "development": "./src/public.ts",

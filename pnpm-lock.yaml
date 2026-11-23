@@ -1375,6 +1375,9 @@ importers:
       '@quieter/mail':
         specifier: workspace:*
         version: link:../mail
+      '@quieter/observability':
+        specifier: workspace:*
+        version: link:../observability
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.6(@cloudflare/workers-types@5.20261121.1)(@opentelemetry/api@1.9.1)(bun-types@1.4.5)(postgres@4.1.1)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7)
@@ -1514,34 +1517,6 @@ importers:
       vite:
         specifier: npm:@voidzero-dev/vite-plus-core@8.3.8000
         version: '@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)'
-      vite-plus:
-        specifier: 'catalog:'
-        version: 1.7.0(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@31.0.1(@napi-rs/canvas@1.1.0)(@noble/hashes@2.4.0))(typescript@7.0.2)(yaml@2.9.1)
-
-  packages/mail-event-relay:
-    dependencies:
-      '@quieter/env':
-        specifier: workspace:*
-        version: link:../env
-      '@quieter/mail':
-        specifier: workspace:*
-        version: link:../mail
-      postgres:
-        specifier: 4.1.1
-        version: 4.1.1
-      zod:
-        specifier: ^4.6.7
-        version: 4.6.7
-    devDependencies:
-      '@quieter/config':
-        specifier: workspace:*
-        version: link:../config
-      '@types/node':
-        specifier: 'catalog:'
-        version: 26.6.6
-      typescript:
-        specifier: 'catalog:'
-        version: 7.0.2
       vite-plus:
         specifier: 'catalog:'
         version: 1.7.0(@opentelemetry/api@1.9.1)(@types/node@26.6.6)(@vitest/ui@5.1.0)(esbuild@0.28.2)(jiti@2.7.0)(jsdom@31.0.1(@napi-rs/canvas@1.1.0)(@noble/hashes@2.4.0))(typescript@7.0.2)(yaml@2.9.1)

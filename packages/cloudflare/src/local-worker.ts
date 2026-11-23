@@ -32,7 +32,7 @@ export default {
     const url = new URL(request.url);
     if (url.pathname === mailDispatchPath) {
       const { handleMailDispatch } = await import("./mail-dispatch-worker");
-      return await handleMailDispatch(request, env);
+      return await handleMailDispatch(request, env, ctx);
     }
     if (
       url.pathname.startsWith("/mail/") ||
@@ -59,6 +59,11 @@ export default {
     }
     if (request.method !== "POST") {
       return new Response(null, { status: 405 });
+    }
+    if (url.pathname === "/__dev/mail-dispatch") {
+      const { repairMailDispatch } = await import("./mail-dispatch-worker");
+      await repairMailDispatch(env);
+      return new Response(null, { status: 204 });
     }
     if (url.pathname === "/__dev/mail/seed") {
       try {

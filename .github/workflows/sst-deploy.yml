@@ -11,11 +11,15 @@ on:
         required: false
         default: false
         type: boolean
-      activate_mail_event_dispatch:
-        description: Activate committed mail events after the relay and its replication slots are ready
+      mail_event_dispatch:
+        description: Enable committed dispatch or disable it after restoring fallback schedules
         required: false
-        default: false
-        type: boolean
+        default: unchanged
+        type: choice
+        options:
+          - unchanged
+          - enable
+          - disable
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -158,8 +162,7 @@ jobs:
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
       GMAIL_BODY_STORAGE_ENABLED: ${{ vars.GMAIL_BODY_STORAGE_ENABLED }}
       QUIETER_GMAIL_EVENTS_ENABLED: ${{ vars.QUIETER_GMAIL_EVENTS_ENABLED }}
-      QUIETER_MAIL_EVENT_RELAY_ENABLED: ${{ vars.QUIETER_MAIL_EVENT_RELAY_ENABLED }}
-      QUIETER_MAIL_EVENT_RELAY_SHARDED: ${{ vars.QUIETER_MAIL_EVENT_RELAY_SHARDED }}
+      QUIETER_MAIL_DISPATCH_ENABLED: ${{ vars.QUIETER_MAIL_DISPATCH_ENABLED }}
       QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: ${{ vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED }}
       QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
@@ -197,9 +200,6 @@ jobs:
         run: |
           vp run @quieter/observability#build
           vp run quieter#build
-
-      - name: Build mail event relay
-        run: vp run @quieter/env#build && vp run @quieter/mail-event-relay#build
 
       - name: Prepare web release routing
         run: vp exec node scripts/web-release.ts prepare https://quieter.email "$QUIETER_BUILD_ID"
@@ -288,6 +288,12 @@ jobs:
           fi
           vp exec node packages/database/scripts/run-personal-action-cutover.ts assert --build-id "$GITHUB_SHA"
 
+      - name: Check for old mail relay replication slots
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: vp exec node packages/database/scripts/mail-event-cutover.ts verify
+
       - name: Apply production database migrations
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
@@ -295,24 +301,19 @@ jobs:
         run: vp run @quieter/database#db:deploy
 
       - name: Check mail event cutover
-        if: vars.QUIETER_MAIL_EVENT_RELAY_ENABLED != 'true' || vars.QUIETER_GMAIL_EVENTS_ENABLED == 'true' || vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED == 'true'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: |
           set -euo pipefail
-          stage="${SST_STAGE,,}"
-          slot="quieter_mail_dispatch_${stage//-/_}"
-          mode=sharded
-          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != false ]] || mode=shared
-          if [[ "$QUIETER_MAIL_EVENT_RELAY_ENABLED" != true ]]; then
-            vp exec node packages/database/scripts/mail-event-cutover.ts verify-disabled "$slot" "$mode"
+          if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
+            vp exec node packages/database/scripts/mail-event-cutover.ts verify-disabled
             exit
           fi
           scopes=()
           [[ "$QUIETER_GMAIL_EVENTS_ENABLED" != true ]] || scopes+=(gmail)
           [[ "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" != true ]] || scopes+=(maintenance)
-          vp exec node packages/database/scripts/mail-event-cutover.ts verify "$slot" "$mode" "$(IFS=, ; echo "${scopes[*]}")"
+          vp exec node packages/database/scripts/mail-event-cutover.ts verify "$(IFS=, ; echo "${scopes[*]}")"
 
       - name: Bootstrap explicitly authorized account access
         if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
@@ -340,18 +341,27 @@ jobs:
         id: deploy
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
-      - name: Activate committed mail events
-        if: github.event_name == 'workflow_dispatch' && inputs.activate_mail_event_dispatch == true
+      - name: Change committed mail dispatch
+        if: github.event_name == 'workflow_dispatch' && inputs.mail_event_dispatch != 'unchanged'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          MAIL_EVENT_DISPATCH_OPERATION: ${{ inputs.mail_event_dispatch }}
         run: |
           set -euo pipefail
-          stage="${SST_STAGE,,}"
-          slot="quieter_mail_dispatch_${stage//-/_}"
-          mode=sharded
-          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != false ]] || mode=shared
-          vp exec node packages/database/scripts/mail-event-cutover.ts enable "$slot" "$mode" gmail
+          if [[ "$MAIL_EVENT_DISPATCH_OPERATION" == disable ]]; then
+            if [[ "$QUIETER_GMAIL_EVENTS_ENABLED" == true || "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" == true ]]; then
+              echo "Restore the fallback schedules before disabling committed dispatch." >&2
+              exit 1
+            fi
+            vp exec node packages/database/scripts/mail-event-cutover.ts disable
+          else
+            if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
+              echo "Enable the Cloudflare mail dispatch Worker before activating events." >&2
+              exit 1
+            fi
+            vp exec node packages/database/scripts/mail-event-cutover.ts enable gmail
+          fi
 
       - name: Disable direct private release URLs
         run: vp exec node scripts/check-action-deployment.ts secure-private-releases

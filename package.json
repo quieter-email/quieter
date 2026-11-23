@@ -29,7 +29,6 @@
     "dev:full": "vp run dev:prepare && vp run --parallel --filter=@quieter/web --filter=@quieter/cloudflare dev",
     "dev:linked": "node scripts/local-linked-secrets.ts && vp run dev:full",
     "dev:sst": "vp run @quieter/env#build && node --env-file-if-exists=.env.sst.local scripts/run-sst.ts dev --config sst.local.config.ts --mode mono",
-    "dev:mail-event-relay": "vp run @quieter/env#build && vp run @quieter/mail-event-relay#build && node --env-file-if-exists=.env.mail-event-relay.local packages/mail-event-relay/dist/index.mjs",
     "dev:pubsub": "node --env-file=.env.local scripts/local-pubsub.ts",
     "dev:polar": "wsl -e bash scripts/local-polar.sh",
     "dev:trigger": "node --env-file=.env.local scripts/local-worker-request.ts",

@@ -7,8 +7,10 @@ const timestamp = z.number().int().nonnegative();
 
 export const mailMaintenanceScopeKeySchema = z.string().min(1).max(512);
 export const mailDispatchPath = "/mail/dispatch/event";
+export const MAIL_DISPATCH_BATCH_SIZE = 64;
+export const MAIL_DISPATCH_NOTICE = "quieter_mail_dispatch";
 export const mailDispatchRequestSchema = z.strictObject({
-  eventId: z.uuid(),
+  eventIds: z.array(z.uuid()).min(1).max(MAIL_DISPATCH_BATCH_SIZE),
   expiresAt: timestamp,
   purpose: z.literal("mail-dispatch-event"),
 });

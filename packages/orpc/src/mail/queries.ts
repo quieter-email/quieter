@@ -461,51 +461,54 @@ export const queriesMailOperations = {
           };
     const capture = (async () => {
       try {
-        await withRequestDatabaseClient(async () => {
-          const failures: unknown[] = [];
-          for (const snapshot of snapshots) {
-            try {
-              await writeGmailCapturedMessage({
-                mailboxId: input.mailboxId,
-                snapshot,
-                source: "on_demand",
-              });
-            } catch (error) {
-              failures.push(error);
-            }
-          }
-          for (let offset = 0; offset < thread.messages.length; offset += 4) {
-            const outcomes = await Promise.allSettled(
-              thread.messages.slice(offset, offset + 4).map(
-                async (message) =>
-                  await captureMailboxMessageMemory({
-                    actorUserId: context.userId,
-                    mailboxId: input.mailboxId,
-                    message,
-                    source: "open",
-                  })
-              )
-            );
-            for (const outcome of outcomes) {
-              if (outcome.status === "rejected") {
-                failures.push(outcome.reason);
+        await withRequestDatabaseClient(
+          async () => {
+            const failures: unknown[] = [];
+            for (const snapshot of snapshots) {
+              try {
+                await writeGmailCapturedMessage({
+                  mailboxId: input.mailboxId,
+                  snapshot,
+                  source: "on_demand",
+                });
+              } catch (error) {
+                failures.push(error);
               }
             }
-          }
-          if (selectedMailbox.provider !== "managed") {
-            try {
-              await processPendingMailImportance({
-                limit: 4,
-                mailboxId: input.mailboxId,
-              });
-            } catch (error) {
-              failures.push(error);
+            for (let offset = 0; offset < thread.messages.length; offset += 4) {
+              const outcomes = await Promise.allSettled(
+                thread.messages.slice(offset, offset + 4).map(
+                  async (message) =>
+                    await captureMailboxMessageMemory({
+                      actorUserId: context.userId,
+                      mailboxId: input.mailboxId,
+                      message,
+                      source: "open",
+                    })
+                )
+              );
+              for (const outcome of outcomes) {
+                if (outcome.status === "rejected") {
+                  failures.push(outcome.reason);
+                }
+              }
             }
-          }
-          if (failures.length > 0) {
-            throw new AggregateError(failures, "Thread capture failed.");
-          }
-        });
+            if (selectedMailbox.provider !== "managed") {
+              try {
+                await processPendingMailImportance({
+                  limit: 4,
+                  mailboxId: input.mailboxId,
+                });
+              } catch (error) {
+                failures.push(error);
+              }
+            }
+            if (failures.length > 0) {
+              throw new AggregateError(failures, "Thread capture failed.");
+            }
+          },
+          { independent: context.scheduleBackgroundTask !== undefined }
+        );
       } catch (error) {
         if (!context.scheduleBackgroundTask) {
           throw error;
