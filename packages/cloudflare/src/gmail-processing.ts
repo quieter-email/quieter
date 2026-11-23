@@ -1,3 +1,4 @@
+import { serverEnv } from "@quieter/env/server";
 import type { GmailPubSubNotificationMessage } from "@quieter/orpc/gmail-pubsub";
 
 import { readBoundedJson } from "./bounded-json";
@@ -49,6 +50,9 @@ export const acceptGmailNotification = async (
   });
   if (decision.action !== "ack") {
     throw new Error("Gmail notification was not accepted.");
+  }
+  if (serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true) {
+    return;
   }
   const broadcast = (async () => {
     try {

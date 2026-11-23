@@ -55,6 +55,10 @@ SELECT pg_create_logical_replication_slot(
 
 Review the ECS service and CloudWatch logs for a replication connection and completed reconciliation for every configured slot. Verify a representative durable handoff and the slot's position. For PlanetScale HA, confirm the slot is synchronized and promotion-ready after it advances. Keep the database producer gate `mailDispatchSettings` entry `mail-dispatch-v1` disabled until the slot and relay are ready. Enabling the SST service does not change that entry.
 
+For the cutover, first deploy the relay with both scan-removal flags off. Run the protected SST deployment with `activate_mail_event_dispatch` to open the producer gate. That transaction records the Gmail and maintenance enrollment events. The local equivalent is `vp exec node --env-file=.env.local packages/database/scripts/mail-event-cutover.ts enable <slot> <shared|sharded>`. Use the actual replication slot base. Check that enrollment and delivery have caught up, then select `QUIETER_GMAIL_EVENTS_ENABLED` and `QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED` for the scans you intend to remove. The deployment preflight checks the feed and the corresponding enrollment before disabling a schedule. Allow the previous version's in-flight jobs to drain.
+
+Keep per-mailbox Gmail history reconciliation and watch deadlines in the scheduler. Quiet accounts need those deadlines because Gmail can drop notifications or let a watch expire. The remaining maintenance deadlines arm only for pending work. If reverting, first restore the old schedules and verify that they have taken over before disabling committed dispatch or removing any relay resources.
+
 ## Monitoring and recovery
 
 Monitor the ECS task count and restart events, per-slot errors in the relay log, the oldest pending outbox row, and WAL retained by each slot. The last two distinguish an idle stream from missed delivery. Use the branch's primary database to inspect the slots.

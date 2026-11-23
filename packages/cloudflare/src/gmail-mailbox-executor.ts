@@ -41,6 +41,9 @@ const runGmailMailboxTask = async (
   }
 
   const notify = async () => {
+    if (serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true) {
+      return;
+    }
     try {
       await broadcastMailUpdate(env, {
         eventId: crypto.randomUUID(),

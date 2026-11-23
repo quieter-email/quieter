@@ -227,6 +227,9 @@ export const createGmailResources = (
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          QUIETER_GMAIL_EVENTS_ENABLED: String(
+            context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+          ),
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/worker.ts",
