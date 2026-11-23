@@ -77,6 +77,10 @@ export const createSstConfigEnv = (
       QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE:
         runtimeEnv.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE,
       QUIETER_GMAIL_EVENTS_ENABLED: runtimeEnv.QUIETER_GMAIL_EVENTS_ENABLED,
+      QUIETER_MAIL_EVENT_RELAY_ENABLED:
+        runtimeEnv.QUIETER_MAIL_EVENT_RELAY_ENABLED,
+      QUIETER_MAIL_EVENT_RELAY_SHARDED:
+        runtimeEnv.QUIETER_MAIL_EVENT_RELAY_SHARDED,
       R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
       R2_BUCKET: runtimeEnv.R2_BUCKET,
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
@@ -105,6 +109,8 @@ export const createSstConfigEnv = (
         .max(100_000_000)
         .default(600_000),
       QUIETER_GMAIL_EVENTS_ENABLED: optionalBooleanString,
+      QUIETER_MAIL_EVENT_RELAY_ENABLED: optionalBooleanString,
+      QUIETER_MAIL_EVENT_RELAY_SHARDED: optionalBooleanString,
       R2_ACCOUNT_ID: optionalString,
       R2_BUCKET: optionalString,
       R2_ENDPOINT: optionalString,

@@ -158,6 +158,8 @@ jobs:
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
       GMAIL_BODY_STORAGE_ENABLED: ${{ vars.GMAIL_BODY_STORAGE_ENABLED }}
       QUIETER_GMAIL_EVENTS_ENABLED: ${{ vars.QUIETER_GMAIL_EVENTS_ENABLED }}
+      QUIETER_MAIL_EVENT_RELAY_ENABLED: ${{ vars.QUIETER_MAIL_EVENT_RELAY_ENABLED }}
+      QUIETER_MAIL_EVENT_RELAY_SHARDED: ${{ vars.QUIETER_MAIL_EVENT_RELAY_SHARDED }}
       QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -194,6 +196,9 @@ jobs:
         run: |
           vp run @quieter/observability#build
           vp run quieter#build
+
+      - name: Build mail event relay
+        run: vp run @quieter/env#build && vp run @quieter/mail-event-relay#build
 
       - name: Prepare web release routing
         run: vp exec node scripts/web-release.ts prepare https://quieter.email "$QUIETER_BUILD_ID"

@@ -1,0 +1,20 @@
+{
+  "name": "@quieter/mail-event-relay",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "vp pack"
+  },
+  "dependencies": {
+    "@quieter/env": "workspace:*",
+    "@quieter/mail": "workspace:*",
+    "postgres": "4.1.1",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@quieter/config": "workspace:*",
+    "@types/node": "catalog:",
+    "typescript": "catalog:",
+    "vite-plus": "catalog:"
+  }
+}
