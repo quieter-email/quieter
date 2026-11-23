@@ -22,7 +22,7 @@ vi.mock("@quieter/database/client", () => ({
               where: (condition: SQL) => {
                 recorded.where = condition;
                 return {
-                  returning: async () => [],
+                  returning: async () => Promise.resolve([]),
                 };
               },
             };
@@ -49,14 +49,14 @@ describe("captured message label metadata", () => {
     });
 
     const snapshot = recorded.set?.snapshot;
-    const where = recorded.where;
+    const { where } = recorded;
     expect(snapshot).toBeDefined();
     expect(where).toBeDefined();
     if (snapshot === undefined || where === undefined) {
       return;
     }
 
-    expect(dialect.sqlToQuery(snapshot).params).toEqual([labelIds, "99"]);
+    expect(dialect.sqlToQuery(snapshot).params).toStrictEqual([labelIds, "99"]);
     expect(dialect.sqlToQuery(where).params).toContainEqual(labelIds);
   });
 });

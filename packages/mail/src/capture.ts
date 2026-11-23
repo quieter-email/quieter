@@ -56,6 +56,18 @@ export type CapturedMailSnapshot = {
   };
 };
 
+export const readCapturedLabelIds = (labelIds: unknown): string[] => {
+  const stored: unknown =
+    typeof labelIds === "string" ? JSON.parse(labelIds) : labelIds;
+  if (
+    Array.isArray(stored) &&
+    stored.every((label) => typeof label === "string")
+  ) {
+    return stored;
+  }
+  throw new TypeError("Captured message labelIds are not an array.");
+};
+
 export type MailCaptureHistoryPage = {
   changes: {
     kind: "added" | "deleted" | "labels";

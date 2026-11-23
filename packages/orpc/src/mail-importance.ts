@@ -19,6 +19,7 @@ import {
   organization,
 } from "@quieter/database/schema";
 import { extractListUnsubscribeTargets } from "@quieter/gmail";
+import { readCapturedLabelIds } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import type {
@@ -223,25 +224,26 @@ const loadImportanceSources = async (
       ),
   ]);
   return [
-    ...gmail.flatMap(({ snapshot }) =>
-      snapshot
-        ? [
-            {
-              eligible: !snapshot.labelIds.some((label) =>
-                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-              ),
-              incoming:
-                !snapshot.labelIds.includes("SENT") &&
-                !snapshot.labelIds.includes("DRAFT"),
-              message: {
-                ...importanceMessage(snapshot),
-                threadId: snapshot.threadId,
-              },
-              receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
-            },
-          ]
-        : []
-    ),
+    ...gmail.flatMap(({ snapshot }) => {
+      if (!snapshot) {
+        return [];
+      }
+      const labelIds = readCapturedLabelIds(snapshot.labelIds);
+      const message = { ...snapshot, labelIds };
+      return [
+        {
+          eligible: !labelIds.some((label) =>
+            ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+          ),
+          incoming: !labelIds.includes("SENT") && !labelIds.includes("DRAFT"),
+          message: {
+            ...importanceMessage(message),
+            threadId: message.threadId,
+          },
+          receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
+        },
+      ];
+    }),
     ...managed.map((message) => {
       let stateLabel = message.mailboxState.toUpperCase();
       if (message.mailboxState === "active") {
@@ -330,7 +332,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
     [
       ...gmail.filter(
         ({ labelIds }) =>
-          !labelIds.some((label) =>
+          !readCapturedLabelIds(labelIds).some((label) =>
             ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
           )
       ),
@@ -666,15 +668,14 @@ export const processPendingMailImportance = async (
       )
       .limit(limit);
     for (const { source } of gmail) {
-      if (
-        source.snapshot &&
-        !source.snapshot.labelIds.some((label) =>
-          ["SENT", "DRAFT"].includes(label)
-        )
-      ) {
+      if (source.snapshot) {
+        const labelIds = readCapturedLabelIds(source.snapshot.labelIds);
+        if (labelIds.some((label) => ["SENT", "DRAFT"].includes(label))) {
+          continue;
+        }
         await ensureMailImportanceWork(db, {
           mailboxId: box.id,
-          message: source.snapshot,
+          message: { ...source.snapshot, labelIds },
           messageId: source.messageId,
           receivedAt: new Date(
             Number(source.snapshot.internalDate) || Date.now()

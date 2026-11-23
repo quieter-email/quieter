@@ -303,7 +303,9 @@ export const writeGmailCapturedMessageMetadata = async (input: {
       .update(gmailCapturedMessage)
       .set({
         providerRevision: input.providerRevision,
-        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${JSON.stringify(labelIds)}::jsonb), '{providerRevision}', ${JSON.stringify(input.providerRevision)}::jsonb)`,
+        // postgres.js JSON.stringifies jsonb parameters. A pre-stringified
+        // array is stored as a jsonb string, and `.some` then throws.
+        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${sql.param(labelIds)}::jsonb), '{providerRevision}', ${input.providerRevision}::jsonb)`,
         updatedAt: now,
       })
       .where(
@@ -313,7 +315,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
           isNull(gmailCapturedMessage.deletedAt),
           sql`${gmailCapturedMessage.snapshot} is not null`,
           sql`${gmailCapturedMessage.providerRevision}::numeric <= ${input.providerRevision}::numeric`,
-          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${JSON.stringify(labelIds)}::jsonb)`
+          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${sql.param(labelIds)}::jsonb)`
         )
       )
       .returning({ messageId: gmailCapturedMessage.messageId });
