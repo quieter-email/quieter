@@ -78,8 +78,8 @@ export const CalendarEventDetails = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="min-h-0 flex-1 space-y-0.5 overflow-y-auto px-0.5 pb-0.5">
-        <Surface variant="section">
+      <div className="min-h-0 flex-1 space-y-(--surface-inset) overflow-y-auto px-(--surface-inset) pb-(--surface-inset)">
+        <Surface chrome="inset">
           <div className="flex flex-col gap-4">
             <div className="space-y-2">
               <Pill size="xs" tone="neutral">
@@ -139,7 +139,7 @@ export const CalendarEventDetails = ({
         (event.permissions.respond && self) ||
         event.attendees.length > 0 ||
         event.description ? (
-          <Surface variant="section">
+          <Surface chrome="inset">
             <div className="flex flex-col gap-4">
               {event.location ? (
                 <div className="space-y-1">
@@ -221,7 +221,7 @@ export const CalendarEventDetails = ({
             </div>
           </Surface>
         ) : null}
-        <Surface variant="section">
+        <Surface chrome="inset">
           <div className="space-y-2 text-caption text-muted-fg">
             <p>
               {event.availability === "busy" ? "Busy" : "Free"},{" "}
@@ -250,7 +250,10 @@ export const CalendarEventDetails = ({
         </Surface>
       </div>
       {event.permissions.delete ? (
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface
+          chrome="inset"
+          className="mx-(--surface-inset) mb-(--surface-inset) shrink-0"
+        >
           <ActionFooter>
             {event.permissions.delete ? (
               <Button

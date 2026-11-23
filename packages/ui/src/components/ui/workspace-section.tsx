@@ -3,12 +3,13 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { surfaceVariants } from "./surface";
 
 export const workspaceGutterClassName =
   "[--workspace-gutter:0px] lg:[--workspace-gutter:var(--workspace-gap-wide)]";
 
 export const workspaceSectionVariants = cva(
-  `${workspaceGutterClassName} overflow-hidden rounded-none border-0 bg-panel shadow-none [background-image:var(--panel-gradient)] lg:rounded-panel lg:border lg:border-transparent`,
+  `${workspaceGutterClassName} overflow-hidden rounded-none border border-panel-edge/60 bg-panel shadow-none [background-image:var(--panel-gradient)] lg:rounded-panel`,
   {
     defaultVariants: {
       centered: false,
@@ -44,7 +45,10 @@ export const WorkspaceSection = ({
 );
 
 export const workspaceHeaderVariants = cva(
-  "relative m-0.5 flex min-h-15 shrink-0 flex-col justify-center rounded-section bg-section p-3.5"
+  cn(
+    surfaceVariants({ chrome: "inset", padding: "none" }),
+    "relative m-(--surface-inset) flex min-h-15 shrink-0 flex-col justify-center px-1.75 py-3"
+  )
 );
 
 export type WorkspaceHeaderProps = ComponentPropsWithoutRef<"header">;

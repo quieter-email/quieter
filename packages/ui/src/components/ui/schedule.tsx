@@ -87,7 +87,7 @@ export type ScheduleProps = {
 
 const hourHeight = 56;
 const scheduleFrameClassName =
-  "relative m-0.5 min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain";
+  "relative m-(--surface-inset) min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain";
 type ScheduleStyle = CSSProperties & {
   "--schedule-columns"?: string;
   "--schedule-event-color"?: string;
@@ -701,7 +701,11 @@ export const Schedule = ({
     return (
       <div
         aria-label="Calendar agenda"
-        className={cn(surfaceVariants(), scheduleFrameClassName, "space-y-4")}
+        className={cn(
+          surfaceVariants({ chrome: "inset" }),
+          scheduleFrameClassName,
+          "space-y-4"
+        )}
       >
         {occupied.length === 0 ? (
           <div className="flex min-h-64 flex-col items-center justify-center gap-3 text-center">
@@ -736,7 +740,7 @@ export const Schedule = ({
         <div
           aria-label="Month calendar, scroll to browse months"
           className={cn(
-            surfaceVariants({ padding: "compact" }),
+            surfaceVariants({ chrome: "inset", padding: "compact" }),
             scheduleFrameClassName,
             "flex flex-col [overflow-anchor:none]"
           )}
@@ -905,7 +909,7 @@ export const Schedule = ({
     <div
       aria-label={`${view === "day" ? "Day" : "Week"} calendar`}
       className={cn(
-        surfaceVariants({ padding: "none" }),
+        surfaceVariants({ chrome: "inset", padding: "none" }),
         scheduleFrameClassName
       )}
       ref={scrollRef}

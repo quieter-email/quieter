@@ -14,7 +14,7 @@ export const AccordionItem = ({
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Item>) => (
   <AccordionPrimitive.Item
     className={cn(
-      "rounded-section border border-transparent bg-card text-card-fg",
+      "rounded-section border border-section-edge/60 bg-card text-card-fg",
       className
     )}
     {...props}

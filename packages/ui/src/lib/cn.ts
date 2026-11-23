@@ -29,7 +29,7 @@ const twMerge = extendTailwindMerge({
       "font-size": [{ text: fontSizes }],
     },
     theme: {
-      radius: ["panel", "section"],
+      radius: ["panel", "panel-inset", "section", "section-inset"],
     },
   },
 });

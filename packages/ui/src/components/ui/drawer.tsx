@@ -13,6 +13,7 @@ import {
   overlayTitleClassName,
   overlayTriggerClassName,
 } from "./overlay-chrome";
+import { surfaceVariants } from "./surface";
 
 export const Drawer = DrawerPrimitive.Root;
 export const DrawerPortal = DrawerPrimitive.Portal;
@@ -83,7 +84,11 @@ export const DrawerHeader = ({
   ...props
 }: ComponentPropsWithoutRef<"div">) => (
   <div
-    className={cn("m-0.5 rounded-section bg-section p-3.5", className)}
+    className={cn(
+      surfaceVariants({ chrome: "inset", padding: "none" }),
+      "m-(--surface-inset) px-1.75 py-3.5",
+      className
+    )}
     {...props}
   />
 );

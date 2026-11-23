@@ -6,6 +6,7 @@ import type { ComponentPropsWithoutRef } from "react";
 import { cn } from "../../lib/cn";
 import { buttonVariants } from "./button";
 import { overlaySurfaceClassName } from "./overlay-chrome";
+import { surfaceVariants } from "./surface";
 
 export const FullPageDialog = DialogPrimitive.Root;
 export const FullPageDialogTrigger = DialogPrimitive.Trigger;
@@ -36,7 +37,8 @@ export const FullPageDialogHeader = ({
 }: ComponentPropsWithoutRef<"header">) => (
   <header
     className={cn(
-      "m-0.5 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5",
+      surfaceVariants({ chrome: "inset", padding: "none" }),
+      "m-(--surface-inset) flex shrink-0 items-center gap-3 px-1.75 py-3.5",
       className
     )}
     {...props}

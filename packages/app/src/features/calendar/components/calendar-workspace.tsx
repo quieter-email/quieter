@@ -1039,7 +1039,10 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface
+          chrome="inset"
+          className="mx-(--surface-inset) mb-(--surface-inset) shrink-0"
+        >
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1213,7 +1216,7 @@ const CalendarWorkspaceContent = ({
           }}
           title="Calendar"
         />
-        <WorkspaceHeader>
+        <WorkspaceHeader className="mb-0">
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex max-w-full min-w-0 items-center gap-2">
               <IconButtonTooltip
@@ -1686,7 +1689,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="-ml-0.5 flex w-88 shrink-0 flex-col"
+              className="-ml-(--surface-inset) flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div
@@ -1701,9 +1704,9 @@ const CalendarWorkspaceContent = ({
               ) : (
                 (details ?? (
                   <Surface
-                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    chrome="inset"
+                    className="m-(--surface-inset) flex min-h-0 flex-1 flex-col"
                     padding="none"
-                    variant="section"
                   >
                     <LazyMotion features={domAnimation}>
                       <EmptyMessageState
