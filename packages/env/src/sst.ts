@@ -81,6 +81,8 @@ export const createSstConfigEnv = (
         runtimeEnv.QUIETER_MAIL_EVENT_RELAY_ENABLED,
       QUIETER_MAIL_EVENT_RELAY_SHARDED:
         runtimeEnv.QUIETER_MAIL_EVENT_RELAY_SHARDED,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED:
+        runtimeEnv.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED,
       R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
       R2_BUCKET: runtimeEnv.R2_BUCKET,
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
@@ -111,6 +113,7 @@ export const createSstConfigEnv = (
       QUIETER_GMAIL_EVENTS_ENABLED: optionalBooleanString,
       QUIETER_MAIL_EVENT_RELAY_ENABLED: optionalBooleanString,
       QUIETER_MAIL_EVENT_RELAY_SHARDED: optionalBooleanString,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: optionalBooleanString,
       R2_ACCOUNT_ID: optionalString,
       R2_BUCKET: optionalString,
       R2_ENDPOINT: optionalString,

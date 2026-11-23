@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { mailReminder, mailReminderJob } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
 import { and, eq, inArray, isNull, lte, sql } from "drizzle-orm";
 
@@ -177,7 +178,10 @@ export const advanceReminderScope = async (scope: {
     )
     .orderBy(mailReminder.dueAt)
     .limit(1);
-  if (nextDue !== undefined) {
+  if (
+    nextDue !== undefined &&
+    serverEnv.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED !== true
+  ) {
     await db
       .insert(mailReminderJob)
       .values({

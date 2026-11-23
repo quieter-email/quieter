@@ -8,6 +8,7 @@ const check = process.argv.includes("--check");
 const targets = [
   "packages/cloudflare/wrangler.types.jsonc",
   "packages/cloudflare/wrangler.local.jsonc",
+  "packages/cloudflare/wrangler.maintenance.local.jsonc",
   "packages/cloudflare/wrangler.processing.local.jsonc",
 ] as const;
 

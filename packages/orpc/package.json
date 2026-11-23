@@ -5,6 +5,7 @@
   "exports": {
     "./reminders": "./src/reminders/runtime.ts",
     "./reminders/runtime": "./src/reminders/runtime.ts",
+    "./reminders/wake": "./src/reminders/wake.ts",
     "./reminders/clock": "./src/reminders/clock.ts",
     "./reminders/service": "./src/reminders/service.ts",
     "./ai-mail-authorship": "./src/ai-mail-authorship.ts",

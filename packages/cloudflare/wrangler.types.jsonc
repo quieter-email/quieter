@@ -122,6 +122,10 @@
         "name": "GmailFreshExecutor",
         "class_name": "GmailFreshExecutor",
       },
+      {
+        "name": "MailMaintenanceScheduler",
+        "class_name": "MailMaintenanceScheduler",
+      },
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
       { "name": "ScheduledSend", "class_name": "ScheduledSend" },
@@ -140,6 +144,10 @@
     {
       "tag": "v2",
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],
+    },
+    {
+      "tag": "maintenance-v1",
+      "new_sqlite_classes": ["MailMaintenanceScheduler"],
     },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
     { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },

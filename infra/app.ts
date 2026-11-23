@@ -48,11 +48,19 @@ export const createInfrastructure = async (input: {
       "Gmail event cutover requires Gmail Pub/Sub and the mail event relay."
     );
   }
+  if (
+    context.env.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED === true &&
+    context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED !== true
+  ) {
+    throw new Error(
+      "Mail maintenance event cutover requires the mail event relay."
+    );
+  }
   if (context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED === true) {
     const dispatchUrl = createMailDispatchWorker({
       appDatabase,
       gmailProcessor: gmail.processingWorker,
-      maintenanceScript: mailMaintenance.nodes.worker.scriptName,
+      maintenanceScript: mailMaintenance.worker.nodes.worker.scriptName,
       secretBindings,
       secretResources,
       updates,
@@ -84,6 +92,9 @@ export const createInfrastructure = async (input: {
         context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
       ),
       QUIETER_GMAIL_MAILBOX_LANES: String(context.gmailPubSubEnabled),
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: String(
+        context.env.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED === true
+      ),
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
       R2_BUCKET: context.env.R2_BUCKET ?? "",
       R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
@@ -103,7 +114,7 @@ export const createInfrastructure = async (input: {
       },
       workers: {
         ...gmail.actionWorkers,
-        mailMaintenance: mailMaintenance.nodes.worker.scriptName,
+        mailMaintenance: mailMaintenance.worker.nodes.worker.scriptName,
       },
     },
     gmailLiveSyncTokenSecretName: requireSecretResource(

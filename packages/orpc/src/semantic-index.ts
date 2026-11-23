@@ -25,6 +25,7 @@ export {
 export const processPendingSemanticIndexes = async (
   input: MailboxAutomationScope & {
     allowLocal?: boolean;
+    eventDriven?: boolean;
     limit?: number;
     userId?: string;
   } = {}
@@ -32,6 +33,7 @@ export const processPendingSemanticIndexes = async (
   const options = z
     .object({
       allowLocal: z.boolean().default(false),
+      eventDriven: z.boolean().default(false),
       limit: z.number().int().min(1).max(10).default(3),
       mailboxId: z.string().min(1).optional(),
       provider: z.enum(["gmail", "managed"]).optional(),
@@ -44,6 +46,7 @@ export const processPendingSemanticIndexes = async (
   ) {
     throw new Error("Choose one local user and mailbox to prepare search.");
   }
+  const eventDriven = options.eventDriven || options.provider === "gmail";
   const result = { cancelled: 0, failed: 0, processed: 0 };
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !options.allowLocal) {
     return result;
@@ -67,7 +70,7 @@ export const processPendingSemanticIndexes = async (
       ? undefined
       : eq(semanticIndexRequest.userId, options.userId),
     mailboxAutomationFilter(semanticIndexRequest.mailboxId, options),
-    options.provider === "gmail"
+    eventDriven
       ? or(
           isNull(semanticIndexRequest.completedAt),
           gt(semanticIndexRequest.requestedAt, semanticIndexRequest.completedAt)
@@ -156,18 +159,16 @@ export const processPendingSemanticIndexes = async (
       });
       const complete = coverage.complete && imported;
       const finishedAt = new Date();
-      const completedAt =
-        options.provider === "gmail"
-          ? sql`case when ${semanticIndexRequest.requestedAt} > ${claimed.requestedAt.toISOString()}::timestamp
+      const completedAt = eventDriven
+        ? sql`case when ${semanticIndexRequest.requestedAt} > ${claimed.requestedAt.toISOString()}::timestamp
           then null else ${finishedAt.toISOString()}::timestamp end`
-          : finishedAt;
+        : finishedAt;
       const completed = await db
         .update(semanticIndexRequest)
         .set({
           attemptCount: 0,
           availableAt: new Date(
-            finishedAt.getTime() +
-              (complete && options.provider !== "gmail" ? 300_000 : 0)
+            finishedAt.getTime() + (complete && !eventDriven ? 300_000 : 0)
           ),
           completedAt: complete ? completedAt : null,
           indexedSources: coverage.indexedSources,

@@ -6,7 +6,13 @@ import {
   cloudflareWorkerObservability,
 } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { appOrigin, deploymentEnvironment, production, stage } from "./stage";
+import {
+  appOrigin,
+  deploymentEnvironment,
+  getEnvironmentValue,
+  production,
+  stage,
+} from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailUpdateResources = (
@@ -34,6 +40,10 @@ export const createMailUpdateResources = (
       BETTER_AUTH_URL: appOrigin,
       MAIL_UPDATES_URL: `wss://${domain}/mail/live`,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: getEnvironmentValue(
+        "QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED",
+        "false"
+      ),
       SENTRY_ENVIRONMENT: stage,
     },
     handler: "packages/cloudflare/src/mail-update-worker.ts",

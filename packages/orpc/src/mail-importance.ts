@@ -690,6 +690,7 @@ export const backfillMissingMailImportanceWork = async (
       )
     )
     .limit(20);
+  let created = 0;
   for (const box of boxes) {
     const gmail = await db
       .select({
@@ -729,6 +730,7 @@ export const backfillMissingMailImportanceWork = async (
           receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
           threadId: snapshot.threadId,
         });
+        created += 1;
       }
     }
     const managed = await db
@@ -757,8 +759,10 @@ export const backfillMissingMailImportanceWork = async (
         receivedAt: source.sentAt,
         threadId: source.threadId,
       });
+      created += 1;
     }
   }
+  return created;
 };
 
 export const processPendingMailImportance = async (

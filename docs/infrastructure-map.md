@@ -24,7 +24,7 @@ flowchart TB
         end
 
         subgraph CONSUMERS["Scheduled Workers"]
-            MMAINT["Cron every minute<br/>mail-maintenance-worker.ts<br/>send recovery, cleanup, rule backfills"]
+            MMAINT["Mail maintenance Worker<br/>durable deadlines or minute fallback<br/>send recovery, cleanup, rule backfills"]
             PSMAINT["Cron every minute<br/>gmail-maintenance-worker.ts<br/>repairs due mailbox schedules"]
         end
 
@@ -121,7 +121,7 @@ flowchart TB
 | `GmailMailboxScheduler` | `sst.cloudflare.DurableObject` | `packages/cloudflare/src/gmail-mailbox-scheduler.ts` | Private RPC and alarm | Fresh and catch-up queues | Stores the pending schedule and dispatch tokens per mailbox. |
 | `GmailProjectQuota` | `sst.cloudflare.DurableObject` | `packages/cloudflare/src/gmail-project-quota.ts` | Private RPC | Worker dispatch | Meters Gmail request units and deferrable model request admission across quota shards. |
 | `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | every minute | Hyperdrive and private processor | Claims indexed sync and automation repair deadlines and prunes terminal work. |
-| `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, managed rule backfills, code retries, and cleanup of old processing records without a code. |
+| `MailMaintenanceHandler` | `sst.cloudflare.Worker` | `packages/cloudflare/src/mail-maintenance-worker.ts` | committed work and deadlines, or minute fallback | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, managed automation, usage retries, and retention. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
 
@@ -230,9 +230,11 @@ sequenceDiagram
 
 ### 5. Mail maintenance
 
-`infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, managed rule backfills, and reviewed mailbox Actions within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes maintenance operations; `vp run dev:trigger actions` drains one action alone. New actions use the additive `mailboxAgent*` tables and the existing mail/connector adapters. The retired custom graph tables remain rollback data. Connector credentials reach the Worker only through linked SST Secrets.
+`infra/mail-maintenance.ts` provisions a private Worker and its deadline scheduler. Database triggers register maintenance facts in the same transaction as the work. Relay enrollment registers deadlines for pre-existing rows and starts bounded migration pages. The Worker hands scheduled sends and reminder delivery to their existing Durable Objects. Other tasks compute their next wake from persisted work and go idle when none remains.
 
-Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references.
+Activate the mail event relay and verify its maintenance enrollment before deploying with `QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED=true`. That flag removes the minute trigger. With the flag unset, the minute trigger provides rolling-deployment coverage while the Worker accepts registrations. The local `vp run dev:trigger mail-recovery` command runs the maintenance operations directly. Use `vp run dev:trigger actions` to drain one Action. Connector credentials reach the Worker through linked SST Secrets.
+
+Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references. In event mode a referenced object leaves the cleanup schedule until a transaction releases a reference.
 
 ### 6. Chat with tools
 
