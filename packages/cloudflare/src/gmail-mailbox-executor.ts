@@ -76,19 +76,45 @@ const runGmailMailboxTask = async (
     }
     await notify();
     const now = Date.now();
+    let messageWakes: Partial<Record<"fresh" | "catchup", number>> = {
+      catchup: now,
+      fresh: now,
+    };
+    if (serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true) {
+      const { getGmailMessageWorkWake } =
+        await import("@quieter/orpc/gmail-work");
+      const candidates = await Promise.all(
+        (["fresh", "catchup"] as const).map(async (priority) => {
+          const { nextWakeAt } = await getGmailMessageWorkWake({
+            mailboxId,
+            priority,
+          });
+          return { nextWakeAt, priority };
+        })
+      );
+      messageWakes = Object.fromEntries(
+        candidates.flatMap(({ nextWakeAt, priority }) =>
+          nextWakeAt === null ? [] : [[priority, nextWakeAt.getTime()]]
+        )
+      );
+    }
     return {
       continueNotification: result.status === "pending",
       nextAt:
         result.status === "pending"
           ? now + 5000
-          : now +
-            RECONCILIATION_INTERVAL_MS +
-            Math.floor(Math.random() * 10 * 60_000),
+          : Math.min(
+              now +
+                RECONCILIATION_INTERVAL_MS +
+                Math.floor(Math.random() * 10 * 60_000),
+              result.nextWatchAt === null
+                ? Infinity
+                : Math.max(now + 5000, result.nextWatchAt)
+            ),
       wakeDiscovery: result.needsFreshDiscovery && notification !== undefined,
       wakes: {
         ...(await getGmailMailboxAutomationWakes(mailboxId)),
-        catchup: now,
-        fresh: now,
+        ...messageWakes,
       },
     };
   }
@@ -250,6 +276,7 @@ export const executeGmailMailboxDispatch = async (
         }
         if (
           applied &&
+          serverEnv.QUIETER_GMAIL_EVENTS_ENABLED !== true &&
           dispatch.task === "sync" &&
           outcome.retryAt === undefined &&
           outcome.wakes !== undefined

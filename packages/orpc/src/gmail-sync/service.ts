@@ -552,18 +552,16 @@ const stageMailboxHistoryPage = async ({
   };
 };
 
-const shouldRenewWatch = (state: {
+const watchRenewalAt = (state: {
   watchExpirationAt: Date | null;
   watchRenewedAt: Date | null;
-}) => {
-  const now = Date.now();
-  return (
-    !state.watchRenewedAt ||
-    !state.watchExpirationAt ||
-    state.watchRenewedAt.getTime() <= now - WATCH_RENEWAL_INTERVAL_MS ||
-    state.watchExpirationAt.getTime() <= now + WATCH_EXPIRATION_BUFFER_MS
-  );
-};
+}) =>
+  state.watchRenewedAt === null || state.watchExpirationAt === null
+    ? 0
+    : Math.min(
+        state.watchRenewedAt.getTime() + WATCH_RENEWAL_INTERVAL_MS,
+        state.watchExpirationAt.getTime() - WATCH_EXPIRATION_BUFFER_MS
+      );
 
 const renewMailboxWatch = async ({
   accessToken,
@@ -580,7 +578,7 @@ const renewMailboxWatch = async ({
     serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
     serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
   ) {
-    return;
+    return null;
   }
   const [state] = await db
     .select({
@@ -591,15 +589,21 @@ const renewMailboxWatch = async ({
     .where(watchLease(mailboxId, leaseId))
     .limit(1);
 
-  if (state === undefined || !shouldRenewWatch(state)) {
-    return;
+  if (state === undefined) {
+    return null;
+  }
+  const renewalAt = watchRenewalAt(state);
+  if (renewalAt > Date.now()) {
+    return renewalAt;
   }
 
   const watch = await watchGmailMailbox(accessToken, topicName);
-  await checkpointWatch(db, mailboxId, leaseId, {
+  const renewed = {
     watchExpirationAt: watch.expiration,
     watchRenewedAt: new Date(),
-  });
+  };
+  await checkpointWatch(db, mailboxId, leaseId, renewed);
+  return watchRenewalAt(renewed);
 };
 
 const processMailboxHistory = async ({
@@ -650,14 +654,15 @@ const processMailboxHistory = async ({
     return await runAuthorizedGmailMailbox(
       { mailboxId, userId },
       async (accessToken) => {
-        if (topicName !== undefined) {
-          await renewMailboxWatch({
-            accessToken,
-            leaseId,
-            mailboxId,
-            topicName,
-          });
-        }
+        const nextWatchAt =
+          topicName === undefined
+            ? null
+            : await renewMailboxWatch({
+                accessToken,
+                leaseId,
+                mailboxId,
+                topicName,
+              });
         let capturePending = true;
         try {
           if (!(await hasPendingFreshGmailWork(mailboxId))) {
@@ -754,6 +759,7 @@ const processMailboxHistory = async ({
           needsContinuation:
             historyPending || capturePending || recoveryPending,
           needsFreshDiscovery: historyPending || recoveryPending,
+          nextWatchAt,
         };
       }
     );
@@ -924,6 +930,7 @@ export const maintainGmailPubSubMailbox = async (input: {
   }
   return {
     needsFreshDiscovery: result.needsFreshDiscovery,
+    nextWatchAt: result.nextWatchAt,
     status: result.needsContinuation
       ? ("pending" as const)
       : ("maintained" as const),

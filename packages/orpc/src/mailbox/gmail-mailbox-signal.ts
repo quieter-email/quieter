@@ -10,6 +10,9 @@ import { reportError } from "@quieter/observability";
 export const signalGmailMailbox = async (
   input: Pick<GmailMailboxWake, "kind" | "mailboxId">
 ) => {
+  if (serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true) {
+    return;
+  }
   const base = serverEnv.GMAIL_LIVE_SYNC_URL;
   const secret = serverEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET;
   if (!base || !secret) {

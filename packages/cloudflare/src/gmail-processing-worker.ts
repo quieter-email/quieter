@@ -18,6 +18,13 @@ export { GmailProjectQuota } from "./gmail-project-quota";
 
 const acceptGmailJob = async (job: GmailJob, env: Env) => {
   const now = Date.now();
+  if ("kind" in job && job.kind === "dispatch-wake") {
+    await gmailMailboxScheduler(env, job.mailboxId).wake(
+      job.mailboxId,
+      Object.fromEntries(job.tasks.map((task) => [task, job.dueAt ?? now]))
+    );
+    return;
+  }
   if ("kind" in job && job.kind === "work") {
     await gmailMailboxScheduler(env, job.mailboxId).wake(job.mailboxId, {
       [job.priority]: job.notBefore ?? now,

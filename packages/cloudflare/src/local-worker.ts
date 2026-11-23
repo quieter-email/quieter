@@ -1,5 +1,6 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
+import { mailDispatchPath } from "@quieter/mail/dispatch";
 import { GMAIL_MAILBOX_WAKE_PATH } from "@quieter/mail/updates";
 import { z } from "zod";
 
@@ -29,6 +30,10 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
+    if (url.pathname === mailDispatchPath) {
+      const { handleMailDispatch } = await import("./mail-dispatch-worker");
+      return await handleMailDispatch(request, env);
+    }
     if (
       url.pathname.startsWith("/mail/") ||
       url.pathname === GMAIL_MAILBOX_WAKE_PATH

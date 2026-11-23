@@ -53,6 +53,7 @@ export const createGmailResources = (
     "GMAIL_LIVE_SYNC_TOKEN_SECRET"
   );
   let gmailLiveSyncUrl: $util.Input<string> = "";
+  let processingWorker: sst.cloudflare.Worker | undefined;
   let actionWorkers: {
     gmailProcessing: $util.Output<string>;
     gmailRealtime: $util.Output<string>;
@@ -138,6 +139,9 @@ export const createGmailResources = (
           QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: String(
             context.env.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE
           ),
+          QUIETER_GMAIL_EVENTS_ENABLED: String(
+            context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+          ),
           R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
           R2_BUCKET: context.env.R2_BUCKET ?? "",
           R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
@@ -202,6 +206,7 @@ export const createGmailResources = (
       },
       { dependsOn: [gmailProcessingWorker] }
     );
+    processingWorker = gmailProcessingWorker;
     const gmailRealtimeWorker = new sst.cloudflare.Worker(
       "GmailRealtimeWorker",
       {
@@ -325,7 +330,10 @@ export const createGmailResources = (
     const gmailPubSubMaintenance = new sst.cloudflare.Cron(
       "GmailPubSubMaintenance",
       {
-        schedules: ["* * * * *"],
+        schedules:
+          context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+            ? []
+            : ["* * * * *"],
         worker: {
           build: cloudflareWorkerBuild,
           compatibility: {
@@ -366,5 +374,6 @@ export const createGmailResources = (
     gmailLiveSyncUrl,
     gmailProcessingQueues,
     gmailPubSubIngressUrl,
+    processingWorker,
   };
 };

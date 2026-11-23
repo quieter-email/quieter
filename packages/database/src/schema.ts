@@ -80,6 +80,32 @@ export type MailboxConnectionStatus = "connected" | "needs_reconnect";
 export type MailboxGrantRole = "manager" | "reader" | "responder";
 export type MailboxAccessMode = "private" | "shared";
 export type PersistedMailboxProvider = "gmail" | "managed";
+
+export const mailDispatchSettings = pgTable("mailDispatchSettings", {
+  enabled: boolean("enabled").notNull().default(false),
+  key: text("key").primaryKey(),
+});
+
+export const mailDispatchEvent = pgTable(
+  "mailDispatchEvent",
+  {
+    createdAt: timestamp("createdAt")
+      .notNull()
+      .default(sql`timezone('UTC', now())`),
+    id: text("id")
+      .primaryKey()
+      .default(sql`gen_random_uuid()::text`),
+    payload: jsonb("payload").notNull(),
+    shard: integer("shard").notNull(),
+  },
+  (table) => [
+    index("mail_dispatch_event_shard_created_idx").on(
+      table.shard,
+      table.createdAt,
+      table.id
+    ),
+  ]
+);
 export type MailboxAccessSource = "direct" | "division";
 export type MailboxActionStatus = "needs_attention" | "ready";
 export type MailboxActionRevisionValidationStatus = "invalid" | "valid";

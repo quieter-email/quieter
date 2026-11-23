@@ -7,6 +7,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "services": [
     {
+      "binding": "MAIL_MAINTENANCE",
+      "service": "quieter-mail-maintenance-types",
+    },
+    {
       "binding": "GmailProcessingWorker",
       "service": "quieter-gmail-processing-types",
     },

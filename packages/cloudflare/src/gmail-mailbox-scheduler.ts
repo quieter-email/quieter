@@ -88,8 +88,9 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
       await storage.put("lanes", [...lanes]);
       if (Number.isFinite(next)) {
         const alarm = await storage.getAlarm();
-        if (alarm === null || next < alarm) {
-          await storage.setAlarm(Math.max(next, Date.now() + 1));
+        const due = Math.max(next, Date.now() + 1);
+        if (alarm !== due) {
+          await storage.setAlarm(due);
         }
       } else {
         await storage.deleteAlarm();

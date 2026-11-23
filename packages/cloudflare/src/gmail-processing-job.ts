@@ -1,3 +1,4 @@
+import { gmailDispatchTaskSchema } from "@quieter/mail/dispatch";
 import { gmailAutomationKindSchema } from "@quieter/mail/updates";
 import { z } from "zod";
 
@@ -9,6 +10,12 @@ const notificationSchema = z.object({
 });
 
 export const gmailJobSchema = z.union([
+  z.object({
+    dueAt: z.number().int().nonnegative().optional(),
+    kind: z.literal("dispatch-wake"),
+    mailboxId: z.string().min(1),
+    tasks: z.array(gmailDispatchTaskSchema).min(1).max(7),
+  }),
   z.object({ kind: z.literal("capture"), notification: notificationSchema }),
   z.object({
     kind: z.literal("work"),

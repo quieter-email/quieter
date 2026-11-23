@@ -50,6 +50,7 @@
     "./gmail-pubsub": "./src/gmail-sync/service.ts",
     "./waitlist": "./src/waitlist.ts",
     "./mail-updates": "./src/mail-updates.ts",
+    "./mail-dispatch": "./src/mail-dispatch.ts",
     "./verification-codes": "./src/verification-codes.ts",
     "./mail-importance": "./src/mail-importance.ts",
     "./scheduled-send/service": "./src/scheduled-send/service.ts",

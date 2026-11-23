@@ -11,6 +11,11 @@ on:
         required: false
         default: false
         type: boolean
+      activate_mail_event_dispatch:
+        description: Activate committed mail events after the relay and its replication slots are ready
+        required: false
+        default: false
+        type: boolean
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -152,6 +157,7 @@ jobs:
       QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: ${{ vars.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE }}
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
       GMAIL_BODY_STORAGE_ENABLED: ${{ vars.GMAIL_BODY_STORAGE_ENABLED }}
+      QUIETER_GMAIL_EVENTS_ENABLED: ${{ vars.QUIETER_GMAIL_EVENTS_ENABLED }}
       QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -282,6 +288,20 @@ jobs:
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
+      - name: Check mail event cutover
+        if: vars.QUIETER_GMAIL_EVENTS_ENABLED == 'true' || vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED == 'true'
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          set -euo pipefail
+          mode=shared
+          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != true ]] || mode=sharded
+          scopes=()
+          [[ "$QUIETER_GMAIL_EVENTS_ENABLED" != true ]] || scopes+=(gmail)
+          [[ "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" != true ]] || scopes+=(maintenance)
+          vp exec node packages/database/scripts/mail-event-cutover.ts verify "quieter_mail_dispatch_$SST_STAGE" "$mode" "$(IFS=, ; echo "${scopes[*]}")"
+
       - name: Bootstrap explicitly authorized account access
         if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
         env:
@@ -307,6 +327,17 @@ jobs:
       - name: Deploy prepared build with SST
         id: deploy
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Activate committed mail events
+        if: github.event_name == 'workflow_dispatch' && inputs.activate_mail_event_dispatch == true
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          set -euo pipefail
+          mode=shared
+          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != true ]] || mode=sharded
+          vp exec node packages/database/scripts/mail-event-cutover.ts enable "quieter_mail_dispatch_$SST_STAGE" "$mode"
 
       - name: Disable direct private release URLs
         run: vp exec node scripts/check-action-deployment.ts secure-private-releases
