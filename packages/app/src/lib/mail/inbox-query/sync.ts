@@ -50,6 +50,11 @@ const OTHER_MESSAGE_PAGE_SIZE = 25;
 
 type MessagesQueryKey = ReturnType<typeof getMessagesQueryKey>;
 
+export const liveMailboxChangeVersions = new WeakMap<
+  QueryClient,
+  ReadonlyMap<string, string>
+>();
+
 const messagesQueryPersister: QueryPersister<
   ListMessagesPageResult,
   MessagesQueryKey,
@@ -201,6 +206,7 @@ const refreshMessagesPages = async (
   const refreshedPageParams: (string | undefined)[] = [];
   const oldHistoryId =
     options.preserveHistoryId ?? currentMessages?.pages[0]?.historyId;
+  const oldChangeVersion = currentMessages?.pages[0]?.changeVersion;
   const preserveUnrefreshedPages = options.preserveUnrefreshedPages !== false;
   let pageToken: string | undefined;
   let withheldContinuationToken: string | undefined;
@@ -209,10 +215,13 @@ const refreshMessagesPages = async (
     operation.assertCurrent();
     const pages = refreshedPages.map((page, index) => ({
       ...page,
-      ...(index === 0 && !complete ? { historyId: oldHistoryId } : {}),
+      ...(index === 0 && !complete
+        ? { changeVersion: oldChangeVersion, historyId: oldHistoryId }
+        : {}),
     }));
     if (options.preserveHistoryId !== undefined) {
       pages[0].historyId = options.preserveHistoryId;
+      pages[0].changeVersion = oldChangeVersion;
     }
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
@@ -405,30 +414,37 @@ export const applyMailboxSyncDelta = async (
   updatedMessages: readonly MessageListItem[],
   removedMessageIds: readonly string[],
   signal?: AbortSignal,
-  refreshThreadIds: readonly string[] = []
+  refreshThreadIds: readonly string[] = [],
+  replacedThreadIds?: readonly string[]
 ) => {
   signal?.throwIfAborted();
-  const threadsNeedingRefresh = new Set<string>();
+  const threadsNeedingRefresh = new Set(refreshThreadIds);
   for (const [, thread] of queryClient.getQueriesData<ThreadMessagesResult>({
     predicate: ({ queryKey }) =>
       queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
   })) {
     if (
       thread !== undefined &&
-      (refreshThreadIds.includes(thread.threadId) ||
-        thread.messages.some((message) =>
-          removedMessageIds.includes(message.id)
-        ))
+      thread.messages.some((message) => removedMessageIds.includes(message.id))
     ) {
       threadsNeedingRefresh.add(thread.threadId);
     }
   }
-  if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
+  if (
+    updatedMessages.length > 0 ||
+    removedMessageIds.length > 0 ||
+    (replacedThreadIds?.length ?? 0) > 0
+  ) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
       (data) =>
-        applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
+        applySyncDeltaToQueryData(
+          data,
+          updatedMessages,
+          removedMessageIds,
+          replacedThreadIds
+        )
     );
   }
 
@@ -437,7 +453,10 @@ export const applyMailboxSyncDelta = async (
     ReturnType<typeof getThreadQueryKey>
   >();
 
-  for (const updatedMessage of updatedMessages) {
+  // A list anchor carries aggregate metadata. Refresh the full thread from its own read path.
+  for (const updatedMessage of replacedThreadIds === undefined
+    ? updatedMessages
+    : []) {
     const threadQueryKey = getThreadQueryKey(
       mailboxId,
       updatedMessage.threadId
@@ -472,10 +491,15 @@ export const applyMailboxSyncDelta = async (
   signal?.throwIfAborted();
   await Promise.all(
     [...threadsNeedingRefresh].map(async (threadId) => {
-      await queryClient.invalidateQueries(
-        { exact: true, queryKey: getThreadQueryKey(mailboxId, threadId) },
-        { cancelRefetch: true }
-      );
+      const filters = {
+        exact: true,
+        queryKey: getThreadQueryKey(mailboxId, threadId),
+      };
+      if (replacedThreadIds !== undefined) {
+        await queryClient.cancelQueries(filters);
+        signal?.throwIfAborted();
+      }
+      await queryClient.invalidateQueries(filters, { cancelRefetch: true });
     })
   );
 };
@@ -508,6 +532,7 @@ const syncOwnedMessages = async (
       mailbox,
       searchQuery,
       {
+        preserveUnrefreshedPages: false,
         signal,
       },
       operation
@@ -537,11 +562,24 @@ const syncOwnedMessages = async (
   }
 
   operation.assertCurrent();
+  const targetChangeVersion = liveMailboxChangeVersions
+    .get(queryClient)
+    ?.get(mailboxId);
+  const startChangeVersion = currentMessages.pages[0].changeVersion;
+  if (
+    targetChangeVersion !== undefined &&
+    startChangeVersion !== undefined &&
+    BigInt(targetChangeVersion) <= BigInt(startChangeVersion)
+  ) {
+    return currentMessages.pages[0];
+  }
   const syncDelta = await rpc.mail.syncMailbox(
     {
       category: mailbox,
       mailboxId,
+      startChangeVersion: startChangeVersion ?? "0",
       startHistoryId,
+      targetChangeVersion,
     },
     { signal }
   );
@@ -554,6 +592,9 @@ const syncOwnedMessages = async (
       mailbox,
       searchQuery,
       {
+        ...(startChangeVersion === undefined
+          ? {}
+          : { preserveUnrefreshedPages: false }),
         refreshThreads: true,
         signal,
       },
@@ -564,6 +605,7 @@ const syncOwnedMessages = async (
   if (
     syncDelta.updatedMessages.length > 0 ||
     syncDelta.removedMessageIds.length > 0 ||
+    Boolean(syncDelta.replacedThreadIds?.length) ||
     syncDelta.refreshFirstPage
   ) {
     await queryClient.cancelQueries({
@@ -580,7 +622,8 @@ const syncOwnedMessages = async (
     syncDelta.updatedMessages,
     syncDelta.removedMessageIds,
     signal,
-    syncDelta.refreshThreadIds
+    syncDelta.refreshThreadIds,
+    syncDelta.replacedThreadIds
   );
 
   if (syncDelta.refreshFirstPage) {
@@ -598,12 +641,15 @@ const syncOwnedMessages = async (
     );
   }
   operation.assertCurrent();
-  const { historyId } = syncDelta;
-  if (historyId && historyId !== startHistoryId) {
+  const { changeVersion, historyId } = syncDelta;
+  if (
+    historyId &&
+    (historyId !== startHistoryId || changeVersion !== startChangeVersion)
+  ) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
-      (data) => updateFirstPageHistoryId(data, historyId)
+      (data) => updateFirstPageHistoryId(data, historyId, changeVersion)
     );
     await persistQueryByKey(messagesQueryKey, queryClient);
   }

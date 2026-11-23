@@ -1,0 +1,1 @@
+CREATE INDEX "mail_dispatch_event_created_idx" ON "mailDispatchEvent" ("createdAt","id");

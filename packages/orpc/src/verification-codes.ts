@@ -32,7 +32,7 @@ import {
 } from "drizzle-orm";
 
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
-import { publishMailUpdate } from "./mail-updates";
+import { appendMailboxChange, publishMailboxChange } from "./mailbox-changes";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import {
   decryptVerificationCode,
@@ -522,44 +522,59 @@ export const processMailVerificationCode = async ({
         : Date.parse(message.date ?? "")
     );
     const finishedAt = new Date();
-    const [saved] = await db
-      .update(mailboxVerificationCode)
-      .set({
-        cacheWriteTokens: usage.cacheWriteTokens,
-        cachedTokens: usage.cachedTokens,
-        completionTokens: usage.completionTokens,
-        costUsd: usage.costUsd,
-        encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
-        expiresAt: detail?.expiresAt ?? null,
-        leaseToken: null,
-        leaseUntil: null,
-        model,
-        nextAttemptAt: null,
-        processedAt: finishedAt,
-        promptTokens: usage.promptTokens,
-        receivedAt: detail ? receivedAt : null,
-        service: detail?.service ?? null,
-        threadId: detail ? message.threadId : null,
-        updatedAt: finishedAt,
-        usageReportedAt: usage.costUsd === null ? finishedAt : null,
-      })
-      .where(
-        and(
-          eq(mailboxVerificationCode.id, claimed.id),
-          eq(mailboxVerificationCode.leaseToken, leaseToken)
+    const result = await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(mailboxVerificationCode)
+        .set({
+          cacheWriteTokens: usage.cacheWriteTokens,
+          cachedTokens: usage.cachedTokens,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
+          expiresAt: detail?.expiresAt ?? null,
+          leaseToken: null,
+          leaseUntil: null,
+          model,
+          nextAttemptAt: null,
+          processedAt: finishedAt,
+          promptTokens: usage.promptTokens,
+          receivedAt: detail ? receivedAt : null,
+          service: detail?.service ?? null,
+          threadId: detail ? message.threadId : null,
+          updatedAt: finishedAt,
+          usageReportedAt: usage.costUsd === null ? finishedAt : null,
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
         )
-      )
-      .returning({ id: mailboxVerificationCode.id });
-    if (saved === undefined) {
+        .returning({ id: mailboxVerificationCode.id });
+      if (saved === undefined) {
+        return null;
+      }
+      const change = detail
+        ? await appendMailboxChange(tx, {
+            changes: [
+              {
+                kind: "verification-code.available",
+                threadId: message.threadId ?? undefined,
+              },
+            ],
+            mailboxId,
+          })
+        : undefined;
+      return { change };
+    });
+    if (result === null) {
       return {
         reason: "in_progress",
         retryAt: new Date(Date.now() + AI_ADMISSION_RETRY_MS),
         status: "retry",
       };
     }
-    if (detail) {
-      await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
-    }
+    await publishMailboxChange(result.change);
     if (usage.costUsd !== null) {
       const [event] = await db
         .select()

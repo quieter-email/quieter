@@ -18,6 +18,7 @@ export default defineConfig({
           LINEAR_CLIENT_SECRET: "linear-client-secret",
           OPENROUTER_API_KEY: "openrouter-key",
           POLAR_ACCESS_TOKEN: "polar-access-token",
+          QUIETER_GMAIL_EVENTS_ENABLED: "false",
           SST_RESOURCE_GmailLiveSyncTokenSecret: JSON.stringify({
             value: "live-sync-secret",
           }),
@@ -25,6 +26,7 @@ export default defineConfig({
         r2Buckets: { LocalMailStorage: "quieter-local-mail" },
         serviceBindings: {
           GmailProcessingWorker: () => new Response(null, { status: 503 }),
+          MAIL_MAINTENANCE: () => new Response(null, { status: 503 }),
         },
       },
       wrangler: { configPath: "./wrangler.types.jsonc" },

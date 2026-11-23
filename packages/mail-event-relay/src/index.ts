@@ -8,6 +8,8 @@ import postgres, { PostgresError } from "postgres";
 import { z } from "zod";
 
 const batchSize = 100;
+const deliveryConcurrency = 8;
+const backlogDelayMs = 500;
 const retryDelayMs = 5000;
 const eventIdSchema = z.uuid();
 type RelayEnv = ReturnType<typeof createMailEventRelayEnv>;
@@ -95,13 +97,22 @@ const reconcile = async (
       order by "createdAt", id
       limit ${batchSize}
     `;
-    for (const row of rows) {
-      await deliver(row.id, env, signal);
-      ({ createdAt, id } = row);
+    for (let offset = 0; offset < rows.length; offset += deliveryConcurrency) {
+      const outcomes = await Promise.allSettled(
+        rows.slice(offset, offset + deliveryConcurrency).map(async (row) => {
+          await deliver(row.id, env, signal);
+        })
+      );
+      const failure = outcomes.find((outcome) => outcome.status === "rejected");
+      if (failure !== undefined) {
+        throw failure.reason;
+      }
     }
-    if (rows.length < batchSize) {
+    const last = rows.at(-1);
+    if (rows.length < batchSize || last === undefined) {
       return;
     }
+    ({ createdAt, id } = last);
   }
 };
 
@@ -126,6 +137,7 @@ const consume = async (
   const session = new AbortController();
   const signal = AbortSignal.any([stop, session.signal]);
   const reconciliation = Promise.withResolvers<null>();
+  const deliveredAhead = new Set<string>();
   const consumer = postgres(url, {
     ...options,
     publications: partition.publication,
@@ -162,9 +174,46 @@ const consume = async (
   try {
     await consumer.subscribe(
       "insert:public.mailDispatchEvent",
-      async (row) => {
+      async (row, info) => {
         await reconciliation.promise;
-        await deliver(row?.id, env, signal);
+        const id = eventIdSchema.parse(row?.id);
+        if (deliveredAhead.delete(id)) {
+          return;
+        }
+        if (
+          info.time === undefined ||
+          Date.now() - info.time.getTime() < backlogDelayMs
+        ) {
+          await deliver(id, env, signal);
+          return;
+        }
+        // Work ahead of the stream only when lagging. Each callback still waits
+        // for its own ID, so the driver can confirm only a contiguous WAL prefix.
+        const pending = await sql<{ id: string }[]>`
+          select id from public."mailDispatchEvent"
+          where id <> ${id}
+            ${partition.shard === undefined ? sql`` : sql`and shard = ${partition.shard}`}
+          order by "createdAt", id
+          limit ${deliveryConcurrency - 1}
+        `;
+        const [current, ...ahead] = await Promise.allSettled([
+          deliver(id, env, signal),
+          ...pending.map(async (event) => {
+            await deliver(event.id, env, signal);
+            return event.id;
+          }),
+        ]);
+        for (const result of ahead) {
+          if (result.status === "fulfilled") {
+            deliveredAhead.add(result.value);
+          }
+        }
+        if (deliveredAhead.size > batchSize * deliveryConcurrency) {
+          deliveredAhead.clear();
+        }
+        if (current.status === "rejected") {
+          throw current.reason;
+        }
       },
       () => {
         process.stdout.write(

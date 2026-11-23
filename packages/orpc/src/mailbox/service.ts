@@ -14,6 +14,7 @@ import {
   gmailCredential,
   gmailOAuthState,
   mailbox,
+  mailboxChangeHead,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
@@ -680,17 +681,38 @@ export const listAccessibleGmailUnreadCounts = async (input: {
 };
 
 export const assertAccessibleMailbox = async (input: {
+  includeChangeVersion?: boolean;
   mailboxId: string;
   userId: string;
-}) => {
-  const [ownedGmailMailbox] = await db
+}): Promise<
+  Pick<
+    typeof mailbox.$inferSelect,
+    "contentRevision" | "id" | "organizationId" | "provider"
+  > & {
+    capabilities: ReturnType<typeof getMailboxCapabilities>;
+    mailChangeVersion?: bigint;
+  }
+> => {
+  const includeChangeVersion = input.includeChangeVersion === true;
+  const ownedMailbox = db
     .select({
       contentRevision: mailbox.contentRevision,
       id: mailbox.id,
+      mailChangeVersion: includeChangeVersion
+        ? mailboxChangeHead.version
+        : sql<null>`null`,
       organizationId: mailbox.organizationId,
       provider: mailbox.provider,
     })
-    .from(mailbox)
+    .from(mailbox);
+  const [ownedGmailMailbox] = await (
+    includeChangeVersion
+      ? ownedMailbox.leftJoin(
+          mailboxChangeHead,
+          eq(mailbox.id, mailboxChangeHead.mailboxId)
+        )
+      : ownedMailbox
+  )
     .where(
       and(
         eq(mailbox.id, input.mailboxId),
@@ -706,6 +728,9 @@ export const assertAccessibleMailbox = async (input: {
       capabilities: getMailboxCapabilities({
         provider: ownedGmailMailbox.provider,
       }),
+      mailChangeVersion: includeChangeVersion
+        ? (ownedGmailMailbox.mailChangeVersion ?? 0n)
+        : undefined,
     };
   }
 

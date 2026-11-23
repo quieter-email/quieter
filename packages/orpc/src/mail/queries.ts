@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  getGmailThreadChangeDelta,
   getMailboxSyncDelta,
   getMessageAttachment,
   getDraftWithContent,
@@ -35,6 +36,7 @@ import {
   parseCapturedImportanceSearch,
   processPendingMailImportance,
 } from "../mail-importance";
+import { readMailboxChanges } from "../mailbox-changes";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import { getManagedDraft } from "../managed-mail/messages/get-draft";
@@ -77,6 +79,125 @@ const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
       ? message
       : { ...message, unsubscribeStatus };
   });
+};
+
+const gmailReplayFallback: MailboxSyncDelta = {
+  hasChanges: true,
+  refreshFirstPage: false,
+  removedMessageIds: [],
+  requiresFullRefresh: true,
+  updatedMessages: [],
+};
+
+const replayGmailMailbox = async ({
+  context,
+  contentRevision,
+  headVersion,
+  input,
+  providerCursor,
+  startChangeVersion,
+}: {
+  context: MailRequestContext;
+  contentRevision: number;
+  headVersion: bigint;
+  input: MailInputs["syncMailbox"];
+  providerCursor?: { provider?: string; revision?: string };
+  startChangeVersion: string;
+}): Promise<MailboxSyncDelta> => {
+  const replay = await readMailboxChanges({
+    afterVersion: startChangeVersion,
+    headVersion,
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const important = input.category === "important";
+  const previousRevision = important
+    ? /^app:(?<revision>\d+)$/u.exec(input.startHistoryId)?.groups?.revision
+    : providerCursor?.revision;
+  const previous = Number(previousRevision);
+  if (
+    replay === null ||
+    !Number.isSafeInteger(previous) ||
+    replay.contentRevisions.length !== contentRevision - previous ||
+    replay.contentRevisions.some(
+      (revision, index) => revision !== previous + index + 1
+    )
+  ) {
+    return gmailReplayFallback;
+  }
+  const affectedThreadIds = new Set<string>();
+  const affectedMessageThreads = new Map<string, string | undefined>();
+  for (const change of replay.changes) {
+    if ("messageId" in change) {
+      affectedMessageThreads.set(
+        change.messageId,
+        change.threadId ?? affectedMessageThreads.get(change.messageId)
+      );
+    } else if (
+      change.kind === "importance.changed" ||
+      change.kind === "capture.changed"
+    ) {
+      affectedThreadIds.add(change.threadId);
+    }
+  }
+  const changeVersion = String(headVersion);
+  if (important) {
+    for (const threadId of affectedMessageThreads.values()) {
+      if (threadId === undefined) {
+        return gmailReplayFallback;
+      }
+      affectedThreadIds.add(threadId);
+    }
+    const threadIds = [...affectedThreadIds];
+    const page =
+      threadIds.length > 0
+        ? await listCapturedImportantMessages({
+            mailboxId: input.mailboxId,
+            matchingThreadIds: threadIds,
+            maxResults: threadIds.length,
+          })
+        : undefined;
+    return {
+      changeVersion,
+      hasChanges: threadIds.length > 0,
+      historyId: `app:${contentRevision}`,
+      refreshFirstPage: false,
+      refreshThreadIds: threadIds,
+      removedMessageIds: [],
+      replacedThreadIds: threadIds,
+      requiresFullRefresh: false,
+      updatedMessages: page
+        ? await hydrateUnsubscribeStatus(input.mailboxId, page.messages)
+        : [],
+    };
+  }
+  const delta = await callGmail(
+    context,
+    input.mailboxId,
+    async (accessToken, signal) =>
+      await getGmailThreadChangeDelta(accessToken, {
+        affectedMessageThreads,
+        affectedThreadIds,
+        mailbox: input.category,
+        reconcileProvider:
+          input.targetChangeVersion === undefined ||
+          BigInt(input.targetChangeVersion) > headVersion,
+        signal,
+        startHistoryId: providerCursor?.provider ?? "",
+      })
+  );
+  return {
+    ...delta,
+    changeVersion: delta.requiresFullRefresh ? undefined : changeVersion,
+    historyId: delta.historyId
+      ? `gmail:${delta.historyId}:${contentRevision}`
+      : undefined,
+    updatedMessages: await hydrateGmailMessageMetadata(
+      input.mailboxId,
+      delta.updatedMessages,
+      context.resHeaders
+    ),
+  };
 };
 
 export const queriesMailOperations = {
@@ -440,6 +561,7 @@ export const queriesMailOperations = {
     }
 
     const selectedMailbox = await assertAccessibleMailbox({
+      includeChangeVersion: true,
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
@@ -491,6 +613,8 @@ export const queriesMailOperations = {
       });
       return {
         ...page,
+        changeVersion: String(selectedMailbox.mailChangeVersion),
+        historyId: `app:${selectedMailbox.contentRevision}`,
         messages: await hydrateUnsubscribeStatus(
           input.mailboxId,
           page.messages
@@ -518,6 +642,7 @@ export const queriesMailOperations = {
     );
     return {
       ...page,
+      changeVersion: String(selectedMailbox.mailChangeVersion),
       historyId: page.historyId
         ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
         : undefined,
@@ -556,6 +681,7 @@ export const queriesMailOperations = {
     }
 
     const selectedMailbox = await assertAccessibleMailbox({
+      includeChangeVersion: input.startChangeVersion !== undefined,
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
@@ -572,6 +698,23 @@ export const queriesMailOperations = {
       };
     }
 
+    const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(
+      input.startHistoryId
+    );
+    if (
+      input.startChangeVersion !== undefined &&
+      selectedMailbox.mailChangeVersion !== undefined
+    ) {
+      return await replayGmailMailbox({
+        contentRevision: selectedMailbox.contentRevision,
+        context,
+        headVersion: selectedMailbox.mailChangeVersion,
+        input,
+        providerCursor: token?.groups,
+        startChangeVersion: input.startChangeVersion,
+      });
+    }
+
     if (input.category === "important") {
       const historyId = `app:${selectedMailbox.contentRevision}`;
       const hasChanges = historyId !== input.startHistoryId;
@@ -584,9 +727,6 @@ export const queriesMailOperations = {
         updatedMessages: [],
       };
     }
-    const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(
-      input.startHistoryId
-    );
     const appChanged =
       token?.groups?.revision !== String(selectedMailbox.contentRevision);
     if (token !== null && appChanged) {

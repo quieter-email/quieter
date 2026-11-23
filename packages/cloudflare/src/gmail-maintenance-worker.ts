@@ -1,4 +1,5 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
+import { serverEnv } from "@quieter/env/server";
 import { listDueGmailMailboxAutomation } from "@quieter/orpc/gmail-mailbox-automation/readiness";
 import { claimGmailSchedulerRepairs } from "@quieter/orpc/gmail-pubsub";
 
@@ -70,6 +71,9 @@ export const runGmailMaintenance = async (
 
 export default withSentryReporting({
   async scheduled(_event, env, _ctx) {
+    if (serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true) {
+      return;
+    }
     await runGmailMaintenance(env);
   },
 } satisfies ExportedHandler<Env>);

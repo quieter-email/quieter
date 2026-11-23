@@ -5,6 +5,7 @@ import {
   scheduledMailSend,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
+import { mailMaintenanceScopeKeySchema } from "@quieter/mail/dispatch";
 import { cleanupRateLimitBuckets } from "@quieter/orpc/abuse-protection";
 import { purgeExpiredAiGeneratedMailBodies } from "@quieter/orpc/ai-mail-authorship";
 import { processPendingAiMemoryEvents } from "@quieter/orpc/ai-memory";
@@ -67,7 +68,7 @@ const globalTasks = [
 export const mailMaintenanceDispatchSchema = z
   .object({
     dueAt: z.number().int().nonnegative().max(8_640_000_000_000_000).optional(),
-    scopeKey: z.string().min(1).max(512),
+    scopeKey: mailMaintenanceScopeKeySchema,
     task: z.enum([
       ...globalTasks,
       "scheduled-send",

@@ -69,7 +69,7 @@ FOR EACH ROW WHEN (OLD.provider = 'gmail') EXECUTE FUNCTION dispatch_gmail_disco
 CREATE FUNCTION dispatch_gmail_connection() RETURNS trigger
 LANGUAGE plpgsql AS $$
 BEGIN
-  IF NEW."schedulerRepairAt" <= timezone('UTC', clock_timestamp()) THEN
+  IF NEW."schedulerRepairAt" <= timezone('UTC', clock_timestamp()) + interval '1 minute' THEN
     PERFORM public.enqueue_mail_dispatch_event(
       jsonb_build_object('kind','gmail','mailboxId',NEW."mailboxId",'tasks',jsonb_build_array('sync','memory'))
     );

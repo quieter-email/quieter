@@ -41,6 +41,7 @@ import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { autoLabelBudgetDeferred } from "../mail-automation/auto-label-events";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
 import { processGmailMailCapture } from "../mail-capture";
+import { appendMailboxChange, publishMailboxChange } from "../mailbox-changes";
 import {
   listPendingMailboxVerificationCodeMessageIds,
   reportPendingMailboxVerificationCodeUsage,
@@ -321,7 +322,7 @@ const resetExpiredHistory = async ({
   const desiredRecovery =
     (watch.lastReconciledAt?.getTime() ?? watch.createdAt.getTime()) -
     HISTORY_RECOVERY_OVERLAP_MS;
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     await checkpointWatch(
       tx,
       watch.mailboxId,
@@ -354,7 +355,12 @@ const resetExpiredHistory = async ({
         recoveryPageToken: null,
       });
     }
+    return await appendMailboxChange(tx, {
+      changes: [{ kind: "mailbox.reconcile" }],
+      mailboxId: watch.mailboxId,
+    });
   });
+  await publishMailboxChange(update);
 };
 
 const processHistoryRecoveryPage = async (
@@ -491,13 +497,12 @@ const stageMailboxHistoryPage = async ({
   ) {
     throw new Error("Gmail history page did not include a usable checkpoint.");
   }
-  const messageIds = page.changes
-    .filter(
-      (change) =>
-        change.kind === "added" &&
-        BigInt(change.providerRevision) > watchRevision
-    )
-    .map((change) => change.messageId);
+  const observed = page.changes.filter(
+    (change) => BigInt(change.providerRevision) > watchRevision
+  );
+  const messageIds = observed.flatMap((change) =>
+    change.kind === "added" ? [change.messageId] : []
+  );
   const changes =
     captureRevision === null
       ? []
@@ -505,7 +510,7 @@ const stageMailboxHistoryPage = async ({
           (change) => BigInt(change.providerRevision) > captureRevision
         );
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     await checkpointWatch(tx, mailboxId, leaseId, {
       ...(BigInt(historyId) >= watchRevision
         ? { historyId, historyPageToken: null, lastProcessedAt: now }
@@ -544,7 +549,19 @@ const stageMailboxHistoryPage = async ({
       },
       tx
     );
+    if (observed.length > 0) {
+      return await appendMailboxChange(tx, {
+        changes: observed.map(({ kind, messageId, threadId }) => ({
+          kind: `message.${kind}`,
+          messageId,
+          threadId,
+        })),
+        mailboxId,
+      });
+    }
+    return null;
   });
+  await publishMailboxChange(update);
   return {
     expired: false,
     hasMore: page.nextPageToken !== null,

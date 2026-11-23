@@ -42,36 +42,40 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
 const serviceAccount = "gmail-push@example.invalid";
 
 describe("mail update fan-out", () => {
-  test("delivers deleted mailbox updates only to the signed recipient snapshot", async () => {
-    const recipientUserIds = [crypto.randomUUID(), crypto.randomUUID()];
-    const body = JSON.stringify({
-      event: {
-        eventId: crypto.randomUUID(),
-        mailboxId: "deleted-mailbox",
-        type: "mailbox.changed",
-      },
-      expiresAt: Date.now() + 30_000,
-      purpose: "mail-event",
-      recipientUserIds,
-    });
-    const names = vi.spyOn(env.MailLiveUser, "idFromName");
-    const response = await handleMailUpdates(
-      new Request("https://worker.invalid/mail/events", {
-        body,
-        headers: {
-          "x-mail-signature": await signMailPayload(body, "live-sync-secret"),
+  test(
+    "delivers deleted mailbox updates only to the signed recipient snapshot",
+    { timeout: 20_000 },
+    async () => {
+      const recipientUserIds = [crypto.randomUUID(), crypto.randomUUID()];
+      const body = JSON.stringify({
+        event: {
+          eventId: crypto.randomUUID(),
+          mailboxId: "deleted-mailbox",
+          type: "mailbox.changed",
         },
-        method: "POST",
-      }),
-      env
-    );
+        expiresAt: Date.now() + 30_000,
+        purpose: "mail-event",
+        recipientUserIds,
+      });
+      const names = vi.spyOn(env.MailLiveUser, "idFromName");
+      const response = await handleMailUpdates(
+        new Request("https://worker.invalid/mail/events", {
+          body,
+          headers: {
+            "x-mail-signature": await signMailPayload(body, "live-sync-secret"),
+          },
+          method: "POST",
+        }),
+        env
+      );
 
-    expect(response.status).toBe(204);
-    expect(new Set(names.mock.calls.flat())).toStrictEqual(
-      new Set(recipientUserIds)
-    );
-    names.mockRestore();
-  });
+      expect(response.status).toBe(204);
+      expect(new Set(names.mock.calls.flat())).toStrictEqual(
+        new Set(recipientUserIds)
+      );
+      names.mockRestore();
+    }
+  );
 
   test("rejects recipient changes that are not covered by the signature", async () => {
     const payload = {

@@ -35,7 +35,7 @@ export const createMailEventRelay = (
       MAIL_DISPATCH_URL: dispatchUrl,
       MAIL_EVENT_REPLICATION_SLOT: `quieter_mail_dispatch_${stage.toLowerCase().replaceAll("-", "_")}`,
       QUIETER_MAIL_EVENT_RELAY_SHARDED: String(
-        env.QUIETER_MAIL_EVENT_RELAY_SHARDED ?? false
+        env.QUIETER_MAIL_EVENT_RELAY_SHARDED ?? true
       ),
     },
     image: { context: "packages/mail-event-relay" },

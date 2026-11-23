@@ -345,6 +345,9 @@ export const createGmailResources = (
           },
           environment: {
             ...context.releaseEnvironment,
+            QUIETER_GMAIL_EVENTS_ENABLED: String(
+              context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+            ),
             SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
           },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",

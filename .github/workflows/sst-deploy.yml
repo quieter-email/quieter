@@ -295,18 +295,24 @@ jobs:
         run: vp run @quieter/database#db:deploy
 
       - name: Check mail event cutover
-        if: vars.QUIETER_GMAIL_EVENTS_ENABLED == 'true' || vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED == 'true'
+        if: vars.QUIETER_MAIL_EVENT_RELAY_ENABLED != 'true' || vars.QUIETER_GMAIL_EVENTS_ENABLED == 'true' || vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED == 'true'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: |
           set -euo pipefail
-          mode=shared
-          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != true ]] || mode=sharded
+          stage="${SST_STAGE,,}"
+          slot="quieter_mail_dispatch_${stage//-/_}"
+          mode=sharded
+          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != false ]] || mode=shared
+          if [[ "$QUIETER_MAIL_EVENT_RELAY_ENABLED" != true ]]; then
+            vp exec node packages/database/scripts/mail-event-cutover.ts verify-disabled "$slot" "$mode"
+            exit
+          fi
           scopes=()
           [[ "$QUIETER_GMAIL_EVENTS_ENABLED" != true ]] || scopes+=(gmail)
           [[ "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" != true ]] || scopes+=(maintenance)
-          vp exec node packages/database/scripts/mail-event-cutover.ts verify "quieter_mail_dispatch_$SST_STAGE" "$mode" "$(IFS=, ; echo "${scopes[*]}")"
+          vp exec node packages/database/scripts/mail-event-cutover.ts verify "$slot" "$mode" "$(IFS=, ; echo "${scopes[*]}")"
 
       - name: Bootstrap explicitly authorized account access
         if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
@@ -341,9 +347,11 @@ jobs:
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: |
           set -euo pipefail
-          mode=shared
-          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != true ]] || mode=sharded
-          vp exec node packages/database/scripts/mail-event-cutover.ts enable "quieter_mail_dispatch_$SST_STAGE" "$mode"
+          stage="${SST_STAGE,,}"
+          slot="quieter_mail_dispatch_${stage//-/_}"
+          mode=sharded
+          [[ "$QUIETER_MAIL_EVENT_RELAY_SHARDED" != false ]] || mode=shared
+          vp exec node packages/database/scripts/mail-event-cutover.ts enable "$slot" "$mode" gmail
 
       - name: Disable direct private release URLs
         run: vp exec node scripts/check-action-deployment.ts secure-private-releases

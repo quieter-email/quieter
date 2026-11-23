@@ -23,6 +23,7 @@ import {
 } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
+import type { MailboxChange } from "@quieter/mail/updates";
 import {
   and,
   asc,
@@ -42,6 +43,7 @@ import {
   stageGmailCapturedBody,
 } from "./gmail-captured-body";
 import { ensureMailImportanceWork } from "./mail-importance";
+import { appendMailboxChange, publishMailboxChange } from "./mailbox-changes";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 type CaptureTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -66,6 +68,26 @@ const lockCaptureLease = async (
   if (state === undefined) {
     throw new Error("Mail capture lease expired.");
   }
+};
+
+const recordCaptureChange = async (
+  tx: CaptureTransaction,
+  mailboxId: string,
+  changes: MailboxChange[]
+) => {
+  const [revision] = await tx
+    .update(mailbox)
+    .set({
+      contentRevision: sql`${mailbox.contentRevision} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(mailbox.id, mailboxId))
+    .returning({ value: mailbox.contentRevision });
+  return await appendMailboxChange(tx, {
+    changes,
+    contentRevision: revision.value,
+    mailboxId,
+  });
 };
 
 export const writeGmailCapturedMessage = async (input: {
@@ -116,7 +138,7 @@ export const writeGmailCapturedMessage = async (input: {
     snapshot,
   };
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
@@ -179,19 +201,17 @@ export const writeGmailCapturedMessage = async (input: {
         threadId: snapshot.threadId,
       });
     }
-    if (accepted.length) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+    if (accepted.length === 0) {
+      return null;
     }
-    if (staged !== null && accepted.length > 0) {
+    if (staged !== null) {
       await finishGmailCapturedBody(tx, staged);
     }
+    return await recordCaptureChange(tx, input.mailboxId, [
+      { kind: "capture.changed", threadId: snapshot.threadId },
+    ]);
   });
+  await publishMailboxChange(update);
 };
 
 export const deleteGmailCapturedMessage = async (input: {
@@ -201,10 +221,24 @@ export const deleteGmailCapturedMessage = async (input: {
   leaseId?: string;
 }) => {
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
+    const [previous] = await tx
+      .select({
+        threadId: sql<
+          string | null
+        >`${gmailCapturedMessage.snapshot}->>'threadId'`,
+      })
+      .from(gmailCapturedMessage)
+      .where(
+        and(
+          eq(gmailCapturedMessage.mailboxId, input.mailboxId),
+          eq(gmailCapturedMessage.messageId, input.messageId)
+        )
+      )
+      .for("update");
     const accepted = await tx
       .insert(gmailCapturedMessage)
       .values({
@@ -230,7 +264,8 @@ export const deleteGmailCapturedMessage = async (input: {
           snapshot: null,
           updatedAt: now,
         },
-        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric <= ${input.providerRevision}::numeric`,
+        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${input.providerRevision}::numeric
+          or (${gmailCapturedMessage.providerRevision} = ${input.providerRevision} and ${gmailCapturedMessage.deletedAt} is null)`,
         target: [
           gmailCapturedMessage.mailboxId,
           gmailCapturedMessage.messageId,
@@ -252,15 +287,17 @@ export const deleteGmailCapturedMessage = async (input: {
             eq(mailMessageImportance.messageId, input.messageId)
           )
         );
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+      return await recordCaptureChange(tx, input.mailboxId, [
+        {
+          kind: "message.deleted",
+          messageId: input.messageId,
+          threadId: previous?.threadId ?? undefined,
+        },
+      ]);
     }
+    return null;
   });
+  await publishMailboxChange(update);
 };
 
 const checkpointCapture = async (
@@ -336,7 +373,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
     .slice(0, 512)
     .map((label) => label.slice(0, 256));
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
@@ -357,17 +394,21 @@ export const writeGmailCapturedMessageMetadata = async (input: {
           sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${JSON.stringify(labelIds)}::text::jsonb)`
         )
       )
-      .returning({ messageId: gmailCapturedMessage.messageId });
-    if (accepted.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+      .returning({
+        threadId: sql<
+          string | null
+        >`${gmailCapturedMessage.snapshot}->>'threadId'`,
+      });
+    if (accepted.length === 0) {
+      return null;
     }
+    return await recordCaptureChange(tx, input.mailboxId, [
+      accepted[0].threadId
+        ? { kind: "capture.changed", threadId: accepted[0].threadId }
+        : { kind: "mailbox.reconcile" },
+    ]);
   });
+  await publishMailboxChange(update);
 };
 
 const refreshRetainedMessage = async (input: {

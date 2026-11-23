@@ -68,7 +68,7 @@ import {
   hydrateGmailCapturedSnapshot,
 } from "./gmail-captured-body";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
-import { publishMailUpdate } from "./mail-updates";
+import { appendMailboxChange, publishMailboxChange } from "./mailbox-changes";
 import { mailboxAutomationFilter } from "./mailbox/automation-scope";
 import type { MailboxAutomationScope } from "./mailbox/automation-scope";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -436,7 +436,7 @@ export const setMailImportance = async (input: {
       targets.push({ status: "applied", threadId: target.threadId });
     }
     if (appliedIds.size === 0) {
-      return { sources: [], syncToken: undefined, targets };
+      return { change: undefined, sources: [], syncToken: undefined, targets };
     }
     const appliedSources = sources
       .filter((source) => appliedIds.has(source.message.id))
@@ -494,12 +494,23 @@ export const setMailImportance = async (input: {
       })
       .where(eq(mailbox.id, input.mailboxId))
       .returning({ value: mailbox.contentRevision });
+    const change = await appendMailboxChange(tx, {
+      changes: targets.flatMap((target) =>
+        target.status === "applied"
+          ? [{ kind: "importance.changed", threadId: target.threadId }]
+          : []
+      ),
+      contentRevision: revision.value,
+      mailboxId: input.mailboxId,
+    });
     return {
+      change,
       sources: appliedSources,
       syncToken: String(revision.value),
       targets,
     };
   });
+  await publishMailboxChange(result.change);
   const appliedThreadIds = result.targets
     .filter((target) => target.status === "applied")
     .map((target) => target.threadId);
@@ -586,11 +597,6 @@ export const setMailImportance = async (input: {
         subject: members.find((message) => message.subject)?.subject,
       });
     }
-    await publishMailUpdate({
-      mailboxId: input.mailboxId,
-      threadIds: appliedThreadIds,
-      type: "mailbox.changed",
-    });
     try {
       await learnAiMemoryFromMailAction({
         action: input.important ? "mark_important" : "mark_not_important",
@@ -931,24 +937,24 @@ export const processPendingMailImportance = async (
           })
           .where(claim)
           .returning({ id: mailMessageImportance.messageId });
-        if (rows.length) {
-          await tx
-            .update(mailbox)
-            .set({
-              contentRevision: sql`${mailbox.contentRevision} + 1`,
-              updatedAt: new Date(),
-            })
-            .where(eq(mailbox.id, job.mailboxId));
+        if (rows.length === 0) {
+          return null;
         }
-        return rows.length > 0;
-      });
-      if (changed) {
-        await publishMailUpdate({
+        const [revision] = await tx
+          .update(mailbox)
+          .set({
+            contentRevision: sql`${mailbox.contentRevision} + 1`,
+            updatedAt: new Date(),
+          })
+          .where(eq(mailbox.id, job.mailboxId))
+          .returning({ value: mailbox.contentRevision });
+        return await appendMailboxChange(tx, {
+          changes: [{ kind: "importance.changed", threadId: job.threadId }],
+          contentRevision: revision.value,
           mailboxId: job.mailboxId,
-          threadIds: [job.threadId],
-          type: "mailbox.changed",
         });
-      }
+      });
+      await publishMailboxChange(changed);
     } catch (error) {
       if (!isAiCreditAdmissionBusy(error)) {
         reportError(error, { operation: "mail-importance:classification" });
@@ -1068,6 +1074,7 @@ export const listCapturedImportantMessages = async (input: {
   maxResults?: number;
   pageToken?: string;
   matchingMessageIds?: string[];
+  matchingThreadIds?: string[];
   query?: string;
   searchExpression?: MailSearchExpression | null;
 }): Promise<ListMessagesPageResult> => {
@@ -1111,6 +1118,9 @@ export const listCapturedImportantMessages = async (input: {
         sql`exists (select 1 from ${mailMessageImportance} i inner join ${gmailCapturedMessage} c on c."mailboxId" = i."mailboxId" and c."messageId" = i."messageId" where i."mailboxId" = ${gmailCapturedMessage.mailboxId} and i."threadId" = ${threadId} and coalesce(i."manualImportant", i."aiImportant", false) and c."deletedAt" is null and not (c.snapshot->'labelIds' ?| array['SENT','DRAFT','SPAM','TRASH']))`,
         input.matchingMessageIds
           ? inArray(gmailCapturedMessage.messageId, input.matchingMessageIds)
+          : undefined,
+        input.matchingThreadIds
+          ? inArray(threadId, input.matchingThreadIds)
           : undefined,
         expression ? capturedImportanceSearch(expression) : undefined
       )

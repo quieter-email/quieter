@@ -1746,23 +1746,11 @@ const getThreadListSummaries = async (
   return summariesByThreadId;
 };
 
-export const listMessagesWithDetails = async (
+const buildMailboxThreadRows = async (
   accessToken: string,
-  options?: {
-    pageToken?: string;
-    maxResults?: number;
-    mailbox?: MailboxCategory;
-    query?: string;
-    signal?: AbortSignal;
-  }
-): Promise<ListMessagesPageResult> => {
-  const list = await listThreads(accessToken, options);
-  const threads = await getGmailThreadsListMetadata(
-    accessToken,
-    list.threads.map((thread) => thread.id),
-    options?.signal
-  );
-  const mailbox = options?.mailbox;
+  threads: Awaited<ReturnType<typeof getGmailThreadsListMetadata>>,
+  mailbox?: MailboxCategory
+) => {
   const rows = threads.flatMap((thread) => {
     if (!thread) {
       return [];
@@ -1804,7 +1792,33 @@ export const listMessagesWithDetails = async (
       },
     ];
   });
-  if (mailbox === "done" && rows.length === 0 && list.nextPageToken) {
+  return await Promise.all(
+    rows.map(
+      async ({ anchor, summary }) =>
+        await toMessageListItem(accessToken, anchor, { threadSummary: summary })
+    )
+  );
+};
+
+export const listMessagesWithDetails = async (
+  accessToken: string,
+  options?: {
+    pageToken?: string;
+    maxResults?: number;
+    mailbox?: MailboxCategory;
+    query?: string;
+    signal?: AbortSignal;
+  }
+): Promise<ListMessagesPageResult> => {
+  const list = await listThreads(accessToken, options);
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    list.threads.map((thread) => thread.id),
+    options?.signal
+  );
+  const mailbox = options?.mailbox;
+  const messages = await buildMailboxThreadRows(accessToken, threads, mailbox);
+  if (mailbox === "done" && messages.length === 0 && list.nextPageToken) {
     return await listMessagesWithDetails(accessToken, {
       ...options,
       pageToken: list.nextPageToken,
@@ -1820,14 +1834,7 @@ export const listMessagesWithDetails = async (
 
   return {
     historyId,
-    messages: await Promise.all(
-      rows.map(
-        async ({ anchor, summary }) =>
-          await toMessageListItem(accessToken, anchor, {
-            threadSummary: summary,
-          })
-      )
-    ),
+    messages,
     nextPageToken: list.nextPageToken,
     resultSizeEstimate: list.resultSizeEstimate,
   };
@@ -2867,6 +2874,7 @@ export type GmailCaptureChange = {
   kind: "added" | "deleted" | "labels";
   messageId: string;
   providerRevision: string;
+  threadId?: string;
 };
 
 export const listGmailCaptureHistoryPage = async (
@@ -2904,6 +2912,7 @@ export const listGmailCaptureHistoryPage = async (
           kind: "added",
           messageId: entry.message.id,
           providerRevision: record.id,
+          threadId: entry.message.threadId,
         });
       }
       for (const entry of [
@@ -2914,6 +2923,7 @@ export const listGmailCaptureHistoryPage = async (
           kind: "labels",
           messageId: entry.message.id,
           providerRevision: record.id,
+          threadId: entry.message.threadId,
         });
       }
       for (const entry of record.messagesDeleted ?? []) {
@@ -2921,6 +2931,7 @@ export const listGmailCaptureHistoryPage = async (
           kind: "deleted",
           messageId: entry.message.id,
           providerRevision: record.id,
+          threadId: entry.message.threadId,
         });
       }
     }
@@ -2948,6 +2959,104 @@ export const listGmailCaptureHistoryPage = async (
     }
     throw error;
   }
+};
+
+export const getGmailThreadChangeDelta = async (
+  accessToken: string,
+  options: {
+    affectedMessageThreads: Map<string, string | undefined>;
+    affectedThreadIds: Set<string>;
+    mailbox: MailboxCategory;
+    reconcileProvider: boolean;
+    signal?: AbortSignal;
+    startHistoryId: string;
+  }
+): Promise<MailboxSyncDelta> => {
+  const fallback: MailboxSyncDelta = {
+    hasChanges: true,
+    refreshFirstPage: false,
+    removedMessageIds: [],
+    requiresFullRefresh: true,
+    updatedMessages: [],
+  };
+  const { affectedMessageThreads, affectedThreadIds, signal, startHistoryId } =
+    options;
+  let historyId = startHistoryId;
+  if (options.reconcileProvider) {
+    let pageToken: string | undefined;
+    for (let pageIndex = 0; pageIndex < 3; pageIndex += 1) {
+      const page = await listGmailCaptureHistoryPage(accessToken, {
+        pageToken,
+        signal,
+        startHistoryId,
+      });
+      if (page.historyExpired) {
+        return fallback;
+      }
+      for (const { messageId, threadId } of page.changes) {
+        affectedMessageThreads.set(
+          messageId,
+          threadId ?? affectedMessageThreads.get(messageId)
+        );
+        if (affectedMessageThreads.size > 100) {
+          return fallback;
+        }
+      }
+      if (page.nextPageToken === null) {
+        ({ historyId } = page);
+        break;
+      }
+      if (pageIndex === 2) {
+        return fallback;
+      }
+      pageToken = page.nextPageToken;
+    }
+  }
+
+  const unknownMessageIds: string[] = [];
+  for (const [messageId, threadId] of affectedMessageThreads) {
+    if (threadId) {
+      affectedThreadIds.add(threadId);
+    } else {
+      unknownMessageIds.push(messageId);
+    }
+  }
+  if (unknownMessageIds.length > 0) {
+    const messages = await getGmailMessagesMetadata(
+      accessToken,
+      unknownMessageIds,
+      signal
+    );
+    for (const message of messages) {
+      if (message === null) {
+        return fallback;
+      }
+      affectedThreadIds.add(message.threadId);
+    }
+  }
+  if (affectedThreadIds.size > 100) {
+    return fallback;
+  }
+  const threadIds = [...affectedThreadIds];
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    threadIds,
+    signal
+  );
+  return {
+    hasChanges: threadIds.length > 0,
+    historyId,
+    refreshFirstPage: false,
+    refreshThreadIds: threadIds,
+    removedMessageIds: [],
+    replacedThreadIds: threadIds,
+    requiresFullRefresh: false,
+    updatedMessages: await buildMailboxThreadRows(
+      accessToken,
+      threads,
+      options.mailbox
+    ),
+  };
 };
 
 export const getGmailCapturedSnapshot = async (

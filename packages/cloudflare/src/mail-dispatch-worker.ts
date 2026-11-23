@@ -15,7 +15,11 @@ import { readBoundedJson } from "./bounded-json";
 import { sendGmailProcessingJob } from "./gmail-processing";
 import { broadcastMailUpdate } from "./mail-updates";
 import { requestErrorResponse } from "./request-error";
-import { readLinkedSecret, withSentryReporting } from "./worker-runtime";
+import {
+  readLinkedSecret,
+  reportWorkerError,
+  withSentryReporting,
+} from "./worker-runtime";
 
 export const handleMailDispatch = async (request: Request, env: Env) => {
   const url = new URL(request.url);
@@ -50,10 +54,19 @@ export const handleMailDispatch = async (request: Request, env: Env) => {
     const { eventId } = payload.data;
 
     await withRequestDatabaseClient(async () => {
-      const event = await getMailDispatchEvent(eventId);
-      if (event === null) {
+      const stored = await getMailDispatchEvent(eventId);
+      if (stored === null) {
         return;
       }
+      if (!stored.success) {
+        reportWorkerError(new Error("Invalid stored mail dispatch event."), {
+          eventId,
+          route: mailDispatchPath,
+        });
+        await completeMailDispatchEvent(eventId);
+        return;
+      }
+      const event = stored.data;
       switch (event.kind) {
         case "gmail": {
           if (env.GmailProcessingWorker === undefined) {
@@ -110,7 +123,16 @@ export const handleMailDispatch = async (request: Request, env: Env) => {
                   "https://maintenance.internal/internal/maintenance/bootstrap",
                   { method: "POST" }
                 );
-          if (!response.ok) {
+          if (
+            event.kind === "maintenance" &&
+            (response.status === 400 || response.status === 413)
+          ) {
+            reportWorkerError(new Error("Invalid mail maintenance event."), {
+              eventId,
+              route: mailDispatchPath,
+              status: response.status,
+            });
+          } else if (!response.ok) {
             throw new Error("Mail maintenance did not accept work.");
           }
           break;

@@ -27,7 +27,7 @@ export const getMailDispatchEvent = async (eventId: string) => {
     .where(eq(mailDispatchEvent.id, eventId));
   return stored === undefined
     ? null
-    : mailDispatchEventSchema.parse(stored.payload);
+    : mailDispatchEventSchema.safeParse(stored.payload);
 };
 
 export const completeMailDispatchEvent = async (eventId: string) => {

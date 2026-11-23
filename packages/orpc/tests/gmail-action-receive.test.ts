@@ -141,6 +141,18 @@ vi.mock(import("../src/mail-capture"), () => ({
     needsContinuation: false,
   }),
 }));
+vi.mock(import("../src/mailbox-changes"), () => ({
+  appendMailboxChange: async (_tx, { mailboxId }) => ({
+    queued: true,
+    recipientUserIds: undefined,
+    update: {
+      eventId: crypto.randomUUID(),
+      mailboxId,
+      type: "mailbox.changed",
+    },
+  }),
+  publishMailboxChange: async () => {},
+}));
 vi.mock(import("../src/reminders/service"), () => ({
   observeReminderMail: vi.fn<typeof observeReminderMail>().mockResolvedValue(),
 }));

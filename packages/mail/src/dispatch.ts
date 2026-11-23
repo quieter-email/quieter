@@ -5,6 +5,7 @@ import { gmailAutomationKindSchema, mailUpdateSchema } from "./updates";
 const id = z.string().min(1).max(256);
 const timestamp = z.number().int().nonnegative();
 
+export const mailMaintenanceScopeKeySchema = z.string().min(1).max(512);
 export const mailDispatchPath = "/mail/dispatch/event";
 export const mailDispatchRequestSchema = z.strictObject({
   eventId: z.uuid(),
@@ -31,7 +32,7 @@ export const mailDispatchEventSchema = z.discriminatedUnion("kind", [
   z.strictObject({
     dueAt: timestamp.optional(),
     kind: z.literal("maintenance"),
-    scopeKey: z.string().min(1).max(2048),
+    scopeKey: mailMaintenanceScopeKeySchema,
     task: z.string().min(1).max(128),
   }),
   z.strictObject({

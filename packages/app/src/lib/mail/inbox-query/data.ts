@@ -160,16 +160,30 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
 
 export const updateFirstPageHistoryId = (
   data: MessagesQueryData | undefined,
-  historyId: string
+  historyId: string,
+  changeVersion?: string
 ): MessagesQueryData | undefined => {
   const firstPage = data?.pages[0];
-  if (!data || !firstPage || firstPage.historyId === historyId) {
+  if (
+    !data ||
+    !firstPage ||
+    (firstPage.historyId === historyId &&
+      (changeVersion === undefined ||
+        firstPage.changeVersion === changeVersion))
+  ) {
     return data;
   }
 
   return {
     ...data,
-    pages: [{ ...firstPage, historyId }, ...data.pages.slice(1)],
+    pages: [
+      {
+        ...firstPage,
+        changeVersion: changeVersion ?? firstPage.changeVersion,
+        historyId,
+      },
+      ...data.pages.slice(1),
+    ],
   };
 };
 
@@ -473,18 +487,28 @@ export const getMessageSortTimestamp = (
 const mergeSyncedMessages = (
   currentMessages: readonly MessageListItem[],
   updatedMessages: readonly MessageListItem[],
-  removedMessageIds: readonly string[]
+  removedMessageIds: readonly string[],
+  replacedThreadIds: readonly string[],
+  hasContinuation: boolean
 ) => {
   const updatedMessagesById = new Map(
     updatedMessages.map((message) => [message.id, message] as const)
   );
   const removedMessageIdsSet = new Set(removedMessageIds);
+  const replacedThreads = new Set(replacedThreadIds);
+  const loadedReplacedThreads = new Set<string>();
   const nextMessages = currentMessages.flatMap((message) => {
-    if (removedMessageIdsSet.has(message.id)) {
+    if (replacedThreads.has(message.threadId)) {
+      loadedReplacedThreads.add(message.threadId);
+    }
+    const synced = updatedMessagesById.get(message.id);
+    if (
+      removedMessageIdsSet.has(message.id) ||
+      (replacedThreads.has(message.threadId) && synced === undefined)
+    ) {
       return [];
     }
 
-    const synced = updatedMessagesById.get(message.id);
     return [
       synced ? mergeMessagePreservingLoadedDetails(message, synced) : message,
     ];
@@ -498,7 +522,8 @@ const mergeSyncedMessages = (
   for (const updatedMessage of updatedMessages) {
     if (
       !nextMessageIds.has(updatedMessage.id) &&
-      (!currentMessages.length ||
+      (!hasContinuation ||
+        loadedReplacedThreads.has(updatedMessage.threadId) ||
         getMessageSortTimestamp(updatedMessage) >= oldestLoadedTimestamp)
     ) {
       nextMessages.push(updatedMessage);
@@ -569,7 +594,8 @@ const paginateMessages = (
 export const applySyncDeltaToQueryData = (
   data: MessagesQueryData | undefined,
   updatedMessages: readonly MessageListItem[],
-  removedMessageIds: readonly string[]
+  removedMessageIds: readonly string[],
+  replacedThreadIds: readonly string[] = []
 ): MessagesQueryData | undefined => {
   if (data === undefined || data.pages.length === 0) {
     return data;
@@ -579,7 +605,8 @@ export const applySyncDeltaToQueryData = (
   if (
     !currentMessages.length &&
     !updatedMessages.length &&
-    !removedMessageIds.length
+    !removedMessageIds.length &&
+    !replacedThreadIds.length
   ) {
     return data;
   }
@@ -587,7 +614,9 @@ export const applySyncDeltaToQueryData = (
   const nextMessages = mergeSyncedMessages(
     currentMessages,
     updatedMessages,
-    removedMessageIds
+    removedMessageIds,
+    replacedThreadIds,
+    Boolean(data.pages.at(-1)?.nextPageToken)
   );
   sortMessages(nextMessages, currentMessages);
   const nextPages = paginateMessages(data, nextMessages);

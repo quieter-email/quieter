@@ -18,6 +18,7 @@ import type {
   ReminderTarget,
 } from "@quieter/mail/reminders";
 import type { ScheduledSendStatus } from "@quieter/mail/scheduled-send";
+import type { MailboxChange } from "@quieter/mail/updates";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -99,6 +100,7 @@ export const mailDispatchEvent = pgTable(
     shard: integer("shard").notNull(),
   },
   (table) => [
+    index("mail_dispatch_event_created_idx").on(table.createdAt, table.id),
     index("mail_dispatch_event_shard_created_idx").on(
       table.shard,
       table.createdAt,
@@ -692,6 +694,27 @@ export const mailbox = pgTable(
     index("mailbox_division_id_idx").on(table.divisionId),
     unique("mailbox_email_address_unique").on(table.emailAddress),
   ]
+);
+
+export const mailboxChangeHead = pgTable("mailboxChangeHead", {
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  version: bigint("version", { mode: "bigint" }).notNull(),
+});
+
+export const mailboxChangeJournal = pgTable(
+  "mailboxChangeJournal",
+  {
+    changes: jsonb("changes").$type<MailboxChange[]>().notNull(),
+    contentRevision: bigint("contentRevision", { mode: "number" }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    recipientUserIds: jsonb("recipientUserIds").$type<string[]>(),
+    version: bigint("version", { mode: "bigint" }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.mailboxId, table.version] })]
 );
 
 export const mailSnippet = pgTable(

@@ -75,10 +75,8 @@ BEGIN
         task := 'raw-object-cleanup';
       END IF;
     WHEN 'rateLimitBucket' THEN
-      IF TG_OP = 'INSERT' OR NEW."expiresAt" IS DISTINCT FROM OLD."expiresAt" THEN
-        current_due := extract(epoch FROM NEW."expiresAt") * 1000;
-        task := 'rate-limit-retention';
-      END IF;
+      current_due := extract(epoch FROM NEW."expiresAt") * 1000;
+      task := 'rate-limit-retention';
     WHEN 'aiGeneratedMailBody' THEN
       IF TG_OP = 'INSERT' OR NEW."expiresAt" < OLD."expiresAt" THEN
         current_due := extract(epoch FROM NEW."expiresAt") * 1000;
@@ -185,17 +183,15 @@ BEGIN
         END IF;
         task := 'semantic-index';
       END IF;
-    WHEN 'gmailCapturedMessage' THEN
-      IF NEW."bodyObject" IS NULL AND NEW."deletedAt" IS NULL AND NEW.snapshot IS NOT NULL AND (
-        TG_OP = 'INSERT' OR OLD."bodyObject" IS NOT NULL OR OLD."deletedAt" IS NOT NULL OR OLD.snapshot IS NULL
-      ) THEN
-        current_due := coalesce(extract(epoch FROM NEW."bodyBackfillAfter") * 1000, now_ms);
-        task := 'gmail-body-backfill';
-      END IF;
     ELSE
       RAISE EXCEPTION 'Unexpected maintenance producer %', TG_TABLE_NAME;
   END CASE;
   IF task IS NOT NULL AND current_due IS NOT NULL AND (previous_due IS NULL OR current_due < previous_due) THEN
+    IF task IN ('agent-runs', 'importance', 'memory-bootstrap', 'semantic-index')
+      AND EXISTS (SELECT 1 FROM "mailDispatchSettings" WHERE key = 'gmail-mailbox-lanes-v1' AND enabled)
+      AND EXISTS (SELECT 1 FROM "mailbox" WHERE id = to_jsonb(NEW)->>'mailboxId' AND provider = 'gmail') THEN
+      RETURN NEW;
+    END IF;
     PERFORM mail_maintenance_enqueue(task, current_due);
   END IF;
   RETURN NEW;
@@ -220,7 +216,7 @@ FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
 CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "notBefore" ON "mailObjectCleanup"
 FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
 --> statement-breakpoint
-CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "expiresAt" ON "rateLimitBucket"
+CREATE TRIGGER mail_maintenance_register AFTER INSERT ON "rateLimitBucket"
 FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
 --> statement-breakpoint
 CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "expiresAt" ON "aiGeneratedMailBody"
@@ -254,9 +250,6 @@ CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "status", "us
 FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
 --> statement-breakpoint
 CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "requestedAt", "completedAt", "availableAt", "leaseExpiresAt" ON "semanticIndexRequest"
-FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
---> statement-breakpoint
-CREATE TRIGGER mail_maintenance_register AFTER INSERT OR UPDATE OF "bodyObject", "deletedAt", "snapshot" ON "gmailCapturedMessage"
 FOR EACH ROW EXECUTE FUNCTION mail_maintenance_register();
 --> statement-breakpoint
 CREATE FUNCTION mail_maintenance_next_wake(task text, mailbox_lanes boolean)
