@@ -34,6 +34,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { toast } from "@quieter/ui/toast";
 import {
   useInfiniteQuery,
@@ -187,7 +188,7 @@ export const PersonalizationMemories = ({
   };
 
   return (
-    <>
+    <div className="w-full max-w-xl space-y-4">
       <div className="flex items-center gap-2">
         <Input
           aria-label="Search memories"
@@ -280,61 +281,69 @@ export const PersonalizationMemories = ({
         {items.length > 0 ? (
           <SettingsCard>
             {selecting ? (
-              <div className={settingsSurfaceVariants({ variant: "footer" })}>
-                <IconButtonTooltip
-                  label={allSelected ? "Clear selection" : "Select loaded"}
-                >
-                  <Checkbox
-                    aria-label={
-                      allSelected
-                        ? "Clear selected memories"
-                        : `Select ${selectableCount} loaded ${selectableCount === 1 ? "memory" : "memories"}`
-                    }
-                    checked={allSelected}
-                    disabled={selectionDisabled}
-                    indeterminate={selectedIds.length > 0 && !allSelected}
-                    onCheckedChange={(checked) => {
-                      setSelection(
-                        new Set(
-                          checked
-                            ? items
-                                .slice(0, AI_MEMORY_BULK_DELETE_LIMIT)
-                                .map(({ id }) => id)
-                            : []
-                        )
-                      );
-                    }}
+              <div
+                className={cn(
+                  settingsSurfaceVariants({ variant: "padding" }),
+                  "space-y-1"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <IconButtonTooltip
+                    label={allSelected ? "Clear selection" : "Select loaded"}
                   >
-                    <CheckboxIndicator />
-                  </Checkbox>
-                </IconButtonTooltip>
-                <div className="min-w-0 flex-1">
-                  <p aria-live="polite" className="text-body-sm text-fg">
+                    <Checkbox
+                      aria-label={
+                        allSelected
+                          ? "Clear selected memories"
+                          : `Select ${selectableCount} loaded ${selectableCount === 1 ? "memory" : "memories"}`
+                      }
+                      checked={allSelected}
+                      disabled={selectionDisabled}
+                      indeterminate={selectedIds.length > 0 && !allSelected}
+                      onCheckedChange={(checked) => {
+                        setSelection(
+                          new Set(
+                            checked
+                              ? items
+                                  .slice(0, AI_MEMORY_BULK_DELETE_LIMIT)
+                                  .map(({ id }) => id)
+                              : []
+                          )
+                        );
+                      }}
+                    >
+                      <CheckboxIndicator />
+                    </Checkbox>
+                  </IconButtonTooltip>
+                  <p
+                    aria-live="polite"
+                    className="text-body-sm text-fg tabular-nums"
+                  >
                     {selectedIds.length} selected
                   </p>
-                  {selectionNote ? (
-                    <p className="text-caption text-muted-fg">
-                      {selectionNote}
-                    </p>
-                  ) : null}
+                  <Button
+                    disabled={selectionDisabled || selectedIds.length === 0}
+                    onClick={() => {
+                      setDeleting(selectedIds);
+                    }}
+                    ref={bulkDeleteButton}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    Delete
+                  </Button>
                 </div>
-                <Button
-                  disabled={selectionDisabled || selectedIds.length === 0}
-                  onClick={() => {
-                    setDeleting(selectedIds);
-                  }}
-                  ref={bulkDeleteButton}
-                  size="sm"
-                  variant="destructive"
-                >
-                  Delete
-                </Button>
+                {selectionNote ? (
+                  <p className="pl-7 text-caption text-muted-fg">
+                    {selectionNote}
+                  </p>
+                ) : null}
               </div>
             ) : null}
             <ul className={settingsSurfaceVariants({ variant: "divide" })}>
               {items.map((memory) => {
                 const details = (
-                  <div className="min-w-0 flex-1 space-y-1">
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-caption text-muted-fg">
                       {memoryCategoryLabels[memory.category]}
                     </p>
@@ -347,16 +356,17 @@ export const PersonalizationMemories = ({
                 if (selecting) {
                   const selected = selectedIdSet.has(memory.id);
                   return (
-                    <li
-                      className={cn({
-                        "rounded-lg bg-selection squircle": selected,
-                      })}
-                      key={memory.id}
-                    >
+                    <li className="relative" key={memory.id}>
+                      {selected ? (
+                        <span
+                          aria-hidden
+                          className={mailListRowParts.overlay}
+                        />
+                      ) : null}
                       <label
                         className={cn(
                           settingsSurfaceVariants({ variant: "padding" }),
-                          "flex items-start gap-3",
+                          "relative flex items-start gap-3",
                           {
                             "cursor-not-allowed":
                               selectionDisabled ||
@@ -517,6 +527,6 @@ export const PersonalizationMemories = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 };
