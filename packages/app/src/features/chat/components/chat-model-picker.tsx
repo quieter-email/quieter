@@ -4,6 +4,7 @@ import type { ChatModel } from "@quieter/ai/chat-models";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
+import { CheckIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import {
   Popover,
@@ -13,10 +14,7 @@ import {
 } from "@quieter/ui/popover";
 import { useState } from "react";
 
-import {
-  chatModelLabs,
-  getChatModelOptions,
-} from "../domain/chat-model-options";
+import { getChatModelOptions } from "../domain/chat-model-options";
 
 export const ChatModelPicker = ({
   disabled,
@@ -30,6 +28,7 @@ export const ChatModelPicker = ({
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
   const { autoMatches, groups } = getChatModelOptions(search);
+  const options = groups.flatMap((group) => group.options);
   const selectedModel = chatModels.find(
     (option) =>
       option.value === model ||
@@ -54,7 +53,7 @@ export const ChatModelPicker = ({
         aria-label="Choose model"
         disabled={disabled}
         render={
-          <Button className="-ms-2.75 max-w-full" size="sm" variant="ghost" />
+          <Button className="-ms-1.25 max-w-full" size="sm" variant="ghost" />
         }
       >
         {selectedModel ? (
@@ -62,12 +61,12 @@ export const ChatModelPicker = ({
         ) : (
           <Icon aria-hidden icon={SparklesIcon} />
         )}
-        <span className="truncate">{selectedModel?.label ?? "Auto"}</span>
+        <span className="truncate">{selectedModel?.shortLabel ?? "Auto"}</span>
         <Icon aria-hidden icon={ArrowDown01Icon} />
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex max-h-(--available-height) w-90 flex-col"
+        className="flex max-h-(--available-height) flex-col"
         collisionPadding={16}
         data-assistant-panel
         side="top"
@@ -84,7 +83,7 @@ export const ChatModelPicker = ({
               return;
             }
             event.preventDefault();
-            const firstMatch = groups.at(0)?.options.at(0);
+            const firstMatch = options.at(0);
             if (autoMatches) {
               selectModel("auto");
             } else if (firstMatch) {
@@ -96,59 +95,41 @@ export const ChatModelPicker = ({
           type="search"
           value={search}
         />
-        <div className="mt-2 flex max-h-72 min-h-0 flex-col gap-2 overflow-y-auto">
+        <div className="mt-2 flex max-h-72 min-h-0 flex-col gap-0.5 overflow-y-auto empty:hidden">
           {autoMatches ? (
-            <div className="flex items-start gap-2">
-              <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
-                <Icon
-                  aria-hidden
-                  size={14}
-
-                  icon={SparklesIcon}
-                />
-                Automatic
-              </span>
-              <Button
-                aria-pressed={model === "auto"}
-                onClick={() => {
-                  selectModel("auto");
-                }}
-                size="compact"
-                variant="option"
-              >
-                Auto
-              </Button>
-            </div>
-          ) : null}
-          {groups.map(({ group, options }) => (
-            <fieldset
-              aria-label={`${chatModelLabs[group].label} models`}
-              className="flex items-start gap-2"
-              key={group}
+            <Button
+              aria-pressed={model === "auto"}
+              className="w-full justify-start"
+              onClick={() => {
+                selectModel("auto");
+              }}
+              size="compact"
+              variant="option"
             >
-              <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
-                <ModelLabLogo lab={group} />
-                {chatModelLabs[group].label}
-              </span>
-              <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-                {options.map((option) => (
-                  <Button
-                    aria-label={option.label}
-                    aria-pressed={selectedModel === option}
-                    key={option.value}
-                    onClick={() => {
-                      selectModel(option.value);
-                    }}
-                    size="compact"
-                    variant="option"
-                  >
-                    {option.label.replace(/^(?:Gemini|DeepSeek|GLM) /u, "")}
-                  </Button>
-                ))}
-              </div>
-            </fieldset>
+              <Icon aria-hidden icon={SparklesIcon} />
+              <span className="min-w-0 truncate">Auto</span>
+              {model === "auto" ? <CheckIcon className="ms-auto" /> : null}
+            </Button>
+          ) : null}
+          {options.map((option) => (
+            <Button
+              aria-pressed={selectedModel === option}
+              className="w-full justify-start"
+              key={option.value}
+              onClick={() => {
+                selectModel(option.value);
+              }}
+              size="compact"
+              variant="option"
+            >
+              <ModelLabLogo lab={option.group} />
+              <span className="min-w-0 truncate">{option.label}</span>
+              {selectedModel === option ? (
+                <CheckIcon className="ms-auto" />
+              ) : null}
+            </Button>
           ))}
-          {groups.length === 0 && !autoMatches ? (
+          {options.length === 0 && !autoMatches ? (
             <output className="py-3 text-caption text-muted-fg">
               No matching models.
             </output>

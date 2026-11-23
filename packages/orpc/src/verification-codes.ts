@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 
-import { chatModelSchema } from "@quieter/ai/chat-models";
+import { recordedChatModelSchema } from "@quieter/ai/chat-models";
 import type { AiUsageReport } from "@quieter/ai/chat-usage";
 import type { AutomationMailMessage } from "@quieter/ai/classify-gmail-message";
 import { isAiCreditAdmissionBusy } from "@quieter/ai/errors";
@@ -183,7 +183,7 @@ const reportVerificationCodeUsage = async (
     (model !== VERIFICATION_CODE_MODEL &&
       model !== "typesafe/jev-1.13" &&
       (legacyExtractionModel === undefined ||
-        !chatModelSchema.safeParse(legacyExtractionModel).success)) ||
+        !recordedChatModelSchema.safeParse(legacyExtractionModel).success)) ||
     event.costUsd === null ||
     event.promptTokens === null ||
     event.completionTokens === null

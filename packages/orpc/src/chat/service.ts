@@ -11,7 +11,10 @@ import {
 import type { GmailToolsContext } from "@quieter/ai/chat-agent";
 import { chatMailContextSchema } from "@quieter/ai/chat-context";
 import type { ChatMailContext } from "@quieter/ai/chat-context";
-import { chatModelSchema } from "@quieter/ai/chat-models";
+import {
+  chatModelSchema,
+  retiredChatModelSchema,
+} from "@quieter/ai/chat-models";
 import {
   createForegroundClientTools,
   createForegroundServerTools,
@@ -280,7 +283,9 @@ const chatRequestBodySchema = z
     foreground: foregroundSnapshotSchema,
     mailboxId: identifierSchema,
     message: z.unknown(),
-    model: chatModelSchema.optional(),
+    model: chatModelSchema
+      .or(retiredChatModelSchema.transform(() => null))
+      .optional(),
     threadId: z.uuid(),
     trigger: z.literal("submit-message"),
   })
@@ -341,7 +346,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
       foreground: parsedBody.foreground,
       kind: "message",
       mailboxId: parsedBody.mailboxId,
-      model: resolveChatModel(parsedBody.model),
+      model: resolveChatModel(parsedBody.model ?? undefined),
       threadId,
       trigger: parsedBody.trigger,
       userMessage: {
@@ -428,7 +433,7 @@ export const validateChatRequest = (body: unknown): ValidatedChatRequest => {
     foreground: parsedBody.foreground,
     kind: "continue",
     mailboxId: parsedBody.mailboxId,
-    model: resolveChatModel(parsedBody.model),
+    model: resolveChatModel(parsedBody.model ?? undefined),
     threadId,
     toolDecisions,
     toolOutputs,
