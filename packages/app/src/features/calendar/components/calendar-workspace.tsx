@@ -1039,7 +1039,7 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1471,7 +1471,7 @@ const CalendarWorkspaceContent = ({
         ) : null}
         <div
           className={cn("flex min-h-0 flex-1", {
-            "-mt-0.5": data.failures.length === 0,
+            "-mt-2": data.failures.length === 0,
           })}
           ref={workspaceRef}
         >
@@ -1686,7 +1686,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="-ml-0.5 flex w-88 shrink-0 flex-col"
+              className="-ml-2 flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div
@@ -1701,7 +1701,7 @@ const CalendarWorkspaceContent = ({
               ) : (
                 (details ?? (
                   <Surface
-                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    className="m-2 flex min-h-0 flex-1 flex-col"
                     padding="none"
                     variant="section"
                   >

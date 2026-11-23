@@ -269,7 +269,7 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="mt-auto w-full shrink-0 p-0.5"
+      className="mt-auto w-full shrink-0 p-2"
       onSubmit={(event) => {
         if (commandOpen) {
           event.preventDefault();
