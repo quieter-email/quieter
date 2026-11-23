@@ -22,6 +22,21 @@ export const mailConnectionSchema = z.object({
   userId: z.string().min(1),
 });
 
+export const gmailAutomationKindSchema = z.enum([
+  "actions",
+  "importance",
+  "memory",
+  "reminders",
+]);
+export const gmailMailboxWakeSchema = z.strictObject({
+  expiresAt: z.number().int().positive(),
+  kind: z.union([gmailAutomationKindSchema, z.literal("sync")]),
+  mailboxId: z.string().min(1).max(256),
+  purpose: z.literal("gmail-mailbox-wake"),
+});
+export const GMAIL_MAILBOX_WAKE_PATH = "/gmail/mailbox/wake";
+export type GmailMailboxWake = z.infer<typeof gmailMailboxWakeSchema>;
+
 export const signMailPayload = async (
   payload: string,
   secret: string

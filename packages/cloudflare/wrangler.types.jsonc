@@ -14,6 +14,22 @@
   "queues": {
     "producers": [
       {
+        "binding": "GmailMailboxAutomationQueue0",
+        "queue": "quieter-types-gmail-mailbox-automation-0",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue1",
+        "queue": "quieter-types-gmail-mailbox-automation-1",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue2",
+        "queue": "quieter-types-gmail-mailbox-automation-2",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue3",
+        "queue": "quieter-types-gmail-mailbox-automation-3",
+      },
+      {
         "binding": "GmailMailboxFreshQueue0",
         "queue": "quieter-types-gmail-mailbox-fresh-0",
       },

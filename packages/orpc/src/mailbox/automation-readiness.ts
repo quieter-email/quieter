@@ -10,6 +10,7 @@ import {
   mailReminderJob,
   mailReminderSuggestion,
   userAiContextEvent,
+  semanticIndexRequest,
 } from "@quieter/database/schema";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
@@ -74,6 +75,14 @@ const sources = {
         when 'processing' then ${aiMemoryMailboxState.processingAt} + ${sql.raw(String(BOOTSTRAP_LEASE_MS))} * interval '1 millisecond'
         else ${aiMemoryMailboxState.updatedAt} + ${sql.raw(String(BOOTSTRAP_LEASE_MS))} * interval '1 millisecond'
       end`,
+    },
+    {
+      eligible: sql`${mailbox.status} = 'connected'
+        and ${mailbox.ownerUserId} is not null
+        and (${semanticIndexRequest.completedAt} is null or ${semanticIndexRequest.requestedAt} > ${semanticIndexRequest.completedAt})`,
+      from: sql`${semanticIndexRequest}`,
+      mailboxId: semanticIndexRequest.mailboxId,
+      readyAt: sql`greatest(${semanticIndexRequest.availableAt}, ${semanticIndexRequest.leaseExpiresAt})`,
     },
   ],
   reminders: [
@@ -144,6 +153,26 @@ export const getGmailMailboxAutomationWake = async (input: {
     from (${pendingGmailMailboxRows(input.kind, input)}) pending
   `);
   return { nextWakeAt: row?.nextWakeAt ?? null };
+};
+
+export const getGmailMailboxAutomationWakes = async (mailboxId: string) => {
+  const kinds = ["actions", "importance", "memory", "reminders"] as const;
+  const rows = await db.execute<{
+    kind: GmailMailboxAutomationKind;
+    wakeAt: number;
+  }>(
+    sql.join(
+      kinds.map(
+        (kind) => sql`
+        select ${kind}::text as "kind", min("wakeAt") as "wakeAt"
+        from (${pendingGmailMailboxRows(kind, { mailboxId })}) pending
+        having min("wakeAt") is not null
+      `
+      ),
+      sql` union all `
+    )
+  );
+  return Object.fromEntries(rows.map((row) => [row.kind, row.wakeAt]));
 };
 
 export const listDueGmailMailboxAutomation = async (input: {

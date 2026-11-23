@@ -1,3 +1,4 @@
+import { gmailAutomationKindSchema } from "@quieter/mail/updates";
 import { z } from "zod";
 
 const notificationSchema = z.object({
@@ -14,6 +15,11 @@ export const gmailJobSchema = z.union([
     mailboxId: z.string().min(1),
     notBefore: z.number().int().nonnegative().optional(),
     priority: z.enum(["fresh", "catchup"]),
+  }),
+  z.object({
+    kind: z.literal("automation"),
+    mailboxId: z.string().min(1),
+    tasks: z.array(gmailAutomationKindSchema).min(1).max(4),
   }),
   z.object({ kind: z.literal("maintain"), mailboxId: z.string().min(1) }),
   notificationSchema,

@@ -89,6 +89,7 @@ const work = (): typeof gmailMessageWork.$inferSelect => ({
   lastError: null,
   leaseToken: "claim-token",
   leaseUntil: new Date(Date.now() + 60_000),
+  liveArrival: null,
   mailboxId: "mailbox",
   notificationReceivedAt: new Date(),
   position: 0,

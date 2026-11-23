@@ -5,6 +5,7 @@ import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
   gmailCaptureState,
+  gmailSchedulerEnrollment,
   gmailWatchState,
   mailboxAutomationSettings,
   mailbox,
@@ -12,6 +13,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import {
   getGmailProfile,
+  GmailBackgroundQuotaDeferredError,
   isGmailRateLimitedError,
   isGmailServiceError,
   listGmailCaptureHistoryPage,
@@ -376,7 +378,7 @@ const processHistoryRecoveryPage = async (
   const page = await listGmailMessageIds(accessToken, {
     maxResults: 25,
     pageToken: state.recoveryPageToken ?? undefined,
-    query: `after:${Math.floor(state.recoveryAfter.getTime() / 1000)} before:${Math.floor(
+    query: `after:${Math.floor(state.recoveryAfter.getTime() / 1000)} before:${Math.ceil(
       state.recoveryBefore.getTime() / 1000
     )}`,
   });
@@ -430,17 +432,6 @@ export const willNeedGmailFreshDiscovery = async (input: {
     )
     .where(eq(gmailWatchState.mailboxId, input.mailboxId))
     .limit(1);
-  if (state?.watch.recoveryAfter) {
-    return true;
-  }
-  if (
-    state?.watch.historyId &&
-    input.observedHistoryId !== undefined &&
-    /^\d+$/u.test(input.observedHistoryId) &&
-    BigInt(state.watch.historyId) >= BigInt(input.observedHistoryId)
-  ) {
-    return false;
-  }
   return isHistoryReplaying(state?.watch ?? null, state?.capture ?? null);
 };
 
@@ -539,6 +530,12 @@ const stageMailboxHistoryPage = async ({
     }
     await enqueueGmailMessageWork(
       {
+        liveArrival:
+          notificationReceivedAt !== undefined &&
+          observedHistoryId !== undefined &&
+          capture !== null &&
+          !isHistoryReplaying(watch, capture) &&
+          page.nextPageToken === null,
         mailboxId,
         messageIds,
         notificationReceivedAt,
@@ -672,6 +669,7 @@ const processMailboxHistory = async ({
           }
         } catch (error) {
           if (
+            error instanceof GmailBackgroundQuotaDeferredError ||
             isGmailRateLimitedError(error) ||
             (isGmailServiceError(error) && error.status === 401)
           ) {
@@ -760,6 +758,14 @@ const processMailboxHistory = async ({
       }
     );
   } catch (error) {
+    if (error instanceof GmailBackgroundQuotaDeferredError) {
+      return {
+        busy: true as const,
+        needsContinuation: true,
+        needsFreshDiscovery: false,
+        retryAfterMs: Math.max(1000, error.retryAt - Date.now()),
+      };
+    }
     const now = new Date();
     const retryAfterMs = isGmailRateLimitedError(error)
       ? Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
@@ -796,35 +802,63 @@ const processMailboxHistory = async ({
   }
 };
 
+const enrollLegacyGmailMailboxes = async (limit: number) => {
+  const key = "mailbox-scheduler-v1";
+  await db.transaction(async (tx) => {
+    await tx
+      .insert(gmailSchedulerEnrollment)
+      .values({ key })
+      .onConflictDoNothing();
+    const [page] = await tx
+      .select()
+      .from(gmailSchedulerEnrollment)
+      .where(eq(gmailSchedulerEnrollment.key, key))
+      .for("update");
+    if (page === undefined || page.completedAt !== null) {
+      return;
+    }
+    const mailboxes = await tx
+      .select({ mailboxId: mailbox.id })
+      .from(mailbox)
+      .where(
+        and(
+          eq(mailbox.provider, "gmail"),
+          eq(mailbox.status, "connected"),
+          page.afterMailboxId === null
+            ? undefined
+            : gt(mailbox.id, page.afterMailboxId)
+        )
+      )
+      .orderBy(asc(mailbox.id))
+      .limit(limit)
+      .for("key share");
+    const now = new Date();
+    if (mailboxes.length > 0) {
+      await tx
+        .insert(gmailWatchState)
+        .values(
+          mailboxes.map(({ mailboxId }) => ({
+            createdAt: now,
+            mailboxId,
+            updatedAt: now,
+          }))
+        )
+        .onConflictDoNothing();
+    }
+    await tx
+      .update(gmailSchedulerEnrollment)
+      .set({
+        afterMailboxId: mailboxes.at(-1)?.mailboxId ?? page.afterMailboxId,
+        completedAt: mailboxes.length < limit ? now : null,
+      })
+      .where(eq(gmailSchedulerEnrollment.key, key));
+  });
+};
+
 export const claimGmailSchedulerRepairs = async (limit = 500) => {
+  await enrollLegacyGmailMailboxes(limit);
   const now = new Date();
   const repairAt = sql`coalesce(${gmailWatchState.schedulerRepairAt}, '-infinity'::timestamp)`;
-  await db
-    .insert(gmailWatchState)
-    .select(
-      db
-        .select({
-          createdAt: sql<Date>`now()`.as("createdAt"),
-          mailboxId: mailbox.id,
-          schedulerRepairAt: sql<Date | null>`null::timestamp`.as(
-            "schedulerRepairAt"
-          ),
-          updatedAt: sql<Date>`now()`.as("updatedAt"),
-        })
-        .from(mailbox)
-        .leftJoin(gmailWatchState, eq(gmailWatchState.mailboxId, mailbox.id))
-        .where(
-          and(
-            eq(mailbox.provider, "gmail"),
-            eq(mailbox.status, "connected"),
-            isNull(gmailWatchState.mailboxId)
-          )
-        )
-        .limit(limit)
-        .for("key share", { of: mailbox, skipLocked: true })
-    )
-    .onConflictDoNothing();
-
   return await db.transaction(async (tx) => {
     const due = tx
       .select({ id: gmailWatchState.mailboxId })
@@ -866,7 +900,10 @@ export const maintainGmailPubSubMailbox = async (input: {
     .where(and(eq(mailbox.id, input.mailboxId), eq(mailbox.provider, "gmail")))
     .limit(1);
 
-  if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
+  if (gmailMailbox === undefined) {
+    return { status: "retired" as const };
+  }
+  if (!gmailMailbox.ownerUserId || gmailMailbox.status !== "connected") {
     return { status: "skipped" as const };
   }
 

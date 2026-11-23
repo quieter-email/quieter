@@ -5,6 +5,7 @@ import { db } from "@quieter/database/client";
 import { semanticIndexRequest } from "@quieter/database/schema";
 import { sql } from "drizzle-orm";
 
+import { signalGmailMailbox } from "./mailbox/gmail-mailbox-signal";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 type SemanticIndexScope = Pick<
@@ -126,4 +127,5 @@ export const requestFullMailSemanticIndex = async (
         semanticIndexRequest.kind,
       ],
     });
+  await signalGmailMailbox({ kind: "memory", mailboxId: input.mailboxId });
 };

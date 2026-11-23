@@ -35,6 +35,7 @@ export const createMailMaintenanceResources = (
         ...context.releaseEnvironment,
         MAIL_UPDATES_URL: updatesUrl,
         QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+        QUIETER_GMAIL_MAILBOX_LANES: String(context.gmailPubSubEnabled),
         R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
         R2_BUCKET: context.env.R2_BUCKET ?? "",
         R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",

@@ -1,7 +1,11 @@
 import { randomUUID } from "node:crypto";
 
 import { db } from "@quieter/database/client";
-import { gmailMessageWork, gmailWatchState } from "@quieter/database/schema";
+import {
+  gmailMessageWork,
+  gmailWatchState,
+  mailbox,
+} from "@quieter/database/schema";
 import {
   and,
   asc,
@@ -31,6 +35,17 @@ const unfinished = or(
   )
 );
 
+const matchesWorkPriority = (priority: GmailWorkPriority) =>
+  priority === "fresh"
+    ? or(
+        eq(gmailMessageWork.source, "fresh"),
+        sql`${gmailMessageWork.liveArrival} is true`
+      )
+    : and(
+        eq(gmailMessageWork.source, "catchup"),
+        sql`${gmailMessageWork.liveArrival} is not true`
+      );
+
 export const enqueueGmailMessageWork = async (
   input: {
     mailboxId: string;
@@ -38,6 +53,7 @@ export const enqueueGmailMessageWork = async (
     source: GmailWorkPriority;
     triggerActions?: boolean;
     notificationReceivedAt?: Date;
+    liveArrival?: boolean;
     resumeCritical?: boolean;
   },
   client: Pick<typeof db, "insert"> = db
@@ -55,6 +71,7 @@ export const enqueueGmailMessageWork = async (
         dueAt: now,
         gmailMessageId,
         id: randomUUID(),
+        liveArrival: input.liveArrival,
         mailboxId: input.mailboxId,
         notificationReceivedAt: input.notificationReceivedAt,
         position,
@@ -72,6 +89,7 @@ export const enqueueGmailMessageWork = async (
               dueAt: sql`least(${gmailMessageWork.dueAt}, excluded."dueAt")`,
             }
           : {}),
+        liveArrival: sql`${gmailMessageWork.liveArrival} is true or excluded."liveArrival" is true`,
         notificationReceivedAt: sql`least(${gmailMessageWork.notificationReceivedAt}, excluded."notificationReceivedAt")`,
         position: sql`case when excluded.source = 'fresh' then excluded.position else ${gmailMessageWork.position} end`,
         priorityAt: sql`case when excluded.source = 'fresh' then excluded."priorityAt" else ${gmailMessageWork.priorityAt} end`,
@@ -94,13 +112,16 @@ export const getGmailMessageWorkWake = async (input: {
       providerRetryAt: gmailWatchState.providerRetryAt,
     })
     .from(gmailMessageWork)
+    .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
     .leftJoin(
       gmailWatchState,
       eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
     )
     .where(
       and(
-        eq(gmailMessageWork.source, input.priority),
+        matchesWorkPriority(input.priority),
+        eq(mailbox.status, "connected"),
+        isNotNull(mailbox.ownerUserId),
         eq(gmailMessageWork.mailboxId, input.mailboxId),
         unfinished
       )
@@ -138,7 +159,7 @@ export const hasPendingFreshGmailWork = async (
     .where(
       and(
         eq(gmailMessageWork.mailboxId, mailboxId),
-        eq(gmailMessageWork.source, "fresh"),
+        matchesWorkPriority("fresh"),
         unfinished,
         lte(gmailMessageWork.dueAt, now)
       )
@@ -157,13 +178,16 @@ export const claimGmailMessageWork = async (input: {
       const [candidate] = await tx
         .select({ work: gmailMessageWork })
         .from(gmailMessageWork)
+        .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
         .leftJoin(
           gmailWatchState,
           eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
         )
         .where(
           and(
-            eq(gmailMessageWork.source, input.priority),
+            matchesWorkPriority(input.priority),
+            eq(mailbox.status, "connected"),
+            isNotNull(mailbox.ownerUserId),
             eq(gmailMessageWork.mailboxId, input.mailboxId),
             unfinished,
             or(
@@ -237,15 +261,20 @@ export const finishGmailMessageWork = async (input: {
   actionsComplete: boolean;
   retryAt: Date | null;
   lastError: string | null;
+  suspend?: boolean;
 }) => {
   const now = new Date();
   await db
     .update(gmailMessageWork)
     .set({
-      ...(input.criticalComplete ? { completedAt: now } : {}),
-      ...(input.actionsComplete ? { actionsCompletedAt: now } : {}),
-      dueAt: input.retryAt ?? now,
-      lastError: input.lastError,
+      ...(input.suspend === true
+        ? {}
+        : {
+            ...(input.criticalComplete ? { completedAt: now } : {}),
+            ...(input.actionsComplete ? { actionsCompletedAt: now } : {}),
+            dueAt: input.retryAt ?? now,
+            lastError: input.lastError,
+          }),
       leaseToken: null,
       leaseUntil: null,
       updatedAt: now,
@@ -259,12 +288,16 @@ export const finishGmailMessageWork = async (input: {
     );
 };
 
-export const pruneCompletedGmailMessageWork = async (limit = 10_000) => {
+export const pruneCompletedGmailMessageWork = async (
+  mailboxId: string,
+  limit = 2000
+) => {
   const expired = db
     .select({ id: gmailMessageWork.id })
     .from(gmailMessageWork)
     .where(
       and(
+        eq(gmailMessageWork.mailboxId, mailboxId),
         isNotNull(gmailMessageWork.completedAt),
         isNull(gmailMessageWork.lastError),
         or(

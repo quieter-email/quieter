@@ -1,11 +1,20 @@
 import { serverEnv } from "@quieter/env/server";
+import { gmailAutomationKindSchema } from "@quieter/mail/updates";
 import { DurableObject } from "cloudflare:workers";
 import { z } from "zod";
 
+import type { GMAIL_EXECUTOR_CLASSES } from "./gmail-processing-config";
 import { GMAIL_EXECUTOR_SHARDS } from "./gmail-processing-config";
 import { reportWorkerError } from "./worker-runtime";
 
-const tasks = ["discover", "fresh", "sync", "catchup"] as const;
+export const gmailAutomationTasks = gmailAutomationKindSchema.options;
+const tasks = [
+  "discover",
+  "fresh",
+  "sync",
+  "catchup",
+  ...gmailAutomationTasks,
+] as const;
 export type GmailMailboxTask = (typeof tasks)[number];
 
 const notificationHintSchema = z.object({
@@ -21,6 +30,14 @@ export const gmailDispatchSchema = z.object({
   token: z.uuid(),
 });
 export type GmailDispatch = z.infer<typeof gmailDispatchSchema>;
+
+export const gmailDispatchUsesFreshQueue = ({
+  notification,
+  task,
+}: GmailDispatch) =>
+  task === "discover" ||
+  task === "fresh" ||
+  (task === "sync" && notification !== undefined);
 
 type Lease = {
   token: string;
@@ -87,6 +104,9 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
     notification?: NotificationHint
   ) {
     await this.#update(async (lanes, storage) => {
+      if ((await storage.get<number>("retiredAt")) !== undefined) {
+        return;
+      }
       if (lanes.size === 0) {
         await storage.put("mailboxId", mailboxId);
       }
@@ -141,10 +161,12 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
       nextAt: number | null;
       retryAt?: number;
       continueNotification?: boolean;
+      wakeDiscovery?: boolean;
       wakes?: Partial<Record<GmailMailboxTask, number>>;
+      retired?: boolean;
     }
   ) {
-    return await this.#update((lanes) => {
+    return await this.#update(async (lanes, storage) => {
       const lane = lanes.get(task);
       if (
         lane?.lease?.token !== token ||
@@ -152,6 +174,21 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
         lane.lease.expiresAt <= Date.now()
       ) {
         return false;
+      }
+      if (outcome.retired === true) {
+        lanes.clear();
+        await storage.delete(["mailboxId", "observedHistoryId"]);
+        await storage.put("retiredAt", Date.now());
+        return true;
+      }
+      if (
+        outcome.wakeDiscovery === true &&
+        lane.lease.notification !== undefined
+      ) {
+        const discover = lanes.get("discover") ?? { dueAt: null, lease: null };
+        discover.dueAt = Math.min(discover.dueAt ?? Infinity, Date.now());
+        discover.notification ??= lane.lease.notification;
+        lanes.set("discover", discover);
       }
       if (
         outcome.retryAt !== undefined ||
@@ -184,7 +221,7 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
   async alarm() {
     const mailboxId = await this.ctx.storage.get<string>("mailboxId");
     if (mailboxId === undefined) {
-      throw new Error("Gmail mailbox scheduler requires a named object.");
+      return;
     }
     const dispatches = await this.#update((lanes) => {
       const now = Date.now();
@@ -225,10 +262,12 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
       GMAIL_EXECUTOR_SHARDS[(hash[0] ?? 0) % GMAIL_EXECUTOR_SHARDS.length] ?? 0;
     await Promise.all(
       dispatches.map(async (dispatch) => {
-        const lane =
-          dispatch.task === "fresh" || dispatch.task === "discover"
-            ? "Fresh"
-            : "Catchup";
+        let lane: (typeof GMAIL_EXECUTOR_CLASSES)[number] = "Catchup";
+        if (gmailDispatchUsesFreshQueue(dispatch)) {
+          lane = "Fresh";
+        } else if (gmailAutomationKindSchema.safeParse(dispatch.task).success) {
+          lane = "Automation";
+        }
         try {
           await this.env[`GmailMailbox${lane}Queue${shard}`].send(dispatch);
         } catch (error) {

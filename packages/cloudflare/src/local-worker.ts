@@ -1,5 +1,6 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
+import { GMAIL_MAILBOX_WAKE_PATH } from "@quieter/mail/updates";
 import { z } from "zod";
 
 import { runGmailMaintenance } from "./gmail-maintenance-worker";
@@ -28,7 +29,10 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/mail/")) {
+    if (
+      url.pathname.startsWith("/mail/") ||
+      url.pathname === GMAIL_MAILBOX_WAKE_PATH
+    ) {
       return await realtimeWorker.fetch(request, env, ctx);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;

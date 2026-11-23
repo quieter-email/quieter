@@ -14,6 +14,7 @@ import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { mailboxVerificationCode } from "@quieter/database/schema";
+import { GmailBackgroundQuotaDeferredError } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
 import {
   and,
@@ -317,12 +318,14 @@ export const listVerificationCodes = async ({
 };
 
 export const processMailVerificationCode = async ({
+  assertWorkActive,
   loadMessage,
   mailboxId,
   messageId,
   organizationId,
   userId,
 }: {
+  assertWorkActive?: () => Promise<void>;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
   messageId: string;
@@ -457,7 +460,7 @@ export const processMailVerificationCode = async ({
     }
 
     let { model } = claimed;
-    let detail: ReturnType<typeof validateVerificationCodeCandidate>;
+    let detail: ReturnType<typeof validateVerificationCodeCandidate> = null;
     if (message.otpToken) {
       detail = {
         code: message.otpToken.code,
@@ -469,7 +472,7 @@ export const processMailVerificationCode = async ({
         organizationId,
         userId,
       });
-      if (!budget.allowed) {
+      if (!budget.allowed && budget.reason !== "plan_ineligible") {
         const deferredAt = new Date();
         const retryAt = new Date(deferredAt.getTime() + RETRY_MAX_MS);
         await db
@@ -489,24 +492,27 @@ export const processMailVerificationCode = async ({
         return { reason: "budget", retryAt, status: "retry" };
       }
 
-      const candidate = await extractMailVerificationCode({
-        billing: await createMailboxAiBillingContext({
-          externalId: claimed.id,
-          mailboxId,
-          usageKind: "verificationCode",
-          userId,
-        }),
-        message,
-        onUsage: (reported) => {
-          extractionUsage = reported;
-        },
-      });
-      model = VERIFICATION_CODE_MODEL;
-      detail = validateVerificationCodeCandidate({
-        candidate,
-        message,
-        now: new Date(),
-      });
+      if (budget.allowed) {
+        await assertWorkActive?.();
+        const candidate = await extractMailVerificationCode({
+          billing: await createMailboxAiBillingContext({
+            externalId: claimed.id,
+            mailboxId,
+            usageKind: "verificationCode",
+            userId,
+          }),
+          message,
+          onUsage: (reported) => {
+            extractionUsage = reported;
+          },
+        });
+        model = VERIFICATION_CODE_MODEL;
+        detail = validateVerificationCodeCandidate({
+          candidate,
+          message,
+          now: new Date(),
+        });
+      }
     }
     const usage = accumulateVerificationCodeUsage(claimed, extractionUsage);
     const internalDate = Number(message.internalDate);
@@ -566,7 +572,10 @@ export const processMailVerificationCode = async ({
     }
     return { status: "complete" };
   } catch (error) {
-    if (error instanceof AiProviderDeferredError) {
+    if (
+      error instanceof AiProviderDeferredError ||
+      error instanceof GmailBackgroundQuotaDeferredError
+    ) {
       const retryAt = new Date(error.retryAt);
       await db
         .update(mailboxVerificationCode)

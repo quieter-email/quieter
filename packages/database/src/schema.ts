@@ -1264,6 +1264,12 @@ export const gmailLabel = pgTable(
   ]
 );
 
+export const gmailSchedulerEnrollment = pgTable("gmailSchedulerEnrollment", {
+  afterMailboxId: text("afterMailboxId"),
+  completedAt: timestamp("completedAt"),
+  key: text("key").primaryKey(),
+});
+
 export const gmailWatchState = pgTable(
   "gmailWatchState",
   {
@@ -1317,6 +1323,7 @@ export const gmailMessageWork = pgTable(
     lastError: text("lastError"),
     leaseToken: text("leaseToken"),
     leaseUntil: timestamp("leaseUntil"),
+    liveArrival: boolean("liveArrival"),
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
@@ -1336,6 +1343,11 @@ export const gmailMessageWork = pgTable(
       .on(table.mailboxId, table.source, table.dueAt, table.priorityAt)
       .where(
         sql`${table.completedAt} is null or ${table.lastError} is not null or (${table.triggerActions} is true and ${table.actionsCompletedAt} is null)`
+      ),
+    index("gmail_message_work_finished_mailbox_idx")
+      .on(table.mailboxId, table.updatedAt)
+      .where(
+        sql`${table.completedAt} is not null and ${table.lastError} is null and (${table.triggerActions} is false or ${table.actionsCompletedAt} is not null)`
       ),
     index("gmail_message_work_finished_idx")
       .on(table.updatedAt)
@@ -4111,6 +4123,10 @@ export const semanticIndexRequest = pgTable(
     check(
       "semantic_index_request_lease_check",
       sql`(${table.leaseToken} is null) = (${table.leaseExpiresAt} is null)`
+    ),
+    index("semantic_index_request_ready_mailbox_idx").on(
+      sql`greatest(${table.availableAt}, ${table.leaseExpiresAt})`,
+      table.mailboxId
     ),
     index("semantic_index_request_pending_idx").on(
       table.availableAt,

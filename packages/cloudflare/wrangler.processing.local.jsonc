@@ -10,6 +10,22 @@
   "queues": {
     "producers": [
       {
+        "binding": "GmailMailboxAutomationQueue0",
+        "queue": "quieter-local-gmail-mailbox-automation-0",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue1",
+        "queue": "quieter-local-gmail-mailbox-automation-1",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue2",
+        "queue": "quieter-local-gmail-mailbox-automation-2",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue3",
+        "queue": "quieter-local-gmail-mailbox-automation-3",
+      },
+      {
         "binding": "GmailMailboxFreshQueue0",
         "queue": "quieter-local-gmail-mailbox-fresh-0",
       },
@@ -43,6 +59,30 @@
       },
     ],
     "consumers": [
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-0",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-1",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-2",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-3",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
       {
         "queue": "quieter-local-gmail-mailbox-fresh-0",
         "max_batch_size": 1,

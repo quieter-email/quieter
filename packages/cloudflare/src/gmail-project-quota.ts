@@ -7,6 +7,7 @@ import {
 } from "@quieter/orpc/gmail-work";
 import { DurableObject } from "cloudflare:workers";
 
+import { gmailDispatchUsesFreshQueue } from "./gmail-mailbox-scheduler";
 import type { GmailDispatch } from "./gmail-mailbox-scheduler";
 import { reportWorkerError } from "./worker-runtime";
 
@@ -171,7 +172,7 @@ const consumeQuota = async (input: {
 
 export const withProjectGmailQuota = async <T>(
   env: Pick<Env, "GmailProjectQuota">,
-  dispatch: Pick<GmailDispatch, "mailboxId" | "task">,
+  dispatch: GmailDispatch,
   execute: () => Promise<T>
 ) => {
   const digest = new Uint8Array(
@@ -190,10 +191,10 @@ export const withProjectGmailQuota = async <T>(
 
   const pause = async (kind: "gmail" | "model", delayMs: number) => {
     const now = Date.now();
-    if ((observedPause.get(kind) ?? 0) > now) {
+    const until = Math.ceil((now + delayMs) / 1000) * 1000;
+    if ((observedPause.get(kind) ?? 0) >= until) {
       return;
     }
-    const until = now + delayMs;
     observedPause.set(kind, until);
     for (const key of workerCredits.keys()) {
       if (key.startsWith(`${kind}:`)) {
@@ -225,10 +226,9 @@ export const withProjectGmailQuota = async <T>(
         if (pausedUntil > now) {
           throw new GmailBackgroundQuotaDeferredError(pausedUntil);
         }
-        const preferred =
-          dispatch.task === "discover" || dispatch.task === "fresh"
-            ? "fresh"
-            : "background";
+        const preferred = gmailDispatchUsesFreshQueue(dispatch)
+          ? "fresh"
+          : "background";
         const lane = purpose === "watch" ? "watch" : preferred;
         const choices: readonly QuotaLane[] =
           lane === "background" ? [lane] : [lane, "background"];
@@ -258,7 +258,11 @@ export const withProjectGmailQuota = async <T>(
             await pause("model", Math.max(10_000, retryAfterMs));
           },
           reserve: async () => {
-            if (dispatch.task !== "catchup") {
+            if (
+              dispatch.task !== "catchup" &&
+              dispatch.task !== "memory" &&
+              dispatch.task !== "importance"
+            ) {
               return;
             }
             const pausedUntil = observedPause.get("model") ?? 0;

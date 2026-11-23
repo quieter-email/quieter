@@ -16,6 +16,21 @@ import { requireSecretBinding, requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
+  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GOOGLE_CALENDAR_CLIENT_ID",
+  "GOOGLE_CALENDAR_CLIENT_SECRET",
+  "LINEAR_CLIENT_ID",
+  "LINEAR_CLIENT_SECRET",
+  "NOTION_CLIENT_ID",
+  "NOTION_CLIENT_SECRET",
+  "TODOIST_CLIENT_ID",
+  "TODOIST_CLIENT_SECRET",
+  "CLICKUP_CLIENT_ID",
+  "CLICKUP_CLIENT_SECRET",
+  "MICROSOFT_CLIENT_ID",
+  "MICROSOFT_CLIENT_SECRET",
+  "QUIETER_BACKGROUND_MODEL",
+
   "GMAIL_TOKEN_ENCRYPTION_KEY",
   "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
   "GOOGLE_GMAIL_CLIENT_ID",
@@ -103,6 +118,7 @@ export const createGmailResources = (
         },
         environment: {
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+          MAIL_UPDATES_URL: updates.url,
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
@@ -123,6 +139,7 @@ export const createGmailResources = (
           mailLiveUser,
           appDatabase,
           sentryDsnBinding,
+          requireSecretBinding(secretBindings, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
           ...processingSecretBindings,
         ],
         migrations: [
@@ -207,7 +224,6 @@ export const createGmailResources = (
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
-          ...processingSecretBindings,
         ],
         migrations: [
           { newSqliteClasses: ["GmailLiveSyncMailbox"], tag: "v1" },

@@ -391,9 +391,7 @@ describe("Cloudflare worker runtime", () => {
             { mailboxId: "recovered-fresh" },
             { mailboxId: "recovered-catchup" },
           ]),
-        pruneWork: async () => {
-          await Promise.resolve();
-        },
+        listAutomation: async () => await Promise.resolve([]),
       })
     ).resolves.toMatchObject({ failed: 0, maintained: 2 });
     expect(

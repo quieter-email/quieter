@@ -24,6 +24,13 @@ const acceptGmailJob = async (job: GmailJob, env: Env) => {
     });
     return;
   }
+  if ("kind" in job && job.kind === "automation") {
+    await gmailMailboxScheduler(env, job.mailboxId).wake(
+      job.mailboxId,
+      Object.fromEntries(job.tasks.map((task) => [task, now]))
+    );
+    return;
+  }
   if ("kind" in job && job.kind === "maintain") {
     await gmailMailboxScheduler(env, job.mailboxId).wake(job.mailboxId, {
       sync: now,

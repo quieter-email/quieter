@@ -183,7 +183,7 @@ export const runBilledAiRequest = async <Result>(input: {
         error.statusCode === 429
       ) {
         const retryAfter = error.responseHeaders?.["retry-after"];
-        const delay = Number(retryAfter);
+        const delay = retryAfter ? Number(retryAfter) : Number.NaN;
         const date =
           retryAfter === undefined ? Number.NaN : Date.parse(retryAfter);
         await providerAdmission.observeRateLimit(

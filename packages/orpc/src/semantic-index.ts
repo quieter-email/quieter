@@ -11,6 +11,8 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import { advanceSemanticMailImport } from "./semantic-mail-import";
 import { indexSemanticSources } from "./semantic-search";
@@ -21,10 +23,9 @@ export {
 } from "./semantic-index-request";
 
 export const processPendingSemanticIndexes = async (
-  input: {
+  input: MailboxAutomationScope & {
     allowLocal?: boolean;
     limit?: number;
-    mailboxId?: string;
     userId?: string;
   } = {}
 ) => {
@@ -33,6 +34,7 @@ export const processPendingSemanticIndexes = async (
       allowLocal: z.boolean().default(false),
       limit: z.number().int().min(1).max(10).default(3),
       mailboxId: z.string().min(1).optional(),
+      provider: z.enum(["gmail", "managed"]).optional(),
       userId: z.string().min(1).optional(),
     })
     .parse(input);
@@ -64,9 +66,13 @@ export const processPendingSemanticIndexes = async (
     options.userId === undefined
       ? undefined
       : eq(semanticIndexRequest.userId, options.userId),
-    options.mailboxId === undefined
-      ? undefined
-      : eq(semanticIndexRequest.mailboxId, options.mailboxId)
+    mailboxAutomationFilter(semanticIndexRequest.mailboxId, options),
+    options.provider === "gmail"
+      ? or(
+          isNull(semanticIndexRequest.completedAt),
+          gt(semanticIndexRequest.requestedAt, semanticIndexRequest.completedAt)
+        )
+      : undefined
   );
   const pending = await db
     .select()
@@ -149,12 +155,21 @@ export const processPendingSemanticIndexes = async (
         userId: request.userId,
       });
       const complete = coverage.complete && imported;
+      const finishedAt = new Date();
+      const completedAt =
+        options.provider === "gmail"
+          ? sql`case when ${semanticIndexRequest.requestedAt} > ${claimed.requestedAt.toISOString()}::timestamp
+          then null else ${finishedAt.toISOString()}::timestamp end`
+          : finishedAt;
       const completed = await db
         .update(semanticIndexRequest)
         .set({
           attemptCount: 0,
-          availableAt: new Date(Date.now() + (complete ? 300_000 : 0)),
-          completedAt: complete ? new Date() : null,
+          availableAt: new Date(
+            finishedAt.getTime() +
+              (complete && options.provider !== "gmail" ? 300_000 : 0)
+          ),
+          completedAt: complete ? completedAt : null,
           indexedSources: coverage.indexedSources,
           lastError: null,
           leaseExpiresAt: null,

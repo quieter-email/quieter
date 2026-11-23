@@ -55,6 +55,7 @@ import {
   getGmailMailboxCapacity,
   withGmailMailboxCapacity,
 } from "./gmail-capacity";
+import { signalGmailMailbox } from "./gmail-mailbox-signal";
 import type {
   MailboxGroup,
   MailboxGroupMetadata,
@@ -1269,6 +1270,7 @@ export const completeGmailOAuth = async (input: {
     tokenInfo,
     tokenResponse,
   });
+  await signalGmailMailbox({ kind: "sync", mailboxId });
   try {
     const { queueMailboxMemoryBootstrap } =
       await import("../ai-memory-capture");
@@ -1329,6 +1331,7 @@ export const disconnectGmailMailbox = async (input: {
         )
       );
   });
+  await signalGmailMailbox({ kind: "sync", mailboxId: input.mailboxId });
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 

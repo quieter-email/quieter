@@ -2339,6 +2339,7 @@ export const processPendingAiMemoryEvents = async (
   input: MailboxAutomationScope & {
     allowLocal?: boolean;
     userId?: string;
+    unscopedOnly?: boolean;
     limit?: number;
   } = {}
 ) => {
@@ -2349,6 +2350,9 @@ export const processPendingAiMemoryEvents = async (
   const cutoff = new Date(Date.now() - AI_MEMORY_EVENT_LEASE_MS);
   const eligible = and(
     mailboxAutomationFilter(userAiContextEvent.mailboxId, input),
+    input.unscopedOnly === true
+      ? isNull(userAiContextEvent.mailboxId)
+      : undefined,
     isNull(userAiContextEvent.mergedAt),
     isNull(userAiContextEvent.skippedAt),
     eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
