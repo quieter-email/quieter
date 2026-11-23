@@ -4,7 +4,7 @@ import { production, stage } from "./stage";
 
 export const createMailEventRelay = (
   dispatchUrl: $util.Input<string>,
-  signingSecret: sst.Secret
+  signingKey: $util.Output<string>
 ) => {
   const env = createSstConfigEnv({ production });
   const replicationSecret = new sst.Secret("MailEventReplicationUrl");
@@ -22,7 +22,7 @@ export const createMailEventRelay = (
   const signing = new aws.ssm.Parameter("MailEventRelaySigningBinding", {
     name: `/${$app.name}/${stage}/mail-event-relay/signing-key`,
     type: "SecureString",
-    value: signingSecret.value,
+    value: signingKey,
   });
 
   const vpc = new sst.aws.Vpc("MailEventRelayVpc");

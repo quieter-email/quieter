@@ -13,15 +13,17 @@ CREATE TABLE "mailDispatchSettings" (
 --> statement-breakpoint
 CREATE INDEX "mail_dispatch_event_shard_created_idx" ON "mailDispatchEvent" ("shard","createdAt","id");
 --> statement-breakpoint
-CREATE FUNCTION enqueue_mail_dispatch_event(event jsonb) RETURNS void
+CREATE FUNCTION enqueue_mail_dispatch_event(event jsonb) RETURNS boolean
 LANGUAGE plpgsql AS $$
 DECLARE
-  scope text := coalesce(event->>'mailboxId', event->'update'->>'mailboxId', event->>'scopeKey', event->>'kind');
+  scope text := coalesce(event->>'mailboxId', event->'update'->>'mailboxId', (event->>'task') || ':' || (event->>'scopeKey'), event->>'kind');
 BEGIN
   IF EXISTS (SELECT 1 FROM public."mailDispatchSettings" WHERE key = 'mail-dispatch-v1' AND enabled) THEN
     INSERT INTO public."mailDispatchEvent" (payload, shard)
     VALUES (event, (hashtextextended(scope, 0) & 3)::int);
+    RETURN true;
   END IF;
+  RETURN false;
 END;
 $$;
 --> statement-breakpoint
@@ -40,6 +42,7 @@ LANGUAGE plpgsql AS $$
 BEGIN
   IF NEW.key = 'mail-dispatch-v1' AND NEW.enabled
      AND (TG_OP = 'INSERT' OR NOT OLD.enabled) THEN
+    DELETE FROM public."gmailSchedulerEnrollment" WHERE key = 'gmail-mail-dispatch-v1';
     PERFORM public.enqueue_mail_dispatch_event('{"kind":"gmail-enrollment"}'::jsonb);
     PERFORM public.enqueue_mail_dispatch_event('{"kind":"maintenance-enrollment"}'::jsonb);
   END IF;
@@ -163,3 +166,23 @@ $$;
 CREATE TRIGGER dispatch_gmail_promoted_message_work AFTER UPDATE ON "gmailMessageWork"
 REFERENCING OLD TABLE AS previous_work NEW TABLE AS next_work FOR EACH STATEMENT
 EXECUTE FUNCTION dispatch_gmail_promoted_message_work();
+--> statement-breakpoint
+CREATE FUNCTION dispatch_gmail_memory_on_learning_enabled() RETURNS trigger
+LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' OR OLD."activeLearningEnabled" IS NOT TRUE THEN
+    PERFORM public.enqueue_mail_dispatch_event(jsonb_build_object(
+      'kind','gmail','mailboxId',id,'tasks',jsonb_build_array('memory')
+    ))
+    FROM public.mailbox
+    WHERE provider = 'gmail' AND status = 'connected'
+      AND "ownerUserId" = substring(NEW."scopeKey" FROM 6);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+--> statement-breakpoint
+CREATE TRIGGER dispatch_gmail_memory_on_learning_enabled AFTER INSERT OR UPDATE OF "activeLearningEnabled"
+ON "aiMemoryScopeConfig" FOR EACH ROW
+WHEN (NEW."activeLearningEnabled" AND NEW."scopeKey" LIKE 'user:%')
+EXECUTE FUNCTION dispatch_gmail_memory_on_learning_enabled();

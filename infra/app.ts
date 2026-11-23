@@ -1,6 +1,8 @@
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
+import { createMailDispatchWorker } from "./mail-dispatch";
+import { createMailEventRelay } from "./mail-event-relay";
 import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createMailUpdateResources } from "./mail-updates";
 import { createDeploymentContext } from "./runtime";
@@ -37,6 +39,30 @@ export const createInfrastructure = async (input: {
     appDatabase,
     updates
   );
+  if (
+    context.env.QUIETER_GMAIL_EVENTS_ENABLED === true &&
+    (!context.gmailPubSubEnabled ||
+      context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED !== true)
+  ) {
+    throw new Error(
+      "Gmail event cutover requires Gmail Pub/Sub and the mail event relay."
+    );
+  }
+  if (context.env.QUIETER_MAIL_EVENT_RELAY_ENABLED === true) {
+    const dispatchUrl = createMailDispatchWorker({
+      appDatabase,
+      gmailProcessor: gmail.processingWorker,
+      maintenanceScript: mailMaintenance.nodes.worker.scriptName,
+      secretBindings,
+      secretResources,
+      updates,
+    });
+    createMailEventRelay(
+      dispatchUrl,
+      requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET")
+        .value
+    );
+  }
   const mail = await createMailResources(context, secretResources, updates.url);
   const web = createWeb(
     appDatabase,

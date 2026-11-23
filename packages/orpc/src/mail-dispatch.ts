@@ -4,6 +4,7 @@ import {
   gmailSchedulerEnrollment,
   mailbox,
   mailDispatchEvent,
+  mailDispatchSettings,
 } from "@quieter/database/schema";
 import { mailDispatchEventSchema } from "@quieter/mail/dispatch";
 import type { MailDispatchEvent } from "@quieter/mail/dispatch";
@@ -13,9 +14,10 @@ export const enqueueMailDispatch = async (
   tx: DatabaseExecutor,
   event: MailDispatchEvent
 ) => {
-  await tx.execute(
-    sql`select enqueue_mail_dispatch_event(${JSON.stringify(mailDispatchEventSchema.parse(event))}::text::jsonb)`
+  const [outcome] = await tx.execute<{ queued: boolean }>(
+    sql`select enqueue_mail_dispatch_event(${JSON.stringify(mailDispatchEventSchema.parse(event))}::text::jsonb) as queued`
   );
+  return outcome?.queued;
 };
 
 export const getMailDispatchEvent = async (eventId: string) => {
@@ -34,6 +36,14 @@ export const completeMailDispatchEvent = async (eventId: string) => {
 
 export const enrollGmailDispatch = async () => {
   await db.transaction(async (tx) => {
+    const [settings] = await tx
+      .select({ enabled: mailDispatchSettings.enabled })
+      .from(mailDispatchSettings)
+      .where(eq(mailDispatchSettings.key, "mail-dispatch-v1"))
+      .for("share");
+    if (!settings?.enabled) {
+      return;
+    }
     const key = "gmail-mail-dispatch-v1";
     await tx
       .insert(gmailSchedulerEnrollment)
