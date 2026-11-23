@@ -5,15 +5,14 @@ import {
   gmailMessageWork,
   gmailWatchState,
   mailbox,
-  organization,
 } from "@quieter/database/schema";
 import {
   and,
   asc,
-  count,
   desc,
   eq,
   gt,
+  inArray,
   isNotNull,
   isNull,
   lte,
@@ -24,33 +23,47 @@ import {
 export type GmailWorkPriority = typeof gmailMessageWork.$inferSelect.source;
 export type GmailWorkClaim =
   | { status: "claimed"; work: typeof gmailMessageWork.$inferSelect }
-  | { status: "empty" }
-  | { status: "capacity_busy"; activeLeases: number; retryAt: Date };
+  | { status: "empty" };
 // The queue's maximum invocation lifetime is 15 minutes.
 const WORK_LEASE_MS = 16 * 60_000;
 const unfinished = or(
   isNull(gmailMessageWork.completedAt),
   isNotNull(gmailMessageWork.lastError),
   and(
-    eq(gmailMessageWork.triggerActions, true),
+    sql`${gmailMessageWork.triggerActions} is true`,
     isNull(gmailMessageWork.actionsCompletedAt)
   )
 );
 
-export const enqueueGmailMessageWork = async (input: {
-  mailboxId: string;
-  messageIds: string[];
-  source: GmailWorkPriority;
-  triggerActions?: boolean;
-  notificationReceivedAt?: Date;
-  resumeCritical?: boolean;
-}) => {
+const matchesWorkPriority = (priority: GmailWorkPriority) =>
+  priority === "fresh"
+    ? or(
+        eq(gmailMessageWork.source, "fresh"),
+        sql`${gmailMessageWork.liveArrival} is true`
+      )
+    : and(
+        eq(gmailMessageWork.source, "catchup"),
+        sql`${gmailMessageWork.liveArrival} is not true`
+      );
+
+export const enqueueGmailMessageWork = async (
+  input: {
+    mailboxId: string;
+    messageIds: string[];
+    source: GmailWorkPriority;
+    triggerActions?: boolean;
+    notificationReceivedAt?: Date;
+    liveArrival?: boolean;
+    resumeCritical?: boolean;
+  },
+  client: Pick<typeof db, "insert"> = db
+) => {
   const now = new Date();
   const messages = [...new Set(input.messageIds)];
   if (messages.length === 0) {
     return;
   }
-  await db
+  await client
     .insert(gmailMessageWork)
     .values(
       messages.map((gmailMessageId, position) => ({
@@ -58,6 +71,7 @@ export const enqueueGmailMessageWork = async (input: {
         dueAt: now,
         gmailMessageId,
         id: randomUUID(),
+        liveArrival: input.liveArrival,
         mailboxId: input.mailboxId,
         notificationReceivedAt: input.notificationReceivedAt,
         position,
@@ -75,6 +89,7 @@ export const enqueueGmailMessageWork = async (input: {
               dueAt: sql`least(${gmailMessageWork.dueAt}, excluded."dueAt")`,
             }
           : {}),
+        liveArrival: sql`${gmailMessageWork.liveArrival} is true or excluded."liveArrival" is true`,
         notificationReceivedAt: sql`least(${gmailMessageWork.notificationReceivedAt}, excluded."notificationReceivedAt")`,
         position: sql`case when excluded.source = 'fresh' then excluded.position else ${gmailMessageWork.position} end`,
         priorityAt: sql`case when excluded.source = 'fresh' then excluded."priorityAt" else ${gmailMessageWork.priorityAt} end`,
@@ -88,7 +103,7 @@ export const enqueueGmailMessageWork = async (input: {
 
 export const getGmailMessageWorkWake = async (input: {
   priority: GmailWorkPriority;
-  mailboxId?: string;
+  mailboxId: string;
 }) => {
   const [next] = await db
     .select({
@@ -97,16 +112,17 @@ export const getGmailMessageWorkWake = async (input: {
       providerRetryAt: gmailWatchState.providerRetryAt,
     })
     .from(gmailMessageWork)
+    .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
     .leftJoin(
       gmailWatchState,
       eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
     )
     .where(
       and(
-        eq(gmailMessageWork.source, input.priority),
-        input.mailboxId === undefined
-          ? undefined
-          : eq(gmailMessageWork.mailboxId, input.mailboxId),
+        matchesWorkPriority(input.priority),
+        eq(mailbox.status, "connected"),
+        isNotNull(mailbox.ownerUserId),
+        eq(gmailMessageWork.mailboxId, input.mailboxId),
         unfinished
       )
     )
@@ -132,66 +148,47 @@ export const getGmailMessageWorkWake = async (input: {
   };
 };
 
+export const hasPendingFreshGmailWork = async (
+  mailboxId: string,
+  client: Pick<typeof db, "select"> = db
+) => {
+  const now = new Date();
+  const [pending] = await client
+    .select({ id: gmailMessageWork.id })
+    .from(gmailMessageWork)
+    .where(
+      and(
+        eq(gmailMessageWork.mailboxId, mailboxId),
+        matchesWorkPriority("fresh"),
+        unfinished,
+        lte(gmailMessageWork.dueAt, now)
+      )
+    )
+    .limit(1);
+  return pending !== undefined;
+};
+
 export const claimGmailMessageWork = async (input: {
   priority: GmailWorkPriority;
-  mailboxId?: string;
+  mailboxId: string;
 }): Promise<GmailWorkClaim> =>
   await db.transaction(
     async (tx): Promise<GmailWorkClaim> => {
-      let now = new Date();
-      if (input.priority === "fresh") {
-        await tx.execute(
-          sql`select pg_advisory_xact_lock(hashtextextended('gmail-message-work:fresh-admission', 0))`
-        );
-        // This statement starts after the lock, unlike transaction-scoped now().
-        const [capacity] = await tx
-          .select({
-            activeLeases: count(),
-            now: sql<Date>`statement_timestamp() at time zone 'UTC'`.mapWith(
-              gmailMessageWork.dueAt
-            ),
-          })
-          .from(gmailMessageWork)
-          .where(
-            and(
-              eq(gmailMessageWork.source, "fresh"),
-              gt(
-                gmailMessageWork.leaseUntil,
-                sql`statement_timestamp() at time zone 'UTC'`
-              )
-            )
-          );
-        if (capacity === undefined) {
-          throw new Error("Gmail work admission did not return its capacity.");
-        }
-        ({ now } = capacity);
-        if (capacity.activeLeases >= 4) {
-          return {
-            activeLeases: capacity.activeLeases,
-            retryAt: new Date(now.getTime() + 5000),
-            status: "capacity_busy",
-          };
-        }
-      }
+      const now = new Date();
       const [candidate] = await tx
-        .select({
-          account: mailbox,
-          billingOwnerUserId: organization.billingOwnerUserId,
-          work: gmailMessageWork,
-        })
+        .select({ work: gmailMessageWork })
         .from(gmailMessageWork)
         .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
         .leftJoin(
           gmailWatchState,
           eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
         )
-        .leftJoin(organization, eq(organization.id, mailbox.organizationId))
         .where(
           and(
-            eq(gmailMessageWork.source, input.priority),
-            input.mailboxId === undefined
-              ? undefined
-              : eq(gmailMessageWork.mailboxId, input.mailboxId),
+            matchesWorkPriority(input.priority),
+            eq(mailbox.status, "connected"),
+            isNotNull(mailbox.ownerUserId),
+            eq(gmailMessageWork.mailboxId, input.mailboxId),
             unfinished,
             or(
               isNull(gmailWatchState.providerRetryAt),
@@ -213,37 +210,11 @@ export const claimGmailMessageWork = async (input: {
       if (candidate === undefined) {
         return { status: "empty" };
       }
-      const billingOwnerUserId =
-        candidate.billingOwnerUserId ?? candidate.account.ownerUserId;
-      const accountPredicate =
-        billingOwnerUserId === null
-          ? eq(mailbox.organizationId, candidate.account.organizationId)
-          : sql`coalesce((select owner."billingOwnerUserId" from organization owner where owner.id = ${mailbox.organizationId}), ${mailbox.ownerUserId}) = ${billingOwnerUserId}`;
-      if (input.priority === "catchup") {
-        const [fresh] = await tx
-          .select({ id: gmailMessageWork.id })
-          .from(gmailMessageWork)
-          .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
-          .leftJoin(
-            gmailWatchState,
-            eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
-          )
-          .where(
-            and(
-              accountPredicate,
-              eq(gmailMessageWork.source, "fresh"),
-              unfinished,
-              or(
-                isNull(gmailWatchState.providerRetryAt),
-                lte(gmailWatchState.providerRetryAt, now)
-              ),
-              lte(gmailMessageWork.dueAt, now)
-            )
-          )
-          .limit(1);
-        if (fresh !== undefined) {
-          return { status: "empty" };
-        }
+      if (
+        input.priority === "catchup" &&
+        (await hasPendingFreshGmailWork(candidate.work.mailboxId, tx))
+      ) {
+        return { status: "empty" };
       }
       const [watch] = await tx
         .select()
@@ -290,15 +261,20 @@ export const finishGmailMessageWork = async (input: {
   actionsComplete: boolean;
   retryAt: Date | null;
   lastError: string | null;
+  suspend?: boolean;
 }) => {
   const now = new Date();
   await db
     .update(gmailMessageWork)
     .set({
-      ...(input.criticalComplete ? { completedAt: now } : {}),
-      ...(input.actionsComplete ? { actionsCompletedAt: now } : {}),
-      dueAt: input.retryAt ?? now,
-      lastError: input.lastError,
+      ...(input.suspend === true
+        ? {}
+        : {
+            ...(input.criticalComplete ? { completedAt: now } : {}),
+            ...(input.actionsComplete ? { actionsCompletedAt: now } : {}),
+            dueAt: input.retryAt ?? now,
+            lastError: input.lastError,
+          }),
       leaseToken: null,
       leaseUntil: null,
       updatedAt: now,
@@ -312,72 +288,31 @@ export const finishGmailMessageWork = async (input: {
     );
 };
 
-export const hasPendingFreshGmailWorkForAccount = async (mailboxId: string) => {
-  const [account] = await db
-    .select({
-      account: mailbox,
-      billingOwnerUserId: organization.billingOwnerUserId,
-    })
-    .from(mailbox)
-    .leftJoin(organization, eq(organization.id, mailbox.organizationId))
-    .where(eq(mailbox.id, mailboxId))
-    .limit(1);
-  if (account === undefined) {
-    return false;
-  }
-  const [pending] = await db
+export const pruneCompletedGmailMessageWork = async (
+  mailboxId: string,
+  limit = 2000
+) => {
+  const expired = db
     .select({ id: gmailMessageWork.id })
     .from(gmailMessageWork)
-    .innerJoin(mailbox, eq(mailbox.id, gmailMessageWork.mailboxId))
-    .leftJoin(
-      gmailWatchState,
-      eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
-    )
     .where(
       and(
-        (account.billingOwnerUserId ?? account.account.ownerUserId) === null
-          ? eq(mailbox.organizationId, account.account.organizationId)
-          : sql`coalesce((select owner."billingOwnerUserId" from organization owner where owner.id = ${mailbox.organizationId}), ${mailbox.ownerUserId}) = ${account.billingOwnerUserId ?? account.account.ownerUserId}`,
-        eq(gmailMessageWork.source, "fresh"),
-        unfinished,
+        eq(gmailMessageWork.mailboxId, mailboxId),
+        isNotNull(gmailMessageWork.completedAt),
+        isNull(gmailMessageWork.lastError),
         or(
-          isNull(gmailWatchState.providerRetryAt),
-          lte(gmailWatchState.providerRetryAt, new Date())
+          sql`${gmailMessageWork.triggerActions} is false`,
+          isNotNull(gmailMessageWork.actionsCompletedAt)
         ),
-        or(
-          lte(gmailMessageWork.dueAt, new Date()),
-          gt(gmailMessageWork.leaseUntil, new Date())
-        )
+        lte(gmailMessageWork.updatedAt, sql`now() - interval '30 days'`)
       )
     )
-    .limit(1);
-  return pending !== undefined;
-};
-
-export const listGmailMessageWorkWakeJobs = async (limit = 500) => {
-  const rows = await db
-    .select({
-      mailboxId: gmailMessageWork.mailboxId,
-      nextWakeAt:
-        sql<Date>`min(greatest(${gmailMessageWork.dueAt}, ${gmailMessageWork.leaseUntil}, ${gmailWatchState.providerRetryAt}))`.mapWith(
-          gmailMessageWork.dueAt
-        ),
-      priority: gmailMessageWork.source,
-    })
-    .from(gmailMessageWork)
-    .leftJoin(
-      gmailWatchState,
-      eq(gmailWatchState.mailboxId, gmailMessageWork.mailboxId)
-    )
-    .where(unfinished)
-    .groupBy(gmailMessageWork.mailboxId, gmailMessageWork.source)
-    .orderBy(
-      asc(
-        sql`min(greatest(${gmailMessageWork.dueAt}, ${gmailMessageWork.leaseUntil}, ${gmailWatchState.providerRetryAt}))`
-      )
-    )
-    .limit(limit);
-  return rows;
+    .orderBy(asc(gmailMessageWork.updatedAt))
+    .limit(limit)
+    .for("update", { skipLocked: true });
+  await db
+    .delete(gmailMessageWork)
+    .where(inArray(gmailMessageWork.id, expired));
 };
 
 export const getGmailMailboxProviderRetryAt = async (mailboxId: string) => {

@@ -1,0 +1,92 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "a02640a0-f6b3-4b60-befd-0f00837da411",
+  "prevIds": ["ea17bda0-cd93-401a-b50f-0edd4d7d1577"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "gmailSchedulerEnrollment"],
+      "writes": [
+        "s|tbl|public.gmailSchedulerEnrollment",
+        "n|tbl|public.gmailSchedulerEnrollment",
+        "e|tbl|public.gmailSchedulerEnrollment",
+        "n|rel|public.gmailSchedulerEnrollment",
+        "n|type|public.gmailSchedulerEnrollment",
+        "n|rel|public.gmailSchedulerEnrollment_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "gmailSchedulerEnrollment",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailSchedulerEnrollment",
+        "name": "key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailSchedulerEnrollment",
+        "name": "afterMailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailSchedulerEnrollment",
+        "name": "completedAt",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailSchedulerEnrollment",
+        "name": "gmailSchedulerEnrollment_pkey",
+        "columns": ["key"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

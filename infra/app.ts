@@ -1,6 +1,7 @@
 import { createAppDatabase } from "./database";
 import { createGmailResources } from "./gmail";
 import { createMailResources, mailReceiptRuleSetName } from "./mail";
+import { createMailDispatchWorker } from "./mail-dispatch";
 import { createMailMaintenanceResources } from "./mail-maintenance";
 import { createMailUpdateResources } from "./mail-updates";
 import { createDeploymentContext } from "./runtime";
@@ -22,7 +23,8 @@ export const createInfrastructure = async (input: {
   const updates = createMailUpdateResources(
     secretBindings,
     secretResources,
-    appDatabase
+    appDatabase,
+    context.releaseEnvironment.MAIL_DISPATCH_URL
   );
   const mailMaintenance = createMailMaintenanceResources(
     context,
@@ -37,11 +39,41 @@ export const createInfrastructure = async (input: {
     appDatabase,
     updates
   );
+  if (
+    context.env.QUIETER_GMAIL_EVENTS_ENABLED === true &&
+    (!context.gmailPubSubEnabled ||
+      context.env.QUIETER_MAIL_DISPATCH_ENABLED !== true)
+  ) {
+    throw new Error(
+      "Gmail event cutover requires Gmail Pub/Sub and the mail dispatch Worker."
+    );
+  }
+  if (
+    context.env.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED === true &&
+    context.env.QUIETER_MAIL_DISPATCH_ENABLED !== true
+  ) {
+    throw new Error(
+      "Mail maintenance event cutover requires the mail dispatch Worker."
+    );
+  }
+  if (context.env.QUIETER_MAIL_DISPATCH_ENABLED === true) {
+    createMailDispatchWorker({
+      appDatabase,
+      gmailProcessor: gmail.processingWorker,
+      maintenanceScript: mailMaintenance.worker.nodes.worker.scriptName,
+      secretBindings,
+      secretResources,
+      updates,
+    });
+  }
   const mail = await createMailResources(context, secretResources, updates.url);
   const web = createWeb(
     appDatabase,
     webSecretBindings,
     {
+      GMAIL_BODY_STORAGE_ENABLED: String(
+        context.env.GMAIL_BODY_STORAGE_ENABLED ?? false
+      ),
       GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
       MAIL_BUCKET: mail.mailBucket.name,
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,
@@ -51,6 +83,13 @@ export const createInfrastructure = async (input: {
       ...context.billingEnvironment,
       ...context.releaseEnvironment,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+      QUIETER_GMAIL_EVENTS_ENABLED: String(
+        context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+      ),
+      QUIETER_GMAIL_MAILBOX_LANES: String(context.gmailPubSubEnabled),
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: String(
+        context.env.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED === true
+      ),
       R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
       R2_BUCKET: context.env.R2_BUCKET ?? "",
       R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
@@ -70,7 +109,7 @@ export const createInfrastructure = async (input: {
       },
       workers: {
         ...gmail.actionWorkers,
-        mailMaintenance: mailMaintenance.nodes.worker.scriptName,
+        mailMaintenance: mailMaintenance.worker.nodes.worker.scriptName,
       },
     },
     gmailLiveSyncTokenSecretName: requireSecretResource(

@@ -10,9 +10,11 @@ import type {
 } from "@quieter/database/schema";
 import {
   gmailCaptureState,
+  gmailWatchState,
   gmailCredential,
   gmailOAuthState,
   mailbox,
+  mailboxChangeHead,
   mailboxAutomationSettings,
   mailboxDivisionGrant,
   mailboxGrant,
@@ -54,6 +56,7 @@ import {
   getGmailMailboxCapacity,
   withGmailMailboxCapacity,
 } from "./gmail-capacity";
+import { signalGmailMailbox } from "./gmail-mailbox-signal";
 import type {
   MailboxGroup,
   MailboxGroupMetadata,
@@ -678,17 +681,38 @@ export const listAccessibleGmailUnreadCounts = async (input: {
 };
 
 export const assertAccessibleMailbox = async (input: {
+  includeChangeVersion?: boolean;
   mailboxId: string;
   userId: string;
-}) => {
-  const [ownedGmailMailbox] = await db
+}): Promise<
+  Pick<
+    typeof mailbox.$inferSelect,
+    "contentRevision" | "id" | "organizationId" | "provider"
+  > & {
+    capabilities: ReturnType<typeof getMailboxCapabilities>;
+    mailChangeVersion?: bigint;
+  }
+> => {
+  const includeChangeVersion = input.includeChangeVersion === true;
+  const ownedMailbox = db
     .select({
       contentRevision: mailbox.contentRevision,
       id: mailbox.id,
+      mailChangeVersion: includeChangeVersion
+        ? mailboxChangeHead.version
+        : sql<null>`null`,
       organizationId: mailbox.organizationId,
       provider: mailbox.provider,
     })
-    .from(mailbox)
+    .from(mailbox);
+  const [ownedGmailMailbox] = await (
+    includeChangeVersion
+      ? ownedMailbox.leftJoin(
+          mailboxChangeHead,
+          eq(mailbox.id, mailboxChangeHead.mailboxId)
+        )
+      : ownedMailbox
+  )
     .where(
       and(
         eq(mailbox.id, input.mailboxId),
@@ -704,6 +728,9 @@ export const assertAccessibleMailbox = async (input: {
       capabilities: getMailboxCapabilities({
         provider: ownedGmailMailbox.provider,
       }),
+      mailChangeVersion: includeChangeVersion
+        ? (ownedGmailMailbox.mailChangeVersion ?? 0n)
+        : undefined,
     };
   }
 
@@ -1032,6 +1059,19 @@ const persistGmailOAuthMailbox = async (input: {
         })
         .onConflictDoNothing();
       await database
+        .insert(gmailWatchState)
+        .values({
+          createdAt: now,
+          historyId: input.historyId,
+          mailboxId: input.mailboxId,
+          schedulerRepairAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          set: { schedulerRepairAt: now },
+          target: gmailWatchState.mailboxId,
+        });
+      await database
         .insert(gmailCredential)
         .values({
           accessTokenExpiresAt: new Date(
@@ -1255,6 +1295,7 @@ export const completeGmailOAuth = async (input: {
     tokenInfo,
     tokenResponse,
   });
+  await signalGmailMailbox({ kind: "sync", mailboxId });
   try {
     const { queueMailboxMemoryBootstrap } =
       await import("../ai-memory-capture");
@@ -1315,6 +1356,7 @@ export const disconnectGmailMailbox = async (input: {
         )
       );
   });
+  await signalGmailMailbox({ kind: "sync", mailboxId: input.mailboxId });
   return { disconnected: true, mailboxId: input.mailboxId };
 };
 

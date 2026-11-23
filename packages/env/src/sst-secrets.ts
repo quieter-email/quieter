@@ -6,6 +6,7 @@ export const sstSecretNames = {
   CLOUDFLARE_ACCOUNT_ID: "CloudflareAccountId",
   CONNECTOR_TOKEN_ENCRYPTION_KEY: "ConnectorTokenEncryptionKey",
   DATABASE_URL: "DatabaseUrl",
+  GMAIL_BODY_ENCRYPTION_KEY: "GmailBodyEncryptionKey",
   GMAIL_CREDENTIAL_ROTATION_TOKEN: "GmailCredentialRotationToken",
   GMAIL_LIVE_SYNC_TOKEN_SECRET: "GmailLiveSyncTokenSecret",
   GMAIL_TOKEN_ENCRYPTION_KEY: "GmailTokenEncryptionKey",

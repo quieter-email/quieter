@@ -132,9 +132,9 @@ For Pro mailboxes:
 
 1. Gmail sends an authenticated notification to the Cloudflare ingress.
 2. The ingress validates the Google identity and processes the mailbox history before acknowledging Pub/Sub. A busy mailbox, transient failure, or remaining history page returns a retryable response to Google so backlog work continues.
-3. Up to four messages from a history page are processed concurrently; mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
+3. Up to eight queued messages from history recovery or catch-up are processed concurrently, while fresh mail keeps its separate admission path and preempts catch-up claims. Mailbox leases and history cursors keep progress ordered. The worker then sends browser refresh hints.
 4. Focused browser tabs receive mailbox-dirty signals from the mailbox Durable Object and refresh immediately.
-5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The minute mail-maintenance worker retries managed code extraction and removes old processing records that contain no code.
+5. Scheduled Gmail maintenance processes due mailboxes with bounded concurrency for watch renewal and catch-up. The mail-maintenance Worker retries managed code extraction and removes aged processing records on their persisted deadlines, with a minute trigger available during rollout.
 
 The notification is a wake-up signal, not the source of truth.
 
@@ -235,7 +235,7 @@ The root [`sst.config.ts`](../sst.config.ts) owns only app-wide SST settings and
 - `secrets.ts` declares stage-aware `sst.Secret` resources and Cloudflare secret bindings.
 - `database.ts` owns the Cloudflare Hyperdrive binding.
 - `web.ts` owns the TanStack Start Worker and its common bindings.
-- `mail-maintenance.ts` owns the per-minute `MailMaintenance` cron. `packages/cloudflare/src/mail-maintenance-worker.ts` runs send recovery, storage cleanup, expired rate-limit bucket cleanup, and managed rule backfills.
+- `mail-maintenance.ts` owns the maintenance Worker and its compatibility trigger. Committed database changes register deadlines for send recovery, storage cleanup, retention, and managed jobs.
 - `mail.ts` owns SES receipt storage, processing, ingress, and send permissions.
 - `gmail.ts` owns Gmail live-sync and Pub/Sub resources on Cloudflare.
 - `app.ts` is the small stage-aware composition entry point; `types.ts` contains shared infra boundary types.

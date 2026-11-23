@@ -1,6 +1,7 @@
 import { demoReminderSession } from "@quieter/app/features/reminders/reminder-query";
 import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
+import { liveMailboxChangeVersions } from "@quieter/app/lib/mail/inbox-query/sync";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { appRuntime } from "@quieter/app/runtime";
 import { mailUpdateSchema } from "@quieter/mail/updates";
@@ -29,7 +30,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   const pending = new Map<
     string,
     {
+      countChanged: boolean;
       types: Set<MailUpdate["type"]>;
+      version?: string;
       revision?: string;
       threadIds: Set<string> | null;
     }
@@ -226,7 +229,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     const changes = new Map(pending);
     pending.clear();
     const syncedRevisions = new Set<string>();
+    const changeVersions = new Map<string, string>();
     for (const [mailboxId, change] of changes) {
+      if (change.version !== undefined && !changes.has("*")) {
+        changeVersions.set(mailboxId, change.version);
+      }
       if (
         change.revision !== undefined &&
         isRevisionSynced(mailboxId, change.revision)
@@ -235,6 +242,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       }
     }
     refreshing = true;
+    liveMailboxChangeVersions.set(queryClient, changeVersions);
     try {
       await queryClient.invalidateQueries(
         {
@@ -292,13 +300,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               );
             }
             if (root === "mailboxes") {
-              return [...changes.values()].some((change) =>
-                change.types.has("mailbox.changed")
+              return [...changes.values()].some(
+                (change) =>
+                  change.version === undefined &&
+                  change.types.has("mailbox.changed")
               );
             }
             if (root === "gmail-unread-counts") {
-              return [...changes.values()].some((change) =>
-                change.types.has("mailbox.changed")
+              return [...changes.values()].some(
+                (change) => change.countChanged
               );
             }
             const mailboxId = String(
@@ -313,11 +323,20 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               return false;
             }
             if (root === "message-thread") {
+              const change = changes.get("*") ?? changes.get(mailboxId);
+              if (
+                change?.threadIds &&
+                !change.threadIds.has(String(queryKey[3]))
+              ) {
+                return false;
+              }
               return (
                 queryClient.getQueryCache().findAll({
                   predicate: ({ queryKey: key }) =>
                     key[0] === "messages" &&
                     key[1] === mailboxId &&
+                    key[2] !== "drafts" &&
+                    key[3] === "" &&
                     key.at(-1) === "live-sync",
                   type: "active",
                 }).length === 0
@@ -353,9 +372,12 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             ].includes(String(root));
           },
         },
-        { cancelRefetch: false }
+        { cancelRefetch: changeVersions.size > 0 }
       );
     } finally {
+      if (liveMailboxChangeVersions.get(queryClient) === changeVersions) {
+        liveMailboxChangeVersions.delete(queryClient);
+      }
       refreshing = false;
       scheduleRefresh();
     }
@@ -364,20 +386,41 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     mailboxId = "*",
     type: MailUpdate["type"] = "mailbox.changed",
     revision?: string,
-    threadIds?: string[]
+    threadIds?: string[],
+    typedChange?: MailUpdate["change"]
   ) => {
-    if (type === "mailbox.changed") {
+    if (
+      (type === "mailbox.changed" && typedChange === undefined) ||
+      typedChange?.kinds.includes("verification-code.available") === true ||
+      typedChange?.kinds.includes("mailbox.reconcile") === true
+    ) {
       pendingCodeMailboxes.add(mailboxId);
       scheduleCodeRefresh();
     }
+    if (
+      typedChange?.kinds.every(
+        (kind) => kind === "verification-code.available"
+      ) === true
+    ) {
+      return;
+    }
+    const countChanged =
+      type === "mailbox.changed" &&
+      (typedChange === undefined ||
+        typedChange.kinds.some(
+          (kind) => kind.startsWith("message.") || kind === "mailbox.reconcile"
+        ));
     const change = pending.get(mailboxId);
     if (change === undefined) {
       pending.set(mailboxId, {
+        countChanged,
         revision,
         threadIds: threadIds === undefined ? null : new Set(threadIds),
         types: new Set([type]),
+        version: typedChange?.version,
       });
     } else {
+      change.countChanged ||= countChanged;
       if (change.threadIds !== null) {
         if (threadIds === undefined) {
           change.threadIds = null;
@@ -388,6 +431,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         }
       }
       if (type === "mailbox.changed") {
+        if (typedChange === undefined) {
+          change.version = undefined;
+        } else if (
+          !change.types.has(type) ||
+          (change.version !== undefined &&
+            BigInt(typedChange.version) > BigInt(change.version))
+        ) {
+          change.version = typedChange.version;
+        }
         change.revision =
           revision !== undefined &&
           (!change.types.has(type) ||
@@ -515,7 +567,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             event.data.mailboxId,
             event.data.type,
             event.data.revision,
-            event.data.threadIds
+            event.data.threadIds,
+            event.data.change
           );
         } catch {
           /* Ignore malformed frames. */

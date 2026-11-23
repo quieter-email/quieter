@@ -11,6 +11,7 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "drizzle-orm": "catalog:",
     "postgres": "^4.1.1",
     "sst": "^4.17.2"

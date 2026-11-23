@@ -11,6 +11,15 @@ on:
         required: false
         default: false
         type: boolean
+      mail_event_dispatch:
+        description: Enable committed dispatch or disable it after restoring fallback schedules
+        required: false
+        default: unchanged
+        type: choice
+        options:
+          - unchanged
+          - enable
+          - disable
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -148,7 +157,13 @@ jobs:
       POLAR_SANDBOX: ${{ vars.POLAR_SANDBOX }}
       QUIETER_AUTH_MAIL_MODE: ${{ vars.QUIETER_AUTH_MAIL_MODE }}
       QUIETER_AUTH_MAIL_SENDER: ${{ vars.QUIETER_AUTH_MAIL_SENDER }}
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: ${{ vars.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE }}
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: ${{ vars.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE }}
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: ${{ vars.QUIETER_GMAIL_AI_AUTOMATION_ENABLED }}
+      GMAIL_BODY_STORAGE_ENABLED: ${{ vars.GMAIL_BODY_STORAGE_ENABLED }}
+      QUIETER_GMAIL_EVENTS_ENABLED: ${{ vars.QUIETER_GMAIL_EVENTS_ENABLED }}
+      QUIETER_MAIL_DISPATCH_ENABLED: ${{ vars.QUIETER_MAIL_DISPATCH_ENABLED }}
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: ${{ vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED }}
       QUIETER_PREVIEW_PERSONAS_ENABLED: ${{ vars.QUIETER_PREVIEW_PERSONAS_ENABLED }}
       R2_ACCOUNT_ID: ${{ vars.R2_ACCOUNT_ID }}
       R2_BUCKET: ${{ vars.R2_BUCKET }}
@@ -273,11 +288,32 @@ jobs:
           fi
           vp exec node packages/database/scripts/run-personal-action-cutover.ts assert --build-id "$GITHUB_SHA"
 
+      - name: Check for old mail relay replication slots
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: vp exec node packages/database/scripts/mail-event-cutover.ts verify
+
       - name: Apply production database migrations
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
+
+      - name: Check mail event cutover
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: |
+          set -euo pipefail
+          if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
+            vp exec node packages/database/scripts/mail-event-cutover.ts verify-disabled
+            exit
+          fi
+          scopes=()
+          [[ "$QUIETER_GMAIL_EVENTS_ENABLED" != true ]] || scopes+=(gmail)
+          [[ "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" != true ]] || scopes+=(maintenance)
+          vp exec node packages/database/scripts/mail-event-cutover.ts verify "$(IFS=, ; echo "${scopes[*]}")"
 
       - name: Bootstrap explicitly authorized account access
         if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
@@ -304,6 +340,33 @@ jobs:
       - name: Deploy prepared build with SST
         id: deploy
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
+
+      - name: Verify hosted mail dispatch
+        if: vars.QUIETER_MAIL_DISPATCH_ENABLED == 'true'
+        timeout-minutes: 2
+        run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email --dispatch
+
+      - name: Change committed mail dispatch
+        if: github.event_name == 'workflow_dispatch' && inputs.mail_event_dispatch != 'unchanged'
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          MAIL_EVENT_DISPATCH_OPERATION: ${{ inputs.mail_event_dispatch }}
+        run: |
+          set -euo pipefail
+          if [[ "$MAIL_EVENT_DISPATCH_OPERATION" == disable ]]; then
+            if [[ "$QUIETER_GMAIL_EVENTS_ENABLED" == true || "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" == true ]]; then
+              echo "Restore the fallback schedules before disabling committed dispatch." >&2
+              exit 1
+            fi
+            vp exec node packages/database/scripts/mail-event-cutover.ts disable
+          else
+            if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
+              echo "Enable the Cloudflare mail dispatch Worker before activating events." >&2
+              exit 1
+            fi
+            vp exec node packages/database/scripts/mail-event-cutover.ts enable gmail
+          fi
 
       - name: Disable direct private release URLs
         run: vp exec node scripts/check-action-deployment.ts secure-private-releases

@@ -1,0 +1,100 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "1f93f9c2-6910-42b0-bdf6-9800f9520869",
+  "prevIds": ["cff640aa-a416-457f-a9db-ce8d4f4f5021"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "mailDispatchEvent",
+        "dispatchAfter"
+      ],
+      "writes": [
+        "s|col|public.mailDispatchEvent.dispatchAfter",
+        "n|col|public.mailDispatchEvent.dispatchAfter",
+        "e|col|public.mailDispatchEvent.dispatchAfter"
+      ],
+      "reads": ["n|tbl|public.mailDispatchEvent", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailDispatchEvent",
+        "mail_dispatch_event_shard_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_dispatch_event_shard_due_idx",
+        "n|idx|public.mail_dispatch_event_shard_due_idx",
+        "e|idx|public.mail_dispatch_event_shard_due_idx",
+        "n|rel|public.mail_dispatch_event_shard_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailDispatchEvent",
+        "n|sch|public",
+        "n|col|public.mailDispatchEvent.shard",
+        "n|col|public.mailDispatchEvent.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "dispatchAfter",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "mail_dispatch_event_shard_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "shard",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "coalesce(\"dispatchAfter\", \"createdAt\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}
