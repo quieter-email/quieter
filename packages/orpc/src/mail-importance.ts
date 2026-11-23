@@ -64,6 +64,8 @@ import {
 import { getMailboxMemoryActor } from "./ai-memory-capture";
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
 import { publishMailUpdate } from "./mail-updates";
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import {
   parseAbsoluteDate,
@@ -578,7 +580,10 @@ export const setMailImportance = async (input: {
   };
 };
 
-export const reportPendingMailImportanceUsage = async (mailboxId?: string) => {
+export const reportPendingMailImportanceUsage = async (
+  mailboxId?: string,
+  provider?: MailboxAutomationScope["provider"]
+) => {
   const attempts = await db
     .select()
     .from(mailImportanceAttempt)
@@ -586,7 +591,10 @@ export const reportPendingMailImportanceUsage = async (mailboxId?: string) => {
       and(
         isNull(mailImportanceAttempt.usageReportedAt),
         isNotNull(mailImportanceAttempt.usage),
-        mailboxId ? eq(mailImportanceAttempt.mailboxId, mailboxId) : undefined
+        mailboxAutomationFilter(mailImportanceAttempt.mailboxId, {
+          mailboxId,
+          provider,
+        })
       )
     )
     .orderBy(
@@ -626,10 +634,9 @@ export const reportPendingMailImportanceUsage = async (mailboxId?: string) => {
   }
 };
 
-export const processPendingMailImportance = async (
-  input: { mailboxId?: string; limit?: number } = {}
+export const backfillMissingMailImportanceWork = async (
+  input: MailboxAutomationScope & { limit?: number } = {}
 ) => {
-  await reportPendingMailImportanceUsage(input.mailboxId);
   const limit = Math.min(input.limit ?? 4, 20);
   const boxes = await db
     .select({ id: mailbox.id })
@@ -637,6 +644,9 @@ export const processPendingMailImportance = async (
     .where(
       and(
         input.mailboxId ? eq(mailbox.id, input.mailboxId) : undefined,
+        input.provider === undefined
+          ? undefined
+          : eq(mailbox.provider, input.provider),
         sql`(
     exists (select 1 from ${gmailCapturedMessage} c where c."mailboxId" = ${mailbox.id} and c."deletedAt" is null and c.source <> 'search' and not (c.snapshot->'labelIds' ?| array['SENT','DRAFT']) and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = c."mailboxId" and i."messageId" = c."messageId"))
     or exists (select 1 from ${managedMailMessage} m where m."mailboxId" = ${mailbox.id} and m.direction = 'inbound' and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = m."mailboxId" and i."messageId" = m.id))
@@ -711,6 +721,16 @@ export const processPendingMailImportance = async (
       });
     }
   }
+};
+
+export const processPendingMailImportance = async (
+  input: MailboxAutomationScope & { limit?: number; backfill?: boolean } = {}
+) => {
+  await reportPendingMailImportanceUsage(input.mailboxId, input.provider);
+  if (input.backfill !== false) {
+    await backfillMissingMailImportanceWork(input);
+  }
+  const limit = Math.min(input.limit ?? 4, 20);
   for (let index = 0; index < limit; index += 1) {
     const job = await db.transaction(async (tx) => {
       const [row] = await tx
@@ -718,9 +738,7 @@ export const processPendingMailImportance = async (
         .from(mailMessageImportance)
         .where(
           and(
-            input.mailboxId
-              ? eq(mailMessageImportance.mailboxId, input.mailboxId)
-              : undefined,
+            mailboxAutomationFilter(mailMessageImportance.mailboxId, input),
             inArray(mailMessageImportance.state, [
               "pending",
               "processing",
@@ -908,7 +926,7 @@ export const processPendingMailImportance = async (
       }
     }
   }
-  await reportPendingMailImportanceUsage(input.mailboxId);
+  await reportPendingMailImportanceUsage(input.mailboxId, input.provider);
 };
 
 export const parseCapturedImportanceSearch = (

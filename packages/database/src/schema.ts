@@ -735,6 +735,14 @@ export const userAiContextEvent = pgTable(
       table.mergedAt,
       table.createdAt
     ),
+    index("user_ai_context_event_automation_due_idx")
+      .on(
+        sql`greatest(${table.updatedAt}, ${table.processingAt})`,
+        table.mailboxId
+      )
+      .where(
+        sql`${table.mergedAt} is null and ${table.skippedAt} is null and ${table.metadata}->>'memoryScope' = 'user'`
+      ),
     index("user_ai_context_event_mailbox_created_idx").on(
       table.mailboxId,
       table.createdAt
@@ -1053,6 +1061,18 @@ export const aiMemoryMailboxState = pgTable(
       "ai_memory_mailbox_state_count_check",
       sql`${table.receivedCount} >= 0 and ${table.sentCount} >= 0`
     ),
+    index("ai_memory_mailbox_state_automation_due_idx")
+      .on(
+        sql`(case ${table.status}
+        when 'pending' then ${table.updatedAt}
+        when 'processing' then ${table.processingAt} + 300000 * interval '1 millisecond'
+        else ${table.updatedAt} + 300000 * interval '1 millisecond'
+      end)`,
+        table.mailboxId
+      )
+      .where(
+        sql`${table.status} in ('pending', 'processing', 'failed') and ${table.userId} is not null`
+      ),
     index("ai_memory_mailbox_state_status_updated_idx").on(
       table.status,
       table.updatedAt
@@ -1464,6 +1484,14 @@ export const mailMessageImportance = pgTable(
   (table) => [
     primaryKey({ columns: [table.mailboxId, table.messageId] }),
     index("mail_importance_due_idx").on(table.state, table.nextAttemptAt),
+    index("mail_importance_automation_due_idx")
+      .on(
+        sql`greatest(${table.nextAttemptAt}, ${table.leaseExpiresAt})`,
+        table.mailboxId
+      )
+      .where(
+        sql`${table.state} in ('pending', 'processing', 'paused', 'error')`
+      ),
     index("mail_importance_thread_idx").on(table.mailboxId, table.threadId),
   ]
 );
@@ -1950,6 +1978,14 @@ export const mailboxAgentRun = pgTable(
       table.status,
       table.leaseExpiresAt
     ),
+    index("mailbox_agent_run_automation_due_idx")
+      .on(
+        sql`coalesce(${table.leaseExpiresAt}, ${table.createdAt})`,
+        table.mailboxId
+      )
+      .where(
+        sql`(${table.status} = 'queued' or (${table.status} = 'running' and ${table.leaseExpiresAt} is not null))`
+      ),
     index("mailbox_agent_run_thread_idx").on(table.mailboxId, table.threadId),
     index("mailbox_agent_run_mailbox_created_idx").on(
       table.mailboxId,
@@ -3501,6 +3537,12 @@ export const mailReminderJob = pgTable(
     usageReportedAt: timestamp("usageReportedAt", { withTimezone: true }),
   },
   (table) => [
+    index("mail_reminder_job_evaluate_due_idx")
+      .on(
+        sql`greatest(${table.availableAt}, ${table.leaseUntil})`,
+        table.reminderId
+      )
+      .where(sql`${table.kind} = 'evaluate' and ${table.completedAt} is null`),
     index("mail_reminder_job_ready_idx").on(
       table.kind,
       table.completedAt,
@@ -3575,6 +3617,12 @@ export const mailReminderSuggestion = pgTable(
       table.mailboxId,
       table.messageId
     ),
+    index("mail_reminder_suggestion_automation_due_idx")
+      .on(
+        sql`greatest(${table.availableAt}, ${table.leaseUntil})`,
+        table.mailboxId
+      )
+      .where(sql`${table.status} = 'pending'`),
     index("mail_reminder_suggestion_work_idx").on(
       table.status,
       table.availableAt,
@@ -3619,6 +3667,11 @@ export const gmailComposeOperation = pgTable(
       table.mailboxId,
       table.operationKey
     ),
+    index("gmail_compose_operation_follow_up_due_idx")
+      .on(table.updatedAt, table.mailboxId)
+      .where(
+        sql`${table.kind} = 'send' and ${table.status} = 'accepted' and ${table.followUpReminder} is not null`
+      ),
     index("gmail_compose_operation_status_updated_idx").on(
       table.status,
       table.updatedAt

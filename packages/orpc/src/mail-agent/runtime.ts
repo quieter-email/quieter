@@ -47,6 +47,8 @@ import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { queriesMailOperations } from "../mail/queries";
+import { mailboxAutomationFilter } from "../mailbox/automation-scope";
+import type { MailboxAutomationScope } from "../mailbox/automation-scope";
 import { assertAgentMailboxAccess } from "./access";
 import { assertMailAgentRunAuthority } from "./authority";
 import {
@@ -138,7 +140,9 @@ const runResultSchema = z.strictObject({
   summary: z.string().min(1).max(6000),
 });
 
-const claimNextRun = async (): Promise<ClaimedRun | null> =>
+const claimNextRun = async (
+  scope: MailboxAutomationScope
+): Promise<ClaimedRun | null> =>
   await db.transaction(async (tx) => {
     await tx.execute(
       sql`select set_config('quieter.action_protocol', 'personal-actions-v1', true)`
@@ -148,17 +152,20 @@ const claimNextRun = async (): Promise<ClaimedRun | null> =>
       .select()
       .from(mailboxAgentRun)
       .where(
-        or(
-          and(
-            eq(mailboxAgentRun.status, "queued"),
-            or(
-              isNull(mailboxAgentRun.leaseExpiresAt),
+        and(
+          mailboxAutomationFilter(mailboxAgentRun.mailboxId, scope),
+          or(
+            and(
+              eq(mailboxAgentRun.status, "queued"),
+              or(
+                isNull(mailboxAgentRun.leaseExpiresAt),
+                lt(mailboxAgentRun.leaseExpiresAt, now)
+              )
+            ),
+            and(
+              eq(mailboxAgentRun.status, "running"),
               lt(mailboxAgentRun.leaseExpiresAt, now)
             )
-          ),
-          and(
-            eq(mailboxAgentRun.status, "running"),
-            lt(mailboxAgentRun.leaseExpiresAt, now)
           )
         )
       )
@@ -1109,41 +1116,16 @@ const executeRun = async (run: ClaimedRun) => {
   }
 };
 
-export const drainMailAgentRuns = async (
-  input: { concurrency?: number; limit?: number } = {}
+export const reportPendingMailAgentUsage = async (
+  input: MailboxAutomationScope = {}
 ) => {
-  const limit = Math.min(12, Math.max(1, input.limit ?? 2));
-  const concurrency = Math.min(limit, Math.max(1, input.concurrency ?? 2));
-  let claimed = 0;
-  const outcomes = await Promise.allSettled(
-    Array.from({ length: concurrency }, async () => {
-      while (true) {
-        if (claimed >= limit) {
-          return;
-        }
-        claimed += 1;
-        const run = await claimNextRun();
-        if (run === null) {
-          claimed -= 1;
-          return;
-        }
-        await executeRun(run);
-      }
-    })
-  );
-  const failure = outcomes.find(
-    (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected"
-  );
-  if (failure !== undefined) {
-    throw failure.reason;
-  }
-  const processed = claimed;
   const pendingUsage = await db
     .select()
     .from(mailboxAgentRun)
     .where(
       and(
-        sql`${mailboxAgentRun.usageReportedAt} is null`,
+        mailboxAutomationFilter(mailboxAgentRun.mailboxId, input),
+        sql`${mailboxAgentRun.usageReportedAt} is null and ${mailboxAgentRun.usage} is not null and ${mailboxAgentRun.usage} <> '[]'::jsonb`,
         inArray(mailboxAgentRun.status, [
           "succeeded",
           "skipped",
@@ -1164,6 +1146,7 @@ export const drainMailAgentRuns = async (
     .from(mailboxAgentRevision)
     .where(
       and(
+        mailboxAutomationFilter(mailboxAgentRevision.mailboxId, input),
         sql`${mailboxAgentRevision.usageReportedAt} is null`,
         sql`${mailboxAgentRevision.usage} is not null`
       )
@@ -1187,5 +1170,36 @@ export const drainMailAgentRuns = async (
       }
     }
   }
-  return { processed };
+};
+
+export const drainMailAgentRuns = async (
+  input: MailboxAutomationScope & { concurrency?: number; limit?: number } = {}
+) => {
+  const limit = Math.min(12, Math.max(1, input.limit ?? 2));
+  const concurrency = Math.min(limit, Math.max(1, input.concurrency ?? 2));
+  let claimed = 0;
+  const outcomes = await Promise.allSettled(
+    Array.from({ length: concurrency }, async () => {
+      while (true) {
+        if (claimed >= limit) {
+          return;
+        }
+        claimed += 1;
+        const run = await claimNextRun(input);
+        if (run === null) {
+          claimed -= 1;
+          return;
+        }
+        await executeRun(run);
+      }
+    })
+  );
+  const failure = outcomes.find(
+    (outcome): outcome is PromiseRejectedResult => outcome.status === "rejected"
+  );
+  if (failure !== undefined) {
+    throw failure.reason;
+  }
+  await reportPendingMailAgentUsage(input);
+  return { processed: claimed };
 };

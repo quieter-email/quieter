@@ -47,6 +47,9 @@ import {
 } from "./ai-memory";
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import { getAuthorizedManagedMailbox } from "./mailbox/access";
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
+import { BOOTSTRAP_LEASE_MS } from "./mailbox/automation-timing";
 
 export { extractAuthoredMailText } from "./ai-mail-authorship";
 
@@ -74,7 +77,6 @@ type MemoryMailbox = Pick<
 
 const BOOTSTRAP_MESSAGE_LIMIT = 50;
 const BOOTSTRAP_PAGE_SIZE = 10;
-const BOOTSTRAP_LEASE_MS = 5 * 60_000;
 const managedCursorSchema = z.tuple([z.iso.datetime(), z.string().min(1)]);
 
 export const listMemoryCorrespondents = (addresses: string | undefined) => [
@@ -730,14 +732,10 @@ const captureBootstrapDirection = async (input: {
   };
 };
 
-export const processPendingMailMemoryBootstrap = async ({
-  allowLocal = false,
-  limit = 2,
-  userId,
-}: { allowLocal?: boolean; limit?: number; userId?: string } = {}) => {
-  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
-    return { failed: 0, processed: 0 };
-  }
+export const seedMissingMailMemoryBootstrap = async (
+  input: MailboxAutomationScope & { limit?: number; userId?: string } = {}
+) => {
+  const { limit = 2, userId } = input;
   const missing = await retryIdempotentDatabaseQuery(
     async () =>
       await db
@@ -762,6 +760,12 @@ export const processPendingMailMemoryBootstrap = async ({
         .where(
           and(
             eq(mailbox.status, "connected"),
+            input.mailboxId === undefined
+              ? undefined
+              : eq(mailbox.id, input.mailboxId),
+            input.provider === undefined
+              ? undefined
+              : eq(mailbox.provider, input.provider),
             or(
               isNull(aiMemoryMailboxState.mailboxId),
               sql`${aiMemoryMailboxState.userId} is distinct from case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
@@ -821,6 +825,23 @@ export const processPendingMailMemoryBootstrap = async ({
       }
     }
   }
+};
+
+export const processPendingMailMemoryBootstrap = async (
+  input: MailboxAutomationScope & {
+    allowLocal?: boolean;
+    limit?: number;
+    seedMissing?: boolean;
+    userId?: string;
+  } = {}
+) => {
+  const { allowLocal = false, limit = 2, userId } = input;
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
+    return { failed: 0, processed: 0 };
+  }
+  if (input.seedMissing !== false) {
+    await seedMissingMailMemoryBootstrap(input);
+  }
   const cutoff = new Date(Date.now() - BOOTSTRAP_LEASE_MS);
   const pending = await retryIdempotentDatabaseQuery(
     async () =>
@@ -829,6 +850,8 @@ export const processPendingMailMemoryBootstrap = async ({
         .from(aiMemoryMailboxState)
         .where(
           and(
+            mailboxAutomationFilter(aiMemoryMailboxState.mailboxId, input),
+            isNotNull(aiMemoryMailboxState.userId),
             exists(
               db
                 .select({ id: mailbox.id })

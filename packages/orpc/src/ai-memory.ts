@@ -71,6 +71,9 @@ import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
 import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
+import { AI_MEMORY_EVENT_LEASE_MS } from "./mailbox/automation-timing";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 const MEMORY_EVENT_METADATA_STRING_LIMIT = 600;
@@ -1924,7 +1927,10 @@ export const refreshAiMemoryFromEvent = async ({
           isNull(userAiContextEvent.skippedAt),
           or(
             isNull(userAiContextEvent.processingAt),
-            lt(userAiContextEvent.processingAt, new Date(Date.now() - 120_000))
+            lt(
+              userAiContextEvent.processingAt,
+              new Date(Date.now() - AI_MEMORY_EVENT_LEASE_MS)
+            )
           )
         )
       );
@@ -1943,7 +1949,7 @@ export const refreshAiMemoryFromEvent = async ({
           isNull(userAiContextEvent.processingAt),
           lt(
             userAiContextEvent.processingAt,
-            new Date(claimedAt.getTime() - 120_000)
+            new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
           )
         )
       )
@@ -2077,7 +2083,7 @@ export const refreshAiMemoryFromEvent = async ({
           isNull(userAiContextEvent.processingAt),
           lt(
             userAiContextEvent.processingAt,
-            new Date(claimedAt.getTime() - 120_000)
+            new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
           )
         )
       )
@@ -2102,7 +2108,7 @@ export const refreshAiMemoryFromEvent = async ({
                 isNull(userAiContextEvent.processingAt),
                 lt(
                   userAiContextEvent.processingAt,
-                  new Date(claimedAt.getTime() - 120_000)
+                  new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
                 )
               )
             )
@@ -2329,15 +2335,20 @@ export const refreshAiMemoryFromEvent = async ({
   }
 };
 
-export const processPendingAiMemoryEvents = async ({
-  allowLocal = false,
-  userId,
-}: { allowLocal?: boolean; userId?: string } = {}) => {
+export const processPendingAiMemoryEvents = async (
+  input: MailboxAutomationScope & {
+    allowLocal?: boolean;
+    userId?: string;
+    limit?: number;
+  } = {}
+) => {
+  const { allowLocal = false, userId } = input;
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
     return { failed: 0, processed: 0 };
   }
-  const cutoff = new Date(Date.now() - 120_000);
+  const cutoff = new Date(Date.now() - AI_MEMORY_EVENT_LEASE_MS);
   const eligible = and(
+    mailboxAutomationFilter(userAiContextEvent.mailboxId, input),
     isNull(userAiContextEvent.mergedAt),
     isNull(userAiContextEvent.skippedAt),
     eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
@@ -2346,7 +2357,9 @@ export const processPendingAiMemoryEvents = async ({
       isNull(userAiContextEvent.processingAt),
       lt(userAiContextEvent.processingAt, cutoff)
     ),
-    allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
+    allowLocal && input.mailboxId === undefined
+      ? undefined
+      : lt(userAiContextEvent.updatedAt, cutoff)
   );
   const deadline = Date.now() + 60_000;
   const pending = await retryIdempotentDatabaseQuery(
@@ -2369,9 +2382,10 @@ export const processPendingAiMemoryEvents = async ({
   );
   let processed = 0;
   let failed = 0;
+  let remaining = input.limit ?? Infinity;
   await Promise.all(
     Array.from({ length: Math.min(4, turns.length) }, async () => {
-      while (Date.now() < deadline) {
+      while (remaining > 0 && Date.now() < deadline) {
         const turn = turns.shift();
         if (turn === undefined) {
           return;
@@ -2394,9 +2408,10 @@ export const processPendingAiMemoryEvents = async ({
                 .orderBy(userAiContextEvent.updatedAt, userAiContextEvent.id)
                 .limit(1)
           );
-          if (event === undefined || Date.now() >= deadline) {
+          if (event === undefined || remaining <= 0 || Date.now() >= deadline) {
             continue;
           }
+          remaining -= 1;
           turn.attemptedIds.push(event.id);
           const result = await refreshAiMemoryFromEvent({ eventId: event.id });
           if (result.status === "refreshed") {
