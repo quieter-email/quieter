@@ -84,7 +84,7 @@ export const DrawerHeader = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "m-2 rounded-section bg-section p-3.5 inset-ring inset-ring-section-edge/60",
+      "m-2 rounded-section bg-section p-3.5 inset-ring inset-ring-section-edge/30",
       className
     )}
     {...props}

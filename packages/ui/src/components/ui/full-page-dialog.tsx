@@ -36,7 +36,7 @@ export const FullPageDialogHeader = ({
 }: ComponentPropsWithoutRef<"header">) => (
   <header
     className={cn(
-      "m-2 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5 inset-ring inset-ring-section-edge/60",
+      "m-2 flex shrink-0 items-center gap-3 rounded-section bg-section p-3.5 inset-ring inset-ring-section-edge/30",
       className
     )}
     {...props}
