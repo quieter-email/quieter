@@ -792,7 +792,7 @@ export const DesignSystemShowcase = () => {
             </Text>
           </Surface>
           <Surface padding="compact" variant="panel">
-            <Surface chrome="inset" padding="compact">
+            <Surface padding="compact">
               <div className="p-4">
                 <Text weight="medium">Standalone panel</Text>
               </div>
@@ -826,8 +826,8 @@ export const DesignSystemShowcase = () => {
                 </Button>
               </div>
             </WorkspaceHeader>
-            <div className="mx-(--surface-inset) mb-(--surface-inset)">
-              <Surface chrome="inset" padding="compact">
+            <div className="p-0.5">
+              <Surface padding="compact">
                 <div className="p-4">
                   <Text weight="medium">Section</Text>
                 </div>
@@ -1750,7 +1750,7 @@ export const DesignSystemShowcase = () => {
             />
           </Row>
           <Row label="Prompt composer">
-            <PromptComposerFrame chrome="inset" className="w-80 max-w-full">
+            <PromptComposerFrame className="w-80 max-w-full">
               {showPromptContext ? (
                 <div className="flex min-w-0">
                   <ComposerContextChip

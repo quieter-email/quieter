@@ -269,7 +269,7 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="mt-auto w-full shrink-0 p-(--surface-inset)"
+      className="mt-auto w-full shrink-0 p-2"
       onSubmit={(event) => {
         if (commandOpen) {
           event.preventDefault();
@@ -279,7 +279,7 @@ export const ChatComposer = ({
         }
       }}
     >
-      <PromptComposerFrame chrome="inset">
+      <PromptComposerFrame>
         {queue && queue.items.length > 0 ? (
           <div className="flex flex-col gap-1 pb-1">
             <div className="flex min-w-0 items-center justify-between gap-2">

@@ -301,17 +301,14 @@ export const CalendarEventEditor = ({
         </div>
       </WorkspaceHeader>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <fieldset
-          className="min-w-0 space-y-(--surface-inset) px-(--surface-inset) pb-(--surface-inset)"
-          disabled={pending}
-        >
+        <fieldset className="min-w-0 space-y-2 px-2 pb-2" disabled={pending}>
           {state.problem ? (
             <p className="px-4 py-2 text-body-sm text-destructive" role="alert">
               {state.problem}
             </p>
           ) : null}
           {state.conflict ? (
-            <Surface chrome="inset">
+            <Surface variant="section">
               <div className="space-y-3">
                 <Button
                   onClick={() => {
@@ -356,7 +353,7 @@ export const CalendarEventEditor = ({
               </div>
             </Surface>
           ) : null}
-          <Surface chrome="inset" className="@container">
+          <Surface className="@container" variant="section">
             <div className="flex flex-col gap-4">
               <Field className="ml-6 w-auto">
                 <FieldLabel className="sr-only" htmlFor="calendar-event-title">
@@ -617,7 +614,7 @@ export const CalendarEventEditor = ({
               </div>
             </div>
           </Surface>
-          <Surface chrome="inset">
+          <Surface variant="section">
             <div className="flex flex-col gap-1">
               <CalendarEventGuests
                 attendees={baseEvent?.attendees}
@@ -721,7 +718,7 @@ export const CalendarEventEditor = ({
               </div>
             </div>
           </Surface>
-          <Surface chrome="inset">
+          <Surface variant="section">
             <div className="flex flex-col gap-1">
               <Field>
                 <div className="grid min-h-8 grid-cols-[1rem_minmax(0,1fr)] items-center gap-x-2">
@@ -950,10 +947,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <Surface
-          chrome="inset"
-          className="mx-(--surface-inset) mb-(--surface-inset) shrink-0"
-        >
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button

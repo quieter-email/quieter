@@ -335,7 +335,7 @@ export const ManagedUsageSummary = ({
   return (
     <Surface
       // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
-      className="flex flex-col gap-(--surface-inset)"
+      className="flex flex-col gap-2"
       padding="compact"
     >
       <Surface chrome="inset" variant="detail">

@@ -29,9 +29,9 @@ export const Toolbar = ({
           padding: "none",
           variant: chrome === "inset" ? "detail" : "section",
         }),
-        "inline-flex items-center shadow-sm squircle",
+        "inline-flex items-center border border-transparent shadow-sm squircle",
         {
-          "m-(--surface-inset) min-h-12 gap-1.5 px-1.75 py-2 shadow-none":
+          "m-2 min-h-12 gap-1.5 border-0 px-3.5 py-2 shadow-none":
             chrome === "inset",
           "min-h-10 gap-1 p-1": chrome === "default" && size === "default",
           "min-h-8 gap-0.5 rounded-lg p-0.5":

@@ -103,7 +103,6 @@
   --radius: 0.5rem;
   --workspace-gap: 6px;
   --workspace-gap-wide: 8px;
-  --surface-inset: 0.5rem;
   --settings-row-padding: 1rem;
   --shadow-2xs: 0 1px 2px 0 oklch(0 0 0 / 0.03);
   --shadow-xs: 0 1px 2px 0 oklch(0 0 0 / 0.04);
@@ -436,10 +435,6 @@
   --radius-5xl: calc(var(--radius) + 14px);
   --radius-panel: calc(var(--radius) + 12px);
   --radius-section: calc(var(--radius-panel) - 3px);
-  --radius-panel-inset: calc(var(--radius-panel) - var(--surface-inset) - 1px);
-  --radius-section-inset: calc(
-    var(--radius-section) - var(--surface-inset) - 1px
-  );
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
   --shadow-sm: var(--shadow-sm);

@@ -78,46 +78,50 @@ export const MailDeliveryMetrics = ({
 
   return (
     <div className="flex flex-col gap-4">
-      <Surface padding="compact">
-        <Surface chrome="inset" variant="detail">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
-            {stats.map((stat) => (
-              <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
-                <dt className="flex items-center gap-1 text-caption text-muted-fg">
-                  {stat.label}
-                  <Tooltip>
-                    <TooltipTrigger
-                      render={
-                        <Button
-                          aria-label={`About ${stat.label.toLowerCase()}`}
-                          size="icon-xs"
-                          variant="ghost"
-                        />
-                      }
-                    >
-                      <Icon icon={InformationCircleIcon} />
-                    </TooltipTrigger>
-                    <TooltipContent>{stat.hint}</TooltipContent>
-                  </Tooltip>
-                </dt>
-                <dd className="text-metric text-fg tabular-nums">
-                  {stat.value.toLocaleString()}
-                </dd>
-              </div>
-            ))}
-          </dl>
-        </Surface>
+      <Surface padding="none">
+        <div className="p-2">
+          <Surface chrome="inset" variant="detail">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
+              {stats.map((stat) => (
+                <div className="flex min-w-0 flex-col gap-2" key={stat.label}>
+                  <dt className="flex items-center gap-1 text-caption text-muted-fg">
+                    {stat.label}
+                    <Tooltip>
+                      <TooltipTrigger
+                        render={
+                          <Button
+                            aria-label={`About ${stat.label.toLowerCase()}`}
+                            size="icon-xs"
+                            variant="ghost"
+                          />
+                        }
+                      >
+                        <Icon icon={InformationCircleIcon} />
+                      </TooltipTrigger>
+                      <TooltipContent>{stat.hint}</TooltipContent>
+                    </Tooltip>
+                  </dt>
+                  <dd className="text-metric text-fg tabular-nums">
+                    {stat.value.toLocaleString()}
+                  </dd>
+                </div>
+              ))}
+            </dl>
+          </Surface>
+        </div>
 
         <div className="flex flex-col gap-4">
-          <Surface chrome="inset" variant="detail">
-            <div className="flex flex-wrap items-baseline justify-between gap-2">
-              <h2 className="text-body-sm text-fg">Daily activity</h2>
-              <span className="text-micro text-muted-fg">
-                {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
-              </span>
-            </div>
-          </Surface>
-          <div className="px-4.25">
+          <div className="px-2">
+            <Surface chrome="inset" variant="detail">
+              <div className="flex flex-wrap items-baseline justify-between gap-2">
+                <h2 className="text-body-sm text-fg">Daily activity</h2>
+                <span className="text-micro text-muted-fg">
+                  {data[0]?.shortLabel} to {data.at(-1)?.shortLabel}, UTC
+                </span>
+              </div>
+            </Surface>
+          </div>
+          <div className="px-4.5">
             <BarChart
               data={data}
               label="Daily sent, delivered, and bounced mail"
@@ -139,7 +143,7 @@ export const MailDeliveryMetrics = ({
             },
           ].map((stat) => (
             <div
-              className="flex flex-wrap items-center gap-2 px-4.25 py-4"
+              className="flex flex-wrap items-center gap-2 px-4.5 py-4"
               key={stat.label}
             >
               <dt className="flex items-center gap-1 text-caption text-muted-fg">

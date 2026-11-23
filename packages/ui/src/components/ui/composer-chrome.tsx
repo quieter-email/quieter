@@ -16,14 +16,12 @@ import { IconButtonTooltip } from "./icon-button-tooltip";
 import { entranceMotionVariants } from "./motion";
 
 export const PromptComposerFrame = ({
-  chrome = "default",
   className,
   ...props
-}: ComponentPropsWithoutRef<"div"> & { chrome?: "default" | "inset" }) => (
+}: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
       "flex min-w-0 flex-col gap-1 rounded-section border border-section-edge/60 bg-section px-3.25 py-2 shadow-sm",
-      { "rounded-panel-inset px-1.75": chrome === "inset" },
       className
     )}
     {...props}
@@ -162,7 +160,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section border border-section-edge/60 bg-section squircle",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section inset-ring inset-ring-section-edge/60 squircle",
       className
     )}
     {...props}
