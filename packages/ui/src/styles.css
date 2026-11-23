@@ -36,6 +36,7 @@
   --font-geist-mono: "Geist Mono Variable", monospace;
   --canvas: oklch(0.925 0.006 264);
   --panel: oklch(0.993 0.002 264);
+  --panel-edge: color-mix(in srgb, var(--panel), var(--fg) 24%);
   --section: oklch(0.955 0.006 264);
   --detail: oklch(0.89 0.01 264);
   --selection: color-mix(in srgb, var(--canvas), var(--fg) 20%);
@@ -144,6 +145,7 @@
   --auth-particle-tint: var(--primary);
   --canvas: #0a0a0b;
   --panel: #131315;
+  --panel-edge: color-mix(in srgb, var(--panel), var(--fg) 14%);
   --section: #1b1b1e;
   --detail: #26262a;
   --selection: var(--detail);
@@ -324,7 +326,7 @@
   --color-panel: var(--panel);
   --color-section: var(--section);
   --color-detail: var(--detail);
-  --color-panel-edge: color-mix(in srgb, var(--panel), var(--fg) 12%);
+  --color-panel-edge: var(--panel-edge);
   --color-section-edge: color-mix(in srgb, var(--section), var(--fg) 12%);
   --color-detail-edge: color-mix(in srgb, var(--detail), var(--fg) 12%);
   --color-selection: var(--selection);
