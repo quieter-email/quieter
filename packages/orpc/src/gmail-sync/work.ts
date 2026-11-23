@@ -32,8 +32,8 @@ import type { GmailWorkPriority } from "./work-store";
 export {
   enqueueGmailMessageWork,
   getGmailMessageWorkWake,
-  hasPendingFreshGmailWorkForAccount,
-  listGmailMessageWorkWakeJobs,
+  hasPendingFreshGmailWork,
+  pruneCompletedGmailMessageWork,
 } from "./work-store";
 export { isGmailRateLimitedError } from "@quieter/gmail";
 
@@ -124,14 +124,18 @@ export const createGmailAutomationRuntime = (input: {
 };
 
 export const discoverFreshGmailMessages = async (
-  input: GmailPubSubNotificationMessage & { notificationReceivedAt?: number }
+  input: (GmailPubSubNotificationMessage | { mailboxId: string }) & {
+    notificationReceivedAt?: number;
+  }
 ) => {
   const [account] = await db
     .select()
     .from(mailbox)
     .where(
       and(
-        eq(mailbox.emailAddress, input.emailAddress.trim().toLowerCase()),
+        "mailboxId" in input
+          ? eq(mailbox.id, input.mailboxId)
+          : eq(mailbox.emailAddress, input.emailAddress.trim().toLowerCase()),
         eq(mailbox.provider, "gmail"),
         eq(mailbox.status, "connected")
       )
@@ -185,7 +189,7 @@ export const discoverFreshGmailMessages = async (
 
 export const processNextGmailMessageWork = async (input: {
   priority: GmailWorkPriority;
-  mailboxId?: string;
+  mailboxId: string;
   onAttemptComplete?: (attempt: GmailWorkAttempt) => void;
   onCriticalComplete?: (
     timings: GmailMessageCriticalTimings & {
@@ -198,14 +202,6 @@ export const processNextGmailMessageWork = async (input: {
   const handlerStartedAt = Date.now();
   const admission = await claimGmailMessageWork(input);
   const claimMs = performance.now() - attemptStartedAt;
-  if (admission.status === "capacity_busy") {
-    return {
-      activeLeases: admission.activeLeases,
-      moreReady: false,
-      nextWakeAt: admission.retryAt,
-      status: "capacity_busy" as const,
-    };
-  }
   if (admission.status === "empty") {
     const wake = await getGmailMessageWorkWake(input);
     return {
@@ -319,6 +315,7 @@ export const processNextGmailMessageWork = async (input: {
                     });
                   },
                   organizationId,
+                  recovering: work.source === "catchup",
                   triggerActions: work.triggerActions,
                   userId,
                 });

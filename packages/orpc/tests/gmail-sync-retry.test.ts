@@ -22,7 +22,6 @@ import * as aiMemoryCapture from "../src/ai-memory-capture";
 import type { runAuthorizedGmailMailbox } from "../src/gmail-mailbox-access";
 import { processGmailMessage } from "../src/gmail-sync/message";
 import {
-  listGmailPubSubMaintenanceJobs,
   processGmailPubSubNotification,
   retryPendingAutomationMessages,
 } from "../src/gmail-sync/service";
@@ -234,7 +233,7 @@ vi.mock(import("../src/gmail-sync/work-store"), () => ({
     )?.providerRetryAt;
     return deadline instanceof Date ? deadline : null;
   },
-  hasPendingFreshGmailWorkForAccount: async () => false,
+  hasPendingFreshGmailWork: async () => false,
 }));
 
 vi.mock(import("../src/mail-automation/ai-budget"), async (importOriginal) => ({
@@ -975,39 +974,6 @@ describe("Gmail automation retry recovery", () => {
       expect(fixtures.budget).toHaveBeenCalledTimes(Number(mixed));
     }
   );
-
-  test("schedules an enabled mailbox's budget backlog even after a recent reconciliation", async () => {
-    const jobs = await listGmailPubSubMaintenanceJobs();
-
-    expect(jobs.some((job) => job.mailboxId === input.mailboxId)).toBeTruthy();
-  });
-
-  test.each([
-    { autoLabelEnabled: false },
-    { attemptCount: 1 },
-    { labelIds: ["label-1"] },
-  ])(
-    "does not force maintenance for disabled automation or genuine retry backoff: %j",
-    async (state) => {
-      Object.assign(fixtures.rows[0] ?? {}, state);
-
-      const jobs = await listGmailPubSubMaintenanceJobs();
-
-      expect(jobs).toHaveLength(0);
-    }
-  );
-
-  test("schedules unfinished capture independently of automation failure backoff", async () => {
-    Object.assign(fixtures.rows[0] ?? {}, { attemptCount: 1 });
-    Object.assign(fixtures.mailboxes[0] ?? {}, {
-      lastErrorAt: new Date(),
-      phase: "bootstrap",
-    });
-
-    const jobs = await listGmailPubSubMaintenanceJobs();
-
-    expect(jobs.some((job) => job.mailboxId === input.mailboxId)).toBeTruthy();
-  });
 });
 
 vi.mock(import("@quieter/billing/ai-reservation"), () => ({

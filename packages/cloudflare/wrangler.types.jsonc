@@ -14,6 +14,38 @@
   "queues": {
     "producers": [
       {
+        "binding": "GmailMailboxFreshQueue0",
+        "queue": "quieter-types-gmail-mailbox-fresh-0",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue1",
+        "queue": "quieter-types-gmail-mailbox-fresh-1",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue2",
+        "queue": "quieter-types-gmail-mailbox-fresh-2",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue3",
+        "queue": "quieter-types-gmail-mailbox-fresh-3",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue0",
+        "queue": "quieter-types-gmail-mailbox-catchup-0",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue1",
+        "queue": "quieter-types-gmail-mailbox-catchup-1",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue2",
+        "queue": "quieter-types-gmail-mailbox-catchup-2",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue3",
+        "queue": "quieter-types-gmail-mailbox-catchup-3",
+      },
+      {
         "binding": "GmailProcessingQueue",
         "queue": "quieter-gmail-processing-types",
       },
@@ -61,6 +93,10 @@
   "durable_objects": {
     "bindings": [
       {
+        "name": "GmailMailboxScheduler",
+        "class_name": "GmailMailboxScheduler",
+      },
+      {
         "name": "GmailFreshExecutor",
         "class_name": "GmailFreshExecutor",
       },
@@ -75,6 +111,10 @@
   },
   "migrations": [
     { "tag": "fresh-v1", "new_sqlite_classes": ["GmailFreshExecutor"] },
+    {
+      "tag": "mailbox-scheduler-v1",
+      "new_sqlite_classes": ["GmailMailboxScheduler"],
+    },
     {
       "tag": "v2",
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],

@@ -1,87 +1,49 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
-import {
-  listGmailPubSubMaintenanceJobs,
-  maintainGmailPubSubMailbox,
-} from "@quieter/orpc/gmail-pubsub";
-import { listGmailMessageWorkWakeJobs } from "@quieter/orpc/gmail-work";
+import { claimGmailSchedulerRepairs } from "@quieter/orpc/gmail-pubsub";
+import { pruneCompletedGmailMessageWork } from "@quieter/orpc/gmail-work";
 
-import { enqueueGmailMessageWork } from "./gmail-processing";
-import { broadcastGmailUpdate } from "./mail-updates";
+import { sendGmailProcessingJob } from "./gmail-processing";
 import { reportWorkerError, withSentryReporting } from "./worker-runtime";
 
-const CONCURRENCY = 4;
-
 export const runGmailMaintenance = async (
-  env: Env,
+  env: Pick<Env, "GmailProcessingWorker">,
   dependencies: {
-    listJobs?: typeof listGmailPubSubMaintenanceJobs;
-    listWorkJobs?: typeof listGmailMessageWorkWakeJobs;
-    maintainMailbox?: typeof maintainGmailPubSubMailbox;
+    claimRepairs?: typeof claimGmailSchedulerRepairs;
+    pruneWork?: typeof pruneCompletedGmailMessageWork;
   } = {}
 ) => {
   const jobs = await withRequestDatabaseClient(
     async () =>
-      await (dependencies.listJobs ?? listGmailPubSubMaintenanceJobs)()
+      await (dependencies.claimRepairs ?? claimGmailSchedulerRepairs)()
   );
-  let nextIndex = 0;
   let maintained = 0;
-  let busy = 0;
-  const failures: unknown[] = [];
-  await Promise.all(
-    Array.from({ length: Math.min(CONCURRENCY, jobs.length) }, async () => {
-      while (nextIndex < jobs.length) {
-        const job = jobs[nextIndex];
-        nextIndex += 1;
-        if (job === undefined) {
-          break;
-        }
+  for (let index = 0; index < jobs.length; index += 25) {
+    const accepted = await Promise.all(
+      jobs.slice(index, index + 25).map(async ({ mailboxId }) => {
         try {
-          const result = await withRequestDatabaseClient(
-            async () =>
-              await (
-                dependencies.maintainMailbox ?? maintainGmailPubSubMailbox
-              )({
-                mailboxId: job.mailboxId,
-                topicName: env.GMAIL_PUBSUB_TOPIC,
-              })
-          );
-          if (result.status === "busy") {
-            busy += 1;
-          } else if (
-            result.status === "maintained" ||
-            result.status === "pending"
-          ) {
-            maintained += 1;
-            await broadcastGmailUpdate(
-              env,
-              job.emailAddress,
-              "mailbox.changed"
-            );
+          const decision = await sendGmailProcessingJob(env, {
+            kind: "maintain",
+            mailboxId,
+          });
+          if (decision.action !== "ack") {
+            throw new Error("Gmail mailbox repair was not accepted.");
           }
+          return true;
         } catch (error) {
-          failures.push(error);
           reportWorkerError(error, {
             category: "gmail_maintenance_mailbox_error",
             route: "scheduled",
           });
+          return false;
         }
-      }
-    })
-  );
-  const workJobs = await withRequestDatabaseClient(
-    async () =>
-      await (dependencies.listWorkJobs ?? listGmailMessageWorkWakeJobs)()
-  );
-  for (const job of workJobs) {
-    await enqueueGmailMessageWork(env, job);
-  }
-  if (failures.length > 0) {
-    throw new AggregateError(
-      failures,
-      "Gmail maintenance failed for some mailboxes."
+      })
     );
+    maintained += accepted.filter(Boolean).length;
   }
-  return { busy, maintained, scanned: jobs.length };
+  await withRequestDatabaseClient(async () => {
+    await (dependencies.pruneWork ?? pruneCompletedGmailMessageWork)();
+  });
+  return { failed: jobs.length - maintained, maintained, scanned: jobs.length };
 };
 
 export default withSentryReporting({

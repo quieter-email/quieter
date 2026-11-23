@@ -3,10 +3,7 @@ import { serverEnv } from "@quieter/env/server";
 import { z } from "zod";
 
 import { runGmailMaintenance } from "./gmail-maintenance-worker";
-import {
-  enqueueGmailNotification,
-  processGmailQueue,
-} from "./gmail-processing";
+import { acceptGmailNotification, processGmailQueue } from "./gmail-processing";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
@@ -97,7 +94,7 @@ export default {
           return new Response(null, { status: 403 });
         }
         const notification = parseGmailNotification(delivery.data.message.data);
-        await enqueueGmailNotification(
+        await acceptGmailNotification(
           {
             emailAddress: notification.emailAddress.trim().toLowerCase(),
             historyId: notification.historyId,

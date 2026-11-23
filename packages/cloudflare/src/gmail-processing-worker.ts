@@ -1,66 +1,51 @@
-import { serverEnv } from "@quieter/env/server";
-import { GMAIL_FRESH_WORK_CONCURRENCY } from "@quieter/mail/gmail-work";
-import { z } from "zod";
+import { withRequestDatabaseClient } from "@quieter/database/client";
 
 import { readBoundedJson } from "./bounded-json";
+import { executeGmailMailboxDispatch } from "./gmail-mailbox-executor";
+import { gmailMailboxScheduler } from "./gmail-mailbox-scheduler";
 import {
   GMAIL_JOB_BODY_LIMIT,
   GMAIL_PROCESSING_URL,
   gmailJobSchema,
-  processGmailJob,
 } from "./gmail-processing-job";
-import type {
-  GmailFreshWake,
-  GmailProcessingEnv,
-} from "./gmail-processing-job";
+import type { GmailJob } from "./gmail-processing-job";
 import { RequestError, requestErrorResponse } from "./request-error";
 import { withSentryReporting } from "./worker-runtime";
 
 export { GmailFreshExecutor } from "./gmail-fresh-executor";
+export { GmailMailboxScheduler } from "./gmail-mailbox-scheduler";
 
-const executorNames = Array.from(
-  { length: GMAIL_FRESH_WORK_CONCURRENCY },
-  (_, index) => `fresh-v1-${index}`
-);
-const deliveryKeySchema = z.string().min(1).max(256).optional();
-
-const acceptFreshWake = async (
-  env: Pick<Env, "GmailFreshExecutor">,
-  wake: GmailFreshWake,
-  deliveryKey = crypto.randomUUID()
-) => {
-  const hash = new Uint8Array(
-    await crypto.subtle.digest("SHA-256", new TextEncoder().encode(deliveryKey))
+const acceptGmailJob = async (job: GmailJob, env: Env) => {
+  const now = Date.now();
+  if ("kind" in job && job.kind === "work") {
+    await gmailMailboxScheduler(env, job.mailboxId).wake(job.mailboxId, {
+      [job.priority]: job.notBefore ?? now,
+    });
+    return;
+  }
+  if ("kind" in job && job.kind === "maintain") {
+    await gmailMailboxScheduler(env, job.mailboxId).wake(job.mailboxId, {
+      sync: now,
+    });
+    return;
+  }
+  const notification = "kind" in job ? job.notification : job;
+  const { findConnectedGmailMailbox } =
+    await import("@quieter/orpc/gmail-pubsub");
+  const account = await withRequestDatabaseClient(
+    async () => await findConnectedGmailMailbox(notification.emailAddress)
   );
-  const first = (hash[0] ?? 0) % executorNames.length;
-  const names = Array.from(
-    { length: Math.min(executorNames.length, Math.max(1, wake.count)) },
-    (_, index) => executorNames[(first + index) % executorNames.length]
-  );
-  // Native local workerd does not implement jurisdiction restrictions.
-  const namespace =
-    serverEnv.QUIETER_DEPLOYMENT_ENV === "local"
-      ? env.GmailFreshExecutor
-      : env.GmailFreshExecutor.jurisdiction("eu");
-  const accepted = await Promise.allSettled(
-    names.map(async (name) => {
-      if (name === undefined) {
-        throw new Error("Fresh executor slot is unavailable.");
-      }
-      await namespace.getByName(name, { locationHint: "weur" }).wake(wake);
-    })
-  );
-  const failed = accepted.find((result) => result.status === "rejected");
-  if (failed?.status === "rejected") {
-    throw failed.reason;
+  if (account !== null) {
+    await gmailMailboxScheduler(env, account.id).wake(
+      account.id,
+      { ...("kind" in job ? {} : { discover: now }), sync: now },
+      "kind" in job ? undefined : notification.historyId
+    );
   }
 };
 
 export default withSentryReporting({
-  async fetch(
-    request: Request,
-    env: GmailProcessingEnv & Pick<Env, "GmailFreshExecutor">
-  ) {
+  async fetch(request: Request, env: Env) {
     const url = new URL(request.url);
     if (
       request.method !== "POST" ||
@@ -82,36 +67,12 @@ export default withSentryReporting({
       if (!parsed.success) {
         throw new RequestError(400, "gmail_processing_job_invalid");
       }
-      const deliveryKey = deliveryKeySchema.safeParse(
-        request.headers.get("x-quieter-delivery-key") ?? undefined
-      );
-      if (!deliveryKey.success) {
-        throw new RequestError(400, "gmail_processing_delivery_key_invalid");
-      }
       request.signal.throwIfAborted();
-      let decision;
-      if (
-        "kind" in parsed.data &&
-        parsed.data.kind === "work" &&
-        parsed.data.priority === "fresh"
-      ) {
-        await acceptFreshWake(
-          env,
-          { count: 1, mailboxId: parsed.data.mailboxId, notBefore: Date.now() },
-          deliveryKey.data
-        );
-        decision = { action: "ack" } as const;
-      } else {
-        decision = await processGmailJob(parsed.data, env, {
-          onFreshWakeAccepted: async (wake) => {
-            await acceptFreshWake(env, wake);
-          },
-        });
-      }
+      await acceptGmailJob(parsed.data, env);
       request.signal.throwIfAborted();
       const placement = request.headers.get("cf-placement");
       return Response.json(
-        decision,
+        { action: "ack" },
         placement !== null && /^(?:local|remote)-[A-Z]{3}$/u.test(placement)
           ? { headers: { "cf-placement": placement } }
           : undefined
@@ -119,5 +80,8 @@ export default withSentryReporting({
     } catch (error) {
       return requestErrorResponse(error, "gmail-processing");
     }
+  },
+  async queue(batch, env) {
+    await executeGmailMailboxDispatch(batch, env);
   },
 } satisfies ExportedHandler<Env>);

@@ -10,6 +10,7 @@ import type {
 } from "@quieter/database/schema";
 import {
   gmailCaptureState,
+  gmailWatchState,
   gmailCredential,
   gmailOAuthState,
   mailbox,
@@ -1031,6 +1032,19 @@ const persistGmailOAuthMailbox = async (input: {
           updatedAt: now,
         })
         .onConflictDoNothing();
+      await database
+        .insert(gmailWatchState)
+        .values({
+          createdAt: now,
+          historyId: input.historyId,
+          mailboxId: input.mailboxId,
+          schedulerRepairAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoUpdate({
+          set: { schedulerRepairAt: now },
+          target: gmailWatchState.mailboxId,
+        });
       await database
         .insert(gmailCredential)
         .values({

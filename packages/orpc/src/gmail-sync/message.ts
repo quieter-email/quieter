@@ -11,7 +11,10 @@ import {
 import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
-import { gmailAutoLabelEvent } from "@quieter/database/schema";
+import {
+  gmailAutoLabelEvent,
+  mailboxVerificationCode,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
   getMessageWithDetails,
@@ -54,6 +57,9 @@ import {
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
+const RECOVERY_ACTION_MAX_AGE_MS = 24 * 60 * 60_000;
+const RECOVERY_LABEL_MAX_AGE_MS = 48 * 60 * 60_000;
+const RECOVERY_CODE_MAX_AGE_MS = 2 * 60 * 60_000;
 const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
   MAILBOX_LABELS.drafts,
   MAILBOX_LABELS.sent,
@@ -608,6 +614,7 @@ export const processGmailMessage = async ({
   onAttemptComplete,
   onCriticalComplete,
   organizationId,
+  recovering = false,
   triggerActions = false,
   userId,
 }: {
@@ -622,6 +629,7 @@ export const processGmailMessage = async ({
     timings: GmailMessageCriticalTimings
   ) => void | Promise<void>;
   organizationId: string | null;
+  recovering?: boolean;
   triggerActions?: boolean;
   userId: string;
 }) => {
@@ -678,8 +686,49 @@ export const processGmailMessage = async ({
   let verificationCodeMs = 0;
   let autoLabelMs = 0;
   try {
+    const recoveredMessage = recovering ? await loadMessage() : null;
+    const recoveredAt = Number(recoveredMessage?.internalDate);
+    const recoveredAge =
+      Number.isFinite(recoveredAt) && recoveredAt > 0
+        ? Date.now() - recoveredAt
+        : Infinity;
+    const [pendingLabel, pendingCode] = await Promise.all([
+      recovering &&
+      autoLabelEnabled &&
+      (recoveredAge > RECOVERY_LABEL_MAX_AGE_MS ||
+        recoveredMessage?.labelIds?.includes(MAILBOX_LABELS.unread) !== true)
+        ? db
+            .select({ id: gmailAutoLabelEvent.id })
+            .from(gmailAutoLabelEvent)
+            .where(
+              and(
+                eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+                eq(gmailAutoLabelEvent.gmailMessageId, gmailMessageId)
+              )
+            )
+            .limit(1)
+        : undefined,
+      recovering && extractCodes && recoveredAge > RECOVERY_CODE_MAX_AGE_MS
+        ? db
+            .select({ id: mailboxVerificationCode.id })
+            .from(mailboxVerificationCode)
+            .where(
+              and(
+                eq(mailboxVerificationCode.mailboxId, mailboxId),
+                eq(mailboxVerificationCode.messageId, gmailMessageId)
+              )
+            )
+            .limit(1)
+        : undefined,
+    ]);
+    const shouldExtractCode = extractCodes && (pendingCode?.length ?? 1) > 0;
+    const shouldLabel = autoLabelEnabled && (pendingLabel?.length ?? 1) > 0;
+    if (!shouldLabel) {
+      attempt.autoLabel.outcome = "disabled";
+      attempt.autoLabel.path = "disabled";
+    }
     const [verificationCode, autoLabel] = await Promise.allSettled([
-      (extractCodes
+      (shouldExtractCode
         ? processMailVerificationCode({
             loadMessage,
             mailboxId,
@@ -691,7 +740,7 @@ export const processGmailMessage = async ({
       ).finally(() => {
         verificationCodeMs = performance.now() - startedAt;
       }),
-      (autoLabelEnabled
+      (shouldLabel
         ? processAutoLabelMessage({
             accessToken,
             attempt: attempt.autoLabel,
@@ -751,7 +800,8 @@ export const processGmailMessage = async ({
           });
         }
       }),
-      triggerActions
+      triggerActions &&
+      (!recovering || recoveredAge <= RECOVERY_ACTION_MAX_AGE_MS)
         ? loadMessage().then(async (message) => {
             if (
               message !== null &&

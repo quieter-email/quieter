@@ -1,4 +1,3 @@
-export {
-  GMAIL_CATCHUP_WORK_CONCURRENCY,
-  GMAIL_FRESH_WORK_CONCURRENCY,
-} from "@quieter/mail/gmail-work";
+export const GMAIL_EXECUTOR_SHARDS = [0, 1, 2, 3] as const;
+
+export const GMAIL_EXECUTOR_CLASSES = ["Fresh", "Catchup"] as const;

@@ -33,7 +33,6 @@
     "./auto-label-matching": "./src/auto-label-matching.ts",
     "./unsubscribe": "./src/unsubscribe.ts",
     "./capture": "./src/capture.ts",
-    "./gmail-work": "./src/gmail-work.ts",
     "./otp-token": "./src/otp-token.ts",
     "./scheduled-send": "./src/scheduled-send.ts",
     "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts"

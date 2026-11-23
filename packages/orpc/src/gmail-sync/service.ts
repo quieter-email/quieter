@@ -4,11 +4,9 @@ import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-err
 import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
-  gmailCaptureState,
   gmailWatchState,
   mailboxAutomationSettings,
   mailbox,
-  mailboxVerificationCode,
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
@@ -24,9 +22,7 @@ import {
   asc,
   desc,
   eq,
-  exists,
-  gt,
-  isNotNull,
+  inArray,
   isNull,
   lt,
   lte,
@@ -48,7 +44,7 @@ import {
   deferGmailMailboxProvider,
   enqueueGmailMessageWork,
   getGmailMailboxProviderRetryAt,
-  hasPendingFreshGmailWorkForAccount,
+  hasPendingFreshGmailWork,
 } from "./work-store";
 
 const WATCH_RENEWAL_INTERVAL_MS = 1000 * 60 * 60 * 20;
@@ -385,7 +381,7 @@ const processMailboxHistory = async ({
   let captureNeedsContinuation = false;
   try {
     try {
-      if (await hasPendingFreshGmailWorkForAccount(mailboxId)) {
+      if (await hasPendingFreshGmailWork(mailboxId)) {
         captureNeedsContinuation = true;
       } else {
         const capture = await runAuthorizedGmailMailbox(
@@ -599,113 +595,57 @@ const renewMailboxWatch = async ({
     .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
-// Renew expiring watches; each maintenance run also reconciles missed notifications.
-export const listGmailPubSubMaintenanceJobs = async (limit = 500) => {
-  const captureDue = or(
-    isNull(gmailCaptureState.mailboxId),
-    isNotNull(gmailCaptureState.historyPageToken),
-    isNotNull(gmailCaptureState.pendingHistoryPage),
-    sql`${gmailCaptureState.phase} <> 'history'`,
-    isNull(gmailCaptureState.lastCapturedAt),
-    lte(gmailCaptureState.lastCapturedAt, sql`now() - interval '2 hours'`)
-  );
-  return await db
-    .select({
-      emailAddress: mailbox.emailAddress,
-      mailboxId: mailbox.id,
-    })
-    .from(mailbox)
-    .leftJoin(gmailWatchState, eq(gmailWatchState.mailboxId, mailbox.id))
-    .leftJoin(gmailCaptureState, eq(gmailCaptureState.mailboxId, mailbox.id))
-    .where(
-      and(
-        eq(mailbox.provider, "gmail"),
-        eq(mailbox.status, "connected"),
-        or(
-          isNull(gmailWatchState.providerRetryAt),
-          lte(gmailWatchState.providerRetryAt, sql`now()`)
-        ),
-        or(
-          captureDue,
-          isNull(gmailWatchState.mailboxId),
-          isNull(gmailWatchState.watchExpirationAt),
-          lte(
-            gmailWatchState.watchExpirationAt,
-            sql`now() + interval '72 hours'`
+export const claimGmailSchedulerRepairs = async (limit = 500) => {
+  const now = new Date();
+  const repairAt = sql`coalesce(${gmailWatchState.schedulerRepairAt}, '-infinity'::timestamp)`;
+  await db
+    .insert(gmailWatchState)
+    .select(
+      db
+        .select({
+          createdAt: sql<Date>`now()`.as("createdAt"),
+          mailboxId: mailbox.id,
+          schedulerRepairAt: sql<Date | null>`null::timestamp`.as(
+            "schedulerRepairAt"
           ),
-          lte(
-            gmailWatchState.watchRenewedAt,
-            sql`now() - interval '36 hours' - make_interval(secs => ((('x' || md5(${mailbox.id}))::bit(32)::int & 2147483647) % 7200))`
-          ),
-          isNull(gmailWatchState.lastReconciledAt),
-          isNotNull(gmailWatchState.historyPageToken),
-          isNotNull(gmailWatchState.recoveryAfter),
-          isNotNull(gmailWatchState.recoveryPageToken),
-          lte(
-            gmailWatchState.lastReconciledAt,
-            sql`now() - interval '2 hours'`
-          ),
-          exists(
-            db
-              .select({ id: gmailAutoLabelEvent.id })
-              .from(gmailAutoLabelEvent)
-              .innerJoin(
-                mailboxAutomationSettings,
-                eq(
-                  mailboxAutomationSettings.mailboxId,
-                  gmailAutoLabelEvent.mailboxId
-                )
-              )
-              .where(
-                and(
-                  eq(gmailAutoLabelEvent.mailboxId, mailbox.id),
-                  eq(mailboxAutomationSettings.autoLabelEnabled, true),
-                  and(
-                    autoLabelBudgetDeferred,
-                    ne(
-                      gmailAutoLabelEvent.lastError,
-                      AI_CREDIT_ADMISSION_BUSY_MESSAGE
-                    )
-                  )
-                )
-              )
-          ),
-          exists(
-            db
-              .select({ id: mailboxVerificationCode.id })
-              .from(mailboxVerificationCode)
-              .where(
-                and(
-                  eq(mailboxVerificationCode.mailboxId, mailbox.id),
-                  isNull(mailboxVerificationCode.processedAt),
-                  gt(
-                    mailboxVerificationCode.createdAt,
-                    sql`now() - interval '2 hours'`
-                  ),
-                  or(
-                    isNull(mailboxVerificationCode.leaseUntil),
-                    lt(mailboxVerificationCode.leaseUntil, sql`now()`)
-                  ),
-                  or(
-                    isNull(mailboxVerificationCode.nextAttemptAt),
-                    lte(mailboxVerificationCode.nextAttemptAt, sql`now()`)
-                  )
-                )
-              )
+          updatedAt: sql<Date>`now()`.as("updatedAt"),
+        })
+        .from(mailbox)
+        .leftJoin(gmailWatchState, eq(gmailWatchState.mailboxId, mailbox.id))
+        .where(
+          and(
+            eq(mailbox.provider, "gmail"),
+            eq(mailbox.status, "connected"),
+            isNull(gmailWatchState.mailboxId)
           )
-        ),
-        or(
-          captureDue,
-          isNull(gmailWatchState.lastErrorAt),
-          lte(gmailWatchState.lastErrorAt, sql`now() - interval '1 hour'`)
         )
-      )
+        .limit(limit)
+        .for("key share", { of: mailbox, skipLocked: true })
     )
-    .orderBy(
-      desc(isNull(gmailWatchState.lastReconciledAt)),
-      asc(gmailWatchState.lastReconciledAt)
-    )
-    .limit(limit);
+    .onConflictDoNothing();
+
+  return await db.transaction(async (tx) => {
+    const due = tx
+      .select({ id: gmailWatchState.mailboxId })
+      .from(gmailWatchState)
+      .innerJoin(mailbox, eq(mailbox.id, gmailWatchState.mailboxId))
+      .where(and(eq(mailbox.status, "connected"), lte(repairAt, now)))
+      .orderBy(asc(repairAt), asc(gmailWatchState.mailboxId))
+      .limit(limit)
+      .for("update", { of: gmailWatchState, skipLocked: true });
+    return await tx
+      .update(gmailWatchState)
+      .set({ schedulerRepairAt: new Date(now.getTime() + 10 * 60_000) })
+      .where(inArray(gmailWatchState.mailboxId, due))
+      .returning({ mailboxId: gmailWatchState.mailboxId });
+  });
+};
+
+export const recordGmailSchedulerHeartbeat = async (mailboxId: string) => {
+  await db
+    .update(gmailWatchState)
+    .set({ schedulerRepairAt: new Date(Date.now() + 4 * 60 * 60_000) })
+    .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
 export const maintainGmailPubSubMailbox = async (input: {
@@ -778,14 +718,7 @@ export type GmailPubSubNotificationMessage = {
   pubSubMessageId: string;
 };
 
-export const processGmailPubSubNotification = async (
-  input: GmailPubSubNotificationMessage,
-  options?: {
-    maxHistoryPages?: number;
-    onAccepted?: (input: { mailboxId: string }) => Promise<void>;
-    onProcessed?: (input: { mailboxId: string }) => Promise<void>;
-  }
-) => {
+export const findConnectedGmailMailbox = async (emailAddress: string) => {
   const [gmailMailbox] = await db
     .select({
       id: mailbox.id,
@@ -796,13 +729,29 @@ export const processGmailPubSubNotification = async (
     .from(mailbox)
     .where(
       and(
-        eq(mailbox.emailAddress, input.emailAddress.trim().toLowerCase()),
+        eq(mailbox.emailAddress, emailAddress.trim().toLowerCase()),
         eq(mailbox.provider, "gmail")
       )
     )
     .limit(1);
 
   if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
+    return null;
+  }
+
+  return { ...gmailMailbox, ownerUserId: gmailMailbox.ownerUserId };
+};
+
+export const processGmailPubSubNotification = async (
+  input: GmailPubSubNotificationMessage,
+  options?: {
+    maxHistoryPages?: number;
+    onAccepted?: (input: { mailboxId: string }) => Promise<void>;
+    onProcessed?: (input: { mailboxId: string }) => Promise<void>;
+  }
+) => {
+  const gmailMailbox = await findConnectedGmailMailbox(input.emailAddress);
+  if (gmailMailbox === null) {
     return { ignored: true as const, reason: "mailbox_not_connected" as const };
   }
 

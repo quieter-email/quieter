@@ -100,7 +100,7 @@ vi.mock(import("../src/gmail-sync/work-store"), () => ({
     retryAt,
   enqueueGmailMessageWork: fixtures.enqueueWork,
   getGmailMailboxProviderRetryAt: async () => null,
-  hasPendingFreshGmailWorkForAccount: async () => false,
+  hasPendingFreshGmailWork: async () => false,
 }));
 vi.mock(import("../src/mail-capture"), () => ({
   processGmailMailCapture: async () => ({

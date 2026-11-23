@@ -11,8 +11,8 @@ import type {
   claimGmailMessageWork,
   deferGmailMailboxProvider,
   enqueueGmailMessageWork,
-  hasPendingFreshGmailWorkForAccount,
-  listGmailMessageWorkWakeJobs,
+  hasPendingFreshGmailWork,
+  pruneCompletedGmailMessageWork,
   finishGmailMessageWork,
   getGmailMessageWorkWake,
   getGmailMailboxProviderRetryAt,
@@ -35,9 +35,9 @@ vi.mock(import("../src/gmail-sync/work-store"), () => ({
   finishGmailMessageWork: fixtures.finish,
   getGmailMailboxProviderRetryAt: fixtures.providerRetryAt,
   getGmailMessageWorkWake: fixtures.wake,
-  hasPendingFreshGmailWorkForAccount:
-    vi.fn<typeof hasPendingFreshGmailWorkForAccount>(),
-  listGmailMessageWorkWakeJobs: vi.fn<typeof listGmailMessageWorkWakeJobs>(),
+  hasPendingFreshGmailWork: vi.fn<typeof hasPendingFreshGmailWork>(),
+  pruneCompletedGmailMessageWork:
+    vi.fn<typeof pruneCompletedGmailMessageWork>(),
 }));
 vi.mock(import("../src/gmail-sync/message"), () => ({
   processGmailMessage: fixtures.process,
@@ -119,38 +119,17 @@ describe("Gmail message work", () => {
   test("does not execute or finish a message claimed by another worker", async () => {
     fixtures.claim.mockResolvedValue({ status: "empty" });
     await expect(
-      processNextGmailMessageWork({ priority: "fresh" })
+      processNextGmailMessageWork({ mailboxId: "mailbox", priority: "fresh" })
     ).resolves.toMatchObject({ status: "idle" });
     expect(fixtures.process).not.toHaveBeenCalled();
     expect(fixtures.finish).not.toHaveBeenCalled();
   });
 
-  test("retains a future capacity rescue without authorizing or reading ready work", async () => {
-    const retryAt = new Date(Date.now() + 5000);
-    fixtures.claim.mockResolvedValue({
-      activeLeases: 4,
-      retryAt,
-      status: "capacity_busy",
-    });
-    fixtures.wake.mockResolvedValue({
-      moreReady: true,
-      nextWakeAt: new Date(),
-    });
-    const result = await processNextGmailMessageWork({ priority: "fresh" });
-    expect(result).toMatchObject({
-      moreReady: false,
-      nextWakeAt: retryAt,
-      status: "capacity_busy",
-    });
-    expect(result.nextWakeAt?.getTime()).toBeGreaterThan(Date.now());
-    expect(fixtures.authorize).not.toHaveBeenCalled();
-    expect(fixtures.process).not.toHaveBeenCalled();
-    expect(fixtures.finish).not.toHaveBeenCalled();
-    expect(fixtures.wake).not.toHaveBeenCalled();
-  });
-
   test("runs pending work with the current owner and settings", async () => {
-    await processNextGmailMessageWork({ priority: "fresh" });
+    await processNextGmailMessageWork({
+      mailboxId: "mailbox",
+      priority: "fresh",
+    });
     expect(fixtures.process).toHaveBeenCalledWith(
       expect.objectContaining({
         accessToken: "current-token",
@@ -183,7 +162,7 @@ describe("Gmail message work", () => {
       },
     });
     await expect(
-      processNextGmailMessageWork({ priority: "fresh" })
+      processNextGmailMessageWork({ mailboxId: "mailbox", priority: "fresh" })
     ).resolves.toMatchObject({ status: "retry" });
     expect(fixtures.finish).toHaveBeenCalledWith(
       expect.objectContaining({ criticalComplete: false, retryAt })
@@ -199,7 +178,7 @@ describe("Gmail message work", () => {
     fixtures.process.mockRejectedValue(failure);
     fixtures.deferProvider.mockResolvedValue(longerCooldown);
     await expect(
-      processNextGmailMessageWork({ priority: "fresh" })
+      processNextGmailMessageWork({ mailboxId: "mailbox", priority: "fresh" })
     ).rejects.toBe(failure);
     expect(fixtures.deferProvider).toHaveBeenCalledWith(
       "mailbox",
@@ -230,7 +209,10 @@ describe("Gmail message work", () => {
       status: "claimed",
       work: { ...work(), completedAt: new Date() },
     });
-    await processNextGmailMessageWork({ priority: "fresh" });
+    await processNextGmailMessageWork({
+      mailboxId: "mailbox",
+      priority: "fresh",
+    });
     expect(fixtures.process).toHaveBeenCalledWith(
       expect.objectContaining({
         autoLabelEnabled: false,
@@ -260,7 +242,7 @@ describe("Gmail message work", () => {
         throw failure;
       });
       await expect(
-        processNextGmailMessageWork({ priority: "fresh" })
+        processNextGmailMessageWork({ mailboxId: "mailbox", priority: "fresh" })
       ).rejects.toBe(failure);
       expect(fixtures.finish).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -283,7 +265,10 @@ describe("Gmail message work", () => {
         autoLabel: { status: "disabled" },
         verificationCode: { status: "disabled" },
       });
-      await processNextGmailMessageWork({ priority: "catchup" });
+      await processNextGmailMessageWork({
+        mailboxId: "mailbox",
+        priority: "catchup",
+      });
       expect(fixtures.process).toHaveBeenCalledWith(
         expect.objectContaining({
           autoLabelEnabled: false,

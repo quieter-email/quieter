@@ -1265,11 +1265,16 @@ export const gmailWatchState = pgTable(
     recoveryAfter: timestamp("recoveryAfter"),
     recoveryBefore: timestamp("recoveryBefore"),
     recoveryPageToken: text("recoveryPageToken"),
+    schedulerRepairAt: timestamp("schedulerRepairAt"),
     updatedAt: timestamp("updatedAt").notNull(),
     watchExpirationAt: timestamp("watchExpirationAt"),
     watchRenewedAt: timestamp("watchRenewedAt"),
   },
   (table) => [
+    index("gmail_watch_state_scheduler_repair_at_idx").on(
+      sql`coalesce(${table.schedulerRepairAt}, '-infinity'::timestamp)`,
+      table.mailboxId
+    ),
     index("gmail_watch_state_watch_expiration_at_idx").on(
       table.watchExpirationAt
     ),
@@ -1307,6 +1312,16 @@ export const gmailMessageWork = pgTable(
       table.mailboxId,
       table.gmailMessageId
     ),
+    index("gmail_message_work_pending_mailbox_idx")
+      .on(table.mailboxId, table.source, table.dueAt, table.priorityAt)
+      .where(
+        sql`${table.completedAt} is null or ${table.lastError} is not null or (${table.triggerActions} is true and ${table.actionsCompletedAt} is null)`
+      ),
+    index("gmail_message_work_finished_idx")
+      .on(table.updatedAt)
+      .where(
+        sql`${table.completedAt} is not null and ${table.lastError} is null and (${table.triggerActions} is false or ${table.actionsCompletedAt} is not null)`
+      ),
     index("gmail_message_work_ready_idx").on(
       table.source,
       table.dueAt,
