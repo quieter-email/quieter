@@ -78,6 +78,10 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE,
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE,
       QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
       QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS:
         runtimeEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS,
@@ -176,6 +180,18 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_CHAT_MODEL: optionalString,
       QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .max(1_000_000)
+        .optional(),
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(15_000)
+        .max(100_000_000)
+        .default(600_000),
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
       QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS: optionalString,
       QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS: optionalString,

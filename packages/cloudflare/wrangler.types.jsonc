@@ -92,6 +92,8 @@
   ],
   "durable_objects": {
     "bindings": [
+      { "name": "GmailProjectQuota", "class_name": "GmailProjectQuota" },
+
       {
         "name": "GmailMailboxScheduler",
         "class_name": "GmailMailboxScheduler",
@@ -122,6 +124,7 @@
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
     { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },
     { "tag": "scheduled-send-v1", "new_sqlite_classes": ["ScheduledSend"] },
+    { "tag": "gmail-quota-v1", "new_sqlite_classes": ["GmailProjectQuota"] },
   ],
   "observability": {
     "enabled": true,

@@ -71,6 +71,10 @@ export const createSstConfigEnv = (
       POLAR_SANDBOX: runtimeEnv.POLAR_SANDBOX,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE,
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE,
       R2_ACCOUNT_ID: runtimeEnv.R2_ACCOUNT_ID,
       R2_BUCKET: runtimeEnv.R2_BUCKET,
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
@@ -85,6 +89,18 @@ export const createSstConfigEnv = (
       POLAR_PRODUCT_PRO_ID: optionalString,
       POLAR_SANDBOX: optionalBooleanString,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .max(1_000_000)
+        .optional(),
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(15_000)
+        .max(100_000_000)
+        .default(600_000),
       R2_ACCOUNT_ID: optionalString,
       R2_BUCKET: optionalString,
       R2_ENDPOINT: optionalString,

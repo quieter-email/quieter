@@ -8,3 +8,4 @@ export {
 } from "./worker";
 export { GmailFreshExecutor } from "./gmail-fresh-executor";
 export { GmailMailboxScheduler } from "./gmail-mailbox-scheduler";
+export { GmailProjectQuota } from "./gmail-project-quota";

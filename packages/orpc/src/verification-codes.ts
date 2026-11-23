@@ -9,6 +9,7 @@ import {
   MailVerificationCodeTimeoutError,
   VERIFICATION_CODE_MODEL,
 } from "@quieter/ai/extract-verification-code";
+import { AiProviderDeferredError } from "@quieter/ai/provider-admission";
 import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -53,7 +54,8 @@ export type VerificationCodeProcessingResult =
         | "budget"
         | "extraction_timeout"
         | "failure"
-        | "in_progress";
+        | "in_progress"
+        | "provider_quota";
       retryAt: Date;
     };
 
@@ -564,6 +566,24 @@ export const processMailVerificationCode = async ({
     }
     return { status: "complete" };
   } catch (error) {
+    if (error instanceof AiProviderDeferredError) {
+      const retryAt = new Date(error.retryAt);
+      await db
+        .update(mailboxVerificationCode)
+        .set({
+          leaseToken: null,
+          leaseUntil: null,
+          nextAttemptAt: retryAt,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
+        );
+      return { reason: "provider_quota", retryAt, status: "retry" };
+    }
     const extractionTimedOut =
       error instanceof MailVerificationCodeTimeoutError;
     const failureReason = extractionTimedOut ? "extraction_timeout" : "failure";

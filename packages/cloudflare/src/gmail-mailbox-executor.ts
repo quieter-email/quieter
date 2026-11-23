@@ -8,6 +8,7 @@ import type {
   GmailDispatch,
   GmailMailboxScheduler,
 } from "./gmail-mailbox-scheduler";
+import { withProjectGmailQuota } from "./gmail-project-quota";
 import { broadcastMailUpdate } from "./mail-updates";
 import { reportWorkerError } from "./worker-runtime";
 
@@ -15,7 +16,7 @@ type ExecutionOutcome = Parameters<GmailMailboxScheduler["finish"]>[1];
 const RECONCILIATION_INTERVAL_MS = 2 * 60 * 60_000;
 
 const runGmailMailboxTask = async (
-  { mailboxId, task }: GmailDispatch,
+  { mailboxId, notification, task }: GmailDispatch,
   env: Env
 ): Promise<ExecutionOutcome> => {
   const notify = async () => {
@@ -36,6 +37,7 @@ const runGmailMailboxTask = async (
     const { maintainGmailPubSubMailbox } =
       await import("@quieter/orpc/gmail-pubsub");
     const result = await maintainGmailPubSubMailbox({
+      ...notification,
       mailboxId,
       topicName: env.GMAIL_PUBSUB_TOPIC,
     });
@@ -49,6 +51,7 @@ const runGmailMailboxTask = async (
     await notify();
     const now = Date.now();
     return {
+      continueNotification: result.status === "pending",
       nextAt:
         result.status === "pending"
           ? now + 5000
@@ -60,18 +63,26 @@ const runGmailMailboxTask = async (
   }
 
   const {
+    createGmailAutomationRuntime,
     discoverFreshGmailMessages,
     getGmailMessageWorkWake,
     processNextGmailMessageWork,
   } = await import("@quieter/orpc/gmail-work");
   if (task === "discover") {
-    const result = await discoverFreshGmailMessages({ mailboxId });
+    const result = await discoverFreshGmailMessages({
+      mailboxId,
+      notificationReceivedAt: notification?.notificationReceivedAt,
+    });
     return result.ignored
       ? { nextAt: null }
       : { nextAt: null, wakes: { fresh: Date.now() } };
   }
 
   const work = { mailboxId, priority: task };
+  const runtimes = new Map<
+    string,
+    ReturnType<typeof createGmailAutomationRuntime>
+  >();
   let broadcast: Promise<void> | undefined;
   const outcomes = await Promise.allSettled(
     Array.from(
@@ -79,6 +90,21 @@ const runGmailMailboxTask = async (
       async () =>
         await processNextGmailMessageWork({
           ...work,
+          automationRuntime: (context) => {
+            const key = JSON.stringify([
+              context.mailboxId,
+              context.userId,
+              context.organizationId,
+              context.accessToken,
+            ]);
+            const existing = runtimes.get(key);
+            if (existing !== undefined) {
+              return existing;
+            }
+            const runtime = createGmailAutomationRuntime(context);
+            runtimes.set(key, runtime);
+            return runtime;
+          },
           onAttemptComplete: (attempt) => {
             // oxlint-disable-next-line no-console -- Timing snapshots contain no mailbox or message data.
             console.info({ event: "gmail_processing_attempt", ...attempt });
@@ -120,7 +146,8 @@ export const executeGmailMailboxDispatch = async (
   batch: MessageBatch,
   env: Env
 ) => {
-  const { isGmailRateLimitedError } = await import("@quieter/orpc/gmail-work");
+  const { GmailBackgroundQuotaDeferredError, isGmailRateLimitedError } =
+    await import("@quieter/orpc/gmail-work");
   await Promise.all(
     batch.messages.map(async (message) => {
       const parsed = gmailDispatchSchema.safeParse(message.body);
@@ -138,19 +165,28 @@ export const executeGmailMailboxDispatch = async (
         let outcome: ExecutionOutcome;
         try {
           outcome = await withRequestDatabaseClient(
-            async () => await runGmailMailboxTask(dispatch, env)
+            async () =>
+              await withProjectGmailQuota(
+                env,
+                dispatch,
+                async () => await runGmailMailboxTask(dispatch, env)
+              )
           );
         } catch (error) {
-          reportWorkerError(error, {
-            category: "gmail_mailbox_execution_failed",
-            route: "queue",
-          });
-          const retryAt =
-            Date.now() +
-            (isGmailRateLimitedError(error)
-              ? Math.max(1000, error.retryAfterMs ?? 60_000)
-              : 60_000);
-          outcome = { nextAt: retryAt, retryAt };
+          if (error instanceof GmailBackgroundQuotaDeferredError) {
+            outcome = { nextAt: error.retryAt, retryAt: error.retryAt };
+          } else {
+            reportWorkerError(error, {
+              category: "gmail_mailbox_execution_failed",
+              route: "queue",
+            });
+            const retryAt =
+              Date.now() +
+              (isGmailRateLimitedError(error)
+                ? Math.max(1000, error.retryAfterMs ?? 60_000)
+                : 60_000);
+            outcome = { nextAt: retryAt, retryAt };
+          }
         }
         let applied: boolean;
         try {

@@ -14,6 +14,7 @@ import { withSentryReporting } from "./worker-runtime";
 
 export { GmailFreshExecutor } from "./gmail-fresh-executor";
 export { GmailMailboxScheduler } from "./gmail-mailbox-scheduler";
+export { GmailProjectQuota } from "./gmail-project-quota";
 
 const acceptGmailJob = async (job: GmailJob, env: Env) => {
   const now = Date.now();
@@ -39,7 +40,12 @@ const acceptGmailJob = async (job: GmailJob, env: Env) => {
     await gmailMailboxScheduler(env, account.id).wake(
       account.id,
       { ...("kind" in job ? {} : { discover: now }), sync: now },
-      "kind" in job ? undefined : notification.historyId
+      "kind" in job
+        ? undefined
+        : {
+            notificationReceivedAt: notification.notificationReceivedAt ?? now,
+            observedHistoryId: notification.historyId,
+          }
     );
   }
 };

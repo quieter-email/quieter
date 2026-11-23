@@ -95,6 +95,8 @@
   },
   "durable_objects": {
     "bindings": [
+      { "name": "GmailProjectQuota", "class_name": "GmailProjectQuota" },
+
       {
         "name": "GmailMailboxScheduler",
         "class_name": "GmailMailboxScheduler",
@@ -116,5 +118,6 @@
       "tag": "mailbox-scheduler-v1",
       "new_sqlite_classes": ["GmailMailboxScheduler"],
     },
+    { "tag": "gmail-quota-v1", "new_sqlite_classes": ["GmailProjectQuota"] },
   ],
 }

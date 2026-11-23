@@ -10,6 +10,8 @@ import { APICallError } from "ai";
 import type { LanguageModelMiddleware } from "ai";
 import { z } from "zod";
 
+import { aiProviderAdmission } from "./provider-admission";
+
 export const providerUsageResponseSchema = z.object({
   id: z.string().optional(),
   usage: z.object({ cost: z.number().nonnegative().optional() }).optional(),
@@ -126,6 +128,8 @@ export const runBilledAiRequest = async <Result>(input: {
   };
   try {
     recordStage("admission");
+    const providerAdmission = aiProviderAdmission();
+    await providerAdmission?.reserve();
     const reservationId = await reserveAiCreditUsage(
       input.billing,
       input.maximumCostUsd
@@ -172,6 +176,21 @@ export const runBilledAiRequest = async <Result>(input: {
         recordStage("release");
         await releaseAiCreditUsage(reservationId);
         recordStage(null);
+      }
+      if (
+        providerAdmission !== undefined &&
+        APICallError.isInstance(error) &&
+        error.statusCode === 429
+      ) {
+        const retryAfter = error.responseHeaders?.["retry-after"];
+        const delay = Number(retryAfter);
+        const date =
+          retryAfter === undefined ? Number.NaN : Date.parse(retryAfter);
+        await providerAdmission.observeRateLimit(
+          Number.isFinite(delay)
+            ? delay * 1000
+            : Math.max(0, Number.isFinite(date) ? date - Date.now() : 30_000)
+        );
       }
       throw error;
     }

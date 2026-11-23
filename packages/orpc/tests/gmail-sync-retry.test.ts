@@ -291,12 +291,13 @@ const input = {
   automationRuntime: {
     getAutoLabelContext: async () => ({
       availableLabelIds: new Set<string>(),
+      getMemoryCandidates: async () =>
+        await Promise.resolve({
+          mailboxId: "mailbox-1",
+          userId: "user-1",
+        }),
       historyLabels: [],
       labels: [],
-      memoryCandidates: {
-        mailboxId: "mailbox-1",
-        userId: "user-1",
-      },
       model: "fixture-model",
     }),
     getBudgetStatus: fixtures.budget,
@@ -940,6 +941,11 @@ describe("Gmail automation retry recovery", () => {
           ...input.automationRuntime,
           getAutoLabelContext: async () => ({
             availableLabelIds: new Set(["deterministic", "ai"]),
+            getMemoryCandidates: async () =>
+              await Promise.resolve({
+                mailboxId: "mailbox-1",
+                userId: "user-1",
+              }),
             historyLabels: [],
             labels: [
               candidate,
@@ -953,10 +959,6 @@ describe("Gmail automation retry recovery", () => {
                   ]
                 : []),
             ],
-            memoryCandidates: {
-              mailboxId: "mailbox-1",
-              userId: "user-1",
-            },
             model: "fixture-model",
           }),
         },

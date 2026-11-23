@@ -8,6 +8,7 @@ import {
   isAiCreditAdmissionBusy,
   shouldReportAiTaskFailure,
 } from "@quieter/ai/errors";
+import { AiProviderDeferredError } from "@quieter/ai/provider-admission";
 import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
@@ -18,6 +19,7 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import {
   getMessageWithDetails,
+  GmailBackgroundQuotaDeferredError,
   isGmailServiceError,
   isGmailRateLimitedError,
   mutateGmailMessage,
@@ -71,7 +73,7 @@ export type AutoLabelContext = {
   availableLabelIds: Set<string>;
   historyLabels: Pick<MailAutoLabelCandidate, "id" | "name">[];
   labels: MailAutoLabelCandidate[];
-  memoryCandidates: AiAgentMemoryCandidates | null;
+  getMemoryCandidates: () => Promise<AiAgentMemoryCandidates | null>;
   model: string;
 };
 type MailAutomationBudgetStatus = Awaited<
@@ -409,23 +411,24 @@ const processAutoLabelMessage = async ({
                 userId,
               });
         recordStage(null);
-        if (aiLabels.length > 0 && autoLabelContext.memoryCandidates !== null) {
+        let memoryContext;
+        if (aiLabels.length > 0) {
           recordStage("memory");
+          const candidates = await autoLabelContext.getMemoryCandidates();
+          if (candidates !== null) {
+            memoryContext = await loadAiAgentContext({
+              agent: "auto_label",
+              candidates,
+              mailboxId,
+              onDiagnostics: (memory) => {
+                attempt.memory = memory;
+              },
+              query: buildMailMemoryQuery(message),
+              semantic: { billingMailboxId: mailboxId },
+              userId: candidates.userId,
+            });
+          }
         }
-        const memoryContext =
-          aiLabels.length === 0 || autoLabelContext.memoryCandidates === null
-            ? null
-            : await loadAiAgentContext({
-                agent: "auto_label",
-                candidates: autoLabelContext.memoryCandidates,
-                mailboxId,
-                onDiagnostics: (memory) => {
-                  attempt.memory = memory;
-                },
-                query: buildMailMemoryQuery(message),
-                semantic: { billingMailboxId: mailboxId },
-                userId: autoLabelContext.memoryCandidates.userId,
-              });
         recordStage(null);
         let aiLabelIds: string[] = [];
         if (aiLabels.length > 0) {
@@ -442,7 +445,7 @@ const processAutoLabelMessage = async ({
             labelHistory,
             labels: aiLabels,
             memoryContext:
-              memoryContext === null
+              memoryContext === undefined || memoryContext === null
                 ? null
                 : serializeAiAgentContext(memoryContext),
             message,
@@ -561,6 +564,12 @@ const processAutoLabelMessage = async ({
         return { reason: "admission_busy", retryAt, status: "retry" };
       }
       const now = new Date();
+      if (
+        error instanceof GmailBackgroundQuotaDeferredError ||
+        error instanceof AiProviderDeferredError
+      ) {
+        throw error;
+      }
       const attemptCount = event.attemptCount + 1;
       const retryAt = new Date(
         now.getTime() +

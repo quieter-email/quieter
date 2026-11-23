@@ -30,6 +30,16 @@ import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { decodeHTML } from "entities";
 import { z } from "zod";
 
+import {
+  gmailBackgroundQuotaMeter,
+  gmailRequestQuotaUnits,
+} from "./background-quota";
+
+export {
+  GmailBackgroundQuotaDeferredError,
+  withGmailBackgroundQuota,
+} from "./background-quota";
+
 const headerSchema = z.object({
   name: z.string(),
   value: z.string(),
@@ -544,6 +554,11 @@ const createGoogleApiError = async (
     googleStatus,
   });
   applyRetryAfterHeader(error, response);
+  if (response.status === 403 && googleReason === "dailylimitexceeded") {
+    await gmailBackgroundQuotaMeter()?.observeProjectLimit(
+      error.retryAfterMs ?? 15 * 60_000
+    );
+  }
   if (
     error.retryAfterMs === undefined &&
     isKnownGmailRateLimit({
@@ -815,6 +830,14 @@ const requestGmail = async <T>(
   if (options?.body !== undefined && options.body !== null) {
     headers.set("Content-Type", "application/json");
     body = JSON.stringify(options.body);
+  }
+
+  const quota = gmailBackgroundQuotaMeter();
+  if (quota !== undefined) {
+    await quota.reserve(
+      gmailRequestQuotaUnits(url, options?.method ?? "GET"),
+      url.pathname.endsWith("/watch") ? "watch" : "work"
+    );
   }
 
   const response = await fetch(url.toString(), {
@@ -1408,6 +1431,11 @@ const getGmailMetadataBatch = async <T>(
     `--${boundary}--`,
     "",
   ].join("\r\n");
+
+  await gmailBackgroundQuotaMeter()?.reserve(
+    ids.length * (resource === "message" ? 60 : 120),
+    "work"
+  );
 
   const response = await fetch("https://gmail.googleapis.com/batch/gmail/v1", {
     body,

@@ -68,6 +68,10 @@ export const createGmailResources = (
       "GmailFreshExecutor",
       { className: "GmailFreshExecutor" }
     );
+    const gmailProjectQuota = new sst.cloudflare.DurableObject(
+      "GmailProjectQuota",
+      { className: "GmailProjectQuota" }
+    );
     const gmailMailboxScheduler = new sst.cloudflare.DurableObject(
       "GmailMailboxScheduler",
       { className: "GmailMailboxScheduler" }
@@ -102,12 +106,19 @@ export const createGmailResources = (
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: String(
+            context.env.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE ?? ""
+          ),
+          QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: String(
+            context.env.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE
+          ),
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/gmail-processing-worker.ts",
         link: [
           gmailFreshExecutor,
           gmailMailboxScheduler,
+          gmailProjectQuota,
           ...executorQueues,
           mailLiveUser,
           appDatabase,
@@ -119,6 +130,10 @@ export const createGmailResources = (
           {
             newSqliteClasses: [gmailMailboxScheduler.className],
             tag: "mailbox-scheduler-v1",
+          },
+          {
+            newSqliteClasses: [gmailProjectQuota.className],
+            tag: "gmail-quota-v1",
           },
         ],
         placement: { region: GMAIL_PROCESSING_REGION },

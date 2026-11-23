@@ -8,8 +8,15 @@ import { reportWorkerError } from "./worker-runtime";
 const tasks = ["discover", "fresh", "sync", "catchup"] as const;
 export type GmailMailboxTask = (typeof tasks)[number];
 
+const notificationHintSchema = z.object({
+  notificationReceivedAt: z.number().int().nonnegative(),
+  observedHistoryId: z.string().max(64).regex(/^\d+$/u),
+});
+type NotificationHint = z.infer<typeof notificationHintSchema>;
+
 export const gmailDispatchSchema = z.object({
   mailboxId: z.string().min(1),
+  notification: notificationHintSchema.optional(),
   task: z.enum(tasks),
   token: z.uuid(),
 });
@@ -19,11 +26,13 @@ type Lease = {
   token: string;
   expiresAt: number;
   state: "sent" | "running";
+  notification?: NotificationHint;
 };
 type Lane = {
   dueAt: number | null;
   lease: Lease | null;
   blockedUntil?: number;
+  notification?: NotificationHint;
 };
 
 const DELIVERY_LEASE_MS = 15 * 60_000;
@@ -75,13 +84,14 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
   async wake(
     mailboxId: string,
     wakes: Partial<Record<GmailMailboxTask, number>>,
-    observedHistoryId?: string
+    notification?: NotificationHint
   ) {
     await this.#update(async (lanes, storage) => {
       if (lanes.size === 0) {
         await storage.put("mailboxId", mailboxId);
       }
-      if (observedHistoryId !== undefined) {
+      if (notification !== undefined) {
+        const { observedHistoryId } = notification;
         const previous = await storage.get<string>("observedHistoryId");
         if (
           previous !== undefined &&
@@ -98,6 +108,12 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
         }
         const lane = lanes.get(task) ?? { dueAt: null, lease: null };
         lane.dueAt = Math.min(lane.dueAt ?? Infinity, dueAt);
+        if (
+          notification !== undefined &&
+          (task === "sync" || task === "discover")
+        ) {
+          lane.notification = notification;
+        }
         lanes.set(task, lane);
       }
     });
@@ -110,6 +126,7 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
         return false;
       }
       lane.lease = {
+        ...lane.lease,
         expiresAt: Date.now() + EXECUTION_LEASE_MS,
         state: "running",
         token,
@@ -123,6 +140,7 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
     outcome: {
       nextAt: number | null;
       retryAt?: number;
+      continueNotification?: boolean;
       wakes?: Partial<Record<GmailMailboxTask, number>>;
     }
   ) {
@@ -134,6 +152,12 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
         lane.lease.expiresAt <= Date.now()
       ) {
         return false;
+      }
+      if (
+        outcome.retryAt !== undefined ||
+        outcome.continueNotification === true
+      ) {
+        lane.notification ??= lane.lease.notification;
       }
       lane.lease = null;
       lane.blockedUntil = outcome.retryAt;
@@ -172,19 +196,21 @@ export class GmailMailboxScheduler extends DurableObject<Env> {
         }
         const next = laneDeadline(lane);
         if (next <= now) {
-          const token =
-            lane.lease?.state === "sent"
-              ? lane.lease.token
-              : crypto.randomUUID();
-          if (lane.lease === null) {
+          const sent = lane.lease?.state === "sent" ? lane.lease : null;
+          const token = sent?.token ?? crypto.randomUUID();
+          let notification = lane.lease?.notification;
+          if (sent === null && lane.dueAt !== null && lane.dueAt <= now) {
+            notification = lane.notification ?? notification;
+            lane.notification = undefined;
             lane.dueAt = null;
           }
           lane.lease = {
             expiresAt: now + DELIVERY_LEASE_MS,
+            notification,
             state: "sent",
             token,
           };
-          ready.push({ mailboxId, task, token });
+          ready.push({ mailboxId, notification, task, token });
         }
       }
       return ready;

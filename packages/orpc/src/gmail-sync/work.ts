@@ -1,6 +1,8 @@
+import { AiProviderDeferredError } from "@quieter/ai/provider-admission";
 import { db } from "@quieter/database/client";
 import { mailbox, mailboxAutomationSettings } from "@quieter/database/schema";
 import {
+  GmailBackgroundQuotaDeferredError,
   listGmailMessageIds,
   listLabels,
   isGmailRateLimitedError,
@@ -35,7 +37,15 @@ export {
   hasPendingFreshGmailWork,
   pruneCompletedGmailMessageWork,
 } from "./work-store";
-export { isGmailRateLimitedError } from "@quieter/gmail";
+export {
+  AiProviderDeferredError,
+  withAiProviderAdmission,
+} from "@quieter/ai/provider-admission";
+export {
+  GmailBackgroundQuotaDeferredError,
+  isGmailRateLimitedError,
+  withGmailBackgroundQuota,
+} from "@quieter/gmail";
 
 type MessageAttempt = Parameters<
   NonNullable<Parameters<typeof processGmailMessage>[0]["onAttemptComplete"]>
@@ -79,12 +89,11 @@ export const createGmailAutomationRuntime = (input: {
   userId: string;
 }): MailAutomationRuntime => {
   let context: Promise<AutoLabelContext> | undefined;
+  let memory: ReturnType<AutoLabelContext["getMemoryCandidates"]> | undefined;
+  let budget: ReturnType<typeof getMailAutomationAiBudgetStatus> | undefined;
   return {
     getAutoLabelContext: async () => {
       context ??= (async () => {
-        const actor = await getMailboxMemoryActor({
-          mailboxId: input.mailboxId,
-        });
         const labels = await syncGmailLabels(
           input.mailboxId,
           await listLabels(input.accessToken)
@@ -103,23 +112,33 @@ export const createGmailAutomationRuntime = (input: {
           }));
         return {
           availableLabelIds: new Set(candidates.map((label) => label.id)),
+          getMemoryCandidates: async () => {
+            memory ??= (async () => {
+              const actor = await getMailboxMemoryActor({
+                mailboxId: input.mailboxId,
+              });
+              return actor === null
+                ? null
+                : await loadAiAgentMemoryCandidates({
+                    mailboxId: input.mailboxId,
+                    userId: actor.userId,
+                  });
+            })();
+            return await memory;
+          },
           historyLabels: labels
             .filter((label) => label.type === "user")
             .map(({ id, name }) => ({ id, name })),
           labels: candidates,
-          memoryCandidates:
-            actor === null
-              ? null
-              : await loadAiAgentMemoryCandidates({
-                  mailboxId: input.mailboxId,
-                  userId: actor.userId,
-                }),
           model: loadAiConfiguration().autoLabelModel,
         };
       })();
       return await context;
     },
-    getBudgetStatus: async () => await getMailAutomationAiBudgetStatus(input),
+    getBudgetStatus: async () => {
+      budget ??= getMailAutomationAiBudgetStatus(input);
+      return await budget;
+    },
   };
 };
 
@@ -189,6 +208,7 @@ export const discoverFreshGmailMessages = async (
 
 export const processNextGmailMessageWork = async (input: {
   priority: GmailWorkPriority;
+  automationRuntime?: typeof createGmailAutomationRuntime;
   mailboxId: string;
   onAttemptComplete?: (attempt: GmailWorkAttempt) => void;
   onCriticalComplete?: (
@@ -288,7 +308,9 @@ export const processNextGmailMessageWork = async (input: {
                   autoLabelEnabled:
                     !criticalComplete &&
                     (account.settings?.autoLabelEnabled ?? false),
-                  automationRuntime: createGmailAutomationRuntime({
+                  automationRuntime: (
+                    input.automationRuntime ?? createGmailAutomationRuntime
+                  )({
                     accessToken,
                     mailboxId: work.mailboxId,
                     organizationId,
@@ -356,7 +378,12 @@ export const processNextGmailMessageWork = async (input: {
             ? Math.max(1000, error.retryAfterMs ?? 60_000)
             : 60_000)
       );
-      if (isGmailRateLimitedError(error)) {
+      if (
+        error instanceof GmailBackgroundQuotaDeferredError ||
+        error instanceof AiProviderDeferredError
+      ) {
+        retryAt = new Date(error.retryAt);
+      } else if (isGmailRateLimitedError(error)) {
         retryAt = await deferGmailMailboxProvider(work.mailboxId, retryAt);
       }
       throw error;

@@ -182,9 +182,9 @@ describe("Gmail action receive acknowledgement", () => {
           automationRuntime: {
             getAutoLabelContext: async () => ({
               availableLabelIds: new Set<string>(),
+              getMemoryCandidates: async () => await Promise.resolve(null),
               historyLabels: [],
               labels: [],
-              memoryCandidates: null,
               model: "unused",
             }),
             getBudgetStatus: async () => ({ allowed: true, reason: "allowed" }),
