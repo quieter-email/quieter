@@ -32,7 +32,8 @@ export const mailListRowFrameVariants = cva(
 );
 
 export const mailListRowParts = {
-  overlay: "pointer-events-none absolute inset-2 z-0 rounded-lg bg-selection",
+  overlay:
+    "pointer-events-none absolute inset-2 z-0 rounded-lg bg-selection/45 dark:bg-selection",
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
