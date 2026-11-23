@@ -199,6 +199,43 @@ For an explicitly authorized cutover only, `accept_unfunded_owned_organizations=
 
 The account workflow has no entitlement revocation action. Temporary grants expire naturally. Revoking a permanent grant requires a separately reviewed protected operation, including its authorization and scope. Do not delete override history or change production data locally.
 
+### Inspect AI memory usage by operation
+
+Run `inspect-ai-memory-usage` for the exact account payer. The report uses a read-only transaction. It uses the current UTC month for unlimited accounts and the stored, active subscription period for metered accounts. It returns `unavailable` if it cannot confirm a period from local records.
+
+`costMicroCents` is the amount recorded as usage. Divide it by 100,000,000 to get dollars. `recordedCostOperations` counts cost entries. A legacy ledger entry may cover several model calls. Released reservations, attempts with unknown cost, and known costs missing from the usage total have their own fields. Rows marked `current-funded-team` lack a frozen payer. They can include usage from before a funding change. `memory-recall` includes search and background indexing because they share the same recorded operation.
+
+The public workflow log contains ciphertext. The operator decrypts the report with the matching private key. Pass only the random request ID as a workflow input. Keep the payer ID in the protected request secret.
+
+Use OpenSSL 3 to create a fresh local key and certificate. Enter the approved internal user ID at the prompt. Set the protected request only when the incident owner authorizes production configuration and no other report is using the secret.
+
+```bash
+report_dir=$(mktemp -d)
+report_request_id=$(openssl rand -hex 16)
+openssl req -x509 -newkey rsa:3072 -noenc -days 1 -subj '/CN=Quieter AI memory report' \
+  -keyout "$report_dir/key.pem" -out "$report_dir/cert.pem"
+read -r -s -p 'Internal billing user ID: ' report_user_id
+printf '%s' "$report_user_id" |
+  jq -Rsc --arg requestId "$report_request_id" --rawfile recipientCertificate "$report_dir/cert.pem" \
+    '{requestId: $requestId, userId: ., recipientCertificate: $recipientCertificate}' |
+  gh secret set BILLING_AI_MEMORY_REPORT_REQUEST --env production
+unset report_user_id
+gh workflow run billing-operations.yml --ref main \
+  -f action=inspect-ai-memory-usage -f report_request_id="$report_request_id"
+```
+
+After the run succeeds, use its run ID to decrypt the report locally. The request ID ties the run to the protected request. Remove your request secret when its run finishes. Delete the local private key once you have finished reading the report.
+
+```bash
+gh run view "$report_run_id" --log |
+  awk '/Encrypted AI memory report [A-Za-z0-9+/=]+$/ {print $NF}' |
+  base64 --decode |
+  openssl cms -decrypt -binary -inform DER -recip "$report_dir/cert.pem" -inkey "$report_dir/key.pem"
+gh secret delete BILLING_AI_MEMORY_REPORT_REQUEST --env production
+rm -f "$report_dir/key.pem" "$report_dir/cert.pem"
+rmdir "$report_dir"
+```
+
 ### Bootstrap before the first account-only deployment
 
 The standalone workflow exists only after merge. To guarantee a named authorized account has permanent access before account-only writers publish, set the production GitHub environment variable `BILLING_BOOTSTRAP_USER_ID` to the verified internal user ID before merging the cutover. Set `BILLING_BOOTSTRAP_ACCEPT_FUNDING=true` only when accepting every currently unfunded organization owned by that exact user is also explicitly authorized. No identity is inferred from an email address or display name.
