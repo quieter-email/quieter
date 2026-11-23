@@ -8,6 +8,7 @@ import {
   mailbox,
   mailMessageImportance,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import {
   getGmailCapturedSnapshot,
   getGmailCaptureMetadata,
@@ -36,6 +37,10 @@ import {
   sql,
 } from "drizzle-orm";
 
+import {
+  finishGmailCapturedBody,
+  stageGmailCapturedBody,
+} from "./gmail-captured-body";
 import { ensureMailImportanceWork } from "./mail-importance";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
@@ -97,6 +102,19 @@ export const writeGmailCapturedMessage = async (input: {
   };
   const analysis = analyzeMailMessage(snapshot);
   analysis.truncated ||= Object.values(snapshot.truncation).some(Boolean);
+  const staged =
+    serverEnv.GMAIL_BODY_STORAGE_ENABLED === true
+      ? await stageGmailCapturedBody(
+          { mailboxId: input.mailboxId, messageId: snapshot.id },
+          snapshot
+        )
+      : null;
+  const content = staged?.columns ?? {
+    bodyObject: null,
+    bodySearchDocument: null,
+    bodySearchText: null,
+    snapshot,
+  };
   const now = new Date();
   await db.transaction(async (tx) => {
     if (input.leaseId) {
@@ -105,26 +123,43 @@ export const writeGmailCapturedMessage = async (input: {
     const accepted = await tx
       .insert(gmailCapturedMessage)
       .values({
+        ...content,
         analysis,
         capturedAt: now,
         deletedAt: null,
         mailboxId: input.mailboxId,
         messageId: snapshot.id,
         providerRevision: snapshot.providerRevision,
-        snapshot,
         source: input.source,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         set: {
           analysis,
+          bodyBackfillAfter: null,
+          bodyObject: sql`excluded."bodyObject"`,
+          bodySearchDocument: sql`excluded."bodySearchDocument"`,
+          bodySearchText: sql`excluded."bodySearchText"`,
           deletedAt: null,
           providerRevision: snapshot.providerRevision,
-          snapshot,
+          snapshot: sql`excluded.snapshot`,
           source: input.source,
           updatedAt: now,
         },
-        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${snapshot.providerRevision}::numeric or (${gmailCapturedMessage.providerRevision}::numeric = ${snapshot.providerRevision}::numeric and ${gmailCapturedMessage.deletedAt} is null and (${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot or (${gmailCapturedMessage.source} = 'search' and excluded.source <> 'search')))`,
+        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < excluded."providerRevision"::numeric
+          or (${gmailCapturedMessage.providerRevision}::numeric = excluded."providerRevision"::numeric
+            and ${gmailCapturedMessage.deletedAt} is null
+            and (
+              case when ${gmailCapturedMessage.bodyObject} is null and excluded."bodyObject" is null
+                then ${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot
+                else (${gmailCapturedMessage.snapshot} - array['bodyText','bodyHtml']) is distinct from (excluded.snapshot - array['bodyText','bodyHtml'])
+                  or coalesce(${gmailCapturedMessage.bodySearchText}, ${gmailCapturedMessage.snapshot}->>'bodyText')
+                    is distinct from coalesce(excluded."bodySearchText", excluded.snapshot->>'bodyText')
+                  or gmail_capture_html_digest(${gmailCapturedMessage.snapshot}, ${gmailCapturedMessage.bodyObject})
+                    is distinct from gmail_capture_html_digest(excluded.snapshot, excluded."bodyObject")
+              end
+              or (${gmailCapturedMessage.source} = 'search' and excluded.source <> 'search')
+            ))`,
         target: [
           gmailCapturedMessage.mailboxId,
           gmailCapturedMessage.messageId,
@@ -152,6 +187,9 @@ export const writeGmailCapturedMessage = async (input: {
           updatedAt: now,
         })
         .where(eq(mailbox.id, input.mailboxId));
+    }
+    if (staged !== null && accepted.length > 0) {
+      await finishGmailCapturedBody(tx, staged);
     }
   });
 };
@@ -183,6 +221,10 @@ export const deleteGmailCapturedMessage = async (input: {
       .onConflictDoUpdate({
         set: {
           analysis: null,
+          bodyBackfillAfter: null,
+          bodyObject: null,
+          bodySearchDocument: null,
+          bodySearchText: null,
           deletedAt: now,
           providerRevision: input.providerRevision,
           snapshot: null,
@@ -302,7 +344,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
       .update(gmailCapturedMessage)
       .set({
         providerRevision: input.providerRevision,
-        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${JSON.stringify(labelIds)}::jsonb), '{providerRevision}', ${JSON.stringify(input.providerRevision)}::jsonb)`,
+        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${JSON.stringify(labelIds)}::text::jsonb), '{providerRevision}', to_jsonb(${input.providerRevision}::text))`,
         updatedAt: now,
       })
       .where(
@@ -312,7 +354,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
           isNull(gmailCapturedMessage.deletedAt),
           sql`${gmailCapturedMessage.snapshot} is not null`,
           sql`${gmailCapturedMessage.providerRevision}::numeric <= ${input.providerRevision}::numeric`,
-          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${JSON.stringify(labelIds)}::jsonb)`
+          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${JSON.stringify(labelIds)}::text::jsonb)`
         )
       )
       .returning({ messageId: gmailCapturedMessage.messageId });

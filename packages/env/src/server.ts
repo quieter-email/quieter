@@ -33,6 +33,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_MIGRATION_URL: runtimeEnv.DATABASE_MIGRATION_URL,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
+      GMAIL_BODY_ENCRYPTION_KEY: runtimeEnv.GMAIL_BODY_ENCRYPTION_KEY,
+      GMAIL_BODY_STORAGE_ENABLED: runtimeEnv.GMAIL_BODY_STORAGE_ENABLED,
       GMAIL_CREDENTIAL_ROTATION_TOKEN:
         runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
@@ -140,6 +142,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_MIGRATION_URL: optionalUrl,
       DATABASE_URL: optionalUrl,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: optionalString,
+      GMAIL_BODY_ENCRYPTION_KEY: optionalString,
+      GMAIL_BODY_STORAGE_ENABLED: optionalBooleanString,
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
       GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),

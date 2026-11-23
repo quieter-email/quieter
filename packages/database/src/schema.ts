@@ -24,6 +24,7 @@ import {
   bigserial,
   boolean,
   check,
+  customType,
   doublePrecision,
   foreignKey,
   index,
@@ -1420,10 +1421,26 @@ export const gmailCaptureState = pgTable(
   ]
 );
 
+type GmailCapturedBodyObject = {
+  bucket: string;
+  htmlDigest: string | null;
+  key: string;
+  keyVersion: string;
+  revision: string;
+};
+
+const tsvector = customType<{ data: string }>({
+  dataType: () => "tsvector",
+});
+
 export const gmailCapturedMessage = pgTable(
   "gmailCapturedMessage",
   {
     analysis: jsonb("analysis").$type<MailMessageAnalysis>(),
+    bodyBackfillAfter: timestamp("bodyBackfillAfter"),
+    bodyObject: jsonb("bodyObject").$type<GmailCapturedBodyObject>(),
+    bodySearchDocument: tsvector("bodySearchDocument").array(),
+    bodySearchText: text("bodySearchText"),
     capturedAt: timestamp("capturedAt").notNull(),
     deletedAt: timestamp("deletedAt"),
     mailboxId: text("mailboxId")
@@ -1431,7 +1448,10 @@ export const gmailCapturedMessage = pgTable(
       .references(() => mailbox.id, { onDelete: "cascade" }),
     messageId: text("messageId").notNull(),
     providerRevision: text("providerRevision").notNull(),
-    snapshot: jsonb("snapshot").$type<CapturedMailSnapshot>(),
+    snapshot: jsonb("snapshot").$type<
+      Omit<CapturedMailSnapshot, "bodyHtml" | "bodyText"> &
+        Partial<Pick<CapturedMailSnapshot, "bodyHtml" | "bodyText">>
+    >(),
     source: text("source")
       .$type<"bootstrap" | "history" | "on_demand" | "recovery" | "search">()
       .notNull(),
@@ -1453,6 +1473,27 @@ export const gmailCapturedMessage = pgTable(
     ),
     index("gmail_captured_message_live_thread_idx")
       .on(table.mailboxId, sql`(${table.snapshot}->>'threadId')`)
+      .where(sql`${table.deletedAt} is null`),
+    index("gmail_captured_message_pending_body_idx")
+      .on(
+        sql`(coalesce(${table.bodyBackfillAfter}, '-infinity'::timestamp))`,
+        table.mailboxId,
+        table.messageId
+      )
+      .where(
+        sql`${table.deletedAt} is null and ${table.bodyObject} is null and ${table.snapshot} is not null`
+      ),
+    index("gmail_captured_message_body_text_idx")
+      .using(
+        "gin",
+        sql`(coalesce(coalesce(${table.bodySearchText}, ${table.snapshot}->>'bodyText'), '')) gin_trgm_ops`
+      )
+      .where(sql`${table.deletedAt} is null`),
+    index("gmail_captured_message_body_search_idx")
+      .using(
+        "gin",
+        sql`(coalesce(case when ${table.bodySearchDocument} is null then gmail_capture_search_full(${table.snapshot}) else (${table.bodySearchDocument})[1] end, ''::tsvector))`
+      )
       .where(sql`${table.deletedAt} is null`),
   ]
 );

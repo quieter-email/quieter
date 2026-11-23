@@ -32,6 +32,8 @@ For recovery, use a forward deployment that keeps both Durable Object namespaces
 
 Track oldest ready work by lane, queue retries, watch expiry margin, provider throttling, and unresolved billing outcomes during a rollout. Validate the limits of the configured Gmail project, model budget, and database before expanding. Keep both legacy-compatible history columns through the rollback window. Confirm that old executors and queue messages have drained before removing any legacy resources.
 
+Encrypted capture has its own rollout switch. Deploy compatible readers with the switch off, then follow the [body storage rollout](mail-capture.md#encrypted-gmail-bodies) before enabling writes and backfill.
+
 ## Local verification
 
 Run `vp run env:doctor`, then `vp run dev:workers`. The gateway listens on loopback and calls the auxiliary private processor through a native Worker service binding. Both use the ignored bindings prepared by `dev:prepare`. To choose another port, update the local URLs, run `vp run dev:prepare`, then run `vp run @quieter/cloudflare#dev --port <port>`. See [development setup](development.md) and [Cloudflare's local queue documentation](https://developers.cloudflare.com/queues/configuration/local-development/).

@@ -42,6 +42,7 @@
     "./domain-connect": "./src/mail-domain/domain-connect-service.ts",
     "./domain-connect-template": "./src/mail-domain/domain-connect.ts",
     "./gmail-compose-retention": "./src/gmail-compose-retention.ts",
+    "./gmail-body-backfill": "./src/gmail-body-backfill.ts",
     "./gmail-credential-rotation": "./src/gmail-credential-rotation.ts",
     "./gmail-mailbox-automation": "./src/mailbox/gmail-automation.ts",
     "./gmail-mailbox-automation/readiness": "./src/mailbox/automation-readiness.ts",

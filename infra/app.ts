@@ -42,6 +42,9 @@ export const createInfrastructure = async (input: {
     appDatabase,
     webSecretBindings,
     {
+      GMAIL_BODY_STORAGE_ENABLED: String(
+        context.env.GMAIL_BODY_STORAGE_ENABLED ?? false
+      ),
       GMAIL_LIVE_SYNC_URL: gmail.gmailLiveSyncUrl,
       MAIL_BUCKET: mail.mailBucket.name,
       MAIL_RECEIPT_ROLE_ARN: mail.mailReceiptRole.arn,

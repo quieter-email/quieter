@@ -7,6 +7,7 @@ import {
 import { analyzeMailMessage } from "@quieter/mail/capture";
 import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
+import { hydrateGmailCapturedSnapshot } from "./gmail-captured-body";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 export const normalizeCapturedMailMetadata = async (input: {
@@ -18,7 +19,14 @@ export const normalizeCapturedMailMetadata = async (input: {
   const mailbox = await assertAccessibleMailbox(input);
   if (mailbox.provider === "gmail") {
     const rows = await db
-      .select()
+      .select({
+        analysis: gmailCapturedMessage.analysis,
+        bodyObject: gmailCapturedMessage.bodyObject,
+        mailboxId: gmailCapturedMessage.mailboxId,
+        messageId: gmailCapturedMessage.messageId,
+        providerRevision: gmailCapturedMessage.providerRevision,
+        snapshot: gmailCapturedMessage.snapshot,
+      })
       .from(gmailCapturedMessage)
       .where(
         and(
@@ -38,10 +46,12 @@ export const normalizeCapturedMailMetadata = async (input: {
       if (row.snapshot === null || row.analysis === null) {
         continue;
       }
-      const analysis = analyzeMailMessage(row.snapshot);
-      analysis.truncated ||= Object.values(row.snapshot.truncation).some(
-        Boolean
-      );
+      const snapshot = await hydrateGmailCapturedSnapshot(row);
+      if (snapshot === null) {
+        continue;
+      }
+      const analysis = analyzeMailMessage(snapshot);
+      analysis.truncated ||= Object.values(snapshot.truncation).some(Boolean);
       await assertAccessibleMailbox(input);
       await db.transaction(async (tx) => {
         const accepted = await tx
@@ -53,8 +63,9 @@ export const normalizeCapturedMailMetadata = async (input: {
               eq(gmailCapturedMessage.messageId, row.messageId),
               eq(gmailCapturedMessage.providerRevision, row.providerRevision),
               isNull(gmailCapturedMessage.deletedAt),
-              sql`${gmailCapturedMessage.snapshot} = ${JSON.stringify(row.snapshot)}::jsonb`,
-              sql`${gmailCapturedMessage.analysis} = ${JSON.stringify(row.analysis)}::jsonb`
+              sql`${gmailCapturedMessage.snapshot} = ${JSON.stringify(row.snapshot)}::text::jsonb`,
+              sql`${gmailCapturedMessage.bodyObject} is not distinct from ${row.bodyObject === null ? null : JSON.stringify(row.bodyObject)}::text::jsonb`,
+              sql`${gmailCapturedMessage.analysis} = ${JSON.stringify(row.analysis)}::text::jsonb`
             )
           )
           .returning({ messageId: gmailCapturedMessage.messageId });

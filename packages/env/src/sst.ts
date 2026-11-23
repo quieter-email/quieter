@@ -60,6 +60,7 @@ export const createSstConfigEnv = (
     emptyStringAsUndefined: true,
     onValidationError: throwEnvironmentValidationError,
     runtimeEnvStrict: {
+      GMAIL_BODY_STORAGE_ENABLED: runtimeEnv.GMAIL_BODY_STORAGE_ENABLED,
       GMAIL_PUBSUB_PUSH_AUDIENCE: runtimeEnv.GMAIL_PUBSUB_PUSH_AUDIENCE,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT:
         runtimeEnv.GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT,
@@ -80,6 +81,7 @@ export const createSstConfigEnv = (
       R2_ENDPOINT: runtimeEnv.R2_ENDPOINT,
     },
     server: {
+      GMAIL_BODY_STORAGE_ENABLED: optionalBooleanString,
       GMAIL_PUBSUB_PUSH_AUDIENCE: optionalString,
       GMAIL_PUBSUB_PUSH_SERVICE_ACCOUNT: z.email().optional(),
       GMAIL_PUBSUB_SUBSCRIPTION: optionalString,

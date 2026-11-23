@@ -17,6 +17,7 @@ import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
   "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_BODY_ENCRYPTION_KEY",
   "GOOGLE_CALENDAR_CLIENT_ID",
   "GOOGLE_CALENDAR_CLIENT_SECRET",
   "LINEAR_CLIENT_ID",
@@ -30,13 +31,14 @@ const processingSecretNames = [
   "MICROSOFT_CLIENT_ID",
   "MICROSOFT_CLIENT_SECRET",
   "QUIETER_BACKGROUND_MODEL",
-
   "GMAIL_TOKEN_ENCRYPTION_KEY",
   "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
   "GOOGLE_GMAIL_CLIENT_ID",
   "GOOGLE_GMAIL_CLIENT_SECRET",
   "OPENROUTER_API_KEY",
   "POLAR_ACCESS_TOKEN",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
 ] as const;
 
 export const createGmailResources = (
@@ -111,12 +113,20 @@ export const createGmailResources = (
     const gmailProcessingWorker = new sst.cloudflare.Worker(
       "GmailProcessingWorker",
       {
-        build: cloudflareWorkerBuild,
+        build: {
+          esbuild: {
+            ...cloudflareWorkerBuild.esbuild,
+            conditions: ["workerd", "worker", "module", "node"],
+          },
+        },
         compatibility: {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],
         },
         environment: {
+          GMAIL_BODY_STORAGE_ENABLED: String(
+            context.env.GMAIL_BODY_STORAGE_ENABLED ?? false
+          ),
           GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
           MAIL_UPDATES_URL: updates.url,
           ...context.billingEnvironment,
@@ -128,6 +138,9 @@ export const createGmailResources = (
           QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: String(
             context.env.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE
           ),
+          R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
+          R2_BUCKET: context.env.R2_BUCKET ?? "",
+          R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/gmail-processing-worker.ts",

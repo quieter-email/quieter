@@ -248,6 +248,8 @@ export default {
         await import("@quieter/orpc/ai-memory");
       const { cleanupGmailComposeOperations } =
         await import("@quieter/orpc/gmail-compose-retention");
+      const { backfillGmailCapturedBodies } =
+        await import("@quieter/orpc/gmail-body-backfill");
       const { cleanupMailObjects } =
         await import("@quieter/orpc/managed-mail/storage");
       const { processManagedRuleBackfills } =
@@ -262,6 +264,7 @@ export default {
           recoverMailSends(),
           processPendingAiMemoryEvents(),
           cleanupGmailComposeOperations(),
+          backfillGmailCapturedBodies(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),

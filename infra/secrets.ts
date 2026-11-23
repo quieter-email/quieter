@@ -35,13 +35,21 @@ export const requireSecretBinding = (
   return binding;
 };
 
-export const createSecretInfrastructure = () => {
+export const createSecretInfrastructure = (
+  gmailBodyStorageEnabled: boolean
+) => {
   const secretResources: SecretResources = {};
   for (const [environmentName, secretName] of Object.entries(sstSecretNames)) {
     if (!isSecretName(environmentName)) {
       throw new Error(`Unknown SST secret environment name ${environmentName}`);
     }
-    secretResources[environmentName] = new sst.Secret(secretName);
+    secretResources[environmentName] = new sst.Secret(
+      secretName,
+      environmentName === "GMAIL_BODY_ENCRYPTION_KEY" &&
+        !gmailBodyStorageEnabled
+        ? ""
+        : undefined
+    );
   }
 
   const secretBindings: SecretBindings = {};
@@ -52,10 +60,21 @@ export const createSecretInfrastructure = () => {
     if (directOnlySecretNames.has(environmentName)) {
       continue;
     }
+    const value =
+      environmentName === "GMAIL_BODY_ENCRYPTION_KEY" && gmailBodyStorageEnabled
+        ? secret.value.apply((keys) => {
+            if (!/^[\da-f]{64}(?:,[\da-f]{64})*$/iu.test(keys)) {
+              throw new Error(
+                "GmailBodyEncryptionKey requires 32-byte hex keys."
+              );
+            }
+            return keys;
+          })
+        : secret.value;
     secretBindings[environmentName] = new sst.Linkable(environmentName, {
       include: [
         sst.cloudflare.binding({
-          properties: { text: secret.value },
+          properties: { text: value },
           type: "secretTextBindings",
         }),
       ],

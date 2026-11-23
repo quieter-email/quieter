@@ -33,6 +33,9 @@ export const createMailMaintenanceResources = (
       environment: {
         ...context.billingEnvironment,
         ...context.releaseEnvironment,
+        GMAIL_BODY_STORAGE_ENABLED: String(
+          context.env.GMAIL_BODY_STORAGE_ENABLED ?? false
+        ),
         MAIL_UPDATES_URL: updatesUrl,
         QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
         QUIETER_GMAIL_MAILBOX_LANES: String(context.gmailPubSubEnabled),
@@ -64,6 +67,7 @@ export const createMailMaintenanceResources = (
             "OPENROUTER_API_KEY",
             "QUIETER_BACKGROUND_MODEL",
             "GMAIL_TOKEN_ENCRYPTION_KEY",
+            "GMAIL_BODY_ENCRYPTION_KEY",
             "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
             "GOOGLE_GMAIL_CLIENT_ID",
             "GOOGLE_GMAIL_CLIENT_SECRET",

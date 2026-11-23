@@ -7,6 +7,7 @@ import {
   processPendingMailMemoryBootstrap,
   seedMissingMailMemoryBootstrap,
 } from "@quieter/orpc/ai-memory-capture";
+import { backfillGmailCapturedBodies } from "@quieter/orpc/gmail-body-backfill";
 import { cleanupGmailComposeOperations } from "@quieter/orpc/gmail-compose-retention";
 import {
   drainMailAgentRuns,
@@ -54,6 +55,7 @@ export default withSentryReporting({
             : undefined,
           purgeExpiredAiGeneratedMailBodies(),
           cleanupGmailComposeOperations(),
+          backfillGmailCapturedBodies(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),
