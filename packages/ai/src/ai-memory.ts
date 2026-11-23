@@ -694,10 +694,8 @@ Admission and maintenance:
 - For automatic additions, require concrete evidence of a durable fact that meaningfully changes how
   a future assistant can help this user. Skip minor details and weak inferences. Keep distinctive
   authored voice, active work, and meaningful relationships when the evidence supports them.
-- Treat routine receipts, login and security alerts, temporary balances, shipment timelines,
-  marketing, and one-off notices as background noise. A new login, device, location, timestamp, or
-  service name alone does not justify a memory. When the message provides concrete evidence of a
-  genuinely new, lasting fact that would change future assistance, retain only that fact.
+- Skip routine activity, temporary status changes, and incidental details unless they establish a
+  lasting fact that meets the same bar. Retain the durable fact and omit the event details.
 - A direct request from the user to remember a safe fact still warrants saving it.
 - Incoming generic sender behavior is not a user preference. Scope supported sender-specific context
   to the exact known correspondent; never promote it to a general user trait without evidence.
