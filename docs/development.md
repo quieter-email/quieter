@@ -82,7 +82,9 @@ Local development requires only the values needed by the paths you exercise. Imp
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
-Interactive chat selects model families through OpenRouter's [latest aliases](https://openrouter.ai/docs/guides/routing/routers/latest-resolution), so releases update without redeploying. Flash Lite has no dedicated alias and is pinned to the current stable version in `chat-models.ts`; update it when a new release ships. `QuieterChatModel` chooses the Auto family; existing concrete chat identifiers normalize to that family. Explicit family choices stay within that family when a provider is unavailable.
+Interactive chat uses concrete model IDs in `chat-models.ts` so each label matches the version it selects. Check OpenRouter's text and tool-calling endpoints for zero data retention before adding a model to the picker. `QuieterChatModel` chooses the Auto model. Older model IDs and family aliases resolve to their corresponding picker choices. Existing Gemini Flash and Flash Lite chat selections resolve to Gemini 4 Hydrogen. Flash Lite remains the default for background tasks.
+
+If an existing chat or background secret names a retired model, Quieter uses the corresponding default until the secret is updated. Chat requests from older tabs use Auto when they reference a retired model.
 
 ## Running
 

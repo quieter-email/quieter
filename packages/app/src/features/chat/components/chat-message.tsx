@@ -1,7 +1,6 @@
 "use client";
 
 import { Copy01Icon, Edit02Icon } from "@hugeicons/core-free-icons";
-import { MarkdownContent } from "@quieter/app/features/chat/components/markdown-content";
 import { ToolActivity } from "@quieter/app/features/chat/components/tool-activity";
 import {
   getAssistantProgress,
@@ -12,6 +11,7 @@ import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-to
 import { getChatActivitySegments } from "@quieter/app/features/chat/domain/tool-activity";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
@@ -30,7 +30,15 @@ import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
 import { toast } from "@quieter/ui/toast";
 import type { UIMessage } from "ai";
-import { useState } from "react";
+import { lazy, Suspense, useState } from "react";
+import type { ReactNode } from "react";
+
+export const preloadChatMarkdown = async () => {
+  const { MarkdownContent } = await import("./markdown-content");
+  return { default: MarkdownContent };
+};
+
+const MarkdownContent = lazy(preloadChatMarkdown);
 
 const copyMessage = async (text: string) => {
   try {
@@ -42,6 +50,27 @@ const copyMessage = async (text: string) => {
       fallback: "Could not copy to clipboard.",
     });
   }
+};
+
+export const ChatEntry = ({
+  animateOnMount,
+  children,
+}: {
+  animateOnMount: boolean;
+  children: ReactNode;
+}) => {
+  // oxlint-disable-next-line react/hook-use-state -- Intentionally frozen at mount; there is no setter.
+  const [entering] = useState(animateOnMount);
+  return (
+    <div
+      className={cn({
+        "animate-in duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) fade-in slide-in-from-bottom-1 motion-reduce:animate-none":
+          entering,
+      })}
+    >
+      {children}
+    </div>
+  );
 };
 
 const EditMessage = ({
@@ -117,6 +146,7 @@ const EditMessage = ({
 export const ChatMessage = ({
   approvals,
   edit,
+  entering = false,
   isStreaming,
   message,
   onSuggestion,
@@ -126,6 +156,7 @@ export const ChatMessage = ({
     disabled: boolean;
     onSubmit: (messageId: string, text: string) => void;
   };
+  entering?: boolean;
   isStreaming: boolean;
   message: UIMessage;
   onSuggestion?: (text: string) => void;
@@ -138,28 +169,30 @@ export const ChatMessage = ({
 
   if (message.role === "user") {
     return (
-      <div className="group/message flex items-center justify-end gap-1">
-        {edit === undefined ? null : (
-          <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
-            <EditMessage
-              disabled={edit.disabled}
-              onEdit={(value) => {
-                edit.onSubmit(message.id, value);
-              }}
-              text={text}
-            />
-          </div>
-        )}
-        <Surface
-          chrome="bubble"
-          className="max-w-2/3"
-          data-conversation-item={message.id}
-          padding="snug"
-          variant="section"
-        >
-          <Text className="wrap-anywhere whitespace-pre-wrap">{text}</Text>
-        </Surface>
-      </div>
+      <ChatEntry animateOnMount={entering}>
+        <div className="group/message flex items-center justify-end gap-1">
+          {edit === undefined ? null : (
+            <div className="opacity-0 transition-opacity group-hover/message:opacity-100 focus-within:opacity-100 [@media(pointer:coarse)]:opacity-100">
+              <EditMessage
+                disabled={edit.disabled}
+                onEdit={(value) => {
+                  edit.onSubmit(message.id, value);
+                }}
+                text={text}
+              />
+            </div>
+          )}
+          <Surface
+            chrome="bubble"
+            className="max-w-2/3"
+            data-conversation-item={message.id}
+            padding="snug"
+            variant="section"
+          >
+            <Text className="wrap-anywhere whitespace-pre-wrap">{text}</Text>
+          </Surface>
+        </div>
+      </ChatEntry>
     );
   }
 
@@ -173,40 +206,59 @@ export const ChatMessage = ({
   const progress = activeWork
     ? null
     : getAssistantProgress(message.parts, isStreaming);
-  const suggestions = getMessageSuggestions(message.parts);
   const interruption = message.parts.findLast(
     (part) => part.type === "data-chat-interruption"
   );
+  const interruptionText =
+    interruption?.type === "data-chat-interruption" &&
+    typeof interruption.data === "string"
+      ? interruption.data
+      : undefined;
+  if (
+    segments.length === 0 &&
+    progress === null &&
+    interruptionText === undefined &&
+    text === ""
+  ) {
+    return null;
+  }
+  const suggestions = getMessageSuggestions(message.parts);
 
   return (
     <article className="group/message w-full min-w-0 space-y-3 text-body text-fg">
-      {segments.map((segment) => {
-        if (segment.kind === "text") {
-          return (
-            <MarkdownContent
-              key={`${message.id}:${segment.id}`}
-              markdown={segment.text}
-            />
-          );
-        }
-        return (
-          <ToolActivity
-            activity={segment}
-            isStreaming={isStreaming}
-            key={segment.id}
-          />
-        );
-      })}
-      {interruption?.type === "data-chat-interruption" &&
-      typeof interruption.data === "string" ? (
+      {segments.map((segment) => (
+        <ChatEntry
+          animateOnMount={isStreaming}
+          key={
+            segment.kind === "text" ? `${message.id}:${segment.id}` : segment.id
+          }
+        >
+          {segment.kind === "text" ? (
+            <Suspense
+              fallback={
+                <Text className="wrap-anywhere whitespace-pre-wrap" size="body">
+                  {segment.text}
+                </Text>
+              }
+            >
+              <MarkdownContent markdown={segment.text} />
+            </Suspense>
+          ) : (
+            <ToolActivity activity={segment} isStreaming={isStreaming} />
+          )}
+        </ChatEntry>
+      ))}
+      {interruptionText === undefined ? null : (
         <Text aria-live="polite" size="sm" tone="muted">
-          {interruption.data}
+          {interruptionText}
         </Text>
-      ) : null}
+      )}
       {progress === null ? null : (
-        <Text aria-live="polite" size="sm" tone="muted">
-          {progress}
-        </Text>
+        <output className="status-shimmer flex w-fit">
+          <Text as="span" size="sm" tone="muted">
+            {progress}
+          </Text>
+        </output>
       )}
       {onSuggestion !== undefined &&
       !isStreaming &&
