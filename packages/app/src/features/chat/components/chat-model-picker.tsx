@@ -95,7 +95,7 @@ export const ChatModelPicker = ({
           type="search"
           value={search}
         />
-        <div className="mt-2 flex max-h-72 min-h-0 flex-col gap-0.5 overflow-y-auto empty:hidden">
+        <div className="mt-2 flex max-h-96 min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain empty:hidden">
           {autoMatches ? (
             <Button
               aria-pressed={model === "auto"}
