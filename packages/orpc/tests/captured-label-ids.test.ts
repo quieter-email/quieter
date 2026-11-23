@@ -22,7 +22,7 @@ vi.mock("@quieter/database/client", () => ({
               where: (condition: SQL) => {
                 recorded.where = condition;
                 return {
-                  returning: async () => Promise.resolve([]),
+                  returning: () => [],
                 };
               },
             };
