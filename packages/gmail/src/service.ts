@@ -2893,10 +2893,12 @@ export const listGmailCaptureHistoryPage = async (
       }
     );
     const changes: GmailCaptureChange[] = [];
+    let lastRecordHistoryId: string | null = null;
     for (const record of response.history ?? []) {
       if (!record.id || !/^\d+$/u.test(record.id)) {
         throw new Error("Message history has no reliable revision.");
       }
+      lastRecordHistoryId = record.id;
       for (const entry of record.messagesAdded ?? []) {
         changes.push({
           kind: "added",
@@ -2922,7 +2924,8 @@ export const listGmailCaptureHistoryPage = async (
         });
       }
     }
-    const historyId = response.historyId ?? options.startHistoryId;
+    const historyId =
+      response.historyId ?? lastRecordHistoryId ?? options.startHistoryId;
     if (!/^\d+$/u.test(historyId)) {
       throw new Error("Message history has no reliable revision.");
     }
@@ -2930,6 +2933,7 @@ export const listGmailCaptureHistoryPage = async (
       changes,
       historyExpired: false,
       historyId,
+      lastRecordHistoryId,
       nextPageToken: response.nextPageToken ?? null,
     };
   } catch (error) {
@@ -2938,6 +2942,7 @@ export const listGmailCaptureHistoryPage = async (
         changes: [],
         historyExpired: true,
         historyId: options.startHistoryId,
+        lastRecordHistoryId: null,
         nextPageToken: null,
       };
     }

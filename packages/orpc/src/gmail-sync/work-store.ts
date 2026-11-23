@@ -31,20 +31,23 @@ const unfinished = or(
   )
 );
 
-export const enqueueGmailMessageWork = async (input: {
-  mailboxId: string;
-  messageIds: string[];
-  source: GmailWorkPriority;
-  triggerActions?: boolean;
-  notificationReceivedAt?: Date;
-  resumeCritical?: boolean;
-}) => {
+export const enqueueGmailMessageWork = async (
+  input: {
+    mailboxId: string;
+    messageIds: string[];
+    source: GmailWorkPriority;
+    triggerActions?: boolean;
+    notificationReceivedAt?: Date;
+    resumeCritical?: boolean;
+  },
+  client: Pick<typeof db, "insert"> = db
+) => {
   const now = new Date();
   const messages = [...new Set(input.messageIds)];
   if (messages.length === 0) {
     return;
   }
-  await db
+  await client
     .insert(gmailMessageWork)
     .values(
       messages.map((gmailMessageId, position) => ({

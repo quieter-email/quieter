@@ -1,9 +1,10 @@
 /* oxlint-disable eslint/require-await -- Provider test doubles keep async contracts without network I/O. */
 import type {
   getMessageWithDetails,
-  listGmailAddedMessageHistoryPage,
+  listGmailCaptureHistoryPage,
   listGmailMessageIds,
 } from "@quieter/gmail";
+import type { MailCaptureHistoryPage } from "@quieter/mail/capture";
 import {
   afterEach,
   beforeEach,
@@ -22,16 +23,24 @@ import type { observeReminderMail } from "../src/reminders/service";
 import type { processMailVerificationCode } from "../src/verification-codes";
 
 const fixtures = vi.hoisted(() => ({
+  capture: {
+    historyId: "99",
+    historyPageToken: null,
+    leaseExpiresAt: null,
+    pendingHistoryPage: null as MailCaptureHistoryPage | null,
+    phase: "history",
+  },
   enqueue: vi.fn<typeof enqueueMailAgentMessage>(),
   enqueueWork: vi.fn<typeof enqueueGmailMessageWork>(),
-  history: vi.fn<typeof listGmailAddedMessageHistoryPage>(),
+  history: vi.fn<typeof listGmailCaptureHistoryPage>(),
   list: vi.fn<typeof listGmailMessageIds>(),
   message: vi.fn<typeof getMessageWithDetails>(),
   processCode: vi.fn<typeof processMailVerificationCode>(),
   state: {
-    historyId: "before-receive",
+    historyId: "101",
     historyPageToken: null,
     lastProcessedAt: null,
+    lastReconciledAt: null,
     mailboxId: "mailbox",
     recoveryAfter: null as Date | null,
     recoveryBefore: null as Date | null,
@@ -39,50 +48,74 @@ const fixtures = vi.hoisted(() => ({
   },
 }));
 
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake maintains the single mailbox cursor used by these receive tests.
+// oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake models rollback of the mailbox checkpoint writes.
 vi.mock("@quieter/database/client", async () => {
   const { getTableName } = await import("drizzle-orm");
-  return {
-    db: {
-      insert: () => ({ values: () => ({ onConflictDoNothing: () => {} }) }),
-      select: () => ({
-        from: (table: Parameters<typeof getTableName>[0]) => {
-          const name = getTableName(table);
-          const query = {
-            limit: () => {
-              if (name === "mailbox") {
-                return [
-                  {
-                    id: "mailbox",
-                    organizationId: null,
-                    ownerUserId: "owner",
-                    status: "connected",
-                  },
-                ];
-              }
-              return name === "gmailWatchState" ? [fixtures.state] : [];
-            },
-            orderBy: () => query,
-            where: () => query,
-          };
-          return query;
+  const db = {
+    insert: () => ({ values: () => ({ onConflictDoNothing: () => {} }) }),
+    select: (fields?: Record<string, unknown>) => ({
+      from: (table: Parameters<typeof getTableName>[0]) => {
+        const name = getTableName(table);
+        const query = {
+          leftJoin: () => query,
+          limit: () => {
+            if (name === "mailbox") {
+              return [
+                {
+                  id: "mailbox",
+                  organizationId: null,
+                  ownerUserId: "owner",
+                  status: "connected",
+                },
+              ];
+            }
+            if (name !== "gmailWatchState") {
+              return [];
+            }
+            return fields?.capture === undefined
+              ? [fixtures.state]
+              : [{ capture: fixtures.capture, watch: fixtures.state }];
+          },
+          orderBy: () => query,
+          where: () => query,
+        };
+        return query;
+      },
+    }),
+    update: (table: Parameters<typeof getTableName>[0]) => ({
+      set: (values: object) => ({
+        where: () => {
+          const state =
+            getTableName(table) === "gmailCaptureState"
+              ? fixtures.capture
+              : fixtures.state;
+          Object.assign(state, values);
+          return { returning: () => [{ mailboxId: "mailbox" }] };
         },
       }),
-      update: () => ({
-        set: (values: object) => ({
-          where: () => {
-            Object.assign(fixtures.state, values);
-            return { returning: () => [{ mailboxId: "mailbox" }] };
-          },
-        }),
-      }),
+    }),
+  };
+  return {
+    db: {
+      ...db,
+      transaction: async (run: (tx: typeof db) => Promise<unknown>) => {
+        const capture = { ...fixtures.capture };
+        const watch = { ...fixtures.state };
+        try {
+          return await run(db);
+        } catch (error) {
+          Object.assign(fixtures.capture, capture);
+          Object.assign(fixtures.state, watch);
+          throw error;
+        }
+      },
     },
   };
 });
 vi.mock(import("@quieter/gmail"), async (importOriginal) => ({
   ...(await importOriginal()),
   getMessageWithDetails: fixtures.message,
-  listGmailAddedMessageHistoryPage: fixtures.history,
+  listGmailCaptureHistoryPage: fixtures.history,
   listGmailMessageIds: fixtures.list,
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The fake supplies an already authorized provider token without OAuth I/O.
@@ -125,15 +158,22 @@ vi.mock(import("../src/verification-codes"), () => ({
 
 const notification = {
   emailAddress: "owner@example.test",
-  historyId: "after-receive",
+  historyId: "105",
   pubSubMessageId: "notification",
 };
 
 describe("Gmail action receive acknowledgement", () => {
   beforeEach(() => {
-    Object.assign(fixtures.state, {
-      historyId: "before-receive",
+    Object.assign(fixtures.capture, {
+      historyId: "99",
       historyPageToken: null,
+      pendingHistoryPage: null,
+    });
+    Object.assign(fixtures.state, {
+      historyId: "101",
+      historyPageToken: null,
+      lastProcessedAt: null,
+      lastReconciledAt: null,
       recoveryAfter: null,
       recoveryBefore: null,
       recoveryPageToken: null,
@@ -141,10 +181,13 @@ describe("Gmail action receive acknowledgement", () => {
     fixtures.enqueue.mockReset().mockResolvedValue();
     fixtures.enqueueWork.mockReset().mockResolvedValue();
     fixtures.history.mockReset().mockResolvedValue({
-      hasMore: false,
+      changes: [
+        { kind: "added", messageId: "inbound", providerRevision: "105" },
+      ],
       historyExpired: false,
-      historyId: "after-receive",
-      messageIds: ["inbound"],
+      historyId: "105",
+      lastRecordHistoryId: "105",
+      nextPageToken: null,
     });
     fixtures.list.mockReset().mockResolvedValue({ messageIds: ["historical"] });
     const labels: Record<string, string[]> = {
@@ -166,10 +209,22 @@ describe("Gmail action receive acknowledgement", () => {
 
   test("enqueues new inbound independently of label and code processing, excluding sent and draft mail", async () => {
     fixtures.history.mockResolvedValue({
-      hasMore: false,
+      changes: [
+        {
+          kind: "added",
+          messageId: "before-automation-cursor",
+          providerRevision: "100",
+        },
+        ...["inbound", "sent", "draft"].map((messageId) => ({
+          kind: "added" as const,
+          messageId,
+          providerRevision: "105",
+        })),
+      ],
       historyExpired: false,
-      historyId: "after-receive",
-      messageIds: ["inbound", "sent", "draft"],
+      historyId: "105",
+      lastRecordHistoryId: "105",
+      nextPageToken: null,
     });
     await expect(
       processGmailPubSubNotification(notification)
@@ -193,6 +248,7 @@ describe("Gmail action receive acknowledgement", () => {
           gmailMessageId: messageId,
           mailboxId: job.mailboxId,
           organizationId: null,
+          recovering: job.source === "catchup",
           triggerActions: job.triggerActions,
           userId: "owner",
         });
@@ -201,7 +257,12 @@ describe("Gmail action receive acknowledgement", () => {
     expect(fixtures.enqueue).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({ mailboxId: "mailbox", messageId: "inbound" })
     );
-    expect(fixtures.state.historyId).toBe("after-receive");
+    expect(
+      fixtures.capture.pendingHistoryPage?.changes.map(
+        (change) => change.messageId
+      )
+    ).toContain("before-automation-cursor");
+    expect(fixtures.state.historyId).toBe("105");
   });
 
   test("preserves the cursor when durable enqueue fails so redelivery can retry", async () => {
@@ -209,19 +270,21 @@ describe("Gmail action receive acknowledgement", () => {
     await expect(processGmailPubSubNotification(notification)).rejects.toThrow(
       "Inbox unavailable"
     );
-    expect(fixtures.state.historyId).toBe("before-receive");
+    expect(fixtures.state.historyId).toBe("101");
+    expect(fixtures.capture.pendingHistoryPage).toBeNull();
     await expect(
       processGmailPubSubNotification(notification)
     ).resolves.toMatchObject({ ignored: false });
-    expect(fixtures.state.historyId).toBe("after-receive");
+    expect(fixtures.state.historyId).toBe("105");
   });
 
   test("never treats historical recovery as a newly received message", async () => {
     fixtures.history.mockResolvedValue({
-      hasMore: false,
+      changes: [],
       historyExpired: false,
-      historyId: "after-receive",
-      messageIds: [],
+      historyId: "105",
+      lastRecordHistoryId: null,
+      nextPageToken: null,
     });
     fixtures.state.recoveryAfter = new Date(Date.now() - 60_000);
     fixtures.state.recoveryBefore = new Date();

@@ -4,6 +4,7 @@ import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-err
 import { db } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
+  gmailCaptureState,
   gmailWatchState,
   mailboxAutomationSettings,
   mailbox,
@@ -12,7 +13,8 @@ import { serverEnv } from "@quieter/env/server";
 import {
   getGmailProfile,
   isGmailRateLimitedError,
-  listGmailAddedMessageHistoryPage,
+  isGmailServiceError,
+  listGmailCaptureHistoryPage,
   listGmailMessageIds,
   watchGmailMailbox,
 } from "@quieter/gmail";
@@ -22,6 +24,7 @@ import {
   asc,
   desc,
   eq,
+  gt,
   inArray,
   isNull,
   lt,
@@ -41,9 +44,7 @@ import {
   reportPendingMailboxVerificationCodeUsage,
 } from "../verification-codes";
 import {
-  deferGmailMailboxProvider,
   enqueueGmailMessageWork,
-  getGmailMailboxProviderRetryAt,
   hasPendingFreshGmailWork,
 } from "./work-store";
 
@@ -59,30 +60,16 @@ const getErrorMessage = (error: unknown) =>
     ? error.message.slice(0, 2000)
     : "Unknown Gmail update error.";
 
-const ensureWatchState = async (mailboxId: string, historyId?: string) => {
+const ensureWatchState = async (mailboxId: string) => {
   const now = new Date();
   await db
     .insert(gmailWatchState)
     .values({
       createdAt: now,
-      historyId,
       mailboxId,
       updatedAt: now,
     })
     .onConflictDoNothing();
-};
-
-const recordWatchError = async (mailboxId: string, error: unknown) => {
-  const now = new Date();
-  await ensureWatchState(mailboxId);
-  await db
-    .update(gmailWatchState)
-    .set({
-      lastError: getErrorMessage(error),
-      lastErrorAt: now,
-      updatedAt: now,
-    })
-    .where(eq(gmailWatchState.mailboxId, mailboxId));
 };
 
 const claimMailboxProcessingLease = async (mailboxId: string) => {
@@ -114,25 +101,6 @@ const claimMailboxProcessingLease = async (mailboxId: string) => {
     .returning({ mailboxId: gmailWatchState.mailboxId });
 
   return claimed === undefined ? null : leaseId;
-};
-
-const extendMailboxProcessingLease = async (
-  mailboxId: string,
-  leaseId: string
-) => {
-  const now = new Date();
-  await db
-    .update(gmailWatchState)
-    .set({
-      processingLeaseExpiresAt: new Date(now.getTime() + PROCESSING_LEASE_MS),
-      updatedAt: now,
-    })
-    .where(
-      and(
-        eq(gmailWatchState.mailboxId, mailboxId),
-        eq(gmailWatchState.processingLeaseId, leaseId)
-      )
-    );
 };
 
 const releaseMailboxProcessingLease = async (
@@ -259,42 +227,139 @@ export const retryPendingAutomationMessages = async ({
   });
 };
 
-const beginHistoryRecovery = async (
-  accessToken: string,
-  mailboxId: string,
-  lastProcessedAt: Date | null
-) => {
-  const profile = await getGmailProfile(accessToken);
-  if (!profile.historyId) {
-    throw new Error("Gmail profile did not include a history ID.");
-  }
+type WatchState = typeof gmailWatchState.$inferSelect;
+type CaptureState = typeof gmailCaptureState.$inferSelect;
+type HistoryTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
 
+const watchLease = (mailboxId: string, leaseId: string) =>
+  and(
+    eq(gmailWatchState.mailboxId, mailboxId),
+    eq(gmailWatchState.processingLeaseId, leaseId),
+    gt(
+      gmailWatchState.processingLeaseExpiresAt,
+      sql`clock_timestamp() at time zone 'UTC'`
+    )
+  );
+
+const checkpointWatch = async (
+  client: Pick<typeof db, "update">,
+  mailboxId: string,
+  leaseId: string,
+  changes: Partial<typeof gmailWatchState.$inferInsert>
+) => {
+  const [state] = await client
+    .update(gmailWatchState)
+    .set({ ...changes, updatedAt: new Date() })
+    .where(watchLease(mailboxId, leaseId))
+    .returning({ mailboxId: gmailWatchState.mailboxId });
+  if (state === undefined) {
+    throw new Error("Gmail history lease expired.");
+  }
+};
+
+const checkpointCaptureHistory = async (
+  tx: HistoryTransaction,
+  capture: CaptureState,
+  changes: Partial<typeof gmailCaptureState.$inferInsert>
+) => {
+  const [state] = await tx
+    .update(gmailCaptureState)
+    .set({ ...changes, updatedAt: new Date() })
+    .where(
+      and(
+        eq(gmailCaptureState.mailboxId, capture.mailboxId),
+        eq(gmailCaptureState.phase, "history"),
+        eq(gmailCaptureState.historyId, capture.historyId ?? ""),
+        isNull(gmailCaptureState.pendingHistoryPage),
+        or(
+          isNull(gmailCaptureState.leaseExpiresAt),
+          lt(
+            gmailCaptureState.leaseExpiresAt,
+            sql`clock_timestamp() at time zone 'UTC'`
+          )
+        )
+      )
+    )
+    .returning({ mailboxId: gmailCaptureState.mailboxId });
+  if (state === undefined) {
+    throw new Error("Mail capture changed while Gmail history was being read.");
+  }
+};
+
+const resetExpiredHistory = async ({
+  accessToken,
+  capture,
+  leaseId,
+  watch,
+}: {
+  accessToken: string;
+  capture: CaptureState | null;
+  leaseId: string;
+  watch: WatchState;
+}) => {
+  const profile = await getGmailProfile(accessToken);
+  const { historyId } = profile;
+  if (!historyId || !/^\d+$/u.test(historyId)) {
+    throw new Error("Gmail profile did not include a valid history ID.");
+  }
+  const resetWatch =
+    capture === null ||
+    (watch.historyId !== null &&
+      capture.historyId !== null &&
+      BigInt(watch.historyId) === BigInt(capture.historyId));
+  const expiredHistoryId = capture?.historyId ?? watch.historyId;
+  if (
+    expiredHistoryId !== null &&
+    BigInt(historyId) <= BigInt(expiredHistoryId)
+  ) {
+    throw new Error("Gmail did not provide a newer history ID for recovery.");
+  }
   const now = new Date();
   const earliestRecovery = now.getTime() - HISTORY_RECOVERY_LOOKBACK_MS;
   const desiredRecovery =
-    (lastProcessedAt?.getTime() ?? earliestRecovery) -
+    (watch.lastReconciledAt?.getTime() ?? watch.createdAt.getTime()) -
     HISTORY_RECOVERY_OVERLAP_MS;
-
-  await db
-    .update(gmailWatchState)
-    .set({
-      historyId: profile.historyId,
-      historyPageToken: null,
-      recoveryAfter: new Date(Math.max(earliestRecovery, desiredRecovery)),
-      recoveryBefore: now,
-      recoveryPageToken: null,
-      updatedAt: now,
-    })
-    .where(eq(gmailWatchState.mailboxId, mailboxId));
+  await db.transaction(async (tx) => {
+    await checkpointWatch(
+      tx,
+      watch.mailboxId,
+      leaseId,
+      resetWatch
+        ? {
+            historyId,
+            historyPageToken: null,
+            recoveryAfter:
+              watch.recoveryAfter ??
+              new Date(Math.max(earliestRecovery, desiredRecovery)),
+            recoveryBefore: now,
+            recoveryPageToken: null,
+          }
+        : {}
+    );
+    if (capture !== null) {
+      await checkpointCaptureHistory(tx, capture, {
+        coverageGapAt: capture.coverageGapAt ?? now,
+        historyChangeOffset: 0,
+        historyId,
+        historyPageToken: null,
+        phase: "recovery",
+        recoveryAfter: new Date(
+          (capture.lastCapturedAt ?? capture.createdAt).getTime() -
+            HISTORY_RECOVERY_OVERLAP_MS
+        ),
+        recoveryBefore: now,
+        recoveryOffset: 0,
+        recoveryPageToken: null,
+      });
+    }
+  });
 };
 
-const processHistoryRecoveryPage = async ({
-  accessToken,
-  mailboxId,
-}: {
-  accessToken: string;
-  mailboxId: string;
-}) => {
+const processHistoryRecoveryPage = async (
+  accessToken: string,
+  mailboxId: string,
+  leaseId: string
+) => {
   const [state] = await db
     .select({
       recoveryAfter: gmailWatchState.recoveryAfter,
@@ -302,17 +367,10 @@ const processHistoryRecoveryPage = async ({
       recoveryPageToken: gmailWatchState.recoveryPageToken,
     })
     .from(gmailWatchState)
-    .where(eq(gmailWatchState.mailboxId, mailboxId))
+    .where(watchLease(mailboxId, leaseId))
     .limit(1);
-
-  if (
-    state === undefined ||
-    state.recoveryAfter === null ||
-    state.recoveryAfter === undefined ||
-    state.recoveryBefore === null ||
-    state.recoveryBefore === undefined
-  ) {
-    return;
+  if (!state?.recoveryAfter || !state.recoveryBefore) {
+    return false;
   }
 
   const page = await listGmailMessageIds(accessToken, {
@@ -322,215 +380,179 @@ const processHistoryRecoveryPage = async ({
       state.recoveryBefore.getTime() / 1000
     )}`,
   });
-  await enqueueGmailMessageWork({
-    mailboxId,
-    messageIds: page.messageIds,
-    source: "catchup",
-  });
-
-  await db
-    .update(gmailWatchState)
-    .set({
+  await db.transaction(async (tx) => {
+    await checkpointWatch(tx, mailboxId, leaseId, {
       recoveryAfter: page.nextPageToken ? state.recoveryAfter : null,
       recoveryBefore: page.nextPageToken ? state.recoveryBefore : null,
       recoveryPageToken: page.nextPageToken ?? null,
-      updatedAt: new Date(),
-    })
-    .where(eq(gmailWatchState.mailboxId, mailboxId));
+    });
+    await enqueueGmailMessageWork(
+      { mailboxId, messageIds: page.messageIds, source: "catchup" },
+      tx
+    );
+  });
+  return Boolean(page.nextPageToken);
 };
 
-const processMailboxHistory = async ({
-  mailboxId,
-  maxHistoryPages,
-  organizationId,
-  userId,
-}: {
+const isHistoryReplaying = (
+  watch: WatchState | null,
+  capture: CaptureState | null
+) => {
+  if (
+    !watch?.historyId ||
+    !capture?.historyId ||
+    capture.phase !== "history" ||
+    capture.pendingHistoryPage !== null ||
+    watch.recoveryAfter !== null ||
+    watch.historyPageToken !== null ||
+    capture.historyPageToken !== null
+  ) {
+    return true;
+  }
+  return (
+    BigInt(watch.historyId) !== BigInt(capture.historyId) ||
+    (watch.lastProcessedAt !== null &&
+      (watch.lastReconciledAt === null ||
+        watch.lastProcessedAt > watch.lastReconciledAt))
+  );
+};
+
+export const willNeedGmailFreshDiscovery = async (input: {
   mailboxId: string;
-  maxHistoryPages: number;
-  organizationId: string | null;
-  userId: string;
+  observedHistoryId?: string;
 }) => {
-  const leaseId = await claimMailboxProcessingLease(mailboxId);
-  if (!leaseId) {
-    const [state] = await db
-      .select({
-        processingLeaseExpiresAt: gmailWatchState.processingLeaseExpiresAt,
-        providerRetryAt: gmailWatchState.providerRetryAt,
-      })
-      .from(gmailWatchState)
-      .where(eq(gmailWatchState.mailboxId, mailboxId))
-      .limit(1);
-    return {
-      busy: true,
-      needsContinuation: false,
-      retryAfterMs: Math.max(
-        state?.providerRetryAt === null || state?.providerRetryAt === undefined
-          ? 0
-          : state.providerRetryAt.getTime() - Date.now(),
-        Math.min(
-          MAILBOX_RATE_LIMIT_RETRY_MS,
-          Math.max(
-            1000,
-            (state?.processingLeaseExpiresAt?.getTime() ?? Date.now()) -
-              Date.now()
-          )
-        )
-      ),
-    };
+  const [state] = await db
+    .select({ capture: gmailCaptureState, watch: gmailWatchState })
+    .from(gmailWatchState)
+    .leftJoin(
+      gmailCaptureState,
+      eq(gmailCaptureState.mailboxId, gmailWatchState.mailboxId)
+    )
+    .where(eq(gmailWatchState.mailboxId, input.mailboxId))
+    .limit(1);
+  if (state?.watch.recoveryAfter) {
+    return true;
   }
-  let captureNeedsContinuation = false;
-  try {
-    try {
-      if (await hasPendingFreshGmailWork(mailboxId)) {
-        captureNeedsContinuation = true;
-      } else {
-        const capture = await runAuthorizedGmailMailbox(
-          { mailboxId, userId },
-          async (accessToken) =>
-            await processGmailMailCapture({ accessToken, mailboxId })
+  if (
+    state?.watch.historyId &&
+    input.observedHistoryId !== undefined &&
+    /^\d+$/u.test(input.observedHistoryId) &&
+    BigInt(state.watch.historyId) >= BigInt(input.observedHistoryId)
+  ) {
+    return false;
+  }
+  return isHistoryReplaying(state?.watch ?? null, state?.capture ?? null);
+};
+
+const stageMailboxHistoryPage = async ({
+  accessToken,
+  capture,
+  leaseId,
+  notificationReceivedAt,
+  observedHistoryId,
+  watch,
+}: {
+  accessToken: string;
+  capture: (CaptureState & { historyId: string }) | null;
+  leaseId: string;
+  notificationReceivedAt?: Date;
+  observedHistoryId?: string;
+  watch: WatchState & { historyId: string };
+}) => {
+  const { mailboxId } = watch;
+  const watchRevision = BigInt(watch.historyId);
+  const captureRevision = capture === null ? null : BigInt(capture.historyId);
+  const captureIsBehind =
+    captureRevision !== null && captureRevision <= watchRevision;
+  const startHistoryId =
+    capture !== null && captureIsBehind ? capture.historyId : watch.historyId;
+  if (
+    observedHistoryId !== undefined &&
+    /^\d+$/u.test(observedHistoryId) &&
+    BigInt(startHistoryId) >= BigInt(observedHistoryId) &&
+    (capture === null || !isHistoryReplaying(watch, capture))
+  ) {
+    return { expired: false, hasMore: false, stagedCapture: false };
+  }
+
+  // Legacy tokens bind to different queries. Resume the all-change stream
+  // from a complete history record and let the two revisions filter replay.
+  const page = await listGmailCaptureHistoryPage(accessToken, {
+    startHistoryId,
+  });
+  if (page.historyExpired) {
+    await resetExpiredHistory({
+      accessToken,
+      capture: captureIsBehind ? capture : null,
+      leaseId,
+      watch,
+    });
+    return { expired: true, hasMore: true, stagedCapture: false };
+  }
+
+  const historyId = page.nextPageToken
+    ? page.lastRecordHistoryId
+    : page.historyId;
+  if (
+    historyId === null ||
+    BigInt(historyId) < BigInt(startHistoryId) ||
+    (page.nextPageToken && BigInt(historyId) === BigInt(startHistoryId))
+  ) {
+    throw new Error("Gmail history page did not include a usable checkpoint.");
+  }
+  const messageIds = page.changes
+    .filter(
+      (change) =>
+        change.kind === "added" &&
+        BigInt(change.providerRevision) > watchRevision
+    )
+    .map((change) => change.messageId);
+  const changes =
+    captureRevision === null
+      ? []
+      : page.changes.filter(
+          (change) => BigInt(change.providerRevision) > captureRevision
         );
-        captureNeedsContinuation = capture.needsContinuation;
-      }
-    } catch (error) {
-      if (isGmailRateLimitedError(error)) {
-        throw error;
-      }
-      reportError(error, { operation: "gmail-sync:mail-capture" });
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await checkpointWatch(tx, mailboxId, leaseId, {
+      ...(BigInt(historyId) >= watchRevision
+        ? { historyId, historyPageToken: null, lastProcessedAt: now }
+        : {}),
+      ...(page.nextPageToken === null ? { lastReconciledAt: now } : {}),
+    });
+    if (
+      capture !== null &&
+      captureRevision !== null &&
+      BigInt(historyId) >= captureRevision
+    ) {
+      await checkpointCaptureHistory(tx, capture, {
+        historyPageToken: null,
+        ...(page.nextPageToken === null ? { lastCapturedAt: now } : {}),
+        ...(changes.length > 0
+          ? {
+              historyChangeOffset: 0,
+              pendingHistoryPage: { changes, historyId, nextPageToken: null },
+            }
+          : { historyId }),
+      });
     }
-    const needsContinuation = await runAuthorizedGmailMailbox(
-      { mailboxId, userId },
-      async (accessToken) => {
-        const [automationSettings] = await db
-          .select({
-            autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
-          })
-          .from(mailboxAutomationSettings)
-          .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
-          .limit(1);
-        const autoLabelEnabled = automationSettings?.autoLabelEnabled ?? false;
-        for (let pageIndex = 0; pageIndex < maxHistoryPages; pageIndex += 1) {
-          const [state] = await db
-            .select({
-              historyId: gmailWatchState.historyId,
-              historyPageToken: gmailWatchState.historyPageToken,
-              lastProcessedAt: gmailWatchState.lastProcessedAt,
-            })
-            .from(gmailWatchState)
-            .where(eq(gmailWatchState.mailboxId, mailboxId))
-            .limit(1);
-          if (!state?.historyId) {
-            await beginHistoryRecovery(
-              accessToken,
-              mailboxId,
-              state?.lastProcessedAt ?? null
-            );
-            break;
-          }
-
-          const page = await listGmailAddedMessageHistoryPage(accessToken, {
-            pageToken: state.historyPageToken ?? undefined,
-            startHistoryId: state.historyId,
-          });
-          if (page.historyExpired) {
-            await beginHistoryRecovery(
-              accessToken,
-              mailboxId,
-              state.lastProcessedAt
-            );
-            break;
-          }
-
-          await enqueueGmailMessageWork({
-            mailboxId,
-            messageIds: page.messageIds,
-            source: "catchup",
-            triggerActions: true,
-          });
-          const now = new Date();
-          await db
-            .update(gmailWatchState)
-            .set({
-              historyId: page.nextPageToken ? state.historyId : page.historyId,
-              historyPageToken: page.nextPageToken ?? null,
-              lastError: null,
-              lastErrorAt: null,
-              lastProcessedAt: now,
-              updatedAt: now,
-            })
-            .where(eq(gmailWatchState.mailboxId, mailboxId));
-          await extendMailboxProcessingLease(mailboxId, leaseId);
-
-          if (!page.nextPageToken) {
-            break;
-          }
-        }
-
-        await processHistoryRecoveryPage({
-          accessToken,
-          mailboxId,
-        });
-        await retryPendingAutomationMessages({
-          autoLabelEnabled,
-          mailboxId,
-          organizationId,
-          userId,
-        });
-        await reportPendingAutoLabelUsage(mailboxId, userId);
-        await reportPendingMailboxVerificationCodeUsage(mailboxId, userId);
-        const [remaining] = await db
-          .select({
-            historyPageToken: gmailWatchState.historyPageToken,
-            recoveryAfter: gmailWatchState.recoveryAfter,
-            recoveryPageToken: gmailWatchState.recoveryPageToken,
-          })
-          .from(gmailWatchState)
-          .where(eq(gmailWatchState.mailboxId, mailboxId))
-          .limit(1);
-        if (remaining === undefined) {
-          throw new Error("Gmail watch state disappeared during processing.");
-        }
-        const hasRemainingPages =
-          remaining.historyPageToken !== null ||
-          remaining.recoveryAfter !== null ||
-          remaining.recoveryPageToken !== null;
-        const now = new Date();
-        await db
-          .update(gmailWatchState)
-          .set({
-            lastError: null,
-            lastErrorAt: null,
-            ...(hasRemainingPages ? {} : { lastReconciledAt: now }),
-            updatedAt: now,
-          })
-          .where(eq(gmailWatchState.mailboxId, mailboxId));
-        return hasRemainingPages;
-      }
-    );
-
-    return {
-      busy: false,
-      needsContinuation: needsContinuation || captureNeedsContinuation,
-    };
-  } catch (error) {
-    await recordWatchError(mailboxId, error);
-    if (isGmailRateLimitedError(error)) {
-      const retryAt = await deferGmailMailboxProvider(
+    await enqueueGmailMessageWork(
+      {
         mailboxId,
-        new Date(
-          Date.now() +
-            Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
-        )
-      );
-      return {
-        busy: true,
-        needsContinuation: true,
-        retryAfterMs: Math.max(1000, retryAt.getTime() - Date.now()),
-      };
-    }
-    throw error;
-  } finally {
-    await releaseMailboxProcessingLease(mailboxId, leaseId);
-  }
+        messageIds,
+        notificationReceivedAt,
+        source: "catchup",
+        triggerActions: true,
+      },
+      tx
+    );
+  });
+  return {
+    expired: false,
+    hasMore: page.nextPageToken !== null,
+    stagedCapture: changes.length > 0,
+  };
 };
 
 const shouldRenewWatch = (state: {
@@ -547,52 +569,231 @@ const shouldRenewWatch = (state: {
 };
 
 const renewMailboxWatch = async ({
+  accessToken,
+  leaseId,
   mailboxId,
   topicName,
-  userId,
 }: {
+  accessToken: string;
+  leaseId: string;
   mailboxId: string;
   topicName: string;
-  userId: string;
 }) => {
   if (
     serverEnv.QUIETER_DEPLOYMENT_ENV === "local" &&
     serverEnv.QUIETER_LOCAL_GMAIL_WATCH_OWNER !== "local"
   ) {
-    await ensureWatchState(mailboxId);
     return;
   }
-  await ensureWatchState(mailboxId);
   const [state] = await db
     .select({
-      historyId: gmailWatchState.historyId,
       watchExpirationAt: gmailWatchState.watchExpirationAt,
       watchRenewedAt: gmailWatchState.watchRenewedAt,
     })
     .from(gmailWatchState)
-    .where(eq(gmailWatchState.mailboxId, mailboxId))
+    .where(watchLease(mailboxId, leaseId))
     .limit(1);
 
   if (state === undefined || !shouldRenewWatch(state)) {
     return;
   }
 
-  const watch = await runAuthorizedGmailMailbox(
-    { mailboxId, userId },
-    async (accessToken) => await watchGmailMailbox(accessToken, topicName)
-  );
-  const now = new Date();
-  await db
-    .update(gmailWatchState)
-    .set({
-      historyId: state.historyId ?? watch.historyId,
-      lastError: null,
-      lastErrorAt: null,
-      updatedAt: now,
-      watchExpirationAt: watch.expiration,
-      watchRenewedAt: now,
-    })
-    .where(eq(gmailWatchState.mailboxId, mailboxId));
+  const watch = await watchGmailMailbox(accessToken, topicName);
+  await checkpointWatch(db, mailboxId, leaseId, {
+    watchExpirationAt: watch.expiration,
+    watchRenewedAt: new Date(),
+  });
+};
+
+const processMailboxHistory = async ({
+  mailboxId,
+  maxHistoryPages,
+  notificationReceivedAt,
+  observedHistoryId,
+  organizationId,
+  topicName,
+  userId,
+}: {
+  mailboxId: string;
+  maxHistoryPages: number;
+  notificationReceivedAt?: Date;
+  observedHistoryId?: string;
+  organizationId: string | null;
+  topicName?: string;
+  userId: string;
+}) => {
+  const leaseId = await claimMailboxProcessingLease(mailboxId);
+  if (!leaseId) {
+    const [state] = await db
+      .select({
+        processingLeaseExpiresAt: gmailWatchState.processingLeaseExpiresAt,
+        providerRetryAt: gmailWatchState.providerRetryAt,
+      })
+      .from(gmailWatchState)
+      .where(eq(gmailWatchState.mailboxId, mailboxId))
+      .limit(1);
+    return {
+      busy: true as const,
+      needsContinuation: false,
+      needsFreshDiscovery: false,
+      retryAfterMs: Math.max(
+        (state?.providerRetryAt?.getTime() ?? 0) - Date.now(),
+        Math.min(
+          MAILBOX_RATE_LIMIT_RETRY_MS,
+          Math.max(
+            1000,
+            (state?.processingLeaseExpiresAt?.getTime() ?? Date.now()) -
+              Date.now()
+          )
+        )
+      ),
+    };
+  }
+  try {
+    return await runAuthorizedGmailMailbox(
+      { mailboxId, userId },
+      async (accessToken) => {
+        if (topicName !== undefined) {
+          await renewMailboxWatch({
+            accessToken,
+            leaseId,
+            mailboxId,
+            topicName,
+          });
+        }
+        let capturePending = true;
+        try {
+          if (!(await hasPendingFreshGmailWork(mailboxId))) {
+            const capture = await processGmailMailCapture({
+              accessToken,
+              mailboxId,
+            });
+            capturePending = capture.needsContinuation;
+          }
+        } catch (error) {
+          if (
+            isGmailRateLimitedError(error) ||
+            (isGmailServiceError(error) && error.status === 401)
+          ) {
+            throw error;
+          }
+          reportError(error, { operation: "gmail-sync:mail-capture" });
+        }
+
+        let historyPending = false;
+        let historyExpired = false;
+        for (let pageIndex = 0; pageIndex < maxHistoryPages; pageIndex += 1) {
+          const [state] = await db
+            .select({ capture: gmailCaptureState, watch: gmailWatchState })
+            .from(gmailWatchState)
+            .leftJoin(
+              gmailCaptureState,
+              eq(gmailCaptureState.mailboxId, gmailWatchState.mailboxId)
+            )
+            .where(watchLease(mailboxId, leaseId))
+            .limit(1);
+          if (state === undefined) {
+            throw new Error("Gmail history lease expired.");
+          }
+          const { watch, capture } = state;
+          if (!watch.historyId) {
+            await resetExpiredHistory({
+              accessToken,
+              capture: null,
+              leaseId,
+              watch,
+            });
+            historyPending = true;
+            historyExpired = true;
+            break;
+          }
+
+          const page = await stageMailboxHistoryPage({
+            accessToken,
+            capture:
+              capture?.phase === "history" &&
+              capture.pendingHistoryPage === null &&
+              capture.historyId &&
+              (!capture.leaseExpiresAt || capture.leaseExpiresAt <= new Date())
+                ? { ...capture, historyId: capture.historyId }
+                : null,
+            leaseId,
+            notificationReceivedAt,
+            observedHistoryId,
+            watch: { ...watch, historyId: watch.historyId },
+          });
+          historyPending = page.hasMore;
+          historyExpired = page.expired;
+          capturePending ||= page.stagedCapture;
+          if (page.expired || page.stagedCapture || !page.hasMore) {
+            break;
+          }
+        }
+        const recoveryPending =
+          historyExpired ||
+          (await processHistoryRecoveryPage(accessToken, mailboxId, leaseId));
+        const [automationSettings] = await db
+          .select({
+            autoLabelEnabled: mailboxAutomationSettings.autoLabelEnabled,
+          })
+          .from(mailboxAutomationSettings)
+          .where(eq(mailboxAutomationSettings.mailboxId, mailboxId))
+          .limit(1);
+        await retryPendingAutomationMessages({
+          autoLabelEnabled: automationSettings?.autoLabelEnabled ?? false,
+          mailboxId,
+          organizationId,
+          userId,
+        });
+        await reportPendingAutoLabelUsage(mailboxId, userId);
+        await reportPendingMailboxVerificationCodeUsage(mailboxId, userId);
+        await checkpointWatch(db, mailboxId, leaseId, {
+          lastError: null,
+          lastErrorAt: null,
+        });
+        return {
+          busy: false as const,
+          needsContinuation:
+            historyPending || capturePending || recoveryPending,
+          needsFreshDiscovery: historyPending || recoveryPending,
+        };
+      }
+    );
+  } catch (error) {
+    const now = new Date();
+    const retryAfterMs = isGmailRateLimitedError(error)
+      ? Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
+      : undefined;
+    const [state] = await db
+      .update(gmailWatchState)
+      .set({
+        lastError: getErrorMessage(error),
+        lastErrorAt: now,
+        ...(retryAfterMs === undefined
+          ? {}
+          : {
+              providerRetryAt: sql`greatest(${gmailWatchState.providerRetryAt}, ${new Date(now.getTime() + retryAfterMs)})`,
+            }),
+        updatedAt: now,
+      })
+      .where(watchLease(mailboxId, leaseId))
+      .returning({ providerRetryAt: gmailWatchState.providerRetryAt });
+    if (retryAfterMs !== undefined) {
+      return {
+        busy: true as const,
+        needsContinuation: true,
+        needsFreshDiscovery: false,
+        retryAfterMs: Math.max(
+          1000,
+          (state?.providerRetryAt?.getTime() ?? now.getTime() + retryAfterMs) -
+            Date.now()
+        ),
+      };
+    }
+    throw error;
+  } finally {
+    await releaseMailboxProcessingLease(mailboxId, leaseId);
+  }
 };
 
 export const claimGmailSchedulerRepairs = async (limit = 500) => {
@@ -650,6 +851,8 @@ export const recordGmailSchedulerHeartbeat = async (mailboxId: string) => {
 
 export const maintainGmailPubSubMailbox = async (input: {
   mailboxId: string;
+  notificationReceivedAt?: number;
+  observedHistoryId?: string;
   topicName: string;
 }) => {
   const [gmailMailbox] = await db
@@ -663,53 +866,31 @@ export const maintainGmailPubSubMailbox = async (input: {
     .where(and(eq(mailbox.id, input.mailboxId), eq(mailbox.provider, "gmail")))
     .limit(1);
 
-  if (!gmailMailbox?.ownerUserId) {
+  if (!gmailMailbox?.ownerUserId || gmailMailbox.status !== "connected") {
     return { status: "skipped" as const };
   }
 
-  try {
-    if (gmailMailbox.status !== "connected") {
-      return { status: "skipped" as const };
-    }
-    const providerRetryAt = await getGmailMailboxProviderRetryAt(
-      gmailMailbox.id
-    );
-    if (providerRetryAt !== null && providerRetryAt.getTime() > Date.now()) {
-      return { status: "busy" as const };
-    }
-
-    await renewMailboxWatch({
-      mailboxId: gmailMailbox.id,
-      topicName: input.topicName,
-      userId: gmailMailbox.ownerUserId,
-    });
-    const result = await processMailboxHistory({
-      mailboxId: gmailMailbox.id,
-      maxHistoryPages: 2,
-      organizationId: gmailMailbox.organizationId,
-      userId: gmailMailbox.ownerUserId,
-    });
-    if (result.busy) {
-      return { status: "busy" as const };
-    }
-    return {
-      status: result.needsContinuation
-        ? ("pending" as const)
-        : ("maintained" as const),
-    };
-  } catch (error) {
-    if (isGmailRateLimitedError(error)) {
-      await deferGmailMailboxProvider(
-        gmailMailbox.id,
-        new Date(
-          Date.now() +
-            Math.max(1000, error.retryAfterMs ?? MAILBOX_RATE_LIMIT_RETRY_MS)
-        )
-      );
-    }
-    await recordWatchError(gmailMailbox.id, error);
-    throw error;
+  const result = await processMailboxHistory({
+    mailboxId: gmailMailbox.id,
+    maxHistoryPages: 2,
+    notificationReceivedAt:
+      input.notificationReceivedAt === undefined
+        ? undefined
+        : new Date(input.notificationReceivedAt),
+    observedHistoryId: input.observedHistoryId,
+    organizationId: gmailMailbox.organizationId,
+    topicName: input.topicName,
+    userId: gmailMailbox.ownerUserId,
+  });
+  if (result.busy) {
+    return { retryAfterMs: result.retryAfterMs, status: "busy" as const };
   }
+  return {
+    needsFreshDiscovery: result.needsFreshDiscovery,
+    status: result.needsContinuation
+      ? ("pending" as const)
+      : ("maintained" as const),
+  };
 };
 
 export type GmailPubSubNotificationMessage = {
@@ -755,12 +936,13 @@ export const processGmailPubSubNotification = async (
     return { ignored: true as const, reason: "mailbox_not_connected" as const };
   }
 
+  const notificationReceivedAt = new Date();
   await ensureWatchState(gmailMailbox.id);
   await db
     .update(gmailWatchState)
     .set({
-      lastNotificationAt: new Date(),
-      updatedAt: new Date(),
+      lastNotificationAt: notificationReceivedAt,
+      updatedAt: notificationReceivedAt,
     })
     .where(eq(gmailWatchState.mailboxId, gmailMailbox.id));
 
@@ -769,6 +951,8 @@ export const processGmailPubSubNotification = async (
   const result = await processMailboxHistory({
     mailboxId: gmailMailbox.id,
     maxHistoryPages: options?.maxHistoryPages ?? 5,
+    notificationReceivedAt,
+    observedHistoryId: input.historyId,
     organizationId: gmailMailbox.organizationId,
     userId: gmailMailbox.ownerUserId,
   });
@@ -782,8 +966,6 @@ export const processGmailPubSubNotification = async (
     mailboxId: gmailMailbox.id,
     needsContinuation: result.needsContinuation,
     pubSubMessageId: input.pubSubMessageId,
-    ...(result.retryAfterMs === undefined
-      ? {}
-      : { retryAfterMs: result.retryAfterMs }),
+    ...(result.busy ? { retryAfterMs: result.retryAfterMs } : {}),
   };
 };

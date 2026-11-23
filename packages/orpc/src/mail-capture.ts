@@ -13,7 +13,6 @@ import {
   getGmailCaptureMetadata,
   getGmailProfile,
   isGmailServiceError,
-  listGmailCaptureHistoryPage,
   listGmailMessageIds,
 } from "@quieter/gmail";
 import {
@@ -506,43 +505,9 @@ export const processGmailMailCapture = async (input: {
         continue;
       }
       if (state.phase === "history") {
-        const page =
-          state.pendingHistoryPage ??
-          (await listGmailCaptureHistoryPage(accessToken, {
-            pageToken: state.historyPageToken ?? undefined,
-            startHistoryId: state.historyId,
-          }));
-        if ("historyExpired" in page && page.historyExpired === true) {
-          const profile = await getGmailProfile(accessToken);
-          if (!profile.historyId || !/^\d+$/u.test(profile.historyId)) {
-            throw new Error("Mailbox has no reliable capture baseline.");
-          }
-          await checkpointCapture(mailboxId, leaseId, {
-            coverageGapAt: state.coverageGapAt ?? new Date(),
-            historyChangeOffset: 0,
-            historyId: profile.historyId,
-            historyPageToken: null,
-            pendingHistoryPage: null,
-            phase: "recovery",
-            recoveryAfter: new Date(
-              (state.lastCapturedAt ?? state.createdAt).getTime() -
-                60 * 60 * 1000
-            ),
-            recoveryBefore: new Date(),
-            recoveryOffset: 0,
-            recoveryPageToken: null,
-          });
-          continue;
-        }
-        if (state.pendingHistoryPage === null) {
-          await checkpointCapture(mailboxId, leaseId, {
-            pendingHistoryPage: {
-              changes: page.changes,
-              historyId: page.historyId,
-              nextPageToken: page.nextPageToken,
-            },
-          });
-          continue;
+        const page = state.pendingHistoryPage;
+        if (page === null) {
+          return { busy: false, needsContinuation: false };
         }
         const change = page.changes[state.historyChangeOffset];
         if (change !== undefined) {
@@ -564,7 +529,6 @@ export const processGmailMailCapture = async (input: {
           historyId: page.nextPageToken ? state.historyId : page.historyId,
           historyPageToken: page.nextPageToken,
           pendingHistoryPage: null,
-          ...(page.nextPageToken ? {} : { lastCapturedAt: new Date() }),
         });
         if (!page.nextPageToken) {
           return { busy: false, needsContinuation: false };
