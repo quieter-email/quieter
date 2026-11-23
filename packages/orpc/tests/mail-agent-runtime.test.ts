@@ -1,6 +1,7 @@
 /* oxlint-disable eslint/require-await -- Persistence and provider doubles keep asynchronous contracts without network I/O. */
 import { ORPCError } from "@orpc/server";
 import { actionSpecificationSchema } from "@quieter/ai/action-specification";
+import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import type { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { MockLanguageModelV4 } from "ai/test";
 import type * as Drizzle from "drizzle-orm";
@@ -34,6 +35,7 @@ const state = vi.hoisted(() => ({
   calendarList: vi.fn<typeof listCalendarsForUser>(),
   linear: vi.fn<typeof runLinearMcpToolCallsForUser>(),
   linearTools: vi.fn<typeof listLinearMcpToolsForUser>(),
+  loseLeaseOnStatus: new Set<string>(),
   memory: vi.fn<typeof loadAiAgentContext>(),
   model: vi.fn<() => MockLanguageModelV4>(),
   provenance: vi.fn<typeof recordAiGeneratedMailBody>(),
@@ -93,6 +95,7 @@ vi.mock("@quieter/database/client", async () => {
     let predicate: Predicate | undefined;
     let ignoreConflict = false;
     let limit = Number.POSITIVE_INFINITY;
+    let returningFields: Record<string, { name: string }> | undefined;
     const query = {
       for: () => query,
       leftJoin: () => query,
@@ -105,7 +108,10 @@ vi.mock("@quieter/database/client", async () => {
         return query;
       },
       orderBy: () => query,
-      returning: () => query,
+      returning: (fields?: Record<string, { name: string }>) => {
+        returningFields = fields;
+        return query;
+      },
       // oxlint-disable-next-line unicorn/no-thenable -- Drizzle executes a query when its builder is awaited.
       then: (fulfilled: (rows: Row[]) => unknown) => {
         const name = getTableName(table);
@@ -131,6 +137,16 @@ vi.mock("@quieter/database/client", async () => {
         const rows = state.tables.get(name) ?? [];
         state.tables.set(name, rows);
         if (
+          name === "mailboxAgentRun" &&
+          operation === "update" &&
+          typeof values?.status === "string" &&
+          state.loseLeaseOnStatus.delete(values.status)
+        ) {
+          for (const row of rows) {
+            row.leaseToken = "replacement-owner";
+          }
+        }
+        if (
           operation === "insert" &&
           values !== undefined &&
           !(
@@ -148,7 +164,18 @@ vi.mock("@quieter/database/client", async () => {
             Object.assign(row, values);
           }
         }
-        return fulfilled(selected);
+        return fulfilled(
+          selected.map((row) =>
+            returningFields === undefined
+              ? row
+              : Object.fromEntries(
+                  Object.entries(returningFields).map(([key, column]) => [
+                    key,
+                    row[column.name],
+                  ])
+                )
+          )
+        );
       },
       where: (next: Predicate) => {
         predicate = next;
@@ -469,6 +496,7 @@ describe("durable background action execution", () => {
     vi.clearAllMocks();
     state.authorized = true;
     state.blockedMutation = null;
+    state.loseLeaseOnStatus.clear();
     state.shared = false;
     state.memory.mockReset();
     state.memory.mockResolvedValue({ instructions: null, memory: null });
@@ -577,6 +605,101 @@ describe("durable background action execution", () => {
     expect(state.model).not.toHaveBeenCalled();
     expect(state.save).not.toHaveBeenCalled();
     expect(runRow()).toMatchObject({ status: "queued" });
+  });
+
+  test("does not claim completion after losing the final write lease", async () => {
+    state.loseLeaseOnStatus.add("succeeded");
+    state.model.mockReturnValue(
+      new MockLanguageModelV4({
+        doGenerate: generation([
+          {
+            text: JSON.stringify({
+              matched: true,
+              summary: "Reviewed the message.",
+            }),
+            type: "text",
+          },
+        ]),
+      })
+    );
+    const result = await drainMailAgentRuns({ limit: 1 });
+    expect(result.outcomes).toMatchObject({ complete: 0, lost_ownership: 1 });
+    expect(runRow()).toMatchObject({
+      leaseToken: "replacement-owner",
+      status: "running",
+    });
+  });
+
+  test.each(["mail.send", "mail.unsubscribe"])(
+    "rejects an unsupported %s grant before any model or write on repeated drains",
+    async (toolId) => {
+      const revision = state.tables.get("mailboxAgentRevision")?.[0];
+      const document = actionSpecificationSchema.parse(revision?.specification);
+      document.permissions.push({
+        id: "send",
+        operation: "send",
+        scope: "mailbox",
+      });
+      document.toolGrants.push({
+        confirmation: "required",
+        permissionId: "send",
+        toolId,
+      });
+      Object.assign(revision ?? {}, { specification: document });
+      await drainMailAgentRuns({ limit: 1 });
+      await drainMailAgentRuns({ limit: 1 });
+      expect(state.model).not.toHaveBeenCalled();
+      expect(state.save).not.toHaveBeenCalled();
+      expect(state.linear).not.toHaveBeenCalled();
+      expect(state.tables.get("mailboxAgentEffect") ?? []).toHaveLength(0);
+      expect(runRow()).toMatchObject({ status: "needs_attention" });
+    }
+  );
+
+  test("does not claim a persisted skip after losing the eligibility write lease", async () => {
+    await grantLinearWrites(["update_issue"]);
+    state.read.mockResolvedValue({
+      messages: [{ from: "other@example.test", id: "message" }],
+      threadId: "thread",
+    });
+    state.loseLeaseOnStatus.add("skipped");
+    const result = await drainMailAgentRuns({ limit: 1 });
+    expect(result.outcomes).toMatchObject({ lost_ownership: 1, skipped: 0 });
+    expect(state.model).not.toHaveBeenCalled();
+    expect(runRow()).toMatchObject({ status: "running" });
+  });
+
+  test("does not claim a persisted failure after losing its write lease", async () => {
+    state.authorized = false;
+    state.loseLeaseOnStatus.add("needs_attention");
+    const result = await drainMailAgentRuns({ limit: 1 });
+    expect(result.outcomes).toMatchObject({
+      lost_ownership: 1,
+      needs_attention: 0,
+    });
+    expect(runRow()).toMatchObject({ status: "running" });
+  });
+
+  test("does not claim an admission retry after losing its write lease", async () => {
+    state.model.mockImplementation(() => {
+      throw new AiCreditAdmissionBusyError();
+    });
+    state.loseLeaseOnStatus.add("queued");
+    const result = await drainMailAgentRuns({ limit: 1 });
+    expect(result.outcomes).toMatchObject({ lost_ownership: 1, retry: 0 });
+    expect(runRow()).toMatchObject({ status: "running" });
+    expect(state.save).not.toHaveBeenCalled();
+  });
+
+  test("reports admission retry only after saving the native retry deadline", async () => {
+    state.model.mockImplementation(() => {
+      throw new AiCreditAdmissionBusyError();
+    });
+    const result = await drainMailAgentRuns({ limit: 1 });
+    expect(result.outcomes).toMatchObject({ lost_ownership: 0, retry: 1 });
+    expect(runRow()).toMatchObject({ status: "queued" });
+    expect(runRow().leaseExpiresAt).toBeInstanceOf(Date);
+    expect(state.save).not.toHaveBeenCalled();
   });
 
   test("does not call a provider when the effect transaction is fenced", async () => {
