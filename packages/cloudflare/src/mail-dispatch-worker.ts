@@ -1,7 +1,11 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  MAIL_DISPATCH_BATCH_SIZE,
+  MAIL_DISPATCH_PROBE_ID,
+  MAIL_DISPATCH_SHARD_COUNT,
   mailDispatchEventSchema,
   mailDispatchPath,
+  mailDispatchRepairJobSchema,
   mailDispatchRequestSchema,
 } from "@quieter/mail/dispatch";
 import type { MailDispatchEvent } from "@quieter/mail/dispatch";
@@ -45,8 +49,15 @@ const dispatchEvent = async (
       break;
     }
     case "gmail-enrollment": {
-      if (env.GmailProcessingWorker !== undefined) {
-        await enrollGmailDispatch();
+      if (
+        env.GmailProcessingWorker !== undefined &&
+        (await enrollGmailDispatch())
+      ) {
+        await env.MailDispatchRepairQueue.sendBatch(
+          Array.from({ length: MAIL_DISPATCH_SHARD_COUNT }, (_, shard) => ({
+            body: { shard },
+          }))
+        );
       }
       break;
     }
@@ -145,20 +156,47 @@ const drainMailDispatch = async (
   return { claimed: events.length, delivered };
 };
 
+const repairMailDispatchShard = async (env: Env, shard: number) => {
+  const { claimed } = await drainMailDispatch(env, { shard });
+  if (claimed === MAIL_DISPATCH_BATCH_SIZE) {
+    await env.MailDispatchRepairQueue.send({ shard });
+  }
+};
+
 export const repairMailDispatch = async (env: Env) => {
   await withRequestDatabaseClient(async () => {
-    for (let page = 0; page < 16; page += 1) {
-      // oxlint-disable-next-line no-await-in-loop -- Enrollment can add work to another shard.
-      const results = await Promise.all(
-        [0, 1, 2, 3].map(
-          async (shard) => await drainMailDispatch(env, { shard })
-        )
-      );
-      if (results.every(({ claimed }) => claimed === 0)) {
-        return;
+    const results = await Promise.allSettled(
+      Array.from({ length: MAIL_DISPATCH_SHARD_COUNT }, async (_, shard) => {
+        await repairMailDispatchShard(env, shard);
+      })
+    );
+    const errors: unknown[] = [];
+    for (const result of results) {
+      if (result.status === "rejected") {
+        errors.push(result.reason);
       }
     }
+    if (errors.length > 0) {
+      throw new AggregateError(errors, "Mail dispatch repair failed.");
+    }
   });
+};
+
+export const processMailDispatchRepairQueue = async (
+  batch: MessageBatch,
+  env: Env
+) => {
+  await Promise.all(
+    batch.messages.map(async (message) => {
+      const repair = mailDispatchRepairJobSchema.safeParse(message.body);
+      if (repair.success) {
+        await withRequestDatabaseClient(async () => {
+          await repairMailDispatchShard(env, repair.data.shard);
+        });
+      }
+      message.ack();
+    })
+  );
 };
 
 export const handleMailDispatch = async (
@@ -199,7 +237,10 @@ export const handleMailDispatch = async (
       async () =>
         await drainMailDispatch(env, { eventIds: payload.data.eventIds })
     );
-    if (ctx !== undefined) {
+    if (
+      ctx !== undefined &&
+      !payload.data.eventIds.includes(MAIL_DISPATCH_PROBE_ID)
+    ) {
       ctx.waitUntil(
         (async () => {
           try {
@@ -222,6 +263,7 @@ export const handleMailDispatch = async (
 
 export default withSentryReporting({
   fetch: handleMailDispatch,
+  queue: processMailDispatchRepairQueue,
   async scheduled(_event, env) {
     await repairMailDispatch(env);
   },

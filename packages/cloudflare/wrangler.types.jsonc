@@ -18,6 +18,10 @@
   "queues": {
     "producers": [
       {
+        "binding": "MailDispatchRepairQueue",
+        "queue": "quieter-types-mail-dispatch-repair",
+      },
+      {
         "binding": "GmailMailboxAutomationQueue0",
         "queue": "quieter-types-gmail-mailbox-automation-0",
       },

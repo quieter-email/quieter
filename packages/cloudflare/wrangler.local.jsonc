@@ -20,6 +20,10 @@
   "queues": {
     "producers": [
       {
+        "binding": "MailDispatchRepairQueue",
+        "queue": "quieter-local-mail-dispatch-repair",
+      },
+      {
         "binding": "GmailProcessingQueue",
         "queue": "quieter-local-gmail-processing",
       },
@@ -33,6 +37,12 @@
       },
     ],
     "consumers": [
+      {
+        "queue": "quieter-local-mail-dispatch-repair",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_retries": 3,
+      },
       {
         "queue": "quieter-local-gmail-processing",
         "dead_letter_queue": "quieter-local-gmail-processing-dead-letter",

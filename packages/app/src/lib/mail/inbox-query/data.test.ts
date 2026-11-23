@@ -107,4 +107,43 @@ describe(mergeRefreshedMailboxPagesIntoQueryData, () => {
     ).toStrictEqual([["x", "a", "b", "c", "d"]]);
     expect(next.pageParams).toStrictEqual([undefined]);
   });
+
+  test("drops a stale thread anchor from the tail when a reply moves the thread into the fresh prefix", () => {
+    const previous: MessagesQueryData = {
+      pageParams: [undefined, "old-page-2"],
+      pages: [
+        page([message("a")], "old-page-2"),
+        page(
+          [
+            message("old-anchor", { isUnread: true, threadId: "thread" }),
+            message("b"),
+          ],
+          "old-page-3"
+        ),
+      ],
+    };
+    const refreshed = [
+      page(
+        [message("reply", { isUnread: false, threadId: "thread" })],
+        "new-page-2"
+      ),
+    ];
+
+    const next = mergeRefreshedMailboxPagesIntoQueryData(
+      previous,
+      refreshed,
+      [undefined],
+      { rowScope: "thread" }
+    );
+
+    expect(
+      next.pages.flatMap((currentPage) =>
+        currentPage.messages.map((item) => item.id)
+      )
+    ).toStrictEqual(["reply", "b"]);
+    expect(
+      mergeRefreshedMailboxPagesIntoQueryData(previous, refreshed, [undefined])
+        .pages[1].messages
+    ).toContainEqual(expect.objectContaining({ id: "old-anchor" }));
+  });
 });

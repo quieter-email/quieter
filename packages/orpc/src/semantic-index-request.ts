@@ -3,7 +3,7 @@ import type { AiRequestStageMeasurement } from "@quieter/ai/search-embeddings";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { semanticIndexRequest } from "@quieter/database/schema";
-import { sql } from "drizzle-orm";
+import { gte, sql } from "drizzle-orm";
 
 import { signalGmailMailbox } from "./mailbox/gmail-mailbox-signal";
 import { assertAccessibleMailbox } from "./mailbox/service";
@@ -12,6 +12,10 @@ type SemanticIndexScope = Pick<
   typeof semanticIndexRequest.$inferSelect,
   "kind" | "mailboxId" | "userId"
 >;
+
+const nextRequestedAt = sql`date_trunc('milliseconds', greatest(excluded."requestedAt",
+  ${semanticIndexRequest.requestedAt} + interval '1 millisecond',
+  ${semanticIndexRequest.completedAt} + interval '1 millisecond'))`;
 
 export type SemanticIndexRequestDiagnostics = {
   stages: Partial<
@@ -49,7 +53,7 @@ export const requestSemanticIndex = async (
   };
   try {
     recordStage("authorization");
-    await assertAccessibleMailbox(input);
+    const selectedMailbox = await assertAccessibleMailbox(input);
     recordStage(null);
     const now = new Date();
     const availableAt = new Date(now.getTime() + 30_000);
@@ -69,8 +73,15 @@ export const requestSemanticIndex = async (
           and ${semanticIndexRequest.lastError} is null
           and (${semanticIndexRequest.leaseExpiresAt} is null or ${semanticIndexRequest.leaseExpiresAt} <= ${now.toISOString()}::timestamp)
           then least(${semanticIndexRequest.availableAt}, ${availableAt.toISOString()}::timestamp) else ${semanticIndexRequest.availableAt} end`,
-          requestedAt: now,
+          requestedAt: nextRequestedAt,
         },
+        setWhere:
+          selectedMailbox.provider === "gmail"
+            ? gte(
+                semanticIndexRequest.completedAt,
+                semanticIndexRequest.requestedAt
+              )
+            : undefined,
         target: [
           semanticIndexRequest.userId,
           semanticIndexRequest.mailboxId,
@@ -119,7 +130,7 @@ export const requestFullMailSemanticIndex = async (
         and (${semanticIndexRequest.leaseExpiresAt} is null or ${semanticIndexRequest.leaseExpiresAt} <= ${now.toISOString()}::timestamp)
         then least(${semanticIndexRequest.availableAt}, ${now.toISOString()}::timestamp) else ${semanticIndexRequest.availableAt} end`,
         mailImportRequestedAt: sql`coalesce(${semanticIndexRequest.mailImportRequestedAt}, ${now.toISOString()}::timestamp)`,
-        requestedAt: now,
+        requestedAt: nextRequestedAt,
       },
       target: [
         semanticIndexRequest.userId,

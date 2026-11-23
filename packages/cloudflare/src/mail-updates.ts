@@ -1,5 +1,11 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  MAIL_DISPATCH_NOTICE,
+  MAIL_DISPATCH_PROBE_ID,
+  mailDispatchProbePath,
+  mailDispatchProbeSchema,
+} from "@quieter/mail/dispatch";
+import {
   mailConnectionSchema,
   mailUpdateSchema,
   verifyMailPayload,
@@ -9,6 +15,7 @@ import {
   findGmailUpdateMailboxIds,
   listMailUpdateRecipients,
 } from "@quieter/orpc/mail-updates";
+import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
@@ -66,6 +73,39 @@ export const handleMailUpdates = async (request: Request, env: Env) => {
     return await handleReminderWake(request, env);
   }
   const secret = readLinkedSecret(env.SST_RESOURCE_GmailLiveSyncTokenSecret);
+  if (url.pathname === mailDispatchProbePath && request.method === "POST") {
+    const body = await readBoundedJson(request, 1024);
+    const provided = request.headers.get("x-mail-signature") ?? "";
+    if (!(await verifyMailPayload(JSON.stringify(body), provided, secret))) {
+      return new Response(null, { status: 401 });
+    }
+    const probe = mailDispatchProbeSchema.safeParse(body);
+    const now = Date.now();
+    if (
+      !probe.success ||
+      probe.data.expiresAt <= now ||
+      probe.data.expiresAt > now + 30_000
+    ) {
+      return new Response(null, { status: 400 });
+    }
+    let wake: Promise<boolean> | undefined;
+    // Both values are static protocol constants. The probe never inserts mail.
+    await withRequestDatabaseClient(
+      async (client) => {
+        await client.execute(
+          sql.raw(`do $$ begin
+        raise notice using message = '${MAIL_DISPATCH_NOTICE}', detail = '${MAIL_DISPATCH_PROBE_ID}';
+      end $$`)
+        );
+      },
+      {
+        defer: (task) => {
+          wake = task;
+        },
+      }
+    );
+    return new Response(null, { status: (await wake) === true ? 204 : 503 });
+  }
   if (url.pathname === "/mail/live") {
     if (
       request.method !== "GET" ||

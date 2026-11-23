@@ -81,16 +81,19 @@ try {
         enabled: boolean;
         gmailReady: boolean;
         maintenanceReady: boolean;
+        staleEvents: boolean;
       }[]
     >`
       select
         exists (select 1 from "mailDispatchSettings" where key = 'mail-dispatch-v1' and enabled) as enabled,
         exists (select 1 from "gmailSchedulerEnrollment" where key = 'gmail-mail-dispatch-v1' and "completedAt" is not null)
           and not exists (select 1 from "mailDispatchEvent" where payload->>'kind' = 'gmail-enrollment') as "gmailReady",
-        not exists (select 1 from "mailDispatchEvent" where payload->>'kind' = 'maintenance-enrollment') as "maintenanceReady"
+        not exists (select 1 from "mailDispatchEvent" where payload->>'kind' = 'maintenance-enrollment') as "maintenanceReady",
+        exists (select 1 from "mailDispatchEvent" where "createdAt" < timezone('UTC', now()) - interval '5 minutes') as "staleEvents"
     `;
     if (
       !state?.enabled ||
+      state.staleEvents ||
       (scopes.has("gmail") && !state.gmailReady) ||
       (scopes.has("maintenance") && !state.maintenanceReady)
     ) {

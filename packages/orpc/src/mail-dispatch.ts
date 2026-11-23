@@ -65,7 +65,7 @@ export const completeMailDispatchEvents = async (eventIds: string[]) => {
   }
 };
 
-export const enrollGmailDispatch = async () => {
+export const enrollGmailDispatch = async () =>
   await db.transaction(async (tx) => {
     const [settings] = await tx
       .select({ enabled: mailDispatchSettings.enabled })
@@ -73,7 +73,7 @@ export const enrollGmailDispatch = async () => {
       .where(eq(mailDispatchSettings.key, "mail-dispatch-v1"))
       .for("share");
     if (!settings?.enabled) {
-      return;
+      return false;
     }
     const key = "gmail-mail-dispatch-v1";
     await tx
@@ -86,7 +86,7 @@ export const enrollGmailDispatch = async () => {
       .where(eq(gmailSchedulerEnrollment.key, key))
       .for("update");
     if (progress === undefined || progress.completedAt !== null) {
-      return;
+      return false;
     }
     const limit = 100;
     const page = await tx
@@ -123,5 +123,5 @@ export const enrollGmailDispatch = async () => {
     if (more) {
       await enqueueMailDispatch(tx, { kind: "gmail-enrollment" });
     }
+    return page.length > 0;
   });
-};

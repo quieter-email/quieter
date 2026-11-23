@@ -8,7 +8,17 @@ import { db } from "@quieter/database/client";
 import { semanticIndexRequest } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, gt, isNull, lte, or, sql } from "drizzle-orm";
+import {
+  and,
+  asc,
+  eq,
+  getTableColumns,
+  gt,
+  isNull,
+  lte,
+  or,
+  sql,
+} from "drizzle-orm";
 import { z } from "zod";
 
 import { mailboxAutomationFilter } from "./mailbox/automation-scope";
@@ -107,22 +117,29 @@ export const processPendingSemanticIndexes = async (
         leaseToken,
       })
       .where(and(identity, eligible))
-      .returning();
+      .returning({
+        ...getTableColumns(semanticIndexRequest),
+        // Date would truncate the database timestamp to milliseconds.
+        requestedAt: sql<string>`${semanticIndexRequest.requestedAt}::text`,
+      });
     if (claimed === undefined) {
       continue;
     }
     const ownedLease = and(
       identity,
       eq(semanticIndexRequest.leaseToken, leaseToken),
-      gt(semanticIndexRequest.leaseExpiresAt, sql`now()`)
+      gt(
+        semanticIndexRequest.leaseExpiresAt,
+        sql`timezone('UTC', clock_timestamp())`
+      )
     );
     try {
       const signal = AbortSignal.timeout(
         Math.max(1, Math.min(30_000, deadline - Date.now()))
       );
       let imported =
-        request.mailImportRequestedAt === null ||
-        request.mailImportedAt !== null;
+        claimed.mailImportRequestedAt === null ||
+        claimed.mailImportedAt !== null;
       if (request.kind === "mail" && !imported) {
         await createMailboxAiBillingContext({
           externalId: `semantic-import:${crypto.randomUUID()}`,
@@ -132,8 +149,8 @@ export const processPendingSemanticIndexes = async (
         });
         const progress = await advanceSemanticMailImport({
           mailboxId: request.mailboxId,
-          pageToken: request.mailImportPageToken,
-          pendingIds: request.mailImportPendingIds,
+          pageToken: claimed.mailImportPageToken,
+          pendingIds: claimed.mailImportPendingIds,
           signal,
           userId: request.userId,
         });
@@ -159,18 +176,20 @@ export const processPendingSemanticIndexes = async (
       });
       const complete = coverage.complete && imported;
       const finishedAt = new Date();
-      const completedAt = eventDriven
-        ? sql`case when ${semanticIndexRequest.requestedAt} > ${claimed.requestedAt.toISOString()}::timestamp
-          then null else ${finishedAt.toISOString()}::timestamp end`
-        : finishedAt;
+      const unchanged = sql`${semanticIndexRequest.requestedAt} = ${claimed.requestedAt}::timestamp`;
       const completed = await db
         .update(semanticIndexRequest)
         .set({
           attemptCount: 0,
-          availableAt: new Date(
-            finishedAt.getTime() + (complete && !eventDriven ? 300_000 : 0)
-          ),
-          completedAt: complete ? completedAt : null,
+          availableAt:
+            complete && !eventDriven
+              ? sql`case when ${unchanged} then ${finishedAt.toISOString()}::timestamp + interval '5 minutes'
+                else ${finishedAt.toISOString()}::timestamp end`
+              : finishedAt,
+          completedAt: complete
+            ? sql`case when ${unchanged}
+                then greatest(${semanticIndexRequest.requestedAt}, ${finishedAt.toISOString()}::timestamp) end`
+            : null,
           indexedSources: coverage.indexedSources,
           lastError: null,
           leaseExpiresAt: null,

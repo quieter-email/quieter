@@ -344,6 +344,7 @@ export const createGmailResources = (
             flags: ["nodejs_compat"],
           },
           environment: {
+            ...context.billingEnvironment,
             ...context.releaseEnvironment,
             QUIETER_GMAIL_EVENTS_ENABLED: String(
               context.env.QUIETER_GMAIL_EVENTS_ENABLED === true

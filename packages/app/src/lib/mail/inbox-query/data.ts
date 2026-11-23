@@ -101,7 +101,10 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
   previous: MessagesQueryData | undefined,
   refreshedPages: ListMessagesPageResult[],
   refreshedPageParams: (string | undefined)[],
-  options: { preserveUnrefreshedPages?: boolean } = {}
+  options: {
+    preserveUnrefreshedPages?: boolean;
+    rowScope?: "message" | "thread";
+  } = {}
 ): MessagesQueryData => {
   if (previous === undefined || previous.pages.length === 0) {
     return { pageParams: refreshedPageParams, pages: refreshedPages };
@@ -126,16 +129,21 @@ export const mergeRefreshedMailboxPagesIntoQueryData = (
     return { pageParams: refreshedPageParams, pages };
   }
 
-  const preservedMessageIds = new Set(
-    pages.flatMap((page) => page.messages.map((message) => message.id))
+  // Thread lists hold one anchor per thread, and a new reply changes the anchor id.
+  const getRowKey =
+    options.rowScope === "thread"
+      ? (message: MessageListItem) => message.threadId
+      : (message: MessageListItem) => message.id;
+  const preservedRowKeys = new Set(
+    pages.flatMap((page) => page.messages.map(getRowKey))
   );
   const preservedPages: ListMessagesPageResult[] = [];
   for (const page of previous.pages.slice(refreshedPages.length)) {
     const messages = page.messages.filter(
-      (message) => !preservedMessageIds.has(message.id)
+      (message) => !preservedRowKeys.has(getRowKey(message))
     );
     for (const message of messages) {
-      preservedMessageIds.add(message.id);
+      preservedRowKeys.add(getRowKey(message));
     }
     preservedPages.push({ ...page, messages });
   }

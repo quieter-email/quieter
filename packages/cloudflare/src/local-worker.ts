@@ -291,5 +291,13 @@ export default {
     }
     return new Response(null, { status: 404 });
   },
-  queue: processGmailQueue,
+  async queue(batch, env) {
+    if (batch.queue === "quieter-local-mail-dispatch-repair") {
+      const { processMailDispatchRepairQueue } =
+        await import("./mail-dispatch-worker");
+      await processMailDispatchRepairQueue(batch, env);
+      return;
+    }
+    await processGmailQueue(batch, env);
+  },
 } satisfies ExportedHandler<Env>;

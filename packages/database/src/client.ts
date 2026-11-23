@@ -137,20 +137,25 @@ const deliverMailDispatchWake = async (
         "x-mail-signature": await signMailPayload(body, secret),
       },
       method: "POST",
-      redirect: "error",
+      redirect: "manual",
       signal: AbortSignal.timeout(3000),
     });
     if (!response.ok) {
       throw new Error("Mail dispatch wake was not accepted.");
     }
+    return true;
   } catch (error) {
     reportError(error, { boundary: "mail-dispatch-wake" });
+    return false;
   }
 };
 
 export const withRequestDatabaseClient = async <Result>(
   run: (client: DatabaseClient) => Result | Promise<Result>,
-  options: { defer?: (task: Promise<void>) => void; independent?: boolean } = {}
+  options: {
+    defer?: (task: Promise<boolean>) => void;
+    independent?: boolean;
+  } = {}
 ): Promise<Result> => {
   const requestClient = requestDatabaseClient.getStore();
   if (requestClient && options.independent !== true) {
@@ -165,7 +170,7 @@ export const withRequestDatabaseClient = async <Result>(
       if (
         notice.message === MAIL_DISPATCH_NOTICE &&
         typeof notice.detail === "string" &&
-        eventIds.size < MAIL_DISPATCH_BATCH_SIZE
+        eventIds.size < MAIL_DISPATCH_BATCH_SIZE * 4
       ) {
         eventIds.add(notice.detail);
       }
@@ -180,9 +185,24 @@ export const withRequestDatabaseClient = async <Result>(
         await client.$client.end({ timeout: 1 });
       }
       if (eventIds.size > 0) {
-        const wake = deliverMailDispatchWake(dispatchUrl, signingKey, [
-          ...eventIds,
-        ]);
+        const ids = [...eventIds];
+        const wake = (async () => {
+          const results = await Promise.all(
+            Array.from(
+              { length: Math.ceil(ids.length / MAIL_DISPATCH_BATCH_SIZE) },
+              async (_, index) =>
+                await deliverMailDispatchWake(
+                  dispatchUrl,
+                  signingKey,
+                  ids.slice(
+                    index * MAIL_DISPATCH_BATCH_SIZE,
+                    (index + 1) * MAIL_DISPATCH_BATCH_SIZE
+                  )
+                )
+            )
+          );
+          return results.every(Boolean);
+        })();
         if (options.defer === undefined) {
           await wake;
         } else {

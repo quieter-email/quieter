@@ -208,8 +208,33 @@ const refreshMessagesPages = async (
     options.preserveHistoryId ?? currentMessages?.pages[0]?.historyId;
   const oldChangeVersion = currentMessages?.pages[0]?.changeVersion;
   const preserveUnrefreshedPages = options.preserveUnrefreshedPages !== false;
+  // Sandbox lists return individual messages; every other list returns one row per thread.
+  const rowScope = isSandboxMailboxId(mailboxId) ? "message" : "thread";
   let pageToken: string | undefined;
-  let withheldContinuationToken: string | undefined;
+  // Intermediate publications hide the tail continuation until the refresh settles.
+  let withheldContinuation:
+    | { pageCount: number; pageParam: string | undefined; token: string }
+    | undefined;
+  const restoreWithheldContinuation = (
+    data: MessagesQueryData
+  ): MessagesQueryData => {
+    const lastPageIndex = data.pages.length - 1;
+    if (
+      withheldContinuation === undefined ||
+      data.pages.length !== withheldContinuation.pageCount ||
+      data.pageParams[lastPageIndex] !== withheldContinuation.pageParam ||
+      data.pages[lastPageIndex].nextPageToken !== undefined
+    ) {
+      return data;
+    }
+    const { token } = withheldContinuation;
+    return {
+      ...data,
+      pages: data.pages.map((page, index) =>
+        index === lastPageIndex ? { ...page, nextPageToken: token } : page
+      ),
+    };
+  };
 
   const publish = (complete: boolean) => {
     operation.assertCurrent();
@@ -228,15 +253,23 @@ const refreshMessagesPages = async (
       messagesQueryKey,
       (data) => {
         const merged = mergeRefreshedMailboxPagesIntoQueryData(
-          data,
+          data === undefined ? data : restoreWithheldContinuation(data),
           pages,
           refreshedPageParams,
-          { preserveUnrefreshedPages }
+          { preserveUnrefreshedPages, rowScope }
         );
         const lastPageIndex = merged.pages.length - 1;
-        withheldContinuationToken = complete
-          ? undefined
-          : (merged.pages[lastPageIndex]?.nextPageToken ?? undefined);
+        const continuationToken = merged.pages[lastPageIndex]?.nextPageToken;
+        withheldContinuation =
+          complete ||
+          continuationToken === undefined ||
+          continuationToken === ""
+            ? undefined
+            : {
+                pageCount: merged.pages.length,
+                pageParam: merged.pageParams[lastPageIndex],
+                token: continuationToken,
+              };
         const publishedPages: MessagesQueryData["pages"] = merged.pages.map(
           (page, index) => ({
             ...page,
@@ -266,16 +299,12 @@ const refreshMessagesPages = async (
         if (!data?.pages[0]?.refreshing) {
           return data;
         }
+        const restored = restoreWithheldContinuation(data);
         return {
-          ...data,
-          pages: data.pages.map((page, index) => ({
-            ...page,
-            ...(index === 0 ? { refreshing: undefined } : {}),
-            ...(index === data.pages.length - 1 &&
-            withheldContinuationToken !== undefined
-              ? { nextPageToken: withheldContinuationToken }
-              : {}),
-          })),
+          ...restored,
+          pages: restored.pages.map((page, index) =>
+            index === 0 ? { ...page, refreshing: undefined } : page
+          ),
         };
       }
     );

@@ -409,6 +409,75 @@ describe(refreshLoadedMessagesPages, () => {
     }
   );
 
+  test.each([
+    {
+      calls: 3,
+      ids: ["arrival", "a", "b", "d", "e"],
+      outcome: "complete",
+      token: "old-after-e",
+    },
+    {
+      calls: 3,
+      ids: ["arrival", "a", "c", "d", "e"],
+      outcome: "abort",
+      token: "old-after-e",
+    },
+    { calls: 2, ids: ["arrival", "a"], outcome: "exhausted", token: undefined },
+  ])(
+    "keeps the preserved tail continuation of a deep list across prefix publications ($outcome)",
+    async ({ calls, ids, outcome, token }) => {
+      const client = new QueryClient();
+      const key = getMessagesQueryKey("mailbox", "inbox");
+      client.setQueryData<MessagesQueryData>(key, {
+        pageParams: [undefined, "old-2", "old-3", "old-4", "old-5"],
+        pages: ["a", "b", "c", "d", "e"].map((id) => ({
+          historyId: "old",
+          messages: [message(id)],
+          nextPageToken: `old-after-${id}`,
+        })),
+      });
+      const third = Promise.withResolvers<ListMessagesPageResult>();
+      const controller = new AbortController();
+      vi.mocked(rpc.mail.listThreads)
+        .mockResolvedValueOnce({
+          historyId: "fresh",
+          messages: [message("arrival")],
+          nextPageToken: "fresh-2",
+        })
+        .mockResolvedValueOnce({
+          messages: [message("a")],
+          ...(outcome === "exhausted" ? {} : { nextPageToken: "fresh-3" }),
+        })
+        .mockReturnValueOnce(third.promise);
+      const refreshing = Promise.allSettled([
+        refreshLoadedMessagesPages(client, "mailbox", "inbox", undefined, {
+          signal: controller.signal,
+        }),
+      ]);
+      await vi.waitFor(() => {
+        expect(rpc.mail.listThreads).toHaveBeenCalledTimes(calls);
+      });
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages.at(-1)?.nextPageToken
+      ).toBeUndefined();
+      if (outcome === "abort") {
+        controller.abort();
+      }
+      third.resolve({ messages: [message("b")], nextPageToken: "fresh-4" });
+      const [settled] = await refreshing;
+      expect(settled.status).toBe(
+        outcome === "abort" ? "rejected" : "fulfilled"
+      );
+      const refreshed = client.getQueryData<MessagesQueryData>(key);
+      expect(refreshed?.pages[0]?.refreshing).toBeUndefined();
+      expect(
+        refreshed?.pages.flatMap((page) => page.messages.map((item) => item.id))
+      ).toStrictEqual(ids);
+      expect(refreshed?.pages.at(-1)?.nextPageToken).toBe(token);
+      client.clear();
+    }
+  );
+
   test("ignores superseded direct refreshes and stale deltas without requiring caller signals", async () => {
     const client = new QueryClient();
     const key = getMessagesQueryKey("mailbox", "inbox");
