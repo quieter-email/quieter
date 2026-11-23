@@ -12,6 +12,7 @@ import {
   AssistantSidebarContext,
   AssistantSidebarTrigger,
 } from "@quieter/app/features/chat/components/assistant-sidebar-context";
+import { ChatView } from "@quieter/app/features/chat/components/chat-view";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
 import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
@@ -26,7 +27,6 @@ import {
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   loadCalendarWorkspace,
-  loadChatView,
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -37,7 +37,9 @@ import { MailSidebar } from "@quieter/app/features/navigation/components/mail-si
 import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { ReminderOpenRequest } from "@quieter/app/features/reminders/reminders-panel";
+import { userBillingQueryOptions } from "@quieter/app/features/settings/domain/billing";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
+import { chatQueryOptions } from "@quieter/app/lib/chat-query";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
@@ -52,6 +54,7 @@ import {
   workspaceGutterClassName,
   workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
+import { useQueryClient } from "@tanstack/react-query";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
   Activity,
@@ -197,12 +200,6 @@ const SnippetWorkspaceLoading = ({
   </WorkspaceSection>
 );
 
-const AssistantLoading = () => (
-  <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
-    Loading assistant…
-  </p>
-);
-
 type WorkspaceModuleResource<Module> = {
   load: () => Promise<Module>;
   readonly module: Module | undefined;
@@ -228,8 +225,6 @@ const composeWorkspaceResource =
 
 const snippetWorkspaceResource =
   createWorkspaceModuleResource(loadSnippetWorkspace);
-
-const chatViewResource = createWorkspaceModuleResource(loadChatView);
 
 // Keep module loading in state so Suspense cannot postpone a ready workspace.
 const useWorkspaceModule = <Module,>(
@@ -300,17 +295,6 @@ const SnippetWorkspace = (
   }
   const Workspace = module.default;
   return <Workspace {...props} />;
-};
-
-const ChatView = (
-  props: ComponentProps<Awaited<ReturnType<typeof loadChatView>>["default"]>
-) => {
-  const module = useWorkspaceModule(chatViewResource);
-  if (module === null) {
-    return <AssistantLoading />;
-  }
-  const View = module.default;
-  return <View {...props} />;
 };
 
 const NoMailboxWorkspace = ({
@@ -531,6 +515,22 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
+  const queryClient = useQueryClient();
+  const assistantAvailable =
+    Boolean(selectedMailboxId) && selectedMailboxProvider !== "api";
+  useEffect(() => {
+    if (assistantAvailable) {
+      void Promise.allSettled([queryClient.query(userBillingQueryOptions())]);
+    }
+  }, [assistantAvailable, queryClient]);
+  useEffect(() => {
+    if (assistantAvailable && selectedMailboxId && chatId !== null) {
+      const options = chatQueryOptions(selectedMailboxId, chatId);
+      if (queryClient.getQueryData(options.queryKey) === undefined) {
+        void Promise.allSettled([queryClient.query(options)]);
+      }
+    }
+  }, [assistantAvailable, chatId, queryClient, selectedMailboxId]);
   useEffect(
     () =>
       appRuntime.reminderNotifications?.onOpen((event) => {
@@ -605,7 +605,7 @@ const MailboxWorkspaceContentInner = ({
       // Use the default sidebar layout when storage is unavailable.
     }
     const wide = window.matchMedia("(min-width: 80rem)").matches;
-    // oxlint-disable-next-line react/set-state-in-effect -- Load the chat only when the restored sidebar is visible.
+    // oxlint-disable-next-line react/set-state-in-effect -- Mount the chat when restoring an open sidebar.
     setAssistantOpened(wide && !closed);
     // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
     setAssistantOpen(wide && !closed);
@@ -1124,7 +1124,7 @@ const MailboxWorkspaceContentInner = ({
                     }}
                   >
                     {assistantOpened ? (
-                      <Suspense fallback={<AssistantLoading />}>
+                      <>
                         {allInboxesActive && (
                           <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
                             Assistant for{" "}
@@ -1152,7 +1152,7 @@ const MailboxWorkspaceContentInner = ({
                           }
                           onChatIdChange={onChatIdChange}
                         />
-                      </Suspense>
+                      </>
                     ) : null}
                   </AssistantSidebar>
                 ) : null

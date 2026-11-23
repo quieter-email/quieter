@@ -5,19 +5,23 @@ import {
   chatModels,
   defaultBackgroundModel,
   defaultChatModel,
+  retiredChatModelSchema,
 } from "./chat-models";
 import type { ChatModel } from "./chat-models";
 
 /**
- * Resolves a configured model id against the catalog. Unset values fall back
- * to the matching default; misconfigured values fail loudly so bad secret
- * values surface at request time instead of silently downgrading.
+ * Unset and retired model ids use the default. Unknown ids surface as
+ * configuration errors.
  */
 export const resolveConfiguredModel = (
   value: string | undefined,
   fallback: ChatModel
 ): ChatModel => {
-  if (value === undefined || value === "") {
+  if (
+    value === undefined ||
+    value === "" ||
+    retiredChatModelSchema.safeParse(value).success
+  ) {
     return fallback;
   }
   const parsed = chatModelSchema.safeParse(value);
@@ -28,8 +32,8 @@ export const resolveConfiguredModel = (
 };
 
 /**
- * Interactive choices follow each family's newest version. Auto selects
- * the family configured by QuieterChatModel, including existing pinned ids.
+ * Interactive choices use the picker catalog. Auto follows QuieterChatModel,
+ * with older identifiers resolved to the corresponding picker choice.
  * Server-only: clients must not import this module.
  */
 export const resolveChatModel = (selection?: ChatModel): ChatModel => {

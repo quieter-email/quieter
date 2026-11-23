@@ -54,6 +54,7 @@ type ChatComposerProps = {
   contextItems: ChatContextItem[];
   contextPicker: ReactNode;
   disabled?: boolean;
+  sendDisabled?: boolean;
   input: string;
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   mailboxId: string;
@@ -94,6 +95,7 @@ export const ChatComposer = ({
   contextItems,
   contextPicker,
   disabled = false,
+  sendDisabled = false,
   input,
   inputRef,
   mailboxId,
@@ -544,6 +546,7 @@ export const ChatComposer = ({
                   aria-label={submitLabel}
                   disabled={
                     disabled ||
+                    (sendDisabled && !commandOpen) ||
                     recording ||
                     audioBusy ||
                     !input.trim() ||
