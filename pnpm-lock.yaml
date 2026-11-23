@@ -1375,6 +1375,9 @@ importers:
       '@quieter/mail':
         specifier: workspace:*
         version: link:../mail
+      '@quieter/observability':
+        specifier: workspace:*
+        version: link:../observability
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.6(@cloudflare/workers-types@5.20261121.1)(@opentelemetry/api@1.9.1)(bun-types@1.4.5)(postgres@4.1.1)(valibot@1.4.2(typescript@7.0.2))(zod@4.6.7)

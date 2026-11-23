@@ -101,6 +101,7 @@ export type MessageInspectorResult = {
 };
 
 export type ListMessagesPageResult = {
+  changeVersion?: string;
   messages: MessageListItem[];
   nextPageToken?: string;
   resultSizeEstimate?: number;
@@ -117,11 +118,13 @@ export type ThreadMessagesResult = {
 export type MailLabelListItem = { id: string; name: string; type?: string };
 
 export type MailboxSyncDelta = {
+  changeVersion?: string;
   historyId?: string;
   hasChanges: boolean;
   refreshFirstPage: boolean;
   refreshThreadIds?: string[];
   removedMessageIds: string[];
+  replacedThreadIds?: string[];
   requiresFullRefresh: boolean;
   updatedMessages: MessageListItem[];
 };

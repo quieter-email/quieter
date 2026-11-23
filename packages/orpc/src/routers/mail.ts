@@ -19,6 +19,8 @@ import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
 
+const gmailMessageChanges = { trackedByGmail: true };
+
 const dispatchOrdinaryMail = async ({
   context,
   mailboxId,
@@ -66,9 +68,11 @@ const dispatchOrdinaryMail = async ({
 export const mailRouter = {
   ...mailboxProcedures,
   ...managedOrganizationMailRouter,
-  applyChanges: protectedProcedure
-    .input(mailInputSchemas.applyChanges)
-    .handler(withMailUpdate(mutationsMailOperations.applyChanges)),
+  applyChanges: protectedProcedure.input(mailInputSchemas.applyChanges).handler(
+    withMailUpdate(mutationsMailOperations.applyChanges, "mailbox.changed", {
+      trackedByGmail: ({ command }) => command.kind !== "set-placement",
+    })
+  ),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
     .handler(
@@ -134,22 +138,58 @@ export const mailRouter = {
     .handler(queriesMailOperations.listThreads),
   markMessageAsRead: protectedProcedure
     .input(mailInputSchemas.markMessageAsRead)
-    .handler(withMailUpdate(mutationsMailOperations.markMessageAsRead)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.markMessageAsRead,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   markMessageAsUnread: protectedProcedure
     .input(mailInputSchemas.markMessageAsUnread)
-    .handler(withMailUpdate(mutationsMailOperations.markMessageAsUnread)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.markMessageAsUnread,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   markThreadAsRead: protectedProcedure
     .input(mailInputSchemas.markThreadAsRead)
-    .handler(withMailUpdate(mutationsMailOperations.markThreadAsRead)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.markThreadAsRead,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   markThreadAsUnread: protectedProcedure
     .input(mailInputSchemas.markThreadAsUnread)
-    .handler(withMailUpdate(mutationsMailOperations.markThreadAsUnread)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.markThreadAsUnread,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   moveMessageToTrash: protectedProcedure
     .input(mailInputSchemas.moveMessageToTrash)
-    .handler(withMailUpdate(mutationsMailOperations.moveMessageToTrash)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.moveMessageToTrash,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   moveThreadToTrash: protectedProcedure
     .input(mailInputSchemas.moveThreadToTrash)
-    .handler(withMailUpdate(mutationsMailOperations.moveThreadToTrash)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.moveThreadToTrash,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
     .handler(withMailUpdate(composeMailOperations.saveDraft)),
@@ -184,10 +224,22 @@ export const mailRouter = {
     .handler(withMailUpdate(composeMailOperations.unsubscribeFromMessage)),
   untrashMessage: protectedProcedure
     .input(mailInputSchemas.untrashMessage)
-    .handler(withMailUpdate(mutationsMailOperations.untrashMessage)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.untrashMessage,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   untrashThread: protectedProcedure
     .input(mailInputSchemas.untrashThread)
-    .handler(withMailUpdate(mutationsMailOperations.untrashThread)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.untrashThread,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   updateLabel: protectedProcedure
     .input(mailInputSchemas.updateLabel)
     .handler(
@@ -200,8 +252,20 @@ export const mailRouter = {
     ),
   updateMessageLabels: protectedProcedure
     .input(mailInputSchemas.updateMessageLabels)
-    .handler(withMailUpdate(mutationsMailOperations.updateMessageLabels)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.updateMessageLabels,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
   updateThreadLabels: protectedProcedure
     .input(mailInputSchemas.updateThreadLabels)
-    .handler(withMailUpdate(mutationsMailOperations.updateThreadLabels)),
+    .handler(
+      withMailUpdate(
+        mutationsMailOperations.updateThreadLabels,
+        "mailbox.changed",
+        gmailMessageChanges
+      )
+    ),
 };

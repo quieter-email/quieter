@@ -10,6 +10,9 @@ import {
 import type { CreateReminder, ReminderSource } from "@quieter/mail/reminders";
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
+import { mailboxAutomationFilter } from "../mailbox/automation-scope";
+import type { MailboxAutomationScope } from "../mailbox/automation-scope";
+
 export type ReminderRow = typeof mailReminder.$inferSelect;
 export const enqueueReminderJob = async (
   database: DatabaseExecutor,
@@ -37,7 +40,7 @@ export const enqueueReminderJob = async (
 
 export const claimReminderJob = async (input: {
   kind: "evaluate" | "notify";
-  scope?: { userId: string; mailboxId: string };
+  scope?: MailboxAutomationScope & { userId?: string };
 }) =>
   await db.transaction(async (tx) => {
     const [job] = await tx
@@ -53,12 +56,10 @@ export const claimReminderJob = async (input: {
             isNull(mailReminderJob.leaseUntil),
             lt(mailReminderJob.leaseUntil, sql`now()`)
           ),
-          input.scope
-            ? and(
-                eq(mailReminder.mailboxId, input.scope.mailboxId),
-                eq(mailReminder.userId, input.scope.userId)
-              )
-            : undefined
+          mailboxAutomationFilter(mailReminder.mailboxId, input.scope ?? {}),
+          input.scope?.userId === undefined
+            ? undefined
+            : eq(mailReminder.userId, input.scope.userId)
         )
       )
       .orderBy(mailReminderJob.availableAt)

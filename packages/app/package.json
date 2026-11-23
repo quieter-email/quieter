@@ -285,6 +285,7 @@
     "./lib/mail/inbox-query/data": "./src/lib/mail/inbox-query/data.ts",
     "./lib/mail/inbox-query/index": "./src/lib/mail/inbox-query/index.ts",
     "./lib/mail/inbox-query/keys": "./src/lib/mail/inbox-query/keys.ts",
+    "./lib/mail/inbox-query/provisional": "./src/lib/mail/inbox-query/provisional.ts",
     "./lib/mail/inbox-query/query-cache": "./src/lib/mail/inbox-query/query-cache.ts",
     "./lib/mail/inbox-query/sync": "./src/lib/mail/inbox-query/sync.ts",
     "./lib/mail/labels-query": "./src/lib/mail/labels-query.ts",

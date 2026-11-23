@@ -5,6 +5,9 @@ import {
 } from "@quieter/database/schema";
 import { and, eq, isNull, lt, lte, or, sql } from "drizzle-orm";
 
+import { mailboxAutomationFilter } from "../mailbox/automation-scope";
+import type { MailboxAutomationScope } from "../mailbox/automation-scope";
+
 export type SuggestionRow = typeof mailReminderSuggestion.$inferSelect;
 
 export const enqueueReminderSuggestion = async (input: {
@@ -88,14 +91,19 @@ export const enqueueAutomaticReminderSuggestions = async (input: {
   }
 };
 
-export const claimReminderSuggestion = async (id?: string) =>
+export const claimReminderSuggestion = async (
+  input: MailboxAutomationScope & { id?: string } = {}
+) =>
   await db.transaction(async (tx) => {
     const [row] = await tx
       .select()
       .from(mailReminderSuggestion)
       .where(
         and(
-          id === undefined ? undefined : eq(mailReminderSuggestion.id, id),
+          input.id === undefined
+            ? undefined
+            : eq(mailReminderSuggestion.id, input.id),
+          mailboxAutomationFilter(mailReminderSuggestion.mailboxId, input),
           eq(mailReminderSuggestion.status, "pending"),
           lte(mailReminderSuggestion.availableAt, sql`now()`),
           or(

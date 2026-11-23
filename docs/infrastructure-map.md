@@ -24,8 +24,8 @@ flowchart TB
         end
 
         subgraph CONSUMERS["Scheduled Workers"]
-            MMAINT["Cron every minute<br/>mail-maintenance-worker.ts<br/>send recovery, cleanup, rule backfills"]
-            PSMAINT["Cron */15 min<br/>gmail-maintenance-worker.ts<br/>selects only due mailboxes"]
+            MMAINT["Mail maintenance Worker<br/>durable deadlines or minute fallback<br/>send recovery, cleanup, rule backfills"]
+            PSMAINT["Cron every minute<br/>gmail-maintenance-worker.ts<br/>repairs due mailbox schedules"]
         end
 
         HD["Hyperdrive AppDatabaseV2<br/>connection pooling, caching off"]
@@ -115,10 +115,13 @@ flowchart TB
 | Resource | SST type | Entry point | Triggered by | Talks to | Notes |
 | --- | --- | --- | --- | --- | --- |
 | `Web` | `sst.cloudflare.TanStackStart` | `apps/web` | Browser HTTPS | Hyperdrive, SESv2, Gmail API, OpenRouter, Polar, Sentry, R2 | Production domain `quieter.email` (+ `www` redirect), logs + traces on, linked AWS credentials through `WebAwsPermissions` for sending, domain identity setup in the current account and region, regional receipt rules, and passing only `MailReceiptRole` to SES. |
-| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/mail/live`) | Hyperdrive, processing secrets, `MailLiveUser` | Processes authenticated notifications before acknowledging. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. Mail updates resolve current mailbox recipients before delivery. |
+| `GmailRealtimeWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/worker.ts` | Google Pub/Sub push (POST `/gmail/pubsub`), browser WebSocket (`/mail/live`) | Hyperdrive, processing secrets, `MailLiveUser` | Acknowledges authenticated notifications after durable mailbox acceptance. Verifies Google OIDC JWT against JWKS, checks subscription name, body limit 64 KiB. Mail updates resolve current mailbox recipients before delivery. |
 | `GmailLiveSyncMailboxV2` | `sst.cloudflare.DurableObject` (SQLite, migration `v3`) | `packages/cloudflare/src/gmail-live-sync-mailbox.ts` | Retired transport | Existing legacy sockets only | Fail-closed tombstone closes retained sockets and rejects every request. Current subscriptions use `MailLiveUser`. |
-| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | `*/15 * * * *` | Hyperdrive, Gmail API | Due mailboxes are processed directly with concurrency four, including pending code retries. |
-| `MailMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/mail-maintenance-worker.ts` | every minute | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, expired rate-limit cleanup, managed rule backfills, code retries, and cleanup of old processing records without a code. |
+| `GmailProcessingWorker` | `sst.cloudflare.Worker` | `packages/cloudflare/src/gmail-processing-worker.ts` | Private service binding and sharded fresh, catch-up, and automation queues | Hyperdrive, mailbox scheduler, Gmail API, processing secrets | Resolves intake and runs dispatched work. |
+| `GmailMailboxScheduler` | `sst.cloudflare.DurableObject` | `packages/cloudflare/src/gmail-mailbox-scheduler.ts` | Private RPC and alarm | Fresh and catch-up queues | Stores the pending schedule and dispatch tokens per mailbox. |
+| `GmailProjectQuota` | `sst.cloudflare.DurableObject` | `packages/cloudflare/src/gmail-project-quota.ts` | Private RPC | Worker dispatch | Meters Gmail request units and deferrable model request admission across quota shards. |
+| `GmailPubSubMaintenance` | `sst.cloudflare.Cron` | `packages/cloudflare/src/gmail-maintenance-worker.ts` | every minute | Hyperdrive and private processor | Claims indexed sync and automation repair deadlines and prunes terminal work. |
+| `MailMaintenanceHandler` | `sst.cloudflare.Worker` | `packages/cloudflare/src/mail-maintenance-worker.ts` | committed work and deadlines, or minute fallback | Hyperdrive, R2, Polar, Sentry | Send recovery, storage cleanup, managed automation, usage retries, and retention. |
 | `AppDatabaseV2` | `sst.cloudflare.Hyperdrive` | — | Worker DB access | PostgreSQL origin from `DatabaseUrl` secret | Caching disabled; production uses fixed Hyperdrive id. Workers use `withRequestDatabaseClient` per invocation. |
 | R2 bucket (external) | configured via `R2_*` env + access-key secrets, not an SST resource | — | Receipt processor, mail ingress | — | Canonical `.eml` storage under `mail/inbound/yyyy/mm/dd/uuid.eml`, read back by the web worker via S3-compatible API. |
 
@@ -152,49 +155,28 @@ flowchart TB
 
 ```mermaid
 sequenceDiagram
-    autonumber
-    participant G as Gmail
     participant P as Google Pub/Sub
     participant W as GmailRealtimeWorker
-    participant D as MailLiveUser DO
-    participant DB as PostgreSQL
-    participant A as Gmail API
-    participant B as Browser
-
-    G->>P: mailbox changed (watch)
-    P->>W: POST /gmail/pubsub (OIDC JWT)
-    W->>W: verify JWT vs Google JWKS, subscription, parse payload
-    W->>DB: claim 14-min processing lease, update lastNotificationAt
-    W->>DB: billing entitlement check
-    W->>A: history.list / messages.get / labels (up to 5 pages)
-    W->>DB: persist auto-label and verification-code results
-    W->>DB: resolve connected mailboxes and their current recipients
-    W->>D: broadcast mailbox.changed to each recipient
-    D-->>B: refresh messages, labels, unread counts, and codes
-    W-->>P: 204 after processing, 5xx on failure, busy lease, or remaining pages
+    participant E as GmailProcessingWorker
+    participant S as GmailMailboxScheduler
+    participant Q as Sharded queues
+    participant D as PostgreSQL
+    P->>W: Authenticated notification
+    W->>E: Forward through private binding
+    E->>D: Resolve connected mailbox
+    E->>S: Record durable wake
+    S-->>W: Acceptance via processor
+    W-->>P: 204
+    S->>Q: Dispatch due lane
+    Q->>E: Deliver dispatch
+    E->>S: Claim dispatch token
+    E->>D: Process history or message work
+    E->>S: Finish and schedule continuation
 ```
 
-### 2. Gmail scheduled maintenance (every 15 minutes)
+### 2. Gmail scheduled repair
 
-```mermaid
-sequenceDiagram
-    autonumber
-    participant CR as Cron */15
-    participant DB as PostgreSQL
-    participant A as Gmail API
-    participant D as LiveSync DO
-
-    CR->>DB: list due connected mailboxes (watch renewal, history progress, code retries, or stale sync)
-    CR->>DB: process due mailboxes, up to four concurrently
-    CR->>DB: status re-check
-    alt disconnected or no owner
-        CR->>CR: skip
-    else connected
-        CR->>A: watch.renew if due (20h interval / 48h buffer)
-        CR->>A: history reconcile (2 pages)
-        CR->>D: broadcast mailbox.changed when maintained or pending
-    end
-```
+The cron claims indexed repair deadlines from Postgres and wakes the mailbox scheduler through the private processor. The actor schedules watch renewal and history reconciliation through its sync lane. A failed repair becomes due again when its reservation expires. [Gmail background processing](gmail-processing.md)
 
 ### 3. Inbound managed mail
 
@@ -248,9 +230,11 @@ sequenceDiagram
 
 ### 5. Mail maintenance
 
-`infra/mail-maintenance.ts` provisions `MailMaintenance` every minute. Its handler, `packages/cloudflare/src/mail-maintenance-worker.ts`, runs send recovery, storage cleanup, rate-limit cleanup, managed rule backfills, and reviewed mailbox Actions within a request-scoped database client. The local `vp run dev:trigger mail-recovery` command invokes maintenance operations; `vp run dev:trigger actions` drains one action alone. New actions use the additive `mailboxAgent*` tables and the existing mail/connector adapters. The retired custom graph tables remain rollback data. Connector credentials reach the Worker only through linked SST Secrets.
+`infra/mail-maintenance.ts` provisions a private Worker and its deadline scheduler. Database triggers register maintenance facts in the same transaction as the work. Relay enrollment registers deadlines for pre-existing rows and starts bounded migration pages. The Worker hands scheduled sends and reminder delivery to their existing Durable Objects. Other tasks compute their next wake from persisted work and go idle when none remains.
 
-Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references.
+Activate [mail event dispatch](mail-dispatch.md) and verify its maintenance enrollment before deploying with `QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED=true`. That flag removes the minute trigger. With the flag unset, the minute trigger provides rolling-deployment coverage while the Worker accepts registrations. The local `vp run dev:trigger mail-recovery` command runs the maintenance operations directly. Use `vp run dev:trigger actions` to drain one Action. Connector credentials reach the Worker through linked SST Secrets.
+
+Organization mailbox cleanup records raw-object cleanup jobs in the same transaction that moves Gmail mailboxes and deletes managed mailboxes. Object deletion runs after commit; failures are reported and retained for maintenance retries. Cleanup workers atomically claim due jobs and preserve objects referenced by managed messages, API messages, or send reservations, including legacy S3 message references. In event mode a referenced object leaves the cleanup schedule until a transaction releases a reference.
 
 ### 6. Chat with tools
 

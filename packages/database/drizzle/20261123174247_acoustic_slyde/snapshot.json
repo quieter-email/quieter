@@ -1,0 +1,147 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "a04a9459-da4f-4ce4-b4f1-9ca42b7dbb2d",
+  "prevIds": ["0cc85084-dfef-4ca9-956b-5259b443d91c"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailCapturedMessage",
+        "gmail_captured_message_pending_body_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_captured_message_pending_body_idx",
+        "n|idx|public.gmail_captured_message_pending_body_idx",
+        "e|idx|public.gmail_captured_message_pending_body_idx",
+        "n|rel|public.gmail_captured_message_pending_body_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailCapturedMessage",
+        "n|sch|public",
+        "n|col|public.gmailCapturedMessage.mailboxId",
+        "n|col|public.gmailCapturedMessage.messageId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailCapturedMessage",
+        "gmail_captured_message_body_text_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_captured_message_body_text_idx",
+        "n|idx|public.gmail_captured_message_body_text_idx",
+        "e|idx|public.gmail_captured_message_body_text_idx",
+        "n|rel|public.gmail_captured_message_body_text_idx"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailCapturedMessage",
+        "gmail_captured_message_body_search_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_captured_message_body_search_idx",
+        "n|idx|public.gmail_captured_message_body_search_idx",
+        "e|idx|public.gmail_captured_message_body_search_idx",
+        "n|rel|public.gmail_captured_message_body_search_idx"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "gmail_captured_message_pending_body_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "(coalesce(\"bodyBackfillAfter\", '-infinity'::timestamp))",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "messageId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"deletedAt\" is null and \"bodyObject\" is null and \"snapshot\" is not null",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "gmail_captured_message_body_text_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "(coalesce(coalesce(\"bodySearchText\", \"snapshot\"->>'bodyText'), '')) gin_trgm_ops",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"deletedAt\" is null",
+        "with": "",
+        "method": "gin",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "gmail_captured_message_body_search_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "(coalesce(case when \"bodySearchDocument\" is null then gmail_capture_search_full(\"snapshot\") else (\"bodySearchDocument\")[1] end, ''::tsvector))",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"deletedAt\" is null",
+        "with": "",
+        "method": "gin",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

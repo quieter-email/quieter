@@ -189,27 +189,20 @@ describe("local background entrypoint", () => {
 
   test("durably enqueues validated deliveries without processing in the request", async () => {
     const send = vi
-      .spyOn(env.GmailProcessingQueue, "send")
-      .mockResolvedValueOnce({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
-      });
+      .spyOn(env.GmailProcessingWorker, "fetch")
+      .mockResolvedValueOnce(Response.json({ action: "ack" }));
     const response = await localWorker.fetch(
       request(JSON.stringify(delivery)),
       env
     );
     expect(response.status).toBe(204);
-    expect(send).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({
-        emailAddress: "test@example.invalid",
-        historyId: "42",
-        pubSubMessageId: "local-test-delivery",
-      })
-    );
+    expect(send).toHaveBeenCalledOnce();
+    expect(send.mock.calls[0]?.[1]?.body).toContain("local-test-delivery");
     expect(processGmailPubSubNotification).not.toHaveBeenCalled();
   });
 
   test("leaves the delivery unacknowledged when enqueue fails", async () => {
-    vi.spyOn(env.GmailProcessingQueue, "send").mockRejectedValueOnce(
+    vi.spyOn(env.GmailProcessingWorker, "fetch").mockRejectedValueOnce(
       new Error("temporary")
     );
     const response = await localWorker.fetch(

@@ -1,4 +1,5 @@
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
 import { z } from "zod";
@@ -150,19 +151,22 @@ export const handler = async (
     try {
       const { recordInboundManagedMessage } =
         await import("@quieter/orpc/managed-mail/ingestion");
-      mailboxIds = await recordInboundManagedMessage({
-        providerMessageId,
-        rawMessage,
-        rawObjectBucket,
-        rawObjectKey: s3Key,
-        rawObjectProvider,
-        rawSizeBytes: rawMessage.byteLength,
-        receivedAt,
-        recipients,
-        s3Bucket:
-          rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
-        s3Key: rawObjectProvider === "s3" ? s3Key : undefined,
-      });
+      mailboxIds = await withRequestDatabaseClient(
+        async () =>
+          await recordInboundManagedMessage({
+            providerMessageId,
+            rawMessage,
+            rawObjectBucket,
+            rawObjectKey: s3Key,
+            rawObjectProvider,
+            rawSizeBytes: rawMessage.byteLength,
+            receivedAt,
+            recipients,
+            s3Bucket:
+              rawObjectProvider === "s3" ? Resource.MailBucket.name : undefined,
+            s3Key: rawObjectProvider === "s3" ? s3Key : undefined,
+          })
+      );
     } catch (error) {
       await deleteMailObjectUnlessTracked({
         bucket: rawObjectBucket,

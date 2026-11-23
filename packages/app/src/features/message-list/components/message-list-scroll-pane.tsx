@@ -84,7 +84,14 @@ const loadMoreIfNeeded = ({
   isPending: boolean;
   onLoadMore: () => void;
 }) => {
-  if (!element || !hasNextPage || isFetchingNextPage || isPending || isError) {
+  if (
+    !element ||
+    element.clientHeight <= 0 ||
+    !hasNextPage ||
+    isFetchingNextPage ||
+    isPending ||
+    isError
+  ) {
     return;
   }
 
@@ -303,6 +310,12 @@ export const MessageListScrollPane = ({
   const measuredWidthRef = useRef(0);
   const pendingLayoutRef = useRef<{ animation: Animation | null } | null>(null);
   const pendingAnchorRef = useRef<MessageListScrollAnchor | null>(null);
+  const lastScrollAnchorRef = useRef<MessageListScrollAnchor | null>(null);
+  const threadOrderKey = useMemo(
+    () => threadedMessages.map((thread) => thread.threadId).join("\u0000"),
+    [threadedMessages]
+  );
+  const previousThreadOrderRef = useRef<string | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
   const pendingFocusRef = useRef<{
     threadId: string;
@@ -344,6 +357,63 @@ export const MessageListScrollPane = ({
     },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
+  useLayoutEffect(() => {
+    const element = selection.scrollRef.current;
+    const previousOrder = previousThreadOrderRef.current;
+    previousThreadOrderRef.current = threadOrderKey;
+    if (
+      !element ||
+      previousOrder === null ||
+      previousOrder === threadOrderKey ||
+      element.scrollTop <= 1 ||
+      pendingAnchorRef.current
+    ) {
+      return;
+    }
+    const anchor = lastScrollAnchorRef.current;
+    if (!anchor) {
+      return;
+    }
+    const nextIndex = threadedMessages.findIndex(
+      (thread) => thread.threadId === anchor.key
+    );
+    if (nextIndex === -1) {
+      lastScrollAnchorRef.current = getScrollAnchor(
+        element,
+        messageVirtualizer
+      );
+      return;
+    }
+    if (nextIndex === anchor.index) {
+      return;
+    }
+    const offset = messageVirtualizer.getOffsetForIndex(nextIndex, "start");
+    if (!offset) {
+      return;
+    }
+    const nextTop =
+      offset[0] +
+      Number(getComputedStyle(element).paddingTop.replace("px", "")) +
+      Math.min(anchor.offsetWithinRow, rowHeightEstimateRef.current - 1);
+    if (Math.abs(element.scrollTop - nextTop) > 1) {
+      element.scrollTop = nextTop;
+    }
+    lastScrollAnchorRef.current = { ...anchor, index: nextIndex };
+  }, [
+    messageVirtualizer,
+    selection.scrollRef,
+    threadOrderKey,
+    threadedMessages,
+  ]);
+  useLayoutEffect(() => {
+    const element = selection.scrollRef.current;
+    if (element && element.scrollTop > 1) {
+      lastScrollAnchorRef.current = getScrollAnchor(
+        element,
+        messageVirtualizer
+      );
+    }
+  }, [messageVirtualizer, selection.scrollRef]);
   const updateRowMeasurements = useCallback(
     function updateRowMeasurements(force = false): boolean {
       const element = selection.scrollRef.current;
@@ -478,11 +548,8 @@ export const MessageListScrollPane = ({
     threadedMessages,
     list
   );
-  const hasMountedPrefetchRef = useRef(false);
-
   useLayoutEffect((): (() => void) | undefined => {
     if (
-      hasMountedPrefetchRef.current ||
       !list.hasNextPage ||
       list.isError ||
       list.isFetchingNextPage ||
@@ -491,7 +558,6 @@ export const MessageListScrollPane = ({
       return undefined;
     }
 
-    hasMountedPrefetchRef.current = true;
     loadMoreIfNeeded({
       element: selection.scrollRef.current,
       hasNextPage: list.hasNextPage,
@@ -631,6 +697,13 @@ export const MessageListScrollPane = ({
         }
       }}
       onScroll={() => {
+        const element = selection.scrollRef.current;
+        if (element) {
+          lastScrollAnchorRef.current =
+            element.scrollTop <= 1
+              ? null
+              : getScrollAnchor(element, messageVirtualizer);
+        }
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;
         }
@@ -746,7 +819,7 @@ export const MessageListScrollPane = ({
 
       {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-caption text-muted-fg">
-          {list.isFetchingNextPage || list.hasNextPage ? (
+          {list.isFetchingNextPage || list.hasNextPage || list.isRefreshing ? (
             <Icon
               animation="spin"
               tone="muted"

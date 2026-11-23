@@ -45,8 +45,15 @@ import type { QueryClient, QueryPersister } from "@tanstack/react-query";
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
+const MESSAGE_PAGE_SIZE = 15;
+const OTHER_MESSAGE_PAGE_SIZE = 25;
 
 type MessagesQueryKey = ReturnType<typeof getMessagesQueryKey>;
+
+export const liveMailboxChangeVersions = new WeakMap<
+  QueryClient,
+  ReadonlyMap<string, string>
+>();
 
 const messagesQueryPersister: QueryPersister<
   ListMessagesPageResult,
@@ -64,9 +71,10 @@ const messagesQueryPersister: QueryPersister<
 
 type RefreshLoadedMessagesPagesOptions = {
   maxPageCount?: number;
-  signal?: AbortSignal;
   preserveHistoryId?: string;
+  preserveUnrefreshedPages?: boolean;
   refreshThreads?: boolean;
+  signal?: AbortSignal;
 };
 
 const fetchMessagesPage = async (
@@ -76,10 +84,12 @@ const fetchMessagesPage = async (
   searchQuery?: string | null,
   signal?: AbortSignal
 ) => {
+  const maxResults =
+    pageToken === undefined ? MESSAGE_PAGE_SIZE : OTHER_MESSAGE_PAGE_SIZE;
   if (isManagedSandboxMailboxId(mailboxId)) {
     return listManagedDemoMessages({
       category: mailbox,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     });
@@ -89,7 +99,7 @@ const fetchMessagesPage = async (
     return listDemoMessages({
       category: mailbox,
       mailboxId,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     });
@@ -99,7 +109,7 @@ const fetchMessagesPage = async (
     {
       category: mailbox,
       mailboxId,
-      maxResults: 15,
+      maxResults,
       pageToken,
       query: normalizeSearchQuery(searchQuery),
     },
@@ -196,42 +206,80 @@ const refreshMessagesPages = async (
   const refreshedPageParams: (string | undefined)[] = [];
   const oldHistoryId =
     options.preserveHistoryId ?? currentMessages?.pages[0]?.historyId;
+  const oldChangeVersion = currentMessages?.pages[0]?.changeVersion;
+  const preserveUnrefreshedPages = options.preserveUnrefreshedPages !== false;
+  // Sandbox lists return individual messages; every other list returns one row per thread.
+  const rowScope = isSandboxMailboxId(mailboxId) ? "message" : "thread";
   let pageToken: string | undefined;
+  // Intermediate publications hide the tail continuation until the refresh settles.
+  let withheldContinuation:
+    | { pageCount: number; pageParam: string | undefined; token: string }
+    | undefined;
+  const restoreWithheldContinuation = (
+    data: MessagesQueryData
+  ): MessagesQueryData => {
+    const lastPageIndex = data.pages.length - 1;
+    if (
+      withheldContinuation === undefined ||
+      data.pages.length !== withheldContinuation.pageCount ||
+      data.pageParams[lastPageIndex] !== withheldContinuation.pageParam ||
+      data.pages[lastPageIndex].nextPageToken !== undefined
+    ) {
+      return data;
+    }
+    const { token } = withheldContinuation;
+    return {
+      ...data,
+      pages: data.pages.map((page, index) =>
+        index === lastPageIndex ? { ...page, nextPageToken: token } : page
+      ),
+    };
+  };
 
   const publish = (complete: boolean) => {
     operation.assertCurrent();
     const pages = refreshedPages.map((page, index) => ({
       ...page,
-      ...(index === 0 && !complete ? { historyId: oldHistoryId } : {}),
-      ...(index === refreshedPages.length - 1 && !complete
-        ? { nextPageToken: undefined }
+      ...(index === 0 && !complete
+        ? { changeVersion: oldChangeVersion, historyId: oldHistoryId }
         : {}),
     }));
     if (options.preserveHistoryId !== undefined) {
       pages[0].historyId = options.preserveHistoryId;
+      pages[0].changeVersion = oldChangeVersion;
     }
-    const enriched = mergeRefreshedMailboxPagesIntoQueryData(
-      currentMessages,
-      pages,
-      refreshedPageParams
-    );
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
       (data) => {
         const merged = mergeRefreshedMailboxPagesIntoQueryData(
-          data,
-          enriched.pages,
-          refreshedPageParams
+          data === undefined ? data : restoreWithheldContinuation(data),
+          pages,
+          refreshedPageParams,
+          { preserveUnrefreshedPages, rowScope }
         );
-        return {
-          ...merged,
-          pages: merged.pages.map((page, index) =>
-            index === 0
-              ? { ...page, refreshing: complete ? undefined : true }
-              : page
-          ),
-        };
+        const lastPageIndex = merged.pages.length - 1;
+        const continuationToken = merged.pages[lastPageIndex]?.nextPageToken;
+        withheldContinuation =
+          complete ||
+          continuationToken === undefined ||
+          continuationToken === ""
+            ? undefined
+            : {
+                pageCount: merged.pages.length,
+                pageParam: merged.pageParams[lastPageIndex],
+                token: continuationToken,
+              };
+        const publishedPages: MessagesQueryData["pages"] = merged.pages.map(
+          (page, index) => ({
+            ...page,
+            ...(index === 0 ? { refreshing: complete ? undefined : true } : {}),
+            ...(!complete && index === lastPageIndex
+              ? { nextPageToken: undefined }
+              : {}),
+          })
+        );
+        return { ...merged, pages: publishedPages };
       }
     );
   };
@@ -251,15 +299,12 @@ const refreshMessagesPages = async (
         if (!data?.pages[0]?.refreshing) {
           return data;
         }
+        const restored = restoreWithheldContinuation(data);
         return {
-          ...data,
-          pages: data.pages.map((page, index) => ({
-            ...page,
-            ...(index === 0 ? { refreshing: undefined } : {}),
-            ...(index === data.pages.length - 1
-              ? { nextPageToken: pageToken }
-              : {}),
-          })),
+          ...restored,
+          pages: restored.pages.map((page, index) =>
+            index === 0 ? { ...page, refreshing: undefined } : page
+          ),
         };
       }
     );
@@ -398,30 +443,37 @@ export const applyMailboxSyncDelta = async (
   updatedMessages: readonly MessageListItem[],
   removedMessageIds: readonly string[],
   signal?: AbortSignal,
-  refreshThreadIds: readonly string[] = []
+  refreshThreadIds: readonly string[] = [],
+  replacedThreadIds?: readonly string[]
 ) => {
   signal?.throwIfAborted();
-  const threadsNeedingRefresh = new Set<string>();
+  const threadsNeedingRefresh = new Set(refreshThreadIds);
   for (const [, thread] of queryClient.getQueriesData<ThreadMessagesResult>({
     predicate: ({ queryKey }) =>
       queryKey[0] === "message-thread" && queryKey[2] === mailboxId,
   })) {
     if (
       thread !== undefined &&
-      (refreshThreadIds.includes(thread.threadId) ||
-        thread.messages.some((message) =>
-          removedMessageIds.includes(message.id)
-        ))
+      thread.messages.some((message) => removedMessageIds.includes(message.id))
     ) {
       threadsNeedingRefresh.add(thread.threadId);
     }
   }
-  if (updatedMessages.length > 0 || removedMessageIds.length > 0) {
+  if (
+    updatedMessages.length > 0 ||
+    removedMessageIds.length > 0 ||
+    (replacedThreadIds?.length ?? 0) > 0
+  ) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
       (data) =>
-        applySyncDeltaToQueryData(data, updatedMessages, removedMessageIds)
+        applySyncDeltaToQueryData(
+          data,
+          updatedMessages,
+          removedMessageIds,
+          replacedThreadIds
+        )
     );
   }
 
@@ -430,7 +482,10 @@ export const applyMailboxSyncDelta = async (
     ReturnType<typeof getThreadQueryKey>
   >();
 
-  for (const updatedMessage of updatedMessages) {
+  // A list anchor carries aggregate metadata. Refresh the full thread from its own read path.
+  for (const updatedMessage of replacedThreadIds === undefined
+    ? updatedMessages
+    : []) {
     const threadQueryKey = getThreadQueryKey(
       mailboxId,
       updatedMessage.threadId
@@ -465,10 +520,15 @@ export const applyMailboxSyncDelta = async (
   signal?.throwIfAborted();
   await Promise.all(
     [...threadsNeedingRefresh].map(async (threadId) => {
-      await queryClient.invalidateQueries(
-        { exact: true, queryKey: getThreadQueryKey(mailboxId, threadId) },
-        { cancelRefetch: true }
-      );
+      const filters = {
+        exact: true,
+        queryKey: getThreadQueryKey(mailboxId, threadId),
+      };
+      if (replacedThreadIds !== undefined) {
+        await queryClient.cancelQueries(filters);
+        signal?.throwIfAborted();
+      }
+      await queryClient.invalidateQueries(filters, { cancelRefetch: true });
     })
   );
 };
@@ -501,6 +561,7 @@ const syncOwnedMessages = async (
       mailbox,
       searchQuery,
       {
+        preserveUnrefreshedPages: false,
         signal,
       },
       operation
@@ -530,11 +591,24 @@ const syncOwnedMessages = async (
   }
 
   operation.assertCurrent();
+  const targetChangeVersion = liveMailboxChangeVersions
+    .get(queryClient)
+    ?.get(mailboxId);
+  const startChangeVersion = currentMessages.pages[0].changeVersion;
+  if (
+    targetChangeVersion !== undefined &&
+    startChangeVersion !== undefined &&
+    BigInt(targetChangeVersion) <= BigInt(startChangeVersion)
+  ) {
+    return currentMessages.pages[0];
+  }
   const syncDelta = await rpc.mail.syncMailbox(
     {
       category: mailbox,
       mailboxId,
+      startChangeVersion: startChangeVersion ?? "0",
       startHistoryId,
+      targetChangeVersion,
     },
     { signal }
   );
@@ -547,6 +621,9 @@ const syncOwnedMessages = async (
       mailbox,
       searchQuery,
       {
+        ...(startChangeVersion === undefined
+          ? {}
+          : { preserveUnrefreshedPages: false }),
         refreshThreads: true,
         signal,
       },
@@ -557,6 +634,7 @@ const syncOwnedMessages = async (
   if (
     syncDelta.updatedMessages.length > 0 ||
     syncDelta.removedMessageIds.length > 0 ||
+    Boolean(syncDelta.replacedThreadIds?.length) ||
     syncDelta.refreshFirstPage
   ) {
     await queryClient.cancelQueries({
@@ -573,7 +651,8 @@ const syncOwnedMessages = async (
     syncDelta.updatedMessages,
     syncDelta.removedMessageIds,
     signal,
-    syncDelta.refreshThreadIds
+    syncDelta.refreshThreadIds,
+    syncDelta.replacedThreadIds
   );
 
   if (syncDelta.refreshFirstPage) {
@@ -591,12 +670,15 @@ const syncOwnedMessages = async (
     );
   }
   operation.assertCurrent();
-  const { historyId } = syncDelta;
-  if (historyId && historyId !== startHistoryId) {
+  const { changeVersion, historyId } = syncDelta;
+  if (
+    historyId &&
+    (historyId !== startHistoryId || changeVersion !== startChangeVersion)
+  ) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
-      (data) => updateFirstPageHistoryId(data, historyId)
+      (data) => updateFirstPageHistoryId(data, historyId, changeVersion)
     );
     await persistQueryByKey(messagesQueryKey, queryClient);
   }

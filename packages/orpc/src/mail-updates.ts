@@ -191,10 +191,31 @@ export const withMailUpdate =
       input: TInput;
       context: TContext;
     }) => Promise<TResult>,
-    type: MailUpdate["type"] = "mailbox.changed"
+    type: MailUpdate["type"] = "mailbox.changed",
+    options?: { trackedByGmail: boolean | ((input: TInput) => boolean) }
   ) =>
-  async (options: { input: TInput; context: TContext }) => {
-    const result = await handler(options);
-    await publishMailUpdate({ mailboxId: options.input.mailboxId, type });
+  async (request: { input: TInput; context: TContext }) => {
+    const result = await handler(request);
+    const { mailboxId } = request.input;
+    const tracked = options?.trackedByGmail;
+    if (
+      serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true &&
+      (tracked === true ||
+        (typeof tracked === "function" && tracked(request.input)))
+    ) {
+      try {
+        const [gmail] = await db
+          .select({ id: mailbox.id })
+          .from(mailbox)
+          .where(and(eq(mailbox.id, mailboxId), eq(mailbox.provider, "gmail")))
+          .limit(1);
+        if (gmail !== undefined) {
+          return result;
+        }
+      } catch (error) {
+        reportError(error, { boundary: "mail-update-lookup" });
+      }
+    }
+    await publishMailUpdate({ mailboxId, type });
     return result;
   };

@@ -179,6 +179,9 @@ const runMailDecisions = async ({
         throw new APICallError({
           message: `Mail classification failed (${response.status}).`,
           requestBodyValues: {},
+          responseHeaders: {
+            "retry-after": response.headers.get("retry-after") ?? "",
+          },
           statusCode: response.status,
           url: "https://openrouter.ai/api/alpha/decisions",
         });

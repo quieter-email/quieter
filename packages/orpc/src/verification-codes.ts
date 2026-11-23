@@ -9,10 +9,12 @@ import {
   MailVerificationCodeTimeoutError,
   VERIFICATION_CODE_MODEL,
 } from "@quieter/ai/extract-verification-code";
+import { AiProviderDeferredError } from "@quieter/ai/provider-admission";
 import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { mailboxVerificationCode } from "@quieter/database/schema";
+import { GmailBackgroundQuotaDeferredError } from "@quieter/gmail";
 import { reportError } from "@quieter/observability";
 import {
   and,
@@ -30,7 +32,7 @@ import {
 } from "drizzle-orm";
 
 import { getMailAutomationAiBudgetStatus } from "./mail-automation/ai-budget";
-import { publishMailUpdate } from "./mail-updates";
+import { appendMailboxChange, publishMailboxChange } from "./mailbox-changes";
 import { assertAccessibleMailbox } from "./mailbox/service";
 import {
   decryptVerificationCode,
@@ -53,7 +55,8 @@ export type VerificationCodeProcessingResult =
         | "budget"
         | "extraction_timeout"
         | "failure"
-        | "in_progress";
+        | "in_progress"
+        | "provider_quota";
       retryAt: Date;
     };
 
@@ -315,12 +318,14 @@ export const listVerificationCodes = async ({
 };
 
 export const processMailVerificationCode = async ({
+  assertWorkActive,
   loadMessage,
   mailboxId,
   messageId,
   organizationId,
   userId,
 }: {
+  assertWorkActive?: () => Promise<void>;
   loadMessage: () => Promise<AutomationMailMessage | null>;
   mailboxId: string;
   messageId: string;
@@ -455,7 +460,7 @@ export const processMailVerificationCode = async ({
     }
 
     let { model } = claimed;
-    let detail: ReturnType<typeof validateVerificationCodeCandidate>;
+    let detail: ReturnType<typeof validateVerificationCodeCandidate> = null;
     if (message.otpToken) {
       detail = {
         code: message.otpToken.code,
@@ -467,7 +472,7 @@ export const processMailVerificationCode = async ({
         organizationId,
         userId,
       });
-      if (!budget.allowed) {
+      if (!budget.allowed && budget.reason !== "plan_ineligible") {
         const deferredAt = new Date();
         const retryAt = new Date(deferredAt.getTime() + RETRY_MAX_MS);
         await db
@@ -487,24 +492,27 @@ export const processMailVerificationCode = async ({
         return { reason: "budget", retryAt, status: "retry" };
       }
 
-      const candidate = await extractMailVerificationCode({
-        billing: await createMailboxAiBillingContext({
-          externalId: claimed.id,
-          mailboxId,
-          usageKind: "verificationCode",
-          userId,
-        }),
-        message,
-        onUsage: (reported) => {
-          extractionUsage = reported;
-        },
-      });
-      model = VERIFICATION_CODE_MODEL;
-      detail = validateVerificationCodeCandidate({
-        candidate,
-        message,
-        now: new Date(),
-      });
+      if (budget.allowed) {
+        await assertWorkActive?.();
+        const candidate = await extractMailVerificationCode({
+          billing: await createMailboxAiBillingContext({
+            externalId: claimed.id,
+            mailboxId,
+            usageKind: "verificationCode",
+            userId,
+          }),
+          message,
+          onUsage: (reported) => {
+            extractionUsage = reported;
+          },
+        });
+        model = VERIFICATION_CODE_MODEL;
+        detail = validateVerificationCodeCandidate({
+          candidate,
+          message,
+          now: new Date(),
+        });
+      }
     }
     const usage = accumulateVerificationCodeUsage(claimed, extractionUsage);
     const internalDate = Number(message.internalDate);
@@ -514,44 +522,59 @@ export const processMailVerificationCode = async ({
         : Date.parse(message.date ?? "")
     );
     const finishedAt = new Date();
-    const [saved] = await db
-      .update(mailboxVerificationCode)
-      .set({
-        cacheWriteTokens: usage.cacheWriteTokens,
-        cachedTokens: usage.cachedTokens,
-        completionTokens: usage.completionTokens,
-        costUsd: usage.costUsd,
-        encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
-        expiresAt: detail?.expiresAt ?? null,
-        leaseToken: null,
-        leaseUntil: null,
-        model,
-        nextAttemptAt: null,
-        processedAt: finishedAt,
-        promptTokens: usage.promptTokens,
-        receivedAt: detail ? receivedAt : null,
-        service: detail?.service ?? null,
-        threadId: detail ? message.threadId : null,
-        updatedAt: finishedAt,
-        usageReportedAt: usage.costUsd === null ? finishedAt : null,
-      })
-      .where(
-        and(
-          eq(mailboxVerificationCode.id, claimed.id),
-          eq(mailboxVerificationCode.leaseToken, leaseToken)
+    const result = await db.transaction(async (tx) => {
+      const [saved] = await tx
+        .update(mailboxVerificationCode)
+        .set({
+          cacheWriteTokens: usage.cacheWriteTokens,
+          cachedTokens: usage.cachedTokens,
+          completionTokens: usage.completionTokens,
+          costUsd: usage.costUsd,
+          encryptedCode: detail ? encryptVerificationCode(detail.code) : null,
+          expiresAt: detail?.expiresAt ?? null,
+          leaseToken: null,
+          leaseUntil: null,
+          model,
+          nextAttemptAt: null,
+          processedAt: finishedAt,
+          promptTokens: usage.promptTokens,
+          receivedAt: detail ? receivedAt : null,
+          service: detail?.service ?? null,
+          threadId: detail ? message.threadId : null,
+          updatedAt: finishedAt,
+          usageReportedAt: usage.costUsd === null ? finishedAt : null,
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
         )
-      )
-      .returning({ id: mailboxVerificationCode.id });
-    if (saved === undefined) {
+        .returning({ id: mailboxVerificationCode.id });
+      if (saved === undefined) {
+        return null;
+      }
+      const change = detail
+        ? await appendMailboxChange(tx, {
+            changes: [
+              {
+                kind: "verification-code.available",
+                threadId: message.threadId ?? undefined,
+              },
+            ],
+            mailboxId,
+          })
+        : undefined;
+      return { change };
+    });
+    if (result === null) {
       return {
         reason: "in_progress",
         retryAt: new Date(Date.now() + AI_ADMISSION_RETRY_MS),
         status: "retry",
       };
     }
-    if (detail) {
-      await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
-    }
+    await publishMailboxChange(result.change);
     if (usage.costUsd !== null) {
       const [event] = await db
         .select()
@@ -564,6 +587,27 @@ export const processMailVerificationCode = async ({
     }
     return { status: "complete" };
   } catch (error) {
+    if (
+      error instanceof AiProviderDeferredError ||
+      error instanceof GmailBackgroundQuotaDeferredError
+    ) {
+      const retryAt = new Date(error.retryAt);
+      await db
+        .update(mailboxVerificationCode)
+        .set({
+          leaseToken: null,
+          leaseUntil: null,
+          nextAttemptAt: retryAt,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(mailboxVerificationCode.id, claimed.id),
+            eq(mailboxVerificationCode.leaseToken, leaseToken)
+          )
+        );
+      return { reason: "provider_quota", retryAt, status: "retry" };
+    }
     const extractionTimedOut =
       error instanceof MailVerificationCodeTimeoutError;
     const failureReason = extractionTimedOut ? "extraction_timeout" : "failure";

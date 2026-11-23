@@ -93,6 +93,9 @@ export const embedSearchTexts = async (input: {
         throw new APICallError({
           message: "Search is temporarily unavailable. Try again.",
           requestBodyValues: {},
+          responseHeaders: {
+            "retry-after": response.headers.get("retry-after") ?? "",
+          },
           statusCode: response.status,
           url: "https://openrouter.ai/api/v1/embeddings",
         });
