@@ -7,7 +7,7 @@ export const overlayBackdropClassName =
   "fixed inset-0 z-50 bg-black/50 backdrop-blur-xs transition-opacity duration-150 ease-(--app-motion-ease-out) data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:opacity-0";
 
 export const overlaySurfaceClassName =
-  "border border-transparent bg-panel text-fg shadow-lg";
+  "border border-panel-edge/60 bg-panel text-fg shadow-lg";
 
 const overlayPopupMotionClassName =
   "transition-[opacity,scale] ease-(--app-motion-ease-out) will-change-[opacity,scale] data-ending-style:scale-[0.98] data-ending-style:opacity-0 data-ending-style:duration-100 data-starting-style:scale-[0.98] data-starting-style:opacity-0 motion-reduce:transition-opacity motion-reduce:data-ending-style:scale-100 motion-reduce:data-starting-style:scale-100";
