@@ -2949,11 +2949,11 @@ export const saveAiMemory = async ({
   });
 };
 
-export const forgetAiMemory = async ({
-  memoryId,
+export const forgetAiMemories = async ({
+  memoryIds,
   userId,
 }: {
-  memoryId: string;
+  memoryIds: string[];
   userId: string;
 }) => {
   const target = userScope(userId);
@@ -2964,16 +2964,30 @@ export const forgetAiMemory = async ({
       .from(aiMemory)
       .where(
         and(
-          eq(aiMemory.id, memoryId),
+          inArray(aiMemory.id, memoryIds),
           eq(aiMemory.scopeKey, target.scopeKey),
           eq(aiMemory.userId, userId)
         )
       )
       .for("update");
+    if (memories.length === 0) {
+      return { deleted: 0 };
+    }
     await eraseAiMemoryRecords({ executor: tx, memories, scope: target });
     await advanceAiMemoryScopeRevision(tx, target);
-    return { deleted: true };
+    return { deleted: memories.length };
   });
+};
+
+export const forgetAiMemory = async ({
+  memoryId,
+  userId,
+}: {
+  memoryId: string;
+  userId: string;
+}) => {
+  await forgetAiMemories({ memoryIds: [memoryId], userId });
+  return { deleted: true };
 };
 
 export const purgePersonalAiMemory = async (userId: string) =>
