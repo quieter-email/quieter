@@ -1471,7 +1471,7 @@ const CalendarWorkspaceContent = ({
         ) : null}
         <div
           className={cn("flex min-h-0 flex-1", {
-            "-mt-0.5": data.failures.length === 0,
+            "-mt-2": data.failures.length === 0,
           })}
           ref={workspaceRef}
         >

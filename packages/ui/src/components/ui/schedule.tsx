@@ -87,7 +87,7 @@ export type ScheduleProps = {
 
 const hourHeight = 56;
 const scheduleFrameClassName =
-  "relative m-2 min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain";
+  "relative m-2 min-h-0 min-w-0 flex-1 overflow-auto overscroll-contain border border-section-edge/60 inset-ring-0";
 type ScheduleStyle = CSSProperties & {
   "--schedule-columns"?: string;
   "--schedule-event-color"?: string;

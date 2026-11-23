@@ -826,7 +826,7 @@ export const DesignSystemShowcase = () => {
                 </Button>
               </div>
             </WorkspaceHeader>
-            <div className="p-0.5">
+            <div className="px-2 pb-2">
               <Surface padding="compact">
                 <div className="p-4">
                   <Text weight="medium">Section</Text>
