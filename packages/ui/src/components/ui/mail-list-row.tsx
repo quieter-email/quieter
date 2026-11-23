@@ -21,7 +21,7 @@ export const mailListRowFrameVariants = cva(
     variants: {
       accent: {
         yellow:
-          "after:pointer-events-none after:absolute after:inset-y-2 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
+          "after:pointer-events-none after:absolute after:inset-y-1 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
         adaptive: "@3xl:h-12",
@@ -33,7 +33,7 @@ export const mailListRowFrameVariants = cva(
 
 export const mailListRowParts = {
   overlay:
-    "pointer-events-none absolute inset-2 z-0 rounded-lg bg-selection/45 dark:bg-selection",
+    "pointer-events-none absolute inset-x-2 inset-y-1 z-0 rounded-lg bg-selection/45 dark:bg-selection",
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
