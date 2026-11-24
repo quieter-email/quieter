@@ -9,7 +9,7 @@ import {
 import type { z } from "zod";
 
 import { defaultChatModel } from "./chat-models";
-import type { ChatModel } from "./chat-models";
+import type { ChatModel, GenerationModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { summarizeAiUsage } from "./chat-usage";
 import { createChatModel } from "./openrouter";
@@ -42,7 +42,7 @@ export const runStructuredGeneration = async <TOutput>(input: {
   maxRetries?: number;
   outputRetries?: 0 | 1;
   retryEmptyOutput?: boolean;
-  model?: ChatModel;
+  model?: GenerationModel;
   onUsage?: (usage: AiUsageReport) => void;
   prioritizeLatency?: boolean;
   prompt: string;
