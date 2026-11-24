@@ -63,3 +63,7 @@ Importance search keeps the exact body text as a cleartext SQL projection for su
 Uploads run before the transaction that publishes the pointer. The mail object cleanup worker reclaims abandoned staging objects after a day and replaced or deleted objects after an hour. The shorter delay gives in-flight readers time to finish. Mailbox deletion uses the same cleanup queue through the database cascade.
 
 For local verification, use a disposable loopback database with the migrations applied and the native local R2 bucket. Supply a separate development key in the ignored local configuration or its SST secret, enable the flag, and run `vp run env:doctor`. The local mail-recovery trigger runs one backfill batch and the existing cleanup pass. Local capture rejects encrypted writes against the shared development database because the resulting object pointers would only resolve in your local R2 bucket.
+
+## Repair legacy Gmail labels
+
+After all capture workers run the updated metadata writer, run the protected production deployment with `repair_gmail_capture_labels=true` to repair older snapshots whose label arrays were stored as JSON strings. The job updates snapshots in primary-key order, commits each page, and reports the number of rows repaired. It preserves message bodies and skips rows already repaired or updated by capture. Re-running the same operation is safe.

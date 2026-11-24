@@ -524,7 +524,7 @@ const loadTaskCandidates = async ({
   );
   const applicability = or(
     sql`coalesce(${aiMemory.metadata}->'agents', '["all"]'::jsonb) @> '["all"]'::jsonb`,
-    sql`${aiMemory.metadata}->'agents' @> ${JSON.stringify([agent])}::jsonb`
+    sql`${aiMemory.metadata}->'agents' @> ${JSON.stringify([agent])}::text::jsonb`
   );
   const contacts = queryContacts(query);
   const contactMatch =
@@ -532,7 +532,7 @@ const loadTaskCandidates = async ({
       ? or(
           ...contacts.map(
             (contact) =>
-              sql`${aiMemory.metadata}->'correspondents' @> ${JSON.stringify([contact])}::jsonb`
+              sql`${aiMemory.metadata}->'correspondents' @> ${JSON.stringify([contact])}::text::jsonb`
           )
         )
       : undefined;

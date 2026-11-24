@@ -67,7 +67,7 @@ export const supersedePendingMailPlacement = async (input: {
   const targetCondition =
     input.messageId === undefined
       ? inArray(mailPlacementOperation.threadId, input.threadIds ?? [])
-      : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::jsonb)`;
+      : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::text::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::text::jsonb)`;
   await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })

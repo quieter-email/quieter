@@ -20,6 +20,11 @@ on:
           - unchanged
           - enable
           - disable
+      repair_gmail_capture_labels:
+        description: Repair Gmail capture metadata written by the old label encoder
+        required: false
+        default: false
+        type: boolean
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -345,6 +350,13 @@ jobs:
         if: vars.QUIETER_MAIL_DISPATCH_ENABLED == 'true'
         timeout-minutes: 2
         run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email --dispatch
+
+      - name: Repair legacy Gmail capture labels
+        if: github.event_name == 'workflow_dispatch' && inputs.repair_gmail_capture_labels
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+        run: vp exec node packages/database/scripts/repair-gmail-capture-labels.ts
 
       - name: Change committed mail dispatch
         if: github.event_name == 'workflow_dispatch' && inputs.mail_event_dispatch != 'unchanged'
