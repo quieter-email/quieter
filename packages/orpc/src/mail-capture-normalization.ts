@@ -114,11 +114,11 @@ export const normalizeCapturedMailMetadata = async (input: {
             sql`${managedMailMessage.subject} is not distinct from ${row.subject}`,
             sql`${managedMailMessage.bodyText} is not distinct from ${row.bodyText}`,
             sql`${managedMailMessage.bodyHtml} is not distinct from ${row.bodyHtml}`,
-            sql`${managedMailMessage.headers} = ${JSON.stringify(row.headers)}::jsonb`,
+            sql`${managedMailMessage.headers} = ${JSON.stringify(row.headers)}::text::jsonb`,
             eq(managedMailMessage.from, row.from),
             row.analysis === null
               ? isNull(managedMailMessage.analysis)
-              : sql`${managedMailMessage.analysis} = ${JSON.stringify(row.analysis)}::jsonb`
+              : sql`${managedMailMessage.analysis} = ${JSON.stringify(row.analysis)}::text::jsonb`
           )
         )
         .returning({ id: managedMailMessage.id });

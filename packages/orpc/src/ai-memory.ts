@@ -467,7 +467,7 @@ const listConsolidationMemories = async ({
       : or(
           ...contacts.map(
             (contact) =>
-              sql`${aiMemory.metadata} @> ${JSON.stringify({ correspondents: [contact] })}::jsonb`
+              sql`${aiMemory.metadata} @> ${JSON.stringify({ correspondents: [contact] })}::text::jsonb`
           )
         );
   const usable = and(
@@ -654,19 +654,19 @@ const eraseAiMemoryRecords = async ({
               and snapshot->'metadata' @> ${JSON.stringify({
                 category: "labeling",
                 sourceMailboxId: member.mailboxId,
-              } satisfies AiMemoryMetadata)}::jsonb
+              } satisfies AiMemoryMetadata)}::text::jsonb
               and (
                 snapshot->'metadata' @> ${JSON.stringify({
                   feedbackMembers: [
                     { labelId: member.labelId, source: member.source },
                   ],
-                })}::jsonb
+                })}::text::jsonb
                 or (
                   not (snapshot->'metadata' ? 'feedbackMembers')
                   and snapshot->'metadata' @> ${JSON.stringify({
                     feedbackSource: member.source,
                     labelId: member.labelId,
-                  } satisfies AiMemoryMetadata)}::jsonb
+                  } satisfies AiMemoryMetadata)}::text::jsonb
                 )
               )
           )`
