@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { gmailAutomationKindSchema, mailUpdateSchema } from "./updates";
+import { gmailAutomationKindSchema, mailUpdateSchema } from "./updates.ts";
 
 const id = z.string().min(1).max(256);
 const timestamp = z.number().int().nonnegative();
