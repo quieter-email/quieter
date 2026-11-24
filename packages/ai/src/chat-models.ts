@@ -135,3 +135,6 @@ export const resolveModelFallbacks = (model: ChatModel): ChatModel[] => {
 
 export const defaultChatModel: ChatModel = "google/gemini-4-hydrogen";
 export const defaultBackgroundModel: ChatModel = "google/gemini-3.5-flash-lite";
+export const memoryLearningModel = "openai/gpt-6-luna";
+export const memoryLearningMaxOutputTokens = 1300;
+export type GenerationModel = ChatModel | typeof memoryLearningModel;

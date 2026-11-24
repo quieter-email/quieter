@@ -51,8 +51,8 @@ export const resolveChatModel = (selection?: ChatModel): ChatModel => {
 };
 
 /**
- * The model for everything besides interactive chat, configured through the
- * QuieterBackgroundModel secret with the background default as fallback.
+ * The shared background model. Automatic memory consolidation uses its own
+ * priced route. Configure the shared model through QuieterBackgroundModel.
  * Server-only: clients never send a model and must not import this module.
  */
 export const resolveBackgroundModel = (): ChatModel =>

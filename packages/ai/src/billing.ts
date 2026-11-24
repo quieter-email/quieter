@@ -208,14 +208,23 @@ export const createAiBillingMiddleware = (
   billing: AiBillingContext,
   readCost: (metadata: unknown) => number | undefined,
   onProviderStart?: () => void,
-  maximumCostUsd?: number
+  maximumCostUsd?:
+    | number
+    | ((
+        params: Parameters<
+          NonNullable<LanguageModelMiddleware["wrapGenerate"]>
+        >[0]["params"]
+      ) => number)
 ): LanguageModelMiddleware => ({
   specificationVersion: "v4",
   wrapGenerate: async ({ doGenerate, params }) => {
     params.abortSignal?.throwIfAborted();
     return await runBilledAiRequest({
       billing,
-      maximumCostUsd,
+      maximumCostUsd:
+        typeof maximumCostUsd === "function"
+          ? maximumCostUsd(params)
+          : maximumCostUsd,
       onProviderStart,
       run: async () => {
         const result = await doGenerate();
@@ -229,7 +238,12 @@ export const createAiBillingMiddleware = (
   },
   wrapStream: async ({ doStream, params }) => {
     params.abortSignal?.throwIfAborted();
-    const reservationId = await reserveAiCreditUsage(billing, maximumCostUsd);
+    const reservationId = await reserveAiCreditUsage(
+      billing,
+      typeof maximumCostUsd === "function"
+        ? maximumCostUsd(params)
+        : maximumCostUsd
+    );
     try {
       onProviderStart?.();
       const result = await doStream();

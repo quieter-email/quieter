@@ -5,11 +5,16 @@ import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
 import { createAiBillingMiddleware } from "./billing";
-import type { ChatModel } from "./chat-models";
-import { chatModelSchema, resolveModelFallbacks } from "./chat-models";
+import type { GenerationModel } from "./chat-models";
+import {
+  chatModelSchema,
+  memoryLearningModel,
+  resolveModelFallbacks,
+} from "./chat-models";
 import { openRouterStreamMiddleware } from "./openrouter-stream";
 
 let cachedProvider: ReturnType<typeof createOpenRouter> | null = null;
+const memoryLearningMaxPrice = { completion: 0.5, prompt: 0.1, request: 0 };
 
 const getOpenRouterProvider = () => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
@@ -48,7 +53,7 @@ export const readChatUsageCostUsd = (
  * provider-constrained failover order.
  */
 export const createChatModel = (
-  model: ChatModel,
+  model: GenerationModel,
   options: {
     billing: AiBillingContext;
     onProviderStart?: () => void;
@@ -56,11 +61,17 @@ export const createChatModel = (
     prioritizeLatency?: boolean;
   }
 ) => {
-  const parsedModel = chatModelSchema.parse(model);
+  const parsedModel =
+    model === memoryLearningModel ? model : chatModelSchema.parse(model);
   const fallbacks =
-    options.allowFallbacks === false ? [] : resolveModelFallbacks(parsedModel);
+    options.allowFallbacks === false || parsedModel === memoryLearningModel
+      ? []
+      : resolveModelFallbacks(parsedModel);
   const providerRouting = {
     ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
+    ...(parsedModel === memoryLearningModel
+      ? { max_price: memoryLearningMaxPrice, only: ["azure"] }
+      : {}),
     zdr: true,
   };
   return wrapLanguageModel({
@@ -90,7 +101,21 @@ export const createChatModel = (
       createAiBillingMiddleware(
         options.billing,
         readChatUsageCostUsd,
-        options.onProviderStart
+        options.onProviderStart,
+        parsedModel === memoryLearningModel
+          ? (params) => {
+              // The serialized input includes the prompt and structured output schema.
+              const bytes = new TextEncoder().encode(
+                JSON.stringify(params)
+              ).length;
+              return (
+                ((bytes * 2 + 4096) * memoryLearningMaxPrice.prompt +
+                  (params.maxOutputTokens ?? 0) *
+                    memoryLearningMaxPrice.completion) /
+                1_000_000
+              );
+            }
+          : undefined
       ),
     ],
     model: getOpenRouterProvider().chat(parsedModel, {

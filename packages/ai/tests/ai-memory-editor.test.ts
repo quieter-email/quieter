@@ -134,6 +134,16 @@ describe("memory evidence and mutation boundaries", () => {
     const result = await planAiMemoryUpdate({
       billing,
       currentMemories: [storedStyle],
+      observations: [
+        {
+          kind: "sent_message",
+          metadata: {
+            authorship: "observed_outbound",
+            bodyText: "Hi Alex, let's keep the agenda short. Thanks!",
+            correspondents: "alex@example.com",
+          },
+        },
+      ],
       request: "Consolidate sent-message observations.",
       source: "inferred",
     });
