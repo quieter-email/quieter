@@ -322,18 +322,20 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
   const [gmail, managed] = await Promise.all([
     db
       .select({
-        id: sql<string>`${gmailCapturedMessage.snapshot}->>'id'`,
-        labelIds: sql<
-          CapturedMailSnapshot["labelIds"]
-        >`${gmailCapturedMessage.snapshot}->'labelIds'`,
+        id: gmailCapturedMessage.messageId,
       })
       .from(gmailCapturedMessage)
       .where(
         and(
           eq(gmailCapturedMessage.mailboxId, mailboxId),
           isNull(gmailCapturedMessage.deletedAt),
-          isNotNull(gmailCapturedMessage.snapshot),
-          sql`${gmailCapturedMessage.snapshot} <> 'null'::jsonb`,
+          // The legacy metadata writer stored JSON arrays inside JSON strings.
+          sql`not ((case
+            when jsonb_typeof(${gmailCapturedMessage.snapshot}->'labelIds') = 'string'
+              and pg_input_is_valid(${gmailCapturedMessage.snapshot}->>'labelIds', 'jsonb')
+            then (${gmailCapturedMessage.snapshot}->>'labelIds')::jsonb
+            else ${gmailCapturedMessage.snapshot}->'labelIds'
+          end) ?| array['SENT','DRAFT','SPAM','TRASH'])`,
           inArray(gmailCapturedMessage.messageId, messageIds)
         )
       ),
@@ -349,17 +351,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
         )
       ),
   ]);
-  const eligible = new Set(
-    [
-      ...gmail.filter(
-        ({ labelIds }) =>
-          !labelIds.some((label) =>
-            ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-          )
-      ),
-      ...managed,
-    ].map(({ id }) => id)
-  );
+  const eligible = new Set([...gmail, ...managed].map(({ id }) => id));
   const byId = new Map(
     rows.map((row) => [
       row.messageId,
