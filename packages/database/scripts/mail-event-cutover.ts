@@ -17,7 +17,7 @@ if (
   );
 }
 
-const scopes = new Set(scopesArgument?.split(","));
+const scopes = new Set(scopesArgument ? scopesArgument.split(",") : []);
 const url = getMigrationDatabaseUrl();
 assertMigrationExecutionAllowed(url);
 const db = postgres(url, {
