@@ -6,7 +6,6 @@ import {
 } from "@quieter/database/schema";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { getHistoryCorrespondents } from "@quieter/mail/correspondent-history";
-import { decodeMimeHeaderValue } from "@quieter/mail/message-content";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { MailRequestContext } from "../gmail-request";
@@ -15,60 +14,83 @@ import type { MailInputs } from "./inputs";
 
 const RECENT_MESSAGE_LIMIT = 250;
 const SUGGESTION_LIMIT = 8;
-const gmailLabels = sql`${gmailCapturedMessage.snapshot}->'labelIds'`;
-
 const readRecentGmailAddresses = async (mailboxId: string) => {
-  const messages = await db
+  const recent = db
     .select({
-      headers: sql<
-        CapturedMailSnapshot["headers"]
-      >`coalesce(jsonb_path_query_array(${gmailCapturedMessage.snapshot}->'headers', '$[*] ? (@.name like_regex "^(from|to|cc)$" flag "i")'), '[]'::jsonb)`,
-      sent: sql<boolean>`(${gmailLabels}) ? 'SENT'`,
+      capturedAt: gmailCapturedMessage.capturedAt,
+      deletedAt: gmailCapturedMessage.deletedAt,
+      messageId: gmailCapturedMessage.messageId,
+      snapshot: gmailCapturedMessage.snapshot,
     })
     .from(gmailCapturedMessage)
-    .where(
-      and(
-        eq(gmailCapturedMessage.mailboxId, mailboxId),
-        isNull(gmailCapturedMessage.deletedAt),
-        sql`jsonb_typeof(${gmailLabels}) = 'array'`,
-        sql`not ((${gmailLabels}) ?| array['DRAFT', 'SPAM', 'TRASH'])`
-      )
-    )
+    .where(eq(gmailCapturedMessage.mailboxId, mailboxId))
     .orderBy(
       desc(gmailCapturedMessage.capturedAt),
       desc(gmailCapturedMessage.messageId)
     )
-    .limit(RECENT_MESSAGE_LIMIT);
+    .limit(RECENT_MESSAGE_LIMIT)
+    .as("recent_captured_mail");
+  const labels = sql`(case
+    when jsonb_typeof(${recent.snapshot}->'labelIds') = 'string'
+      and pg_input_is_valid(${recent.snapshot}->>'labelIds', 'jsonb')
+    then (${recent.snapshot}->>'labelIds')::jsonb
+    else ${recent.snapshot}->'labelIds'
+  end)`;
+  const messages = await db
+    .select({
+      headers: sql<
+        CapturedMailSnapshot["headers"]
+      >`coalesce(jsonb_path_query_array(${recent.snapshot}->'headers', '$[*] ? (@.name like_regex "^(from|to|cc)$" flag "i")'), '[]'::jsonb)`,
+      sent: sql<boolean>`${labels} ? 'SENT'`,
+    })
+    .from(recent)
+    .where(
+      and(
+        isNull(recent.deletedAt),
+        sql`jsonb_typeof(${labels}) = 'array'`,
+        sql`not (${labels} ?| array['DRAFT', 'SPAM', 'TRASH'])`
+      )
+    )
+    .orderBy(desc(recent.capturedAt), desc(recent.messageId));
 
   return messages.map(({ headers, sent }) => {
     const values = new Map(
       headers.map(({ name, value }) => [name.toLowerCase(), value])
     );
     return {
-      cc: sent ? decodeMimeHeaderValue(values.get("cc")) : undefined,
-      from: sent ? "" : (decodeMimeHeaderValue(values.get("from")) ?? ""),
-      to: sent ? decodeMimeHeaderValue(values.get("to")) : undefined,
+      cc: sent ? values.get("cc") : undefined,
+      from: sent ? "" : (values.get("from") ?? ""),
+      to: sent ? values.get("to") : undefined,
     };
   });
 };
 
 const readRecentManagedAddresses = async (mailboxId: string) => {
-  const messages = await db
+  const recent = db
     .select({
       cc: managedMailMessage.cc,
       direction: managedMailMessage.direction,
       from: managedMailMessage.from,
+      id: managedMailMessage.id,
+      mailboxState: managedMailMessage.mailboxState,
+      sentAt: managedMailMessage.sentAt,
       to: managedMailMessage.to,
     })
     .from(managedMailMessage)
-    .where(
-      and(
-        eq(managedMailMessage.mailboxId, mailboxId),
-        inArray(managedMailMessage.mailboxState, ["active", "done"])
-      )
-    )
+    .where(eq(managedMailMessage.mailboxId, mailboxId))
     .orderBy(desc(managedMailMessage.sentAt), desc(managedMailMessage.id))
-    .limit(RECENT_MESSAGE_LIMIT);
+    .limit(RECENT_MESSAGE_LIMIT)
+    .as("recent_managed_mail");
+  const messages = await db
+    .select({
+      cc: recent.cc,
+      direction: recent.direction,
+      from: recent.from,
+      to: recent.to,
+    })
+    .from(recent)
+    .where(inArray(recent.mailboxState, ["active", "done"]))
+    .orderBy(desc(recent.sentAt), desc(recent.id));
 
   return messages.map((message) =>
     message.direction === "inbound"
