@@ -471,7 +471,7 @@ export const MessageListSearchDropdown = ({
             aria-label="Search filters"
             className={cn(
               popupSurfaceClassName,
-              "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
+              "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-[min(22rem,calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom)))] flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-[min(28rem,calc(100dvh-6rem))]"
             )}
             data-blocking-overlay=""
             data-search-dropdown-content
@@ -483,9 +483,9 @@ export const MessageListSearchDropdown = ({
               className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
               ref={scrollContainerRef}
             >
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-2.5">
                 {searchFilterSections.map((section) => (
-                  <div className="flex flex-col gap-1" key={section.label}>
+                  <div className="flex flex-col gap-0.5" key={section.label}>
                     <SearchDropdownSectionLabel>
                       {section.label}
                     </SearchDropdownSectionLabel>
