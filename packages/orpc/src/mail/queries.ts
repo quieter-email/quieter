@@ -200,18 +200,19 @@ const projectSnoozableGmailRows = async (input: {
   messages: MessageListItem[];
 }) => {
   const { category, context, mailboxId } = input;
+  const hydrated = await hydrateGmailMessageMetadata(
+    mailboxId,
+    input.messages,
+    context.resHeaders
+  );
+  if (category === undefined) {
+    return hydrated;
+  }
   const messages = await attachMailSnoozeStates({
     mailboxId,
-    messages: await hydrateGmailMessageMetadata(
-      mailboxId,
-      input.messages,
-      context.resHeaders
-    ),
+    messages: hydrated,
     userId: context.userId,
   });
-  if (category === undefined) {
-    return messages;
-  }
   const visible = await filterMailSnoozeVisibility({
     category,
     mailboxId,
@@ -749,14 +750,14 @@ export const queriesMailOperations = {
           pageToken,
           userId: context.userId,
         });
+        if (category === undefined) {
+          return page;
+        }
         const messages = await attachMailSnoozeStates({
           mailboxId: input.mailboxId,
           messages: page.messages,
           userId: context.userId,
         });
-        if (category === undefined) {
-          return { ...page, messages };
-        }
         const visible = await filterMailSnoozeVisibility({
           category,
           mailboxId: input.mailboxId,

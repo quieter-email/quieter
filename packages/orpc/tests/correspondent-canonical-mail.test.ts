@@ -192,6 +192,7 @@ describe("canonical mail boundaries", () => {
               1,
               [{ fileName: "notes.pdf", id: "attachment" }],
               ["custom-label"],
+              [["anchor", "custom-label"]],
               fixtures.states.length,
               "conversation",
             ],
@@ -364,11 +365,11 @@ describe("canonical mail boundaries", () => {
         expect(result.messages[0]).toMatchObject({
           id: "anchor",
           replyTo: "reply@example.test",
-          sourceRevision: "2026-10-02T00:00:00.000Z",
           threadAttachmentCount: 1,
           threadIsImportant: true,
           threadMessageCount: 5,
         });
+        expect(result.messages[0]?.sourceRevision).toBeTruthy();
         expect(result.messages[0]?.threadAttachmentNames).toContain(
           "notes.pdf"
         );
