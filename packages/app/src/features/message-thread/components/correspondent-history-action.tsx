@@ -1,25 +1,25 @@
 "use client";
 
-import { UserGroupIcon } from "@hugeicons/core-free-icons";
+import { Cancel01Icon, UserGroupIcon } from "@hugeicons/core-free-icons";
 import { authClient } from "@quieter/app/lib/auth";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { getHistoryCorrespondents } from "@quieter/mail/correspondent-history";
 import type { MessageListItem } from "@quieter/mail/messages";
 import {
   buildThreadListEntries,
+  formatMessageDate,
   formatMessageListDate,
+  getParsedMessageDate,
+  parseSender,
 } from "@quieter/mail/thread-list";
+import type { ThreadListEntry } from "@quieter/mail/thread-list";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
-  DialogBody,
-  DialogCloseButton,
   DialogContent,
   DialogDescription,
-  DialogFooter,
-  DialogHeader,
   DialogTitle,
   DialogTrigger,
 } from "@quieter/ui/dialog";
@@ -31,16 +31,19 @@ import {
   mailListRowFrameVariants,
   mailListRowParts,
 } from "@quieter/ui/mail-list-row";
+import { Pill } from "@quieter/ui/pill";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectList,
   SelectTrigger,
-  SelectValue,
 } from "@quieter/ui/select";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
+import { Surface } from "@quieter/ui/surface";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@quieter/ui/tabs";
 import { Text } from "@quieter/ui/text";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useId } from "react";
 import type { ReactNode } from "react";
 
@@ -49,7 +52,7 @@ import { ReminderRowTime } from "../../reminders/reminder-row-time";
 import { MemoryEditor } from "../../settings/components/personalization-memory-editor";
 import { MemoryProvenance } from "../../settings/components/personalization-memory-provenance";
 import { useCorrespondentHistory } from "./use-correspondent-history";
-import type { HistorySection } from "./use-correspondent-history";
+import type { HistorySection, MailSource } from "./use-correspondent-history";
 
 type HistoryPage = RouterOutputs["correspondentHistory"]["list"];
 type History = ReturnType<typeof useCorrespondentHistory>;
@@ -61,112 +64,202 @@ export type CorrespondentHistoryActionProps = {
   threadId: string;
   messages: readonly Pick<
     MessageListItem,
-    "threadId" | "from" | "to" | "cc" | "bcc" | "labelIds"
+    "threadId" | "from" | "to" | "cc" | "bcc" | "labelIds" | "senderAvatarUrls"
   >[];
   onOpenConversation: Parameters<
     typeof useCorrespondentHistory
   >[0]["onOpenConversation"];
 };
 
-const sections = [
-  { label: "Mail", value: "mail" },
-  { label: "Context", value: "memory" },
-  { label: "Commitments", value: "commitments" },
-] satisfies { label: string; value: HistorySection }[];
+type Correspondent = ReturnType<typeof getHistoryCorrespondents>[number] & {
+  avatarUrls: MessageListItem["senderAvatarUrls"];
+};
 
-const MailHistoryRows = ({
-  items,
+const sections = {
+  commitments: {
+    empty: "No pending commitments with this person.",
+    label: "Commitments",
+    noun: ["pending commitment", "pending commitments"],
+  },
+  mail: {
+    empty: "No mail with this person in this mailbox.",
+    label: "Mail",
+    noun: ["recent conversation", "recent conversations"],
+  },
+  memory: {
+    empty: "No private notes about this person.",
+    label: "Context",
+    noun: ["private note", "private notes"],
+  },
+} satisfies Record<
+  HistorySection,
+  { empty: string; label: string; noun: [string, string] }
+>;
+const sectionOrder = [
+  "mail",
+  "memory",
+  "commitments",
+] satisfies HistorySection[];
+
+const todayTimeFormatter = new Intl.DateTimeFormat(undefined, {
+  timeStyle: "short",
+});
+
+const formatHistoryDate = (message: MessageListItem) => {
+  const date = getParsedMessageDate(message);
+  return date?.toDateString() === new Date().toDateString()
+    ? `Today, ${todayTimeFormatter.format(date)}`
+    : formatMessageListDate(message);
+};
+
+const getSourceStatus = (
+  source: MailSource | null | undefined,
+  state: SelectedHistory["source"]
+) => {
+  if (!source) {
+    return "unavailable";
+  }
+  if (state.kind === "idle" || state.source.messageId !== source.messageId) {
+    return "available";
+  }
+  return state.kind === "failed" ? "available" : state.kind;
+};
+
+const CorrespondentIdentity = ({ person }: { person: Correspondent }) => (
+  <span className="flex min-w-0 flex-1 items-center gap-3 text-left">
+    <SenderAvatar
+      avatarUrlDark={person.avatarUrls?.dark}
+      avatarUrlLight={person.avatarUrls?.light}
+      fallbackLabel={(person.name ?? person.email).charAt(0).toUpperCase()}
+    />
+    <span className="min-w-0 flex-1 whitespace-normal">
+      {person.name ? (
+        <Text as="span" className="block" size="sm" truncate weight="medium">
+          {person.name}
+        </Text>
+      ) : null}
+      <Text
+        as="span"
+        className="block break-all"
+        size={person.name ? "caption" : "sm"}
+        title={person.email}
+        tone={person.name ? "muted" : "default"}
+      >
+        {person.email}
+      </Text>
+    </span>
+  </span>
+);
+
+const MailHistoryRow = ({
+  correspondentEmail,
+  currentThreadId,
   history,
+  mailboxEmail,
+  source,
   sourceState,
+  thread,
 }: {
-  items: Extract<HistoryPage, { section: "mail" }>["items"];
+  correspondentEmail: string;
+  currentThreadId: string;
   history: History;
+  mailboxEmail: string | undefined;
+  source: MailSource | null | undefined;
   sourceState: SelectedHistory["source"];
+  thread: ThreadListEntry;
 }) => {
-  const sources = new Map(items.map((item) => [item.message.id, item.source]));
-  const threads = buildThreadListEntries(items.map((item) => item.message));
-
-  return (
-    <ul>
-      {threads.map((thread) => {
-        const source = sources.get(thread.anchorMessage.id);
-        const unavailable =
-          !source ||
-          (sourceState.kind === "unavailable" &&
-            sourceState.source.messageId === source.messageId);
-        const pending =
-          sourceState.kind === "opening" &&
-          sourceState.source.messageId === source?.messageId;
-        const stale =
-          sourceState.kind === "stale" &&
-          sourceState.source.messageId === source?.messageId;
-        let sourceLabel: string | null = null;
-        if (pending) {
-          sourceLabel = "Opening";
-        } else if (stale) {
-          sourceLabel = "Refresh needed";
-        } else if (unavailable) {
-          sourceLabel = "Source unavailable";
+  const status = getSourceStatus(source, sourceState);
+  const date = getParsedMessageDate(thread.anchorMessage);
+  const dateLabel = formatHistoryDate(thread.anchorMessage);
+  const [sender] = thread.participants;
+  let author: string | undefined;
+  if (mailboxEmail !== undefined && sender?.email === mailboxEmail) {
+    author = "You";
+  } else if (sender?.email !== correspondentEmail) {
+    author = sender?.label;
+  }
+  let trailing: ReactNode = null;
+  if (status === "available") {
+    trailing =
+      thread.threadId === currentThreadId ? (
+        <Pill size="xs" tone="neutral">
+          This conversation
+        </Pill>
+      ) : null;
+  } else {
+    trailing = (
+      <Text as="span" className="shrink-0" size="caption" tone="muted">
+        {
+          {
+            opening: "Opening",
+            stale: "Refresh needed",
+            unavailable: "Source unavailable",
+          }[status]
         }
-        return (
-          <li
-            className={mailListRowFrameVariants({
-              accent: thread.isImportant ? "yellow" : undefined,
-            })}
-            key={thread.threadId}
-          >
-            {unavailable ? null : (
-              <span
-                aria-hidden
-                className={cn(
-                  mailListRowParts.overlay,
-                  "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100"
-                )}
-              />
-            )}
-            {thread.unreadCount > 0 ? (
-              <span aria-hidden className={mailListRowParts.unreadIndicator} />
-            ) : null}
-            <button
-              aria-busy={pending || undefined}
-              aria-disabled={pending || undefined}
-              aria-label={`Open conversation, ${thread.subject}`}
-              className={mailListRowParts.trigger}
-              disabled={unavailable || stale}
-              onClick={() => {
-                if (source && !pending) {
-                  void history.openSource(source, "mail");
-                }
-              }}
-              type="button"
-            />
-            <MailListRowDetails
-              metadata={
-                <MailListRowMetadata
-                  attachmentCount={thread.attachmentCount}
-                  attachmentNames={thread.attachmentNames}
-                  messageCount={thread.messageCount}
-                  title={thread.attachmentNames.join(", ")}
-                />
-              }
-              sender={thread.participants
-                .map((person) => person.label)
-                .join(", ")}
-              subject={thread.subject}
-              subjectTrailing={
-                sourceLabel ? (
-                  <Text as="span" size="caption" tone="muted">
-                    {sourceLabel}
-                  </Text>
-                ) : null
-              }
-              timestamp={formatMessageListDate(thread.anchorMessage)}
-              unread={thread.unreadCount > 0}
-            />
-          </li>
-        );
+      </Text>
+    );
+  }
+  return (
+    <li
+      className={mailListRowFrameVariants({
+        accent: thread.isImportant ? "yellow" : undefined,
       })}
-    </ul>
+    >
+      {status === "unavailable" ? null : (
+        <span
+          aria-hidden
+          className={cn(
+            mailListRowParts.overlay,
+            "opacity-0 group-focus-within/row:opacity-100 group-hover/row:opacity-100"
+          )}
+        />
+      )}
+      {thread.unreadCount > 0 ? (
+        <span aria-hidden className={mailListRowParts.unreadIndicator} />
+      ) : null}
+      <button
+        aria-busy={status === "opening" || undefined}
+        aria-disabled={status === "opening" || undefined}
+        aria-label={`Open conversation, ${thread.subject}, ${dateLabel}`}
+        className={mailListRowParts.trigger}
+        disabled={status === "unavailable" || status === "stale"}
+        onClick={() => {
+          if (source && status !== "opening") {
+            void history.openSource(source, "mail");
+          }
+        }}
+        type="button"
+      />
+      {/* The header already names the person, so rows lead with the subject. */}
+      <div className="flex min-w-0 flex-1 pl-2">
+        <MailListRowDetails
+          metadata={
+            <MailListRowMetadata
+              attachmentCount={thread.attachmentCount}
+              attachmentNames={thread.attachmentNames}
+              messageCount={thread.messageCount}
+              title={thread.attachmentNames.join(", ")}
+            />
+          }
+          sender={thread.subject}
+          subject={
+            <span className="text-caption font-normal text-muted-fg">
+              {[author, thread.preview].filter(Boolean).join(": ")}
+            </span>
+          }
+          subjectTrailing={trailing}
+          timestamp={
+            <time
+              dateTime={date?.toISOString()}
+              title={formatMessageDate(thread.anchorMessage, "full")}
+            >
+              {dateLabel}
+            </time>
+          }
+          unread={thread.unreadCount > 0}
+        />
+      </div>
+    </li>
   );
 };
 
@@ -177,33 +270,28 @@ const PersonalContextRows = ({
   items: Extract<HistoryPage, { section: "memory" }>["items"];
   history: History;
 }) => (
-  <div className="space-y-4">
-    <Text size="caption" tone="muted">
-      These are your personal notes and may be wrong. They are separate from
-      mail sources.
-    </Text>
-    <ul className="space-y-4">
-      {items.map((memory) => (
-        <li className="flex items-start gap-3" key={memory.id}>
-          <div className="min-w-0 flex-1 space-y-1.5">
-            <Text className="break-words whitespace-pre-wrap" size="sm">
-              {memory.content}
-            </Text>
-            <MemoryProvenance provenance={memory.provenance} />
-          </div>
-          <Button
-            onClick={() => {
-              history.editMemory(memory);
-            }}
-            size="sm"
-            variant="secondary"
-          >
-            Edit
-          </Button>
-        </li>
-      ))}
-    </ul>
-  </div>
+  <ul className="space-y-4 px-4 py-2">
+    {items.map((memory) => (
+      <li className="flex items-start gap-3" key={memory.id}>
+        <div className="min-w-0 flex-1 space-y-1">
+          <Text className="wrap-break-word whitespace-pre-wrap" size="sm">
+            {memory.content}
+          </Text>
+          <MemoryProvenance provenance={memory.provenance} />
+        </div>
+        <Button
+          aria-label={`Edit note, ${memory.summary}`}
+          onClick={() => {
+            history.editMemory(memory);
+          }}
+          size="sm"
+          variant="secondary"
+        >
+          Edit
+        </Button>
+      </li>
+    ))}
+  </ul>
 );
 
 const CommitmentRows = ({
@@ -219,56 +307,40 @@ const CommitmentRows = ({
 }) => {
   const now = useReminderClock(items.map((item) => item.reminder));
   return (
-    <ul className="space-y-4">
+    <ul className="space-y-4 px-4 py-2">
       {items.map(({ reminder, source }) => {
-        const unavailable =
-          !source ||
-          (sourceState.kind === "unavailable" &&
-            sourceState.source.messageId === source.messageId);
-        const pending =
-          sourceState.kind === "opening" &&
-          sourceState.source.messageId === source?.messageId;
-        const stale =
-          sourceState.kind === "stale" &&
-          sourceState.source.messageId === source?.messageId;
-        let sourceLabel = "Open source";
-        if (unavailable) {
-          sourceLabel = "Source unavailable";
-        } else if (stale) {
-          sourceLabel = "Refresh needed";
-        }
+        const status = getSourceStatus(source, sourceState);
         return (
           <li className="space-y-2" key={reminder.id}>
-            <div className="space-y-1">
-              <Text size="sm">{reminder.title}</Text>
-              <div className="flex flex-wrap items-center gap-2">
+            <div className="flex items-baseline justify-between gap-3">
+              <Text className="min-w-0 wrap-break-word" size="sm">
+                {reminder.title}
+              </Text>
+              <div className="shrink-0">
                 <ReminderRowTime now={now} reminder={reminder} />
-                {reminder.status === "suspended" ? (
-                  <Text as="span" size="caption" tone="muted">
-                    Paused
-                  </Text>
-                ) : null}
-                {reminder.evaluationStatus === "pending" ? (
-                  <Text as="span" size="caption" tone="muted">
-                    Checking reply
-                  </Text>
-                ) : null}
               </div>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
+            <div className="flex flex-wrap items-center gap-1">
               <Button
-                disabled={unavailable || stale || pending}
+                disabled={status !== "available"}
                 onClick={() => {
                   if (source) {
                     void history.openSource(source, "commitments");
                   }
                 }}
-                pending={pending}
+                pending={status === "opening"}
                 pendingLabel="Opening"
                 size="sm"
                 variant="secondary"
               >
-                {sourceLabel}
+                {
+                  {
+                    available: "Open source",
+                    opening: "Opening",
+                    stale: "Refresh needed",
+                    unavailable: "Source unavailable",
+                  }[status]
+                }
               </Button>
               {history.canOpenReminder ? (
                 <Button
@@ -287,6 +359,16 @@ const CommitmentRows = ({
                   View reminder
                 </Button>
               ) : null}
+              {reminder.status === "suspended" ? (
+                <Pill className="ms-auto" size="xs" tone="neutral">
+                  Paused
+                </Pill>
+              ) : null}
+              {reminder.evaluationStatus === "pending" ? (
+                <Pill className="ms-auto" size="xs" tone="neutral">
+                  Checking reply
+                </Pill>
+              ) : null}
             </div>
           </li>
         );
@@ -295,12 +377,78 @@ const CommitmentRows = ({
   );
 };
 
-const HistorySectionContent = ({
+const HistoryLoadingRows = () => (
+  <div aria-hidden className="animate-pulse">
+    {["first", "second", "third"].map((row) => (
+      <div className="flex h-17 flex-col justify-center gap-2 px-4" key={row}>
+        <div className="flex items-center justify-between gap-6">
+          <div className="h-3 w-1/2 rounded-md bg-muted" />
+          <div className="h-3 w-12 rounded-md bg-muted" />
+        </div>
+        <div className="h-3 w-3/4 rounded-md bg-muted" />
+      </div>
+    ))}
+  </div>
+);
+
+const SourceFeedback = ({
   history,
+  source,
+}: {
+  history: History;
+  source: SelectedHistory["source"];
+}) => {
+  if (source.kind === "idle") {
+    return null;
+  }
+  if (source.kind === "opening") {
+    return <output className="sr-only">Opening conversation</output>;
+  }
+  if (source.kind === "failed") {
+    return (
+      <Surface className="mx-2" padding="snug">
+        <Text role="alert" size="sm">
+          Could not open this mail. Please try again.
+        </Text>
+      </Surface>
+    );
+  }
+  return (
+    <Surface className="mx-2" padding="snug">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <output className="min-w-0 flex-1 basis-48">
+          <Text as="span" size="sm">
+            {source.kind === "stale"
+              ? "This mail changed. Refresh history before opening it."
+              : "This mail is no longer available."}
+          </Text>
+        </output>
+        {source.kind === "stale" ? (
+          <Button
+            onClick={() => {
+              history.refreshSection(source.section);
+            }}
+            size="sm"
+            variant="secondary"
+          >
+            Refresh history
+          </Button>
+        ) : null}
+      </div>
+    </Surface>
+  );
+};
+
+const HistorySectionContent = ({
+  currentThreadId,
+  history,
+  mailboxEmail,
   view,
   triggerId,
 }: {
+  currentThreadId: string;
   history: History;
+  mailboxEmail: string | undefined;
   view: SelectedHistory;
   triggerId: string;
 }) => {
@@ -328,9 +476,7 @@ const HistorySectionContent = ({
     ).values(),
   ];
   let count = mail.length;
-  let rows: ReactNode = (
-    <MailHistoryRows history={history} items={mail} sourceState={view.source} />
-  );
+  let rows: ReactNode = null;
   if (view.section === "memory") {
     count = memories.length;
     rows = <PersonalContextRows history={history} items={memories} />;
@@ -344,91 +490,97 @@ const HistorySectionContent = ({
         triggerId={triggerId}
       />
     );
+  } else {
+    const sources = new Map(mail.map((item) => [item.message.id, item.source]));
+    rows = (
+      <ul>
+        {buildThreadListEntries(mail.map((item) => item.message)).map(
+          (thread) => (
+            <MailHistoryRow
+              correspondentEmail={view.scope.correspondentEmail}
+              currentThreadId={currentThreadId}
+              history={history}
+              key={thread.threadId}
+              mailboxEmail={mailboxEmail}
+              source={sources.get(thread.anchorMessage.id)}
+              sourceState={view.source}
+              thread={thread}
+            />
+          )
+        )}
+      </ul>
+    );
   }
-  let status = `${count} ${count === 1 ? "item" : "items"}`;
+  const { empty, noun } = sections[view.section];
+  let status = `${count} ${count === 1 ? noun[0] : noun[1]}${query.hasNextPage ? " loaded" : ""}`;
   if (query.isPending) {
     status = "Loading history…";
   } else if (query.isFetchingNextPage) {
     status = "Checking more history…";
-  } else if (query.isError && count === 0) {
+  } else if (count === 0 && query.isError) {
     status = "History could not be loaded.";
-  } else if (count === 0 && query.isSuccess) {
+  } else if (count === 0) {
     status = query.hasNextPage
       ? "No matches on this page. You can check more."
-      : "No history found in this section.";
+      : empty;
   }
-  let sourceFeedback: ReactNode = null;
-  if (view.source.kind === "stale") {
-    sourceFeedback = (
-      <div className="flex flex-wrap items-center gap-2">
-        <output>
-          <Text as="span" size="sm" tone="muted">
-            This mail changed. Refresh history before opening it.
-          </Text>
-        </output>
-        <Button
-          onClick={() => {
-            if (view.source.kind === "stale") {
-              history.refreshSection(view.source.section);
-            }
-          }}
-          size="sm"
-          variant="secondary"
-        >
-          Refresh history
-        </Button>
-      </div>
-    );
-  } else if (view.source.kind === "unavailable") {
-    sourceFeedback = (
-      <output className="block">
-        <Text as="span" size="sm" tone="muted">
-          This mail is no longer available.
-        </Text>
-      </output>
-    );
-  } else if (view.source.kind === "failed") {
-    sourceFeedback = (
-      <Text role="alert" size="sm" tone="muted">
-        Could not open this mail. Please try again.
-      </Text>
-    );
-  }
+  const continuation =
+    query.isError || query.hasNextPage ? (
+      <Button
+        disabled={query.isFetching}
+        onClick={() => {
+          if (query.isError && !query.isFetchNextPageError) {
+            history.retrySection(view.section);
+          } else {
+            history.loadMore(view.section);
+          }
+        }}
+        pending={query.isFetchingNextPage}
+        pendingLabel="Loading"
+        size="sm"
+        variant="secondary"
+      >
+        {query.isError ? "Try again" : "Load more"}
+      </Button>
+    ) : null;
+  const blank = count === 0 && !query.isPending;
   return (
-    <div aria-busy={query.isFetching} className="space-y-4">
-      <Text aria-live="polite" size="caption" tone="muted">
-        {status}
-      </Text>
-      {query.isError ? (
-        <Text role="alert" size="sm" tone="muted">
-          {query.isFetchNextPageError
-            ? "Could not load more history. Your earlier results are still here."
-            : "Could not load this section. Please try again."}
+    <div
+      aria-busy={query.isFetching}
+      className="flex min-h-0 flex-1 flex-col gap-2"
+    >
+      <SourceFeedback history={history} source={view.source} />
+      <div
+        className={cn({
+          "flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center":
+            blank,
+          "space-y-0.5 px-4": !blank,
+        })}
+      >
+        <Text aria-live="polite" size={blank ? "sm" : "caption"} tone="muted">
+          {status}
         </Text>
-      ) : null}
-      {view.source.kind === "opening" ? (
-        <output className="sr-only">Opening conversation</output>
-      ) : null}
-      {sourceFeedback}
-      {rows}
-      {query.isError || query.hasNextPage ? (
-        <Button
-          disabled={query.isFetching}
-          onClick={() => {
-            if (query.isError && !query.isFetchNextPageError) {
-              history.retrySection(view.section);
-            } else {
-              history.loadMore(view.section);
-            }
-          }}
-          pending={query.isFetchingNextPage}
-          pendingLabel="Loading"
-          size="sm"
-          variant="secondary"
-        >
-          {query.isError ? "Try again" : "Load more"}
-        </Button>
-      ) : null}
+        {view.section === "memory" && !query.isPending ? (
+          <Text size="caption" tone="muted">
+            These are your personal notes and may be wrong. They are separate
+            from mail sources.
+          </Text>
+        ) : null}
+        {query.isError && (count > 0 || query.isFetchNextPageError) ? (
+          <Text role="alert" size="caption" tone="muted">
+            Could not load more history. Your earlier results are still here.
+          </Text>
+        ) : null}
+        {blank ? continuation : null}
+      </div>
+      {blank ? null : (
+        <div className="min-h-0 flex-1 scroll-fade-y overflow-y-auto pb-2">
+          {query.isPending ? <HistoryLoadingRows /> : rows}
+          {continuation ? (
+            <div className="px-4 py-2">{continuation}</div>
+          ) : null}
+        </div>
+      )}
     </div>
   );
 };
@@ -442,12 +594,20 @@ const CorrespondentHistoryOwner = ({
   sessionId: string;
 }) => {
   const triggerId = useId();
-  const selectorId = useId();
-  const choices = getHistoryCorrespondents(
-    props.messages.filter((message) => message.threadId === props.threadId)
-  ).filter(
-    (person) => person.email !== props.mailboxEmail?.trim().toLowerCase()
+  const initialFocusId = useId();
+  const mailboxEmail = props.mailboxEmail?.trim().toLowerCase();
+  const messages = props.messages.filter(
+    (message) => message.threadId === props.threadId
   );
+  const avatars = new Map(
+    messages.map((message) => [
+      parseSender(message.from).email.toLowerCase(),
+      message.senderAvatarUrls,
+    ])
+  );
+  const choices: Correspondent[] = getHistoryCorrespondents(messages)
+    .filter((person) => person.email !== mailboxEmail)
+    .map((person) => ({ ...person, avatarUrls: avatars.get(person.email) }));
   const history = useCorrespondentHistory({
     actorId,
     correspondentEmails: choices.map((person) => person.email),
@@ -458,15 +618,26 @@ const CorrespondentHistoryOwner = ({
   });
   const { view } = history;
   const selected = view.kind === "selected" ? view : null;
+  const person = choices.find(
+    (choice) => choice.email === selected?.scope.correspondentEmail
+  );
   const editingMemory = selected?.editingMemory;
+  let title = "Choose a person";
+  if (person) {
+    title = `Correspondent history, ${person.name ?? person.email}`;
+  }
 
   return (
     <Dialog
       onOpenChange={(open) => {
-        if (open) {
-          history.open();
-        } else {
+        if (!open) {
           history.close();
+          return;
+        }
+        history.open();
+        // Without a known mailbox address, the only choice could be the owner.
+        if (choices.length === 1 && mailboxEmail) {
+          history.selectCorrespondent(choices[0].email);
         }
       }}
       open={view.kind !== "closed"}
@@ -482,135 +653,170 @@ const CorrespondentHistoryOwner = ({
         </DialogTrigger>
       </IconButtonTooltip>
       <DialogContent
-        className="flex max-h-[calc(100dvh-2rem)] flex-col"
+        className="min-h-80"
         finalFocus={() =>
           history.consumeFocusHandoff()
             ? false
             : document.querySelector<HTMLElement>(`#${CSS.escape(triggerId)}`)
         }
         initialFocus={() =>
-          document.querySelector<HTMLElement>(`#${CSS.escape(selectorId)}`)
+          document.querySelector<HTMLElement>(`#${CSS.escape(initialFocusId)}`)
         }
+        variant="inspector"
       >
-        <DialogHeader>
-          <DialogTitle>Correspondent history</DialogTitle>
-          <DialogDescription>
-            Recent mail, personal context and pending commitments.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody className="min-h-0 overflow-y-auto" spacing="4">
-          {view.kind === "closed" ? null : (
-            <>
-              <Select
-                items={choices.map((person) => ({
-                  label: person.name
-                    ? `${person.name}, ${person.email}`
-                    : person.email,
-                  value: person.email,
-                }))}
-                onValueChange={(email) => {
-                  if (email !== null) {
-                    history.selectCorrespondent(email);
-                  }
-                }}
-                value={selected?.scope.correspondentEmail ?? null}
-              >
-                <SelectTrigger
-                  aria-label="Correspondent"
-                  id={selectorId}
-                  size="sm"
-                >
-                  <SelectValue placeholder="Choose a person" />
-                </SelectTrigger>
-                <SelectContent
-                  className="w-(--anchor-width) max-w-(--available-width)"
-                  size="compact"
-                >
-                  <SelectList>
-                    {choices.map((person) => (
-                      <SelectItem
-                        className="min-w-0 [&>span]:min-w-0"
-                        key={person.email}
-                        value={person.email}
-                      >
-                        <div className="min-w-0">
-                          {person.name ? (
-                            <Text
-                              as="span"
-                              className="block"
-                              size="sm"
-                              truncate
-                            >
-                              {person.name}
-                            </Text>
-                          ) : null}
-                          <Text
-                            as="span"
-                            className="block"
-                            size="caption"
-                            truncate
-                          >
-                            {person.email}
-                          </Text>
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectList>
-                </SelectContent>
-              </Select>
-              {selected ? (
-                <>
-                  <Text className="break-all" size="caption" tone="muted">
-                    {selected.scope.correspondentEmail}
-                  </Text>
-                  <Tabs
-                    onValueChange={(section: unknown) => {
-                      if (
-                        section === "mail" ||
-                        section === "memory" ||
-                        section === "commitments"
-                      ) {
-                        history.selectSection(section);
+        <DialogTitle className="sr-only">{title}</DialogTitle>
+        <DialogDescription className="sr-only">
+          Recent mail, personal context and pending commitments.
+        </DialogDescription>
+        {view.kind === "closed" ? null : (
+          <>
+            <WorkspaceHeader>
+              <div className="flex min-w-0 items-center gap-2">
+                {person && choices.length > 1 ? (
+                  <Select
+                    items={choices.map((choice) => ({
+                      label: choice.name
+                        ? `${choice.name}, ${choice.email}`
+                        : choice.email,
+                      value: choice.email,
+                    }))}
+                    onValueChange={(email) => {
+                      if (email !== null) {
+                        history.selectCorrespondent(email);
                       }
                     }}
-                    value={selected.section}
+                    value={person.email}
                   >
-                    <TabsList
-                      activateOnFocus={false}
-                      aria-label="History section"
-                      variant="plain"
+                    <SelectTrigger
+                      aria-label={`Switch person, ${person.name ?? ""} ${person.email}`}
+                      className="-my-1.5 -ms-2 min-w-0 flex-1"
+                      size="auto"
+                      variant="ghost"
                     >
-                      {sections.map((section) => (
-                        <TabsTab key={section.value} value={section.value}>
-                          {section.label}
-                        </TabsTab>
-                      ))}
-                    </TabsList>
-                    {sections.map((section) => (
-                      <TabsPanel key={section.value} value={section.value}>
-                        {selected.section === section.value ? (
-                          <HistorySectionContent
-                            history={history}
-                            triggerId={triggerId}
-                            view={selected}
-                          />
-                        ) : null}
-                      </TabsPanel>
-                    ))}
-                  </Tabs>
-                </>
-              ) : (
-                <Text size="sm" tone="muted">
-                  Choose an exact address to load its history. Personal context
-                  and reminders stay private to you in shared mailboxes.
+                      <CorrespondentIdentity person={person} />
+                    </SelectTrigger>
+                    <SelectContent
+                      align="start"
+                      className="w-(--anchor-width) max-w-(--available-width)"
+                    >
+                      <SelectList>
+                        {choices.map((choice) => (
+                          <SelectItem
+                            className="min-w-0 [&>span]:min-w-0"
+                            key={choice.email}
+                            value={choice.email}
+                          >
+                            <CorrespondentIdentity person={choice} />
+                          </SelectItem>
+                        ))}
+                      </SelectList>
+                    </SelectContent>
+                  </Select>
+                ) : null}
+                {person && choices.length === 1 ? (
+                  <CorrespondentIdentity person={person} />
+                ) : null}
+                {person ? null : (
+                  <Text
+                    as="span"
+                    className="min-w-0 flex-1"
+                    size="sm"
+                    weight="medium"
+                  >
+                    People in this conversation
+                  </Text>
+                )}
+                <IconButtonTooltip label="Close">
+                  <Button
+                    aria-label="Close correspondent history"
+                    chrome="toolbar"
+                    onClick={() => {
+                      history.close();
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <Icon aria-hidden icon={Cancel01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              </div>
+            </WorkspaceHeader>
+            {selected ? (
+              <Tabs
+                className="flex min-h-0 flex-1 flex-col"
+                onValueChange={(section: unknown) => {
+                  if (
+                    section === "mail" ||
+                    section === "memory" ||
+                    section === "commitments"
+                  ) {
+                    history.selectSection(section);
+                  }
+                }}
+                value={selected.section}
+              >
+                <TabsList
+                  activateOnFocus={false}
+                  aria-label="History section"
+                  className="mx-2 flex shrink-0"
+                  variant="plain"
+                >
+                  {sectionOrder.map((section) => (
+                    <TabsTab
+                      className="flex-1"
+                      id={section === "mail" ? initialFocusId : undefined}
+                      key={section}
+                      value={section}
+                    >
+                      {sections[section].label}
+                    </TabsTab>
+                  ))}
+                </TabsList>
+                {sectionOrder.map((section) => (
+                  <TabsPanel
+                    className="flex min-h-0 flex-1 flex-col data-hidden:hidden"
+                    key={section}
+                    value={section}
+                  >
+                    {selected.section === section ? (
+                      <HistorySectionContent
+                        currentThreadId={props.threadId}
+                        history={history}
+                        mailboxEmail={mailboxEmail}
+                        triggerId={triggerId}
+                        view={selected}
+                      />
+                    ) : null}
+                  </TabsPanel>
+                ))}
+              </Tabs>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col">
+                <ul className="min-h-0 flex-1 scroll-fade-y overflow-y-auto px-2">
+                  {choices.map((choice, index) => (
+                    <li key={choice.email}>
+                      <Button
+                        className="w-full"
+                        id={index === 0 ? initialFocusId : undefined}
+                        onClick={() => {
+                          history.selectCorrespondent(choice.email);
+                        }}
+                        size="auto"
+                        variant="ghost"
+                      >
+                        <CorrespondentIdentity person={choice} />
+                      </Button>
+                    </li>
+                  ))}
+                </ul>
+                <Text className="m-4 mt-2" size="caption" tone="muted">
+                  Choose a person to load their history. Personal context and
+                  reminders stay private to you in shared mailboxes.
                 </Text>
-              )}
-            </>
-          )}
-        </DialogBody>
-        <DialogFooter>
-          <DialogCloseButton variant="default">Done</DialogCloseButton>
-        </DialogFooter>
+              </div>
+            )}
+          </>
+        )}
       </DialogContent>
       {selected && editingMemory ? (
         <MemoryEditor
