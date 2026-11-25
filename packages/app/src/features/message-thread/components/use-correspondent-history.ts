@@ -486,8 +486,11 @@ export const createCorrespondentHistory = ({
     get owner() {
       return owner;
     },
-    queryOptions(section: HistorySection, scope: HistoryScope | null) {
-      const { view } = state.get();
+    queryOptions(
+      section: HistorySection,
+      scope: HistoryScope | null,
+      activeSection: HistorySection | null = section
+    ) {
       return infiniteQueryOptions<
         HistoryPage,
         Error,
@@ -495,11 +498,7 @@ export const createCorrespondentHistory = ({
         QueryKey,
         string | undefined
       >({
-        enabled:
-          scope !== null &&
-          isCurrent(scope) &&
-          view.kind === "selected" &&
-          view.section === section,
+        enabled: scope !== null && activeSection === section,
         gcTime: 0,
         getNextPageParam: (lastPage: HistoryPage) => lastPage.nextCursor,
         initialPageParam: undefined,
@@ -696,10 +695,15 @@ export const useCorrespondentHistory = (options: HistoryOptions) => {
     ownsCurrentInputs,
   ]);
   const scope = view.kind === "selected" ? view.scope : null;
+  const activeSection = view.kind === "selected" ? view.section : null;
   const queries = {
-    commitments: useInfiniteQuery(history.queryOptions("commitments", scope)),
-    mail: useInfiniteQuery(history.queryOptions("mail", scope)),
-    memory: useInfiniteQuery(history.queryOptions("memory", scope)),
+    commitments: useInfiniteQuery(
+      history.queryOptions("commitments", scope, activeSection)
+    ),
+    mail: useInfiniteQuery(history.queryOptions("mail", scope, activeSection)),
+    memory: useInfiniteQuery(
+      history.queryOptions("memory", scope, activeSection)
+    ),
   };
   return {
     ...history,
