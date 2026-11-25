@@ -119,7 +119,7 @@ export const AssistantSidebar = ({
     }
     const observer = new MutationObserver(() => {
       const composer = panel?.querySelector<HTMLElement>(
-        "[data-assistant-composer]:not(:disabled)"
+        '[data-assistant-composer] [contenteditable="true"]'
       );
       if (composer && document.activeElement === panel) {
         composer.focus({ preventScroll: true });
@@ -128,12 +128,12 @@ export const AssistantSidebar = ({
     });
     const frame = window.requestAnimationFrame(() => {
       const composer = panel?.querySelector<HTMLElement>(
-        "[data-assistant-composer]:not(:disabled)"
+        '[data-assistant-composer] [contenteditable="true"]'
       );
       (composer ?? panel)?.focus({ preventScroll: true });
       if (!composer && panel) {
         observer.observe(panel, {
-          attributeFilter: ["disabled"],
+          attributeFilter: ["contenteditable"],
           childList: true,
           subtree: true,
         });

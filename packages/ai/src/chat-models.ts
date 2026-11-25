@@ -23,6 +23,13 @@ export const chatModels = [
     versions: ["~anthropic/claude-opus-latest", "anthropic/claude-opus-5"],
   },
   {
+    group: "anthropic",
+    label: "Claude Fable 5.2",
+    shortLabel: "Fable",
+    value: "anthropic/claude-fable-5.2",
+    versions: [],
+  },
+  {
     group: "openai",
     label: "GPT-6 Luna",
     shortLabel: "Luna",
@@ -78,13 +85,6 @@ export const chatModels = [
     value: "google/gemini-4-carbon",
     versions: ["~google/gemini-pro-latest", "google/gemini-3.1-pro-preview"],
   },
-  {
-    group: "google",
-    label: "Gemini 4 Argon",
-    shortLabel: "Argon",
-    value: "google/gemini-4-argon",
-    versions: [],
-  },
 ] as const;
 
 export type ChatModelGroup = (typeof chatModels)[number]["group"];
@@ -100,6 +100,7 @@ export type ChatModel = z.infer<typeof chatModelSchema>;
 
 export const retiredChatModelSchema = z.enum([
   "~anthropic/claude-fable-latest",
+  "google/gemini-4-argon",
   "~deepseek/deepseek-flash-latest",
   "deepseek/deepseek-v4-flash",
   "~deepseek/deepseek-pro-latest",

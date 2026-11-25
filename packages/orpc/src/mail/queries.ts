@@ -436,9 +436,11 @@ export const queriesMailOperations = {
                 accessToken,
                 input.threadId,
                 signal,
-                (snapshot) => {
-                  snapshots.push(snapshot);
-                }
+                input.prefetch === true
+                  ? undefined
+                  : (snapshot) => {
+                      snapshots.push(snapshot);
+                    }
               )
           ).catch((error: unknown) => {
             if (isGmailServiceError(error) && error.status === 404) {
@@ -459,6 +461,9 @@ export const queriesMailOperations = {
               context.resHeaders
             ),
           };
+    if (input.prefetch === true) {
+      return result;
+    }
     const capture = (async () => {
       try {
         await withRequestDatabaseClient(

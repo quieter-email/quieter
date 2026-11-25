@@ -10,7 +10,10 @@ import type { useMessageListSelection } from "@quieter/app/features/message-list
 import { useThreadVerificationCodes } from "@quieter/app/features/verification-codes/use-thread-verification-codes";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
-import { attachThreadPreloader } from "@quieter/app/lib/mail-cache-lifecycle";
+import {
+  attachThreadPreloader,
+  THREAD_PRELOAD_LIMIT,
+} from "@quieter/app/lib/mail-cache-lifecycle";
 import type { ThreadPreloadCandidate } from "@quieter/app/lib/mail-cache-lifecycle";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
@@ -22,11 +25,18 @@ import {
   useVirtualizer,
 } from "@tanstack/react-virtual";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
 const MESSAGE_ROW_GAP_PX = 0;
 const MESSAGE_LIST_OVERSCAN = 12;
+const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
 const MESSAGE_LIST_SKELETON_ROW_IDS = [
   "message-list-skeleton-1",
   "message-list-skeleton-2",
@@ -97,7 +107,10 @@ const loadMoreIfNeeded = ({
 
   const distanceToBottom =
     element.scrollHeight - (element.scrollTop + element.clientHeight);
-  if (distanceToBottom <= Math.max(element.clientHeight, 400)) {
+  if (
+    distanceToBottom <=
+    Math.max(element.clientHeight * MESSAGE_LIST_PREFETCH_VIEWPORTS, 400)
+  ) {
     onLoadMore();
   }
 };
@@ -519,26 +532,45 @@ export const MessageListScrollPane = ({
   }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = selection.scrollRef.current;
+    const { range } = messageVirtualizer;
     const candidates: ThreadPreloadCandidate[] = [];
     if (
       element &&
+      range &&
       element.clientWidth > 0 &&
-      element.clientHeight > 0 &&
-      !list.isError
+      element.clientHeight > 0
     ) {
       const top = messageVirtualizer.scrollOffset ?? element.scrollTop;
-      for (const item of virtualItems) {
-        if (item.end <= top || item.start >= top + element.clientHeight) {
-          continue;
+      let first = range.startIndex;
+      const limit = first + THREAD_PRELOAD_LIMIT;
+      for (
+        let viewport = 0;
+        viewport <= MESSAGE_LIST_PREFETCH_VIEWPORTS;
+        viewport += 1
+      ) {
+        const end =
+          viewport === 0
+            ? range.endIndex
+            : (messageVirtualizer.getVirtualItemForOffset(
+                top + element.clientHeight * (viewport + 1) - 1
+              )?.index ?? range.endIndex);
+        const next = Math.min(end + 1, limit);
+        const threads = threadedMessages
+          .slice(first, next)
+          .toSorted(
+            (left, right) =>
+              Number(right.unreadCount > 0) - Number(left.unreadCount > 0) ||
+              Number(right.isImportant) - Number(left.isImportant)
+          );
+        for (const thread of threads) {
+          const candidate = candidateForThread(thread);
+          if (candidate) {
+            candidates.push(candidate);
+          }
         }
-        const thread = threadedMessages[item.index];
-        const candidate =
-          thread === undefined ? undefined : candidateForThread(thread);
-        if (candidate) {
-          candidates.push(candidate);
-        }
+        first = next;
       }
     }
     preloaderRef.current?.update(candidates);
@@ -720,15 +752,7 @@ export const MessageListScrollPane = ({
     >
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
-      {list.isError && (
-        <p className="px-2 py-8 text-body text-destructive">
-          {list.error instanceof Error
-            ? list.error.message
-            : "Could not load messages."}
-        </p>
-      )}
-
-      {!list.isError && threadedMessages.length > 0 && (
+      {threadedMessages.length > 0 && (
         <ul
           className="relative"
           style={{
@@ -807,6 +831,14 @@ export const MessageListScrollPane = ({
             );
           })}
         </ul>
+      )}
+
+      {list.isError && (
+        <p className="px-2 py-8 text-body text-destructive">
+          {list.error instanceof Error
+            ? list.error.message
+            : "Could not load messages."}
+        </p>
       )}
 
       {!isLoadingEmptyMessages &&

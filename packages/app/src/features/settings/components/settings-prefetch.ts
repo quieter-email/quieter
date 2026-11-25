@@ -15,6 +15,22 @@ export type MailboxSettingsPrefetchTarget = {
   provider: string;
 };
 
+export const loadPreferenceSettingsPanels = async () =>
+  await import("@quieter/app/features/settings/components/preference-settings-panels");
+
+export const AI_SETTINGS_STALE_TIME = 60_000;
+
+export const prefetchSettingsOverview = async (queryClient: QueryClient) => {
+  await Promise.allSettled([
+    queryClient.query(mailboxesQueryOptions()),
+    queryClient.query(connectorsQueryOptions()),
+    queryClient.query(userBillingQueryOptions()),
+    queryClient.query(
+      orpc.ai.settings.queryOptions({ staleTime: AI_SETTINGS_STALE_TIME })
+    ),
+  ]);
+};
+
 export const prefetchSettingsTab = async (
   queryClient: QueryClient,
   tab: SettingsTab
@@ -22,7 +38,9 @@ export const prefetchSettingsTab = async (
   switch (tab) {
     case "ai": {
       await Promise.allSettled([
-        queryClient.query(orpc.ai.settings.queryOptions()),
+        queryClient.query(
+          orpc.ai.settings.queryOptions({ staleTime: AI_SETTINGS_STALE_TIME })
+        ),
       ]);
       return;
     }
