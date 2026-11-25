@@ -179,6 +179,7 @@ export const mailInputSchemas = {
   }),
   getThread: z.object({
     mailboxId: z.string().trim().min(1),
+    prefetch: z.boolean().optional(),
     threadId: z.string(),
   }),
   listLabels: z.object({

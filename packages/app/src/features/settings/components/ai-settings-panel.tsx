@@ -7,6 +7,7 @@ import {
   SettingsLoadingState,
   SettingsSection,
 } from "@quieter/app/features/settings/components/settings-layout";
+import { AI_SETTINGS_STALE_TIME } from "@quieter/app/features/settings/components/settings-prefetch";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import { persistQueryByKey } from "@quieter/app/lib/query-persister";
@@ -38,7 +39,9 @@ import { useState } from "react";
 export const AiSettingsPanel = () => {
   const queryClient = useQueryClient();
   const [resetOpen, setResetOpen] = useState(false);
-  const settingsQuery = orpc.ai.settings.queryOptions();
+  const settingsQuery = orpc.ai.settings.queryOptions({
+    staleTime: AI_SETTINGS_STALE_TIME,
+  });
   const settings = useQuery(settingsQuery);
   const update = useMutation(
     orpc.ai.updatePersonalization.mutationOptions({

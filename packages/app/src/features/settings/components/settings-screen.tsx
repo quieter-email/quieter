@@ -1,6 +1,7 @@
 "use client";
 
 import { Menu01Icon } from "@hugeicons/core-free-icons";
+import { loadCalendarWorkspace } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import { BillingCheckoutResult } from "@quieter/app/features/settings/components/billing-checkout-result";
 import { ConnectorConnectionResult } from "@quieter/app/features/settings/components/connector-connection-result";
 import { GmailConnectionResult } from "@quieter/app/features/settings/components/gmail-connection-result";
@@ -10,70 +11,74 @@ import {
   SettingsLoadingState,
   SettingsPageHeader,
 } from "@quieter/app/features/settings/components/settings-layout";
+import { loadPreferenceSettingsPanels } from "@quieter/app/features/settings/components/settings-prefetch";
 import { SettingsSearch } from "@quieter/app/features/settings/components/settings-search";
 import { SettingsSidebar } from "@quieter/app/features/settings/components/settings-sidebar";
 import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { SETTINGS_TITLES } from "@quieter/app/features/settings/domain/settings-navigation";
+import { authClient } from "@quieter/app/lib/auth";
+import {
+  canPrefetchInBackground,
+  scheduleBackgroundPrefetch,
+} from "@quieter/app/lib/background-prefetch";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
-import { lazy, Suspense, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { defaultParseSearch, useRouter } from "@tanstack/react-router";
+import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-const AccountSettingsPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/account-settings-panel").then(
-      ({ AccountSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const AccountBillingPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/account-billing-panel").then(
-      ({ AccountBillingPanel: component }) => ({ default: component })
-    )
-);
-const AiSettingsPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/ai-settings-panel").then(
-      ({ AiSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const ConnectorsSettingsPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/connectors-settings-panel").then(
-      ({ ConnectorsSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const MailboxesSettingsPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/mailboxes-settings-panel").then(
-      ({ MailboxesSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const OrganizationSettingsPanel = lazy(
-  async () =>
-    await import("@quieter/app/features/settings/components/organization-settings-panel").then(
-      ({ OrganizationSettingsPanel: component }) => ({
-        default: component,
-      })
-    )
-);
-const preferenceSettingsPanels = async () =>
-  await import("@quieter/app/features/settings/components/preference-settings-panels");
+const loadAccountSettingsPanel = async () => {
+  const { AccountSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/account-settings-panel");
+  return { default: component };
+};
+const AccountSettingsPanel = lazy(loadAccountSettingsPanel);
+
+const loadAccountBillingPanel = async () => {
+  const { AccountBillingPanel: component } =
+    await import("@quieter/app/features/settings/components/account-billing-panel");
+  return { default: component };
+};
+const AccountBillingPanel = lazy(loadAccountBillingPanel);
+
+const loadAiSettingsPanel = async () => {
+  const { AiSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/ai-settings-panel");
+  return { default: component };
+};
+const AiSettingsPanel = lazy(loadAiSettingsPanel);
+
+const loadConnectorsSettingsPanel = async () => {
+  const { ConnectorsSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/connectors-settings-panel");
+  return { default: component };
+};
+const ConnectorsSettingsPanel = lazy(loadConnectorsSettingsPanel);
+
+const loadMailboxesSettingsPanel = async () => {
+  const { MailboxesSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/mailboxes-settings-panel");
+  return { default: component };
+};
+const MailboxesSettingsPanel = lazy(loadMailboxesSettingsPanel);
+
+const loadOrganizationSettingsPanel = async () => {
+  const { OrganizationSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/organization-settings-panel");
+  return { default: component };
+};
+const OrganizationSettingsPanel = lazy(loadOrganizationSettingsPanel);
+
 const PreferencesSettingsPanel = lazy(
   async () =>
-    await preferenceSettingsPanels().then(
+    await loadPreferenceSettingsPanels().then(
       ({ PreferencesSettingsPanel: component }) => ({
         default: component,
       })
@@ -81,7 +86,7 @@ const PreferencesSettingsPanel = lazy(
 );
 const DevelopmentSettingsPanel = lazy(
   async () =>
-    await preferenceSettingsPanels().then(
+    await loadPreferenceSettingsPanels().then(
       ({ DevelopmentSettingsPanel: component }) => ({
         default: component,
       })
@@ -89,7 +94,7 @@ const DevelopmentSettingsPanel = lazy(
 );
 const DevelopmentSettingsUnavailable = lazy(
   async () =>
-    await preferenceSettingsPanels().then(
+    await loadPreferenceSettingsPanels().then(
       ({ DevelopmentSettingsUnavailable: component }) => ({
         default: component,
       })
@@ -98,6 +103,7 @@ const DevelopmentSettingsUnavailable = lazy(
 type SettingsUser = {
   email: string;
   emailVerified: boolean;
+  id: string;
   image?: string | null;
   name: string;
 };
@@ -110,8 +116,57 @@ export const SettingsScreen = ({
   renderInternalNavigation?: (onRequestClose?: () => void) => ReactNode;
 }) => {
   const [isMobileOpen, setIsMobileOpen] = useState(false);
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const session = authClient.useSession();
+  const preview = usePreviewPersona();
   const routeSearch = settingsRouteApi.useSearch();
-  const { tab } = routeSearch;
+  const { from, tab } = routeSearch;
+  useEffect(
+    () =>
+      scheduleBackgroundPrefetch(queryClient, async (signal) => {
+        await Promise.allSettled([
+          router.loadRouteChunk(router.routesByPath["/"]),
+          loadPreferenceSettingsPanels(),
+        ]);
+        for (const load of [
+          loadAccountSettingsPanel,
+          loadAccountBillingPanel,
+          loadMailboxesSettingsPanel,
+          loadOrganizationSettingsPanel,
+          loadConnectorsSettingsPanel,
+          loadAiSettingsPanel,
+        ]) {
+          if (signal.aborted || !canPrefetchInBackground()) {
+            return;
+          }
+          await Promise.allSettled([load()]);
+        }
+      }),
+    [queryClient, router]
+  );
+  const userId = session.data?.user.id;
+  useEffect((): (() => void) | undefined => {
+    if (preview !== null || userId !== initialUser.id) {
+      return undefined;
+    }
+    return scheduleBackgroundPrefetch(queryClient, async (signal) => {
+      const returnUrl = new URL(from, window.location.origin);
+      const route = mailboxSearchSchema.parse(
+        returnUrl.origin === window.location.origin &&
+          returnUrl.pathname === "/"
+          ? defaultParseSearch(returnUrl.search)
+          : {}
+      );
+      if (route.workspace !== "calendar") {
+        return;
+      }
+      const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
+      if (!signal.aborted) {
+        await prefetchCalendarWorkspace(queryClient, { route, signal, userId });
+      }
+    });
+  }, [from, initialUser.id, preview, queryClient, userId]);
   const preferences = [
     "overview",
     "appearance",
