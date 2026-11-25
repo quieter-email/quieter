@@ -1,7 +1,6 @@
 "use client";
 
 import {
-  AlarmClockIcon,
   ArrowLeft01Icon,
   ArrowRightDoubleIcon,
   CheckmarkCircle02Icon,
@@ -42,7 +41,7 @@ import {
   useMessageViewFocus,
 } from "@quieter/app/features/message-thread/components/use-message-view";
 import {
-  MessageReminderQuickAction,
+  MessageReminderStatus,
   MessageReminderSuggestion,
 } from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -307,14 +306,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const snoozeAction = canSetThreadPlacement
     ? getMailSnoozeAction(snooze, threadMessages)
     : null;
-  const openSnooze =
-    snoozeAction === null
-      ? undefined
-      : () => {
-          setSnoozeDialog({ action: snoozeAction, open: true, snooze });
-        };
   const sharedPlacement = mailboxActions.placementScope === "shared";
-  const snoozeLabel = `${snoozeAction === "reschedule" ? "Change return time" : "Snooze conversation"}${sharedPlacement ? " for everyone" : ""}`;
   const placementLabel = returnThreadToInbox
     ? `Return conversation to Inbox${sharedPlacement ? " for everyone" : ""}`
     : `Mark conversation Done${sharedPlacement ? " for everyone" : ""}`;
@@ -354,6 +346,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         );
       }
     : undefined;
+  const canSetReminder =
+    mailboxProvider !== "api" && activeMailbox !== "drafts";
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -494,94 +488,60 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               {visibleMessages.length === 1 ? "message" : "messages"}
             </p>
           )}
-          <MessageLabels
-            className="shrink-0"
-            labelIds={threadLabelIds}
-            labels={gmailLabels}
-          />
-          {mailboxProvider === "api" || activeMailbox === "drafts" ? null : (
-            <MessageReminderQuickAction
-              mailboxId={mailboxId}
-              message={hotkeyMessage}
-            />
-          )}
-          {toggleThreadPlacement && (
-            <IconButtonTooltip label={placementLabel}>
-              <Button
-                chrome="toolbar"
-                aria-label={placementLabel}
-                disabled={isActionPending}
-                onClick={toggleThreadPlacement}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon
-                  aria-hidden
-                  icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
-                />
-              </Button>
-            </IconButtonTooltip>
-          )}
-          {openSnooze !== undefined && (
-            <div className="hidden shrink-0 @md:block">
-              <IconButtonTooltip label={snoozeLabel}>
+          <div className="flex shrink-0 items-center gap-1 empty:hidden">
+            {toggleThreadPlacement && (
+              <IconButtonTooltip label={placementLabel}>
                 <Button
-                  aria-label={snoozeLabel}
                   chrome="toolbar"
+                  aria-label={placementLabel}
                   disabled={isActionPending}
-                  onClick={openSnooze}
+                  onClick={toggleThreadPlacement}
                   size="icon-sm"
                   type="button"
                   variant="ghost"
                 >
-                  <Icon aria-hidden icon={AlarmClockIcon} />
+                  <Icon
+                    aria-hidden
+                    icon={
+                      returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon
+                    }
+                  />
                 </Button>
               </IconButtonTooltip>
-            </div>
-          )}
-          {toggleThreadImportance && (
-            <IconButtonTooltip label={importanceLabel}>
-              <Button
-                chrome="toolbar"
-                aria-label={importanceLabel}
-                aria-pressed={threadIsImportant}
-                disabled={isActionPending}
-                onClick={toggleThreadImportance}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon
-                  aria-hidden
-                  icon={threadIsImportant ? Flag01Icon : FlagOffIcon}
-                  tone={threadIsImportant ? "default" : "muted"}
+            )}
+            {mailboxProvider !== "api" && (
+              <div className="-me-2.25 shrink-0">
+                <MessageActionsDropdown
+                  actions={threadActions}
+                  isPending={isActionPending}
+                  isUnread={threadIsUnread}
+                  mailbox={activeMailbox}
+                  mailboxId={mailboxId}
+                  message={{
+                    ...message,
+                    snooze,
+                    threadIsImportant,
+                  }}
+                  reminderMessage={canSetReminder ? hotkeyMessage : null}
+                  snoozeEntry={
+                    snoozeAction === null
+                      ? undefined
+                      : {
+                          action: snoozeAction,
+                          onOpen: () => {
+                            setSnoozeDialog({
+                              action: snoozeAction,
+                              open: true,
+                              snooze,
+                            });
+                          },
+                        }
+                  }
+                  threadLabelIds={threadLabelIds}
                 />
-              </Button>
-            </IconButtonTooltip>
-          )}
-          {mailboxProvider !== "api" && (
-            <div className="-me-2.25 shrink-0">
-              <MessageActionsDropdown
-                actions={threadActions}
-                isPending={isActionPending}
-                isUnread={threadIsUnread}
-                mailbox={activeMailbox}
-                mailboxId={mailboxId}
-                message={{
-                  ...message,
-                  snooze,
-                  threadIsImportant,
-                }}
-                snoozeEntry={
-                  snoozeAction === null || openSnooze === undefined
-                    ? undefined
-                    : { action: snoozeAction, onOpen: openSnooze }
-                }
-                threadLabelIds={threadLabelIds}
-              />
-            </div>
-          )}
+              </div>
+            )}
+          </div>
           <AssistantSidebarTrigger
             className={cn(
               "data-[sidebar-open=false]:ms-2.25 data-[sidebar-open=true]:-ms-3",
@@ -590,6 +550,23 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               }
             )}
           />
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
+          <MessageLabels labelIds={threadLabelIds} labels={gmailLabels} />
+          {toggleThreadImportance && threadIsImportant ? (
+            <span className="inline-flex items-center gap-1 text-caption text-muted-fg">
+              <Icon aria-hidden icon={Flag01Icon} size={14} />
+              Important
+            </span>
+          ) : null}
+          {canSetReminder ? (
+            <MessageReminderStatus
+              mailboxId={mailboxId}
+              message={hotkeyMessage}
+            />
+          ) : null}
+          {hasSnooze ? <MailSnoozeStatus snooze={snooze} /> : null}
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
@@ -601,8 +578,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           </div>
         )}
 
-        {mailboxProvider === "api" ||
-        activeMailbox === "drafts" ||
+        {!canSetReminder ||
         composeDemoMode === true ||
         composeManagedDemoMode === true ? null : (
           <MessageReminderSuggestion
@@ -616,11 +592,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           className="mt-3"
           mailboxId={mailboxId}
         />
-        {hasSnooze ? (
-          <div className="mt-2">
-            <MailSnoozeStatus snooze={snooze} />
-          </div>
-        ) : null}
       </WorkspaceHeader>
 
       <div className="flex min-h-0 flex-1">

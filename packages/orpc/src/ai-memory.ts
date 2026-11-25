@@ -2142,8 +2142,9 @@ export const refreshAiMemoryFromEvent = async ({
         messageId: claimed.metadata.messageId,
         userId: claimed.userId,
       });
-      if (hydrated === null) {
+      if (hydrated === null || hydrated === "spam") {
         if (
+          hydrated === null &&
           claimed.metadata.messageContextOnly === true &&
           typeof claimed.metadata.action === "string"
         ) {
