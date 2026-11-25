@@ -24,6 +24,7 @@ import {
   Loading03Icon,
   Mail01Icon,
   Settings01Icon,
+  Tick01Icon,
 } from "@hugeicons/core-free-icons";
 import {
   appEaseOut,
@@ -41,6 +42,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { Link } from "@tanstack/react-router";
 import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useRef, useState } from "react";
@@ -77,7 +79,6 @@ export type MailboxSwitcherOrder = {
 };
 
 type MailboxSummaryProps = {
-  action?: ReactNode;
   className?: string;
   mailbox: MailboxSwitcherMailbox;
 };
@@ -343,27 +344,17 @@ const MailboxMenuItem = ({
   onSelect: () => void;
   handleRef: Ref<HTMLButtonElement>;
 }) => (
-  <div
-    className={cn("group/item flex items-center rounded-md squircle", {
-      "bg-selection": isActive,
-      "focus-within:bg-control-hover hover:bg-control-hover": !isActive,
-    })}
-  >
+  <div className="flex items-center gap-1">
     <DropdownMenuItem
+      highlight="subtle"
       nativeButton
-      render={
-        <Button
-          focusRing="inset"
-          ref={handleRef}
-          type="button"
-          variant="ghost"
-        />
-      }
+      // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- The menu supplies the mailbox summary as button content.
+      render={<button ref={handleRef} type="button" />}
       aria-current={isActive ? "page" : undefined}
       aria-describedby="mailbox-order-help"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-      // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
-      className="h-auto min-h-10 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-1 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent data-highlighted:bg-transparent"
+      // oxlint-disable-next-line shadcn/no-restyle -- Keep the drag handle at its measured size while pressed.
+      className="min-w-0 flex-1 touch-pan-y active:scale-100"
       data-mailbox-switcher-navigation-item
       onSelect={(event) => {
         if (!event.defaultPrevented) {
@@ -371,10 +362,13 @@ const MailboxMenuItem = ({
         }
       }}
     >
+      <span aria-hidden className="flex size-4 shrink-0 items-center">
+        {isActive && <Icon icon={Tick01Icon} size={14} />}
+      </span>
       {children}
     </DropdownMenuItem>
     {action !== null && action !== undefined && action !== false && (
-      <div className="flex shrink-0 items-center gap-1 pr-2.5">{action}</div>
+      <div className="shrink-0 pe-2.5">{action}</div>
     )}
   </div>
 );
@@ -394,49 +388,36 @@ const MailboxInboxStatus = ({
     );
   }
 
-  const unread = hasUnreadMail(mailbox);
-  if (!unread && mailbox.provider !== "managed") {
+  if (!hasUnreadMail(mailbox)) {
     return null;
   }
 
   return (
-    <span className="min-w-7 shrink-0 text-right text-caption text-fg tabular-nums">
-      {unread && (
-        <>
-          <span aria-hidden>
-            {formatUnreadCount(mailbox.unreadNonSpamCount)}
-          </span>
-          <span className="sr-only">{mailbox.unreadNonSpamCount} unread</span>
-        </>
-      )}
+    <span className="shrink-0 text-right text-caption text-fg tabular-nums">
+      <span aria-hidden>{formatUnreadCount(mailbox.unreadNonSpamCount)}</span>
+      <span className="sr-only">{mailbox.unreadNonSpamCount} unread</span>
     </span>
   );
 };
 
-const MailboxSummary = ({
-  action,
-  className,
-  mailbox,
-}: MailboxSummaryProps) => {
+const MailboxSummary = ({ className, mailbox }: MailboxSummaryProps) => {
   const trimmedDisplayName = mailbox.displayName?.trim();
   const displayName =
     trimmedDisplayName === undefined || trimmedDisplayName === ""
       ? null
       : trimmedDisplayName;
   return (
-    <div
-      className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}
-    >
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-body-sm/4 text-fg">
+    <span className={cn("flex min-h-8 min-w-0 items-center gap-2", className)}>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate text-body-sm/4 text-fg">
           {displayName ?? mailbox.emailAddress}
-        </p>
+        </span>
         {displayName !== null && (
-          <p className="truncate text-caption/4 text-muted-fg">
+          <span className="block truncate text-caption/4 text-muted-fg">
             {mailbox.emailAddress}
-          </p>
+          </span>
         )}
-      </div>
+      </span>
       {mailbox.provider === "managed" &&
         (mailbox.accessMode === "private" ||
           mailbox.accessMode === "shared") && (
@@ -444,9 +425,8 @@ const MailboxSummary = ({
             {mailbox.accessMode === "private" ? "Private" : "Shared"}
           </span>
         )}
-      {action}
       <MailboxInboxStatus mailbox={mailbox} />
-    </div>
+    </span>
   );
 };
 
@@ -481,16 +461,18 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="flex min-h-7 items-center">
+          <div className="flex items-center gap-1">
             <DropdownMenuItem
               closeOnSelect={false}
+              highlight="subtle"
               nativeButton
-              render={<Button ref={handleRef} variant="ghost" />}
+              // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- The menu supplies the group name as button content.
+              render={<button ref={handleRef} type="button" />}
               aria-describedby={disabled ? undefined : "mailbox-order-help"}
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-              // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
-              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left active:scale-100"
+              // oxlint-disable-next-line shadcn/no-restyle -- Keep the drag handle at its measured size while pressed.
+              className="min-w-0 flex-1 touch-pan-y active:scale-100"
               data-mailbox-switcher-navigation-item
               onSelect={(event) => {
                 if (!event.defaultPrevented) {
@@ -500,7 +482,7 @@ const MailboxTeam = ({
             >
               <m.span
                 animate={{ rotate: closed ? 0 : 90 }}
-                className="flex size-3 shrink-0 items-center justify-center text-muted-fg"
+                className="flex size-4 shrink-0 items-center text-muted-fg"
                 initial={false}
                 transition={{
                   duration: reducedMotion === true ? 0 : 0.2,
@@ -573,7 +555,7 @@ const MailboxTeam = ({
           opacity: { duration: reducedMotion === true ? 0 : 0.16 },
         }}
       >
-        <div className="space-y-1">{children}</div>
+        <div className="space-y-0.5">{children}</div>
       </m.div>
     </section>
   );
@@ -910,7 +892,6 @@ export const MailboxSwitcherDropdown = ({
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
         className="w-[min(20rem,calc(100vw-2rem))]"
         side={side}
-        size="compact"
       >
         <DragDropProvider<SwitcherDragData>
           plugins={defaultPreset.plugins.filter(
@@ -931,7 +912,7 @@ export const MailboxSwitcherDropdown = ({
           }}
         >
           <div
-            className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
+            className="flex max-h-100 flex-col gap-2.5 overflow-y-auto p-0.5"
             data-mailbox-switcher-list
             onKeyDown={handleArrowNavigation}
             ref={listRef}
@@ -940,23 +921,6 @@ export const MailboxSwitcherDropdown = ({
           >
             {groups.length > 0 ? (
               <>
-                {onSelectAllInboxes &&
-                mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
-                  <>
-                    <DropdownMenuItem
-                      nativeButton
-                      render={<Button variant="ghost" />}
-                      aria-current={allInboxesActive ? "page" : undefined}
-                      className="w-full justify-start"
-                      data-mailbox-switcher-navigation-item
-                      onSelect={onSelectAllInboxes}
-                    >
-                      <Icon aria-hidden icon={Mail01Icon} />
-                      All inboxes
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="shrink-0" />
-                  </>
-                ) : null}
                 {(mailboxes.length >= 8 || isFiltering) && (
                   <div className="sticky top-0 z-10 bg-popover">
                     <Input
@@ -970,6 +934,21 @@ export const MailboxSwitcherDropdown = ({
                     />
                   </div>
                 )}
+                {onSelectAllInboxes &&
+                mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
+                  <DropdownMenuItem
+                    aria-current={allInboxesActive ? "page" : undefined}
+                    data-mailbox-switcher-navigation-item
+                    highlight="subtle"
+                    onSelect={onSelectAllInboxes}
+                  >
+                    <Icon
+                      aria-hidden
+                      icon={allInboxesActive ? Tick01Icon : Mail01Icon}
+                    />
+                    All inboxes
+                  </DropdownMenuItem>
+                ) : null}
                 {(isFiltering ? filteredGroups : groups).map(
                   (group, groupIndex) => {
                     const isCollapsed =
@@ -1066,7 +1045,7 @@ export const MailboxSwitcherDropdown = ({
                             );
                           })
                         ) : (
-                          <p className="px-2 py-1 text-body text-muted-fg">
+                          <p className="py-1 ps-8.5 text-caption text-muted-fg">
                             No Mailbox
                           </p>
                         )}
@@ -1086,29 +1065,26 @@ export const MailboxSwitcherDropdown = ({
                   {orderAnnouncement}
                 </output>
                 {!embedded && (
-                  <>
-                    <DropdownMenuSeparator className="shrink-0" />
+                  <div>
+                    <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      nativeButton
+                      highlight="subtle"
                       render={
-                        <LinkButton
+                        <Link
                           search={{
                             from: "/",
                             mailboxId: "",
                             tab: "mailboxes",
                           }}
-                          size="sm"
                           to="/settings"
-                          variant="ghost"
                         />
                       }
-                      className="w-full justify-start"
                       data-mailbox-switcher-navigation-item
                     >
                       <Icon aria-hidden icon={Settings01Icon} tone="muted" />
                       <span className="text-muted-fg">Mailbox settings</span>
                     </DropdownMenuItem>
-                  </>
+                  </div>
                 )}
               </>
             ) : (
@@ -1132,16 +1108,18 @@ export const MailboxSwitcherDropdown = ({
                   return mailbox ? (
                     <div
                       aria-hidden
-                      className="flex min-h-10 items-center border border-transparent px-2.5 py-1"
+                      className="flex min-h-10 items-center py-1 ps-8.5 pe-2.5"
                     >
                       <MailboxSummary className="w-full" mailbox={mailbox} />
                     </div>
                   ) : (
                     <div
                       aria-hidden
-                      className="flex min-h-7 items-center gap-2 px-2 py-1 text-caption text-muted-fg"
+                      className="flex min-h-7 items-center gap-2 px-2.5 py-1 text-caption text-muted-fg"
                     >
-                      <Icon size={12} icon={ArrowRight01Icon} />
+                      <span className="flex size-4 shrink-0 items-center">
+                        <Icon size={12} icon={ArrowRight01Icon} />
+                      </span>
                       <span className="min-w-0 truncate">{group?.name}</span>
                     </div>
                   );

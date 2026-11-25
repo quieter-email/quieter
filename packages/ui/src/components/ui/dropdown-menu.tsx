@@ -184,6 +184,7 @@ type DropdownMenuItemProps = Omit<
   "closeOnClick" | "onClick"
 > & {
   closeOnSelect?: boolean;
+  highlight?: "default" | "subtle";
   onSelect?: (event: MouseEvent<HTMLElement>) => void;
   tone?: "default" | "destructive";
 };
@@ -191,6 +192,7 @@ type DropdownMenuItemProps = Omit<
 export const DropdownMenuItem = ({
   className,
   closeOnSelect = true,
+  highlight = "default",
   onSelect,
   tone = "default",
   ...props
@@ -202,7 +204,10 @@ export const DropdownMenuItem = ({
       className={cn(
         menuItemClassName,
         { [menuCompactItemClassName]: size === "compact" },
-        { "text-destructive": tone === "destructive" },
+        {
+          "data-highlighted:bg-fg/8": highlight === "subtle",
+          "text-destructive": tone === "destructive",
+        },
         className
       )}
       closeOnClick={closeOnSelect}
