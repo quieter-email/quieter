@@ -29,9 +29,13 @@ import {
 
 const catalog = new Map(
   Object.entries(orpcActions).flatMap(([domain, actions]) =>
-    Object.entries(actions).map(([name, [policy, description]]) => {
+    Object.entries(actions).flatMap(([name, spec]) => {
+      if (spec === "internal") {
+        return [];
+      }
+      const [policy, description] = spec;
       const action = `${domain}.${name}`;
-      return [action, { action, description, domain, policy }] as const;
+      return [[action, { action, description, domain, policy }] as const];
     })
   )
 );

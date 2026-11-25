@@ -12,7 +12,9 @@ export type ActionPolicy =
   | "bulk_delete"
   | "send"
   | "mail_change";
-type ActionSpec = readonly [policy: ActionPolicy, description: string];
+type ActionSpec =
+  | readonly [policy: ActionPolicy, description: string]
+  | "internal";
 
 type Actions = {
   [Domain in keyof typeof appRouter]: Record<
@@ -208,6 +210,7 @@ export const orpcActions = {
       "read",
       "Look up delivery status for selected message IDs.",
     ],
+    listRecipientSuggestions: "internal",
     listThreads: [
       "read",
       "Search or browse one Gmail, managed, or transactional mailbox. Pass query, category, and optional pageToken.",

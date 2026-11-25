@@ -190,6 +190,10 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageIds: z.array(z.string().trim().min(1)).max(100),
   }),
+  listRecipientSuggestions: z.strictObject({
+    mailboxId: z.string().trim().min(1).max(512),
+    query: z.string().trim().min(2).max(254),
+  }),
   listThreads: z.object({
     category: mailCategorySchema,
     correspondentEmail: z

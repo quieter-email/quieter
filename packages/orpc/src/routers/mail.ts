@@ -11,6 +11,7 @@ import type { MailInputs } from "../mail/inputs";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
+import { listRecipientSuggestions } from "../mail/recipient-suggestions";
 import {
   createHeldSend,
   getHeldSend,
@@ -137,6 +138,12 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.listMessageDeliveryStatuses)
     .handler(queriesMailOperations.listMessageDeliveryStatuses),
+  listRecipientSuggestions: protectedProcedure
+    .input(mailInputSchemas.listRecipientSuggestions)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await listRecipientSuggestions({ context, input });
+    }),
   listThreads: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.listThreads)
