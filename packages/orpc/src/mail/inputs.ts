@@ -192,7 +192,7 @@ export const mailInputSchemas = {
   }),
   listRecipientSuggestions: z.strictObject({
     mailboxId: z.string().trim().min(1).max(512),
-    query: z.string().trim().min(2).max(254),
+    query: z.string().trim().min(2).max(254).optional(),
   }),
   listThreads: z.object({
     category: mailCategorySchema,

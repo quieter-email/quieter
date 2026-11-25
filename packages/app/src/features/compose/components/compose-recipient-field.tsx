@@ -78,6 +78,9 @@ const RecipientInput = ({
         }
       }}
       onDismiss={dismiss}
+      onFocus={() => {
+        suggestionScope?.warm();
+      }}
       onSuggestionSelect={(email) => {
         if (!completion) {
           return value.length;
@@ -92,6 +95,9 @@ const RecipientInput = ({
           typed && caret !== null && suggestionScope
             ? getRecipientCompletion(nextValue, caret)
             : null;
+        if (nextCompletion) {
+          suggestionScope?.warm();
+        }
         setActive(
           nextCompletion && suggestionScope
             ? {
