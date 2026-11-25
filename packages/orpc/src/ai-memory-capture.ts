@@ -248,6 +248,9 @@ export const captureMailboxMessageMemory = async (input: {
   message: MessageListItem;
   source: MailMemorySource;
 }) => {
+  if (input.message.labelIds?.includes(MAILBOX_LABELS.spam) === true) {
+    return null;
+  }
   try {
     const selected = await loadMemoryMailbox(input.mailboxId);
     if (selected === undefined) {
@@ -417,7 +420,10 @@ const loadManagedMemoryMessage = async (input: {
     from: message.from,
     id: message.id,
     inReplyTo: message.inReplyTo ?? undefined,
-    labelIds: message.direction === "outbound" ? [MAILBOX_LABELS.sent] : [],
+    labelIds: [
+      ...(message.mailboxState === "spam" ? [MAILBOX_LABELS.spam] : []),
+      ...(message.direction === "outbound" ? [MAILBOX_LABELS.sent] : []),
+    ],
     subject: message.subject ?? undefined,
     threadId: message.threadId,
     to: message.to ?? undefined,
@@ -469,6 +475,9 @@ export const hydrateMailMemoryEvent = async (input: {
   }
   if (message === null) {
     return null;
+  }
+  if (message.labelIds?.includes(MAILBOX_LABELS.spam) === true) {
+    return "spam" as const;
   }
   const { enrichMailAutoLabelFeedbackSource } =
     await import("./mail-automation/memory");
@@ -714,6 +723,7 @@ const captureBootstrapDirection = async (input: {
       and(
         eq(managedMailMessage.mailboxId, input.selected.id),
         eq(managedMailMessage.direction, sent ? "outbound" : "inbound"),
+        ne(managedMailMessage.mailboxState, "spam"),
         gte(managedMailMessage.sentAt, cutoff),
         lte(managedMailMessage.createdAt, input.state.createdAt),
         // Drafts are provisional evidence and must never seed the sent-mail voice profile.

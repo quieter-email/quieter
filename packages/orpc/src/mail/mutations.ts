@@ -84,6 +84,9 @@ const recordMetadataAction = async (
       actionName = `move:${destination.destination}`;
     }
   }
+  if (actionName === "move:spam") {
+    return;
+  }
   const action = {
     action: actionName,
     mailboxId: input.mailboxId,
@@ -148,7 +151,9 @@ const mutateMessage = async (
         ...authorizedInput,
         read: operation === "read",
       });
-      await recordMetadataAction({ context, input }, operation, [result.id]);
+      if (!result.labelIds.includes(MAILBOX_LABELS.spam)) {
+        await recordMetadataAction({ context, input }, operation, [result.id]);
+      }
       return result;
     }
     if (operation === "trash" || operation === "untrash") {
@@ -178,6 +183,9 @@ const mutateMessage = async (
         messageId: input.messageId,
         retireSnoozes: true,
       });
+    }
+    if (result.labelIds.includes(MAILBOX_LABELS.spam)) {
+      return result;
     }
     const labelFeedback = await recordLabelFeedback({
       ...operation,
@@ -218,19 +226,22 @@ const mutateMessage = async (
       mailboxId: input.mailboxId,
       messageIds: [result.id],
     });
+    const memoryMessageIds = result.labelIds.includes(MAILBOX_LABELS.spam)
+      ? []
+      : [result.id];
     const labelFeedback =
       typeof operation === "string"
         ? undefined
         : await recordLabelFeedback({
             ...operation,
             mailboxId: input.mailboxId,
-            providerMessageIds: [result.id],
+            providerMessageIds: memoryMessageIds,
             userId: context.userId,
           });
     await recordMetadataAction(
       { accessToken, context, input, labelFeedback },
       operation,
-      [result.id]
+      memoryMessageIds
     );
     return result;
   });
@@ -275,7 +286,9 @@ const mutateThread = async (
       await recordMetadataAction(
         { context, input },
         operation,
-        result.messages.map((message) => message.id)
+        result.messages
+          .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+          .map((message) => message.id)
       );
       return result;
     }
@@ -309,16 +322,19 @@ const mutateThread = async (
         threadIds: [input.threadId],
       });
     }
+    const memoryMessageIds = result.messages
+      .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+      .map((message) => message.id);
     const labelFeedback = await recordLabelFeedback({
       ...operation,
       mailboxId: input.mailboxId,
-      providerMessageIds: result.messages.map((message) => message.id),
+      providerMessageIds: memoryMessageIds,
       userId: context.userId,
     });
     await recordMetadataAction(
       { context, input, labelFeedback },
       operation,
-      result.messages.map((message) => message.id)
+      memoryMessageIds
     );
     return result;
   }
@@ -345,19 +361,22 @@ const mutateThread = async (
       mailboxId: input.mailboxId,
       messageIds: result.messages.map((message) => message.id),
     });
+    const memoryMessageIds = result.messages
+      .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+      .map((message) => message.id);
     const labelFeedback =
       typeof operation === "string"
         ? undefined
         : await recordLabelFeedback({
             ...operation,
             mailboxId: input.mailboxId,
-            providerMessageIds: result.messages.map((message) => message.id),
+            providerMessageIds: memoryMessageIds,
             userId: context.userId,
           });
     await recordMetadataAction(
       { accessToken, context, input, labelFeedback },
       operation,
-      result.messages.map((message) => message.id)
+      memoryMessageIds
     );
     return result;
   });
@@ -540,16 +559,14 @@ export const mutationsMailOperations = {
           requestedMessageIds,
           signal
         );
-        const threadIdByMessageId = new Map(
-          associations.map((association) => [
-            association.id,
-            association.threadId,
-          ])
+        const associationByMessageId = new Map(
+          associations.map((association) => [association.id, association])
         );
         const validTargets = input.targets.filter((target) =>
           target.messageIds.every(
             (messageId) =>
-              threadIdByMessageId.get(messageId) === target.threadId
+              associationByMessageId.get(messageId)?.threadId ===
+              target.threadId
           )
         );
         const messageIds = [
@@ -591,12 +608,13 @@ export const mutationsMailOperations = {
             messageIds
           );
         } else if (input.command.kind === "set-labels") {
+          const { addIds, removeIds } = input.command;
           await batchModifyMessages(
             accessToken,
             messageIds,
             {
-              addLabelIds: input.command.addIds,
-              removeLabelIds: input.command.removeIds,
+              addLabelIds: addIds,
+              removeLabelIds: removeIds,
             },
             signal
           );
@@ -613,20 +631,29 @@ export const mutationsMailOperations = {
             mailboxId: input.mailboxId,
             messageIds,
           });
+          const memoryMessageIds = addIds.includes(MAILBOX_LABELS.spam)
+            ? []
+            : messageIds.filter(
+                (id) =>
+                  removeIds.includes(MAILBOX_LABELS.spam) ||
+                  associationByMessageId
+                    .get(id)
+                    ?.labelIds?.includes(MAILBOX_LABELS.spam) !== true
+              );
           const labelFeedback = await recordLabelFeedback({
-            addLabelIds: input.command.addIds,
+            addLabelIds: addIds,
             mailboxId: input.mailboxId,
-            providerMessageIds: messageIds,
-            removeLabelIds: input.command.removeIds,
+            providerMessageIds: memoryMessageIds,
+            removeLabelIds: removeIds,
             userId: context.userId,
           });
           await recordMetadataAction(
             { accessToken, context, input, labelFeedback },
             {
-              addLabelIds: input.command.addIds,
-              removeLabelIds: input.command.removeIds,
+              addLabelIds: addIds,
+              removeLabelIds: removeIds,
             },
-            messageIds
+            memoryMessageIds
           );
         } else if (
           input.command.kind === "move" &&
@@ -684,7 +711,7 @@ export const mutationsMailOperations = {
           const appliedThreadIds = [
             ...new Set(
               appliedMessageIds.flatMap((id) => {
-                const threadId = threadIdByMessageId.get(id);
+                const threadId = associationByMessageId.get(id)?.threadId;
                 return threadId === undefined ? [] : [threadId];
               })
             ),
@@ -702,14 +729,11 @@ export const mutationsMailOperations = {
             mailboxId: input.mailboxId,
             messageIds: appliedMessageIds,
           });
-          await learnAiMemoryFromGmailAction({
-            accessToken,
-            action: `move:${input.command.destination}`,
-            mailboxId: input.mailboxId,
-            messageIds: appliedMessageIds,
-            targetCount: appliedMessageIds.length,
-            userId: context.userId,
-          });
+          await recordMetadataAction(
+            { accessToken, context, input },
+            `move:${input.command.destination}`,
+            appliedMessageIds
+          );
         }
         if (failedMutation) {
           throw failedMutation.reason;

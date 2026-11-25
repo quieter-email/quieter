@@ -212,8 +212,14 @@ describe("mail evidence capture", () => {
       observationKind: "sent_message",
       userAuthored: null,
     });
-    expect(evidence?.bodyText).toContain("Looks good");
-    expect(evidence?.bodyText).not.toContain("formal writing style");
+    expect(evidence).toHaveProperty(
+      "bodyText",
+      expect.stringContaining("Looks good")
+    );
+    expect(evidence).toHaveProperty(
+      "bodyText",
+      expect.not.stringContaining("formal writing style")
+    );
     expect(state.record).not.toHaveBeenCalled();
   });
 
