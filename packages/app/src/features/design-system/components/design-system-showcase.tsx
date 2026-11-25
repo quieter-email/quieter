@@ -1367,6 +1367,7 @@ export const DesignSystemShowcase = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem>Mark as read</DropdownMenuItem>
+                <DropdownMenuItem highlight="subtle">Archive</DropdownMenuItem>
                 <DropdownMenuCheckboxItem defaultChecked>
                   Show previews
                 </DropdownMenuCheckboxItem>
