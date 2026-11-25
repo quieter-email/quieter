@@ -190,36 +190,36 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   const createMailboxSummaryRefresher = (queryKey: readonly string[]) => {
     const filters = { exact: true, queryKey };
     let timer: ReturnType<typeof setTimeout> | undefined;
-    let needsRefresh = false;
+    let pendingRefresh: "event" | "recovery" | undefined;
     let inFlight = false;
     const schedule = () => {
       if (
         inFlight ||
         disposed ||
         suspended ||
-        !needsRefresh ||
+        pendingRefresh === undefined ||
         timer !== undefined
       ) {
         return;
       }
       const refreshSummary = async () => {
         inFlight = true;
-        needsRefresh = false;
         try {
-          const preEventFetch = queryClient.getQueryCache().find({
-            ...filters,
-            fetchStatus: "fetching",
-          })?.promise;
-          // A request started before the event can still return the old count.
-          if (preEventFetch !== undefined) {
-            await Promise.allSettled([preEventFetch]);
+          if (pendingRefresh === "event") {
+            const preEventFetch = queryClient.getQueryCache().find({
+              ...filters,
+              fetchStatus: "fetching",
+            })?.promise;
+            // A request started before the event can still return the old count.
+            if (preEventFetch !== undefined) {
+              await Promise.allSettled([preEventFetch]);
+            }
           }
           if (!disposed && !suspended) {
+            pendingRefresh = undefined;
             await queryClient.invalidateQueries(filters, {
               cancelRefetch: false,
             });
-          } else {
-            needsRefresh = true;
           }
         } finally {
           inFlight = false;
@@ -236,8 +236,10 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         clearTimeout(timer);
         timer = undefined;
       },
-      request: () => {
-        needsRefresh = true;
+      request: (reason: "event" | "recovery") => {
+        if (pendingRefresh !== "event") {
+          pendingRefresh = reason;
+        }
         schedule();
       },
     };
@@ -458,8 +460,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       return;
     }
     if (type === "mailbox.changed") {
+      const reason = mailboxId === "*" ? "recovery" : "event";
       if (typedChange === undefined) {
-        mailboxListRefresher.request();
+        mailboxListRefresher.request(reason);
       }
       if (
         typedChange === undefined ||
@@ -467,7 +470,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           (kind) => kind.startsWith("message.") || kind === "mailbox.reconcile"
         )
       ) {
-        gmailUnreadRefresher.request();
+        gmailUnreadRefresher.request(reason);
       }
     }
     const change = pending.get(mailboxId);
