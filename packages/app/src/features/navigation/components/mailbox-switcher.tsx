@@ -481,7 +481,7 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="group/header flex min-h-7 items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover">
+          <div className="flex min-h-7 items-center">
             <DropdownMenuItem
               closeOnSelect={false}
               nativeButton
@@ -490,7 +490,7 @@ const MailboxTeam = ({
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
               // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
-              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left hover:bg-transparent active:scale-100"
+              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left active:scale-100"
               data-mailbox-switcher-navigation-item
               onSelect={(event) => {
                 if (!event.defaultPrevented) {
@@ -528,8 +528,7 @@ const MailboxTeam = ({
               <IconButtonTooltip label={`Open ${group.name} settings`}>
                 <LinkButton
                   aria-label={`Open ${group.name} settings`}
-                  // oxlint-disable-next-line shadcn/no-restyle -- Compact settings action reveals on hover and focus.
-                  className="mr-0.5 size-7 opacity-0 group-focus-within/header:opacity-100 group-hover/header:opacity-100 focus-visible:opacity-100"
+                  className="mr-0.5"
                   data-mailbox-switcher-navigation-action
                   search={{
                     from: "/",
@@ -1087,7 +1086,8 @@ export const MailboxSwitcherDropdown = ({
                   {orderAnnouncement}
                 </output>
                 {!embedded && (
-                  <div className="mt-1">
+                  <>
+                    <DropdownMenuSeparator className="shrink-0" />
                     <DropdownMenuItem
                       nativeButton
                       render={
@@ -1102,14 +1102,13 @@ export const MailboxSwitcherDropdown = ({
                           variant="ghost"
                         />
                       }
-                      // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
-                      className="h-auto min-h-7 w-full justify-between px-2.5 py-1 squircle"
+                      className="w-full justify-start"
                       data-mailbox-switcher-navigation-item
                     >
-                      Manage mailboxes
-                      <Icon aria-hidden icon={Settings01Icon} />
+                      <Icon aria-hidden icon={Settings01Icon} tone="muted" />
+                      <span className="text-muted-fg">Mailbox settings</span>
                     </DropdownMenuItem>
-                  </div>
+                  </>
                 )}
               </>
             ) : (
