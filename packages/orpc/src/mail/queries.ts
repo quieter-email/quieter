@@ -857,7 +857,9 @@ export const queriesMailOperations = {
                 signal,
               })
             : await listMessagesWithDetails(accessToken, {
-                mailbox: input.category,
+                correspondentEmail: input.correspondentEmail,
+                excludeProtected: input.scope === "all_mail" ? true : undefined,
+                mailbox: category,
                 maxResults: input.maxResults,
                 pageToken: currentPageToken,
                 query: input.query?.trim() || undefined,
@@ -865,7 +867,7 @@ export const queriesMailOperations = {
               })
       );
       const messages = await projectSnoozableGmailRows({
-        category: input.category,
+        category,
         context,
         mailboxId: input.mailboxId,
         messages: page.messages,
