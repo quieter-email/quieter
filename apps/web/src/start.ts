@@ -11,6 +11,7 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
+import { waitUntil } from "cloudflare:workers";
 
 import { getRequestRateLimit } from "#/lib/abuse-protection.server";
 import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
@@ -69,7 +70,10 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 const databaseMiddleware = createMiddleware().server(
-  async ({ next }) => await withRequestDatabaseClient(async () => await next())
+  async ({ next }) =>
+    await withRequestDatabaseClient(async () => await next(), {
+      defer: waitUntil,
+    })
 );
 
 let databaseHealthyUntil = 0;

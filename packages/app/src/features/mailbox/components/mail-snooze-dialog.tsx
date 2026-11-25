@@ -1,7 +1,7 @@
 "use client";
 
+import { AlarmClockIcon } from "@hugeicons/core-free-icons";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import {
   calendarWallTimeToInstant,
   getZonedDateTimeFields,
@@ -19,6 +19,9 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Icon } from "@quieter/ui/icon";
+import { Pill } from "@quieter/ui/pill";
+import type { PillTone } from "@quieter/ui/pill";
 import { Text } from "@quieter/ui/text";
 import { TimePicker } from "@quieter/ui/time-picker";
 import { toast } from "@quieter/ui/toast";
@@ -27,40 +30,37 @@ import type { SubmitEvent } from "react";
 
 import { CalendarTimeZonePicker } from "../../calendar/components/calendar-time-zone-picker";
 import { getReminderPresetTime } from "../../reminders/reminder-time";
-
-export const snoozeLiveStatuses = new Set<MailSnoozeState["status"]>([
-  "preparing",
-  "active",
-  "returning",
-  "suspended",
-  "failed",
-  "uncertain",
-]);
-
-const snoozeStatusLabels: Record<MailSnoozeState["status"], string> = {
-  active: "Returns",
-  cancelled: "Return cancelled, was due",
-  failed: "Could not return",
-  preparing: "Preparing return",
-  returned: "Returned, was due",
-  returning: "Returning",
-  superseded: "Return stopped, was due",
-  suspended: "Return paused",
-  uncertain: "Return needs attention",
-};
+import {
+  getMailSnoozeRowLabel,
+  getMailSnoozeStatusText,
+  resumeMailSnoozeAttempt,
+} from "../domain/mail-snooze";
+import type { MailSnoozeAttempt } from "../domain/mail-snooze";
 
 export const MailSnoozeStatus = ({ snooze }: { snooze: MailSnoozeState }) => (
-  <Text as="p" size="caption" tone="muted">
-    {snooze.status === "active" && isSandboxMailboxId(snooze.mailboxId)
-      ? "Preview return"
-      : snoozeStatusLabels[snooze.status]}{" "}
-    {new Intl.DateTimeFormat(undefined, {
-      dateStyle: "medium",
-      timeStyle: "short",
-      timeZone: snooze.timeZone,
-    }).format(new Date(snooze.returnAt))}{" "}
-    ({snooze.timeZone}){snooze.message ? `, ${snooze.message}` : ""}
+  <Text as="span" size="caption" tone="muted">
+    {getMailSnoozeStatusText(snooze)}
   </Text>
+);
+
+const rowStatusTones: Partial<Record<MailSnoozeState["status"], PillTone>> = {
+  failed: "destructive",
+  suspended: "orange",
+  uncertain: "orange",
+};
+
+// The row's open button announces the full status.
+export const MailSnoozeRowStatus = ({
+  snooze,
+}: {
+  snooze: MailSnoozeState;
+}) => (
+  <Pill aria-hidden size="xs" tone={rowStatusTones[snooze.status] ?? "neutral"}>
+    <span className="inline-flex items-center gap-1 tabular-nums">
+      <Icon aria-hidden icon={AlarmClockIcon} size={12} />
+      {getMailSnoozeRowLabel(snooze)}
+    </span>
+  </Pill>
 );
 
 type MailSnoozeDialogProps = {
@@ -68,8 +68,10 @@ type MailSnoozeDialogProps = {
   onOpenChange: (open: boolean) => void;
   onApply: (
     command: MailSnoozeCommand,
-    expectedVersion: number | null
+    expectedVersion: number | null,
+    attempt: MailSnoozeAttempt
   ) => Promise<void>;
+  onApplied?: (command: MailSnoozeCommand) => void;
   initial?: MailSnoozeState;
   reschedule?: boolean;
   shared?: boolean;
@@ -78,6 +80,7 @@ type MailSnoozeDialogProps = {
 
 const MailSnoozeEditor = ({
   onApply,
+  onApplied,
   onOpenChange,
   initial,
   reschedule = false,
@@ -90,6 +93,10 @@ const MailSnoozeEditor = ({
   onPendingChange: (pending: boolean) => void;
 }) => {
   const expectedVersion = useRef(initial?.version ?? null);
+  const attempt = useRef<MailSnoozeAttempt>(new Map());
+  const [retryCommand, setRetryCommand] = useState<MailSnoozeCommand | null>(
+    null
+  );
   const [timeZone, setTimeZone] = useState(
     initial?.timeZone ?? Intl.DateTimeFormat().resolvedOptions().timeZone
   );
@@ -103,9 +110,38 @@ const MailSnoozeEditor = ({
     })
   );
   const [validationError, setValidationError] = useState<string | null>(null);
-  const submitLabel = reschedule ? "Save return time" : "Snooze";
+  const inputsDisabled = pending || retryCommand !== null;
+  const defaultSubmitLabel = reschedule ? "Save return time" : "Snooze";
+  const submitLabel = retryCommand === null ? defaultSubmitLabel : "Try again";
+  const runAttempt = async (command: MailSnoozeCommand) => {
+    onPendingChange(true);
+    try {
+      if (retryCommand === null) {
+        await onApply(command, expectedVersion.current, attempt.current);
+      } else {
+        await resumeMailSnoozeAttempt(attempt.current);
+      }
+      toast.success(
+        reschedule ? "Return time updated." : "Conversation snoozed."
+      );
+      onOpenChange(false);
+      onApplied?.(command);
+    } catch (error) {
+      setRetryCommand(attempt.current.size > 0 ? command : null);
+      toastError(error, {
+        boundary: "mail-snooze",
+        fallback: "Could not update the return time. Try again.",
+      });
+    } finally {
+      onPendingChange(false);
+    }
+  };
   const submit = async (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (retryCommand !== null) {
+      await runAttempt(retryCommand);
+      return;
+    }
     let returnAt: string;
     try {
       returnAt = calendarWallTimeToInstant({
@@ -136,21 +172,7 @@ const MailSnoozeEditor = ({
       return;
     }
     setValidationError(null);
-    onPendingChange(true);
-    try {
-      await onApply(parsed.data, expectedVersion.current);
-      toast.success(
-        reschedule ? "Return time updated." : "Conversation snoozed."
-      );
-      onOpenChange(false);
-    } catch (error) {
-      toastError(error, {
-        boundary: "mail-snooze",
-        fallback: "Could not update the return time. Try again.",
-      });
-    } finally {
-      onPendingChange(false);
-    }
+    await runAttempt(parsed.data);
   };
   return (
     <form
@@ -191,7 +213,7 @@ const MailSnoozeEditor = ({
                 aria-pressed={
                   fields.date === local.date && fields.time === local.time
                 }
-                disabled={pending}
+                disabled={inputsDisabled}
                 key={preset.days}
                 onClick={() => {
                   setLocal(fields);
@@ -209,7 +231,7 @@ const MailSnoozeEditor = ({
           <div className="min-w-0 flex-1">
             <DatePicker
               aria-label="Return date"
-              disabled={pending}
+              disabled={inputsDisabled}
               onValueChange={(date) => {
                 setLocal((value) => ({ ...value, date }));
               }}
@@ -220,7 +242,7 @@ const MailSnoozeEditor = ({
           <div className="w-28 shrink-0">
             <TimePicker
               aria-label="Return time"
-              disabled={pending}
+              disabled={inputsDisabled}
               onValueChange={(time) => {
                 setLocal((value) => ({ ...value, time }));
               }}
@@ -232,16 +254,19 @@ const MailSnoozeEditor = ({
         <div className="justify-self-start">
           <CalendarTimeZonePicker
             aria-label="Return time zone"
-            disabled={pending}
+            disabled={inputsDisabled}
             onValueChange={setTimeZone}
             size="sm"
             value={timeZone}
             variant="ghost"
           />
         </div>
-        <Text as="p" size="caption" tone="muted">
-          Time zone: {timeZone}
-        </Text>
+        {retryCommand === null ? null : (
+          <Text as="p" role="alert" size="caption" tone="muted">
+            Some changes are not confirmed. Try again to finish with the same
+            return time, or cancel and start over.
+          </Text>
+        )}
         {validationError ? (
           <Text as="p" role="alert" size="caption" tone="destructive">
             {validationError}

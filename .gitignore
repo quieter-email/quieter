@@ -63,3 +63,4 @@ packages/database/.migration-forward-*/
 apps/desktop/release/
 
 .env.desktop.local
+.env.mail-event-relay.local

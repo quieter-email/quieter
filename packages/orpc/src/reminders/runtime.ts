@@ -15,18 +15,22 @@ import {
 import { serverEnv } from "@quieter/env/server";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
 import { reportError } from "@quieter/observability";
-import { and, eq, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, lte, sql } from "drizzle-orm";
 import { convert } from "html-to-text";
 
 import { assertCanUseAi } from "../ai-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
 import { queriesMailOperations } from "../mail/queries";
+import { mailboxAutomationFilter } from "../mailbox/automation-scope";
+import type { MailboxAutomationScope } from "../mailbox/automation-scope";
+import { SENT_REMINDER_RETRY_MS } from "../mailbox/automation-timing";
 import { assertReminderScopeAccess } from "./clock";
 import { claimReminderJob, finishReminderJob } from "./persistence";
 import { materializeSentReminder } from "./sent";
 import { processReminderSuggestions } from "./suggestions";
 
+export { reportPendingReminderSuggestionUsage } from "./suggestions";
 export { advanceReminderScope, reconcileReminderSchedules } from "./clock";
 
 const applyReminderEvaluation = async (input: {
@@ -96,13 +100,16 @@ const applyReminderEvaluation = async (input: {
   return true;
 };
 
-const reportPendingReminderUsage = async () => {
+export const reportPendingReminderUsage = async (
+  input: MailboxAutomationScope = {}
+) => {
   const rows = await db
     .select({ job: mailReminderJob, reminder: mailReminder })
     .from(mailReminderJob)
     .innerJoin(mailReminder, eq(mailReminder.id, mailReminderJob.reminderId))
     .where(
       and(
+        mailboxAutomationFilter(mailReminder.mailboxId, input),
         isNotNull(mailReminderJob.usage),
         isNull(mailReminderJob.usageReportedAt)
       )
@@ -139,13 +146,18 @@ const reportPendingReminderUsage = async () => {
 };
 
 export const recoverSentReminderIntents = async (
-  input: { limit?: number } = {}
+  input: MailboxAutomationScope & { limit?: number } = {}
 ) => {
+  const cutoff = new Date(Date.now() - SENT_REMINDER_RETRY_MS);
   const operations = await db
     .select()
     .from(gmailComposeOperation)
     .where(
       and(
+        mailboxAutomationFilter(gmailComposeOperation.mailboxId, input),
+        input.mailboxId === undefined
+          ? undefined
+          : lte(gmailComposeOperation.updatedAt, cutoff),
         eq(gmailComposeOperation.kind, "send"),
         eq(gmailComposeOperation.status, "accepted"),
         isNotNull(gmailComposeOperation.followUpReminder)
@@ -171,10 +183,22 @@ export const recoverSentReminderIntents = async (
         );
       continue;
     }
-    await db
+    const attemptedAt = new Date();
+    const [claimed] = await db
       .update(gmailComposeOperation)
-      .set({ updatedAt: new Date() })
-      .where(eq(gmailComposeOperation.id, operation.id));
+      .set({ updatedAt: attemptedAt })
+      .where(
+        and(
+          eq(gmailComposeOperation.id, operation.id),
+          eq(gmailComposeOperation.updatedAt, operation.updatedAt),
+          eq(gmailComposeOperation.status, "accepted"),
+          isNotNull(gmailComposeOperation.followUpReminder)
+        )
+      )
+      .returning({ id: gmailComposeOperation.id });
+    if (claimed === undefined) {
+      continue;
+    }
     try {
       await materializeSentReminder({
         ...operation.followUpReminder,
@@ -185,7 +209,12 @@ export const recoverSentReminderIntents = async (
       await db
         .update(gmailComposeOperation)
         .set({ followUpReminder: null })
-        .where(eq(gmailComposeOperation.id, operation.id));
+        .where(
+          and(
+            eq(gmailComposeOperation.id, operation.id),
+            eq(gmailComposeOperation.updatedAt, attemptedAt)
+          )
+        );
     } catch {
       reportError(new Error("Sent reminder recovery failed."), {
         operation: "reminder-send-recovery",
@@ -196,13 +225,13 @@ export const recoverSentReminderIntents = async (
 };
 
 export const processReminderJobs = async (
-  input: { limit?: number; allowLocal?: boolean } = {}
+  input: MailboxAutomationScope & { limit?: number; allowLocal?: boolean } = {}
 ) => {
   await recoverSentReminderIntents(input);
-  await reportPendingReminderUsage();
+  await reportPendingReminderUsage(input);
   let count = 0;
   for (; count < Math.min(input.limit ?? 4, 20); count += 1) {
-    const claimed = await claimReminderJob({ kind: "evaluate" });
+    const claimed = await claimReminderJob({ kind: "evaluate", scope: input });
     if (!claimed) {
       break;
     }
@@ -480,7 +509,7 @@ export const processReminderJobs = async (
       }
     }
   }
-  await reportPendingReminderUsage();
+  await reportPendingReminderUsage(input);
   const suggestions = await processReminderSuggestions(input);
   return { count, suggestions };
 };

@@ -69,6 +69,7 @@ export const billingPolarSubscriptionSchema = z.object({
     "canceled",
     "unpaid",
     "paused",
+    "trial_ended",
   ]),
 }) satisfies z.ZodType<BillingPolarSubscription>;
 
@@ -127,6 +128,9 @@ export const normalizeSubscriptionStatus = (
       return "pending";
     }
     case "incomplete_expired": {
+      return "expired";
+    }
+    case "trial_ended": {
       return "expired";
     }
     case "unpaid": {

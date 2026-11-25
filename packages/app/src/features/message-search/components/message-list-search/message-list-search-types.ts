@@ -1,4 +1,7 @@
+import type { RefObject } from "react";
+
 export type MessageListSearchProps = {
+  focusSearchRef?: RefObject<(() => void) | null>;
   isRefreshing: boolean;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";

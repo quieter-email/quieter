@@ -10,6 +10,7 @@ import {
   mailSnoozeOperation,
   managedMailMessage,
 } from "@quieter/database/schema";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import type {
   MailSnoozeApplyInput,
   MailSnoozeResult,
@@ -42,8 +43,11 @@ import {
   loadMailPlacementSnapshot,
 } from "../mail/placement-admission";
 import { resolvePlacementMessageIds } from "../mail/placement-model";
-import { MAIL_SNOOZE_LIVE_STATUSES, serializeMailSnoozeState } from "./state";
+import type { PlacementMessage } from "../mail/placement-model";
+import { serializeMailSnoozeState } from "./state";
 import { requestMailSnoozeWake } from "./wake";
+
+const MAX_SNOOZE_DISPATCH_ATTEMPTS = 8;
 
 const finishSnoozeFailure = async (input: {
   id: string;
@@ -52,6 +56,7 @@ const finishSnoozeFailure = async (input: {
   leaseToken: string | null;
   code: string;
   message: string;
+  nextWakeAt?: Date | null;
   status: "failed" | "suspended" | "superseded" | "uncertain";
 }) =>
   await db.transaction(async (tx) => {
@@ -67,8 +72,7 @@ const finishSnoozeFailure = async (input: {
         leaseToken: null,
         leaseUntil: null,
         message: input.message,
-        nextWakeAt:
-          input.status === "uncertain" ? new Date(Date.now() + 60_000) : null,
+        nextWakeAt: input.nextWakeAt ?? null,
         status: input.status,
         updatedAt: new Date(),
         version: input.version + 1,
@@ -117,6 +121,7 @@ const inspectSnoozeSource = async (input: {
   const source = await loadMailPlacementSnapshot({
     anchorCount: 0,
     budget: { remaining: 1000 },
+    chargeRateLimit: false,
     context: input.context,
     mailboxId: input.row.mailboxId,
     provider: input.provider,
@@ -293,7 +298,15 @@ export const applyMailSnooze = async ({
   }
   const prepared = new Map<
     string,
-    { hiddenMessageIds: string[]; knownIncomingMessageIds: string[] }
+    {
+      associations: { id: string; threadId: string }[];
+      hiddenMessageIds: string[];
+      knownIncomingMessageIds: string[];
+      snapshot: {
+        incomingMessageIds: string[];
+        messages: PlacementMessage[];
+      };
+    }
   >();
   const rejected = new Map<string, { code: string; message: string }>();
   const sourceBudget = { remaining: 1000 };
@@ -367,8 +380,10 @@ export const applyMailSnooze = async ({
           });
         }
         prepared.set(target.threadId, {
+          associations: hidden.map((id) => ({ id, threadId: target.threadId })),
           hiddenMessageIds: hidden,
           knownIncomingMessageIds: snapshot.incomingMessageIds,
+          snapshot,
         });
       } catch (error) {
         rejected.set(target.threadId, describeSnoozeFailure(error));
@@ -445,7 +460,7 @@ export const applyMailSnooze = async ({
           leaseUntil: null,
           mailboxId: input.mailboxId,
           message: null,
-          nextWakeAt: now,
+          nextWakeAt: new Date(now.getTime() + 60_000),
           returnAt: new Date(input.command.returnAt),
           returnOperationId: null,
           returnRequestId: null,
@@ -467,10 +482,7 @@ export const applyMailSnooze = async ({
           throw new ORPCError("INTERNAL_SERVER_ERROR");
         }
       } else {
-        if (
-          current === undefined ||
-          !MAIL_SNOOZE_LIVE_STATUSES.some((status) => status === current.status)
-        ) {
+        if (current === undefined || !isMailSnoozeLiveStatus(current.status)) {
           rejected.set(target.threadId, {
             code: "CONFLICT",
             message:
@@ -478,22 +490,38 @@ export const applyMailSnooze = async ({
           });
           continue;
         }
-        if (input.command.kind === "reschedule") {
-          const [latest] = await tx
-            .select()
-            .from(mailPlacementOperation)
-            .where(
-              and(
-                eq(mailPlacementOperation.mailboxId, input.mailboxId),
-                eq(mailPlacementOperation.threadId, target.threadId)
-              )
+        const [latest] = await tx
+          .select()
+          .from(mailPlacementOperation)
+          .where(
+            and(
+              eq(mailPlacementOperation.mailboxId, input.mailboxId),
+              eq(mailPlacementOperation.threadId, target.threadId)
             )
-            .orderBy(desc(mailPlacementOperation.sequence))
-            .limit(1);
+          )
+          .orderBy(desc(mailPlacementOperation.sequence))
+          .limit(1);
+        const hasActiveLease =
+          current.leaseToken !== null &&
+          current.leaseUntil !== null &&
+          current.leaseUntil.getTime() > now.getTime();
+        const latestIsOwned =
+          latest !== undefined &&
+          (latest.id === current.hideOperationId ||
+            latest.id === current.returnOperationId);
+        if (input.command.kind === "reschedule") {
+          const canReschedulePlacement =
+            current.hideOperationId !== null &&
+            ((latest?.id === current.hideOperationId &&
+              latest.status === "applied") ||
+              (current.status === "suspended" &&
+                current.returnOperationId !== null &&
+                latest?.id === current.returnOperationId &&
+                latest.status === "failed"));
           if (
             !["active", "suspended"].includes(current.status) ||
-            latest?.id !== current.hideOperationId ||
-            latest?.status !== "applied" ||
+            hasActiveLease ||
+            !canReschedulePlacement ||
             current.hiddenMessageIds.length === 0
           ) {
             rejected.set(target.threadId, {
@@ -504,10 +532,21 @@ export const applyMailSnooze = async ({
             continue;
           }
         }
+        const isExhaustedUncertain =
+          current.status === "uncertain" &&
+          current.nextWakeAt === null &&
+          !hasActiveLease;
         if (
-          (input.command.kind === "return-now" &&
-            current.hiddenMessageIds.length === 0) ||
-          (input.command.kind === "cancel" && current.status === "returning")
+          input.command.kind === "return-now" &&
+          (current.hiddenMessageIds.length === 0 ||
+            current.status === "preparing" ||
+            current.status === "returning" ||
+            (current.status === "uncertain" && !isExhaustedUncertain) ||
+            hasActiveLease ||
+            (latestIsOwned &&
+              (latest.status === "pending" ||
+                latest.status === "submitting" ||
+                (latest.status === "uncertain" && !isExhaustedUncertain))))
         ) {
           rejected.set(target.threadId, {
             code: "CONFLICT",
@@ -516,13 +555,34 @@ export const applyMailSnooze = async ({
           });
           continue;
         }
+        if (
+          input.command.kind === "cancel" &&
+          (current.status === "returning" ||
+            (current.status === "preparing" &&
+              (hasActiveLease ||
+                (latest !== undefined &&
+                  latest.id === current.hideOperationId &&
+                  ["submitting", "uncertain"].includes(latest.status)))))
+        ) {
+          rejected.set(target.threadId, {
+            code: "CONFLICT",
+            message:
+              "This snooze is still being confirmed. Refresh before trying again.",
+          });
+          continue;
+        }
         let values: Partial<typeof mailSnooze.$inferInsert>;
         if (input.command.kind === "reschedule") {
           values = {
             actorUserId: context.userId,
+            attempts: 0,
             nextWakeAt: now,
             returnAt: new Date(input.command.returnAt),
-            returnOperationId: null,
+            returnOperationId:
+              latest?.id === current.returnOperationId &&
+              latest.status === "failed"
+                ? current.returnOperationId
+                : null,
             returnRequestId: null,
             status: "active",
             timeZone: input.command.timeZone,
@@ -532,7 +592,8 @@ export const applyMailSnooze = async ({
         } else {
           values = {
             actorUserId: context.userId,
-            nextWakeAt: now,
+            attempts: 0,
+            nextWakeAt: new Date(now.getTime() + 60_000),
             returnRequestId: randomUUID(),
             status: "returning",
           };
@@ -668,7 +729,9 @@ export const applyMailSnooze = async ({
             "A returning Snooze requires its reserved request identity."
           );
         }
+        const preparedTarget = hide ? prepared.get(target.threadId) : undefined;
         const result = await applyMailPlacement({
+          chargeRateLimit: false,
           context,
           input: {
             command: {
@@ -684,6 +747,13 @@ export const applyMailSnooze = async ({
               },
             ],
           },
+          prefetched:
+            preparedTarget === undefined
+              ? undefined
+              : {
+                  associations: preparedTarget.associations,
+                  snapshot: preparedTarget.snapshot,
+                },
           snooze: hide
             ? {
                 id: schedule.id,
@@ -741,8 +811,8 @@ export const applyMailSnooze = async ({
             code: placementResult?.code ?? null,
             message: placementResult?.message ?? null,
             resultingVersion:
-              journalStatus === "applied" || journalStatus === "uncertain"
-                ? acceptedVersion + 1
+              current?.version === acceptedVersion + 1
+                ? current.version
                 : acceptedVersion,
             status: journalStatus,
             updatedAt: new Date(),
@@ -924,6 +994,7 @@ const confirmObservedPlacement = async (input: {
     await tx
       .update(mailSnooze)
       .set({
+        ...(input.phase === "hide" ? { attempts: 0 } : {}),
         code: null,
         leaseToken: null,
         leaseUntil: null,
@@ -975,7 +1046,9 @@ export const dispatchMailSnooze = async (
     );
   if (
     row === undefined ||
-    !MAIL_SNOOZE_LIVE_STATUSES.some((status) => status === row?.status)
+    !isMailSnoozeLiveStatus(row.status) ||
+    row.status === "suspended" ||
+    row.status === "failed"
   ) {
     return { nextWakeAt: null };
   }
@@ -1064,10 +1137,7 @@ export const dispatchMailSnooze = async (
         )
       )
       .for("update");
-    if (
-      current === undefined ||
-      !MAIL_SNOOZE_LIVE_STATUSES.some((status) => status === current.status)
-    ) {
+    if (current === undefined || !isMailSnoozeLiveStatus(current.status)) {
       return { kind: "ended" as const };
     }
     if (
@@ -1148,7 +1218,8 @@ export const dispatchMailSnooze = async (
       )
       .limit(1);
     if (dispatchRow.status === "preparing" && operation === undefined) {
-      await applyMailPlacement({
+      const placed = await applyMailPlacement({
+        chargeRateLimit: false,
         context,
         input: {
           command: { kind: "set-placement", placement: "done" },
@@ -1168,6 +1239,24 @@ export const dispatchMailSnooze = async (
           version: dispatchRow.version,
         },
       });
+      const [placedTarget] = placed.targets;
+      if (
+        placedTarget?.status === "failed" &&
+        dispatchRow.attempts >= MAX_SNOOZE_DISPATCH_ATTEMPTS
+      ) {
+        await finishSnoozeFailure({
+          code: placedTarget.code ?? "hide_failed",
+          id: dispatchRow.id,
+          leaseToken: claim.token,
+          mailboxId: dispatchRow.mailboxId,
+          message:
+            placedTarget.message ??
+            "This conversation could not be snoozed. Refresh and try again.",
+          nextWakeAt: null,
+          status: "failed",
+          version: dispatchRow.version,
+        });
+      }
     } else {
       let manualRecovery = false;
       if (
@@ -1217,15 +1306,55 @@ export const dispatchMailSnooze = async (
         (dispatchRow.status === "preparing" ||
           dispatchRow.status === "uncertain") &&
         !dispatchRow.returnRequestId &&
-        operation !== undefined &&
-        source.done
+        operation !== undefined
       ) {
-        await confirmObservedPlacement({
-          leaseToken: claim.token,
-          operation,
-          phase: "hide",
-          row: dispatchRow,
-        });
+        if (source.done) {
+          await confirmObservedPlacement({
+            leaseToken: claim.token,
+            operation,
+            phase: "hide",
+            row: dispatchRow,
+          });
+        } else if (
+          operation.status === "pending" ||
+          operation.status === "failed"
+        ) {
+          await finishSnoozeFailure({
+            code: "hide_unconfirmed",
+            id: dispatchRow.id,
+            leaseToken: claim.token,
+            mailboxId: dispatchRow.mailboxId,
+            message:
+              "This conversation could not be snoozed. Refresh and try again.",
+            nextWakeAt: null,
+            status: "failed",
+            version: dispatchRow.version,
+          });
+        } else {
+          const nextWakeAt =
+            dispatchRow.attempts < MAX_SNOOZE_DISPATCH_ATTEMPTS
+              ? new Date(
+                  Date.now() +
+                    Math.min(
+                      300_000,
+                      15_000 * 2 ** Math.min(dispatchRow.attempts - 1, 5)
+                    )
+                )
+              : null;
+          await finishSnoozeFailure({
+            code: "hide_unconfirmed",
+            id: dispatchRow.id,
+            leaseToken: claim.token,
+            mailboxId: dispatchRow.mailboxId,
+            message:
+              nextWakeAt === null
+                ? "Could not confirm this snooze automatically. Refresh, return to Inbox, or cancel the return."
+                : "This snooze is still being confirmed. Refresh before trying again.",
+            nextWakeAt,
+            status: "uncertain",
+            version: dispatchRow.version,
+          });
+        }
       } else if (
         (dispatchRow.status === "returning" ||
           dispatchRow.status === "uncertain") &&
@@ -1239,18 +1368,43 @@ export const dispatchMailSnooze = async (
             phase: "return",
             row: dispatchRow,
           });
-        } else {
+        } else if (
+          operation.status === "pending" ||
+          operation.status === "failed"
+        ) {
           await finishSnoozeFailure({
             code: "return_unconfirmed",
             id: dispatchRow.id,
             leaseToken: claim.token,
             mailboxId: dispatchRow.mailboxId,
             message:
-              "The return is still being confirmed. Refresh or choose Return to Inbox.",
-            status:
-              operation.status === "pending" || operation.status === "failed"
-                ? "failed"
-                : "uncertain",
+              "The return could not be confirmed. Refresh or choose Return to Inbox.",
+            nextWakeAt: null,
+            status: "failed",
+            version: dispatchRow.version,
+          });
+        } else {
+          const nextWakeAt =
+            dispatchRow.attempts < MAX_SNOOZE_DISPATCH_ATTEMPTS
+              ? new Date(
+                  Date.now() +
+                    Math.min(
+                      300_000,
+                      15_000 * 2 ** Math.min(dispatchRow.attempts - 1, 5)
+                    )
+                )
+              : null;
+          await finishSnoozeFailure({
+            code: "return_unconfirmed",
+            id: dispatchRow.id,
+            leaseToken: claim.token,
+            mailboxId: dispatchRow.mailboxId,
+            message:
+              nextWakeAt === null
+                ? "Could not confirm this return automatically. Refresh, return to Inbox, or cancel the return."
+                : "The return is still being confirmed. Refresh or choose Return to Inbox.",
+            nextWakeAt,
+            status: "uncertain",
             version: dispatchRow.version,
           });
         }
@@ -1290,17 +1444,20 @@ export const dispatchMailSnooze = async (
           ) {
             return null;
           }
-          if (
-            !current.hideOperationId ||
-            latest?.id !== current.hideOperationId ||
-            latest.status !== "applied"
-          ) {
+          const validPredecessor =
+            current.hideOperationId !== null &&
+            ((current.returnOperationId === null &&
+              latest?.id === current.hideOperationId &&
+              latest.status === "applied") ||
+              (current.returnOperationId !== null &&
+                latest?.id === current.returnOperationId &&
+                latest.status === "failed"));
+          if (!validPredecessor) {
             return null;
           }
           const [updated] = await tx
             .update(mailSnooze)
             .set({
-              returnOperationId: null,
               returnRequestId: randomUUID(),
               status: "returning",
               updatedAt: new Date(),
@@ -1313,6 +1470,7 @@ export const dispatchMailSnooze = async (
         if (returning && returning.returnRequestId) {
           dispatchRow = returning;
           await applyMailPlacement({
+            chargeRateLimit: false,
             context,
             input: {
               command: { kind: "set-placement", placement: "inbox" },
@@ -1324,6 +1482,16 @@ export const dispatchMailSnooze = async (
                   threadId: returning.threadId,
                 },
               ],
+            },
+            prefetched: {
+              associations: source.messages.map((message) => ({
+                id: message.id,
+                threadId: message.threadId,
+              })),
+              snapshot: {
+                incomingMessageIds: source.incomingMessageIds,
+                messages: source.messages,
+              },
             },
             snooze: {
               id: returning.id,
@@ -1350,6 +1518,7 @@ export const dispatchMailSnooze = async (
         dispatchRow.returnRequestId
       ) {
         await applyMailPlacement({
+          chargeRateLimit: false,
           context,
           input: {
             command: { kind: "set-placement", placement: "inbox" },
@@ -1361,6 +1530,16 @@ export const dispatchMailSnooze = async (
                 threadId: dispatchRow.threadId,
               },
             ],
+          },
+          prefetched: {
+            associations: source.messages.map((message) => ({
+              id: message.id,
+              threadId: message.threadId,
+            })),
+            snapshot: {
+              incomingMessageIds: source.incomingMessageIds,
+              messages: source.messages,
+            },
           },
           snooze: {
             id: dispatchRow.id,
@@ -1410,10 +1589,7 @@ export const dispatchMailSnooze = async (
         .set({
           code: current.code,
           message: current.message,
-          resultingVersion:
-            journalStatus === "applied" || journalStatus === "uncertain"
-              ? current.version
-              : dispatchRow.version,
+          resultingVersion: current.version,
           status: journalStatus,
           updatedAt: new Date(),
         })
@@ -1451,7 +1627,7 @@ export const dispatchMailSnooze = async (
         "UNAUTHORIZED",
       ].some((code) => code === error.code)
     ) {
-      await finishSnoozeFailure({
+      const updated = await finishSnoozeFailure({
         ...failure,
         id: dispatchRow.id,
         leaseToken: claim.token,
@@ -1459,6 +1635,24 @@ export const dispatchMailSnooze = async (
         status: "suspended",
         version: dispatchRow.version,
       });
+      if (updated) {
+        await db
+          .update(mailSnoozeOperation)
+          .set({
+            code: failure.code,
+            message: failure.message,
+            resultingVersion: dispatchRow.version + 1,
+            status: "failed",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(mailSnoozeOperation.snoozeId, dispatchRow.id),
+              eq(mailSnoozeOperation.resultingVersion, dispatchRow.version),
+              eq(mailSnoozeOperation.status, "pending")
+            )
+          );
+      }
       await publishMailUpdate({
         mailboxId: scope.mailboxId,
         type: "mailbox.changed",
@@ -1474,6 +1668,91 @@ export const dispatchMailSnooze = async (
         );
       return { nextWakeAt: current?.nextWakeAt?.getTime() ?? null };
     }
+    if (dispatchRow.attempts >= MAX_SNOOZE_DISPATCH_ATTEMPTS) {
+      const updated = await finishSnoozeFailure({
+        ...failure,
+        id: dispatchRow.id,
+        leaseToken: claim.token,
+        mailboxId: dispatchRow.mailboxId,
+        nextWakeAt: null,
+        status: "failed",
+        version: dispatchRow.version,
+      });
+      if (updated) {
+        await db
+          .update(mailSnoozeOperation)
+          .set({
+            code: failure.code,
+            message: failure.message,
+            resultingVersion: dispatchRow.version + 1,
+            status: "failed",
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(mailSnoozeOperation.snoozeId, dispatchRow.id),
+              eq(mailSnoozeOperation.resultingVersion, dispatchRow.version),
+              eq(mailSnoozeOperation.status, "pending")
+            )
+          );
+      }
+      await publishMailUpdate({
+        mailboxId: scope.mailboxId,
+        type: "mailbox.changed",
+      });
+      const [current] = await db
+        .select({ nextWakeAt: mailSnooze.nextWakeAt })
+        .from(mailSnooze)
+        .where(
+          and(
+            eq(mailSnooze.id, dispatchRow.id),
+            eq(mailSnooze.mailboxId, dispatchRow.mailboxId)
+          )
+        );
+      return { nextWakeAt: current?.nextWakeAt?.getTime() ?? null };
+    }
+    let nextHideRequestId: string | undefined;
+    let nextReturnRequestId: string | undefined;
+    if (
+      dispatchRow.status === "returning" &&
+      dispatchRow.returnRequestId !== null
+    ) {
+      const [failedOperation] = await db
+        .select({ id: mailPlacementOperation.id })
+        .from(mailPlacementOperation)
+        .where(
+          and(
+            eq(mailPlacementOperation.mailboxId, dispatchRow.mailboxId),
+            eq(mailPlacementOperation.threadId, dispatchRow.threadId),
+            eq(mailPlacementOperation.actorUserId, context.userId),
+            eq(mailPlacementOperation.requestId, dispatchRow.returnRequestId),
+            eq(mailPlacementOperation.placement, "inbox"),
+            eq(mailPlacementOperation.status, "failed")
+          )
+        )
+        .limit(1);
+      if (failedOperation !== undefined) {
+        nextReturnRequestId = randomUUID();
+      }
+    } else if (dispatchRow.status === "preparing") {
+      const [failedOperation] = await db
+        .select({ id: mailPlacementOperation.id })
+        .from(mailPlacementOperation)
+        .where(
+          and(
+            eq(mailPlacementOperation.mailboxId, dispatchRow.mailboxId),
+            eq(mailPlacementOperation.threadId, dispatchRow.threadId),
+            eq(mailPlacementOperation.actorUserId, context.userId),
+            eq(mailPlacementOperation.requestId, dispatchRow.hideRequestId),
+            eq(mailPlacementOperation.placement, "done"),
+            eq(mailPlacementOperation.status, "failed")
+          )
+        )
+        .limit(1);
+      if (failedOperation !== undefined) {
+        nextHideRequestId = randomUUID();
+      }
+    }
     const delay = Math.min(
       300_000,
       5000 * 2 ** Math.min(dispatchRow.attempts, 6)
@@ -1483,10 +1762,16 @@ export const dispatchMailSnooze = async (
       .update(mailSnooze)
       .set({
         code: failure.code,
+        ...(nextHideRequestId === undefined
+          ? {}
+          : { hideRequestId: nextHideRequestId }),
         leaseToken: null,
         leaseUntil: null,
         message: failure.message,
         nextWakeAt,
+        ...(nextReturnRequestId === undefined
+          ? {}
+          : { returnRequestId: nextReturnRequestId }),
         updatedAt: new Date(),
       })
       .where(
@@ -1583,7 +1868,7 @@ export const handleSnoozeInbound = async (input: {
       .for("update");
     if (
       current === undefined ||
-      !MAIL_SNOOZE_LIVE_STATUSES.some((status) => status === current.status) ||
+      !isMailSnoozeLiveStatus(current.status) ||
       current.knownIncomingMessageIds.includes(input.messageId)
     ) {
       return false;

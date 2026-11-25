@@ -15,8 +15,8 @@ const serverEntry = {
     if (requestedBuild !== null && requestedBuild !== __QUIETER_BUILD_ID__) {
       return new Response("Reload the site to continue.", {
         headers: {
-          "cache-control": "no-store",
           [DEPLOYMENT_RELOAD_HEADER]: "1",
+          "cache-control": "no-store",
         },
         status: 409,
       });

@@ -24,6 +24,8 @@ type ThreadMessageExpectation = Pick<
   "id" | "threadMessageCount"
 > & { includeDrafts: boolean };
 
+type ThreadQueryData = ThreadMessagesResult & { prefetched?: true };
+
 export const shouldRefreshThreadContent = (
   data: ThreadMessagesResult | undefined,
   expectedMessage?: ThreadMessageExpectation
@@ -60,9 +62,10 @@ export const getThreadWithDetailsOptions = (
   mailboxId: string,
   threadId: string,
   enabled = true,
-  expectedMessage?: ThreadMessageExpectation
+  expectedMessage?: ThreadMessageExpectation,
+  { prefetch = false }: { prefetch?: boolean } = {}
 ) =>
-  queryOptions<ThreadMessagesResult>({
+  queryOptions<ThreadQueryData>({
     enabled,
     gcTime: 1000 * 60 * 30,
     persister: queryPersister.persisterFn,
@@ -75,6 +78,13 @@ export const getThreadWithDetailsOptions = (
         return getDemoThread(mailboxId, threadId);
       }
 
+      if (prefetch) {
+        const thread = await rpc.mail.getThread(
+          { mailboxId, prefetch: true, threadId },
+          { signal }
+        );
+        return { ...thread, prefetched: true };
+      }
       return await rpc.mail.getThread({ mailboxId, threadId }, { signal });
     },
     queryKey: getThreadQueryKey(mailboxId, threadId),

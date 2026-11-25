@@ -110,7 +110,7 @@ Marketing uses shared tokens and controls. Its dedicated layout, illustrations, 
 
 During design-system maintenance, change `features/home` only when the user explicitly includes the landing page. Outside design-system maintenance, change `features/home` only when the request explicitly includes the landing page or an authorized shared change actually affects it. Preserve intentional full-height marketing sections. A product whitespace bug is not permission to collapse the landing page's section heights.
 
-Feature groups and pricing need clear hierarchy with restrained type. Use reasonable content padding and distinct blocks rather than a stack of tiny-inset rows squeezed into a large table-like box. Plans should be comparable without oversized bold names or prices. Use live product facts rather than stale mock prices.
+Feature groups and pricing need clear hierarchy with restrained type. Each feature section opens with its heading and a muted lead line stacked together, and its points use 20px titles with 16px descriptions on desktop; tiny one-line captions spread across a wide grid read as a spec sheet. Use reasonable content padding and distinct blocks rather than a stack of tiny-inset rows squeezed into a large table-like box. Plans should be comparable without oversized bold names or prices. Use live product facts rather than stale mock prices.
 
 The waitlist field is a deliberate visual exception. Over atmospheric artwork, use the approved darker field treatment so it does not dominate the hero. Keep the actual form semantics, email validation, keyboard submit, progress, success, and failure behavior. Implement the exception at its existing marketing owner, not by darkening all product inputs.
 

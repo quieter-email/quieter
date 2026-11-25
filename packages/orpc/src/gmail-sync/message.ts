@@ -8,13 +8,18 @@ import {
   isAiCreditAdmissionBusy,
   shouldReportAiTaskFailure,
 } from "@quieter/ai/errors";
+import { AiProviderDeferredError } from "@quieter/ai/provider-admission";
 import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-errors";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
-import { gmailAutoLabelEvent } from "@quieter/database/schema";
+import {
+  gmailAutoLabelEvent,
+  mailboxVerificationCode,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import {
   getMessageWithDetails,
+  GmailBackgroundQuotaDeferredError,
   isGmailServiceError,
   isGmailRateLimitedError,
   mutateGmailMessage,
@@ -55,6 +60,9 @@ import {
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
 const AUTO_LABEL_RETRY_MAX_MS = 1000 * 60 * 60 * 24;
 const MAILBOX_RATE_LIMIT_RETRY_MS = 60_000;
+const RECOVERY_ACTION_MAX_AGE_MS = 24 * 60 * 60_000;
+const RECOVERY_LABEL_MAX_AGE_MS = 48 * 60 * 60_000;
+const RECOVERY_CODE_MAX_AGE_MS = 2 * 60 * 60_000;
 const AUTO_LABEL_EXCLUDED_LABELS = new Set<string>([
   MAILBOX_LABELS.drafts,
   MAILBOX_LABELS.sent,
@@ -66,7 +74,7 @@ export type AutoLabelContext = {
   availableLabelIds: Set<string>;
   historyLabels: Pick<MailAutoLabelCandidate, "id" | "name">[];
   labels: MailAutoLabelCandidate[];
-  memoryCandidates: AiAgentMemoryCandidates | null;
+  getMemoryCandidates: () => Promise<AiAgentMemoryCandidates | null>;
   model: string;
 };
 type MailAutomationBudgetStatus = Awaited<
@@ -194,6 +202,7 @@ const isAutoLabelCandidate = (labelIds: string[] | undefined) =>
 
 const processAutoLabelMessage = async ({
   accessToken,
+  assertWorkActive,
   attempt,
   getAutoLabelContext,
   getBudgetStatus,
@@ -203,6 +212,7 @@ const processAutoLabelMessage = async ({
   userId,
 }: {
   accessToken: string;
+  assertWorkActive?: () => Promise<void>;
   attempt: AutoLabelAttempt;
   getAutoLabelContext: () => Promise<AutoLabelContext>;
   getBudgetStatus: () => Promise<MailAutomationBudgetStatus>;
@@ -269,7 +279,10 @@ const processAutoLabelMessage = async ({
         recordStage("budget");
         budgetStatus = await getBudgetStatus();
         recordStage(null);
-        if (!budgetStatus.allowed) {
+        if (
+          !budgetStatus.allowed &&
+          budgetStatus.reason !== "plan_ineligible"
+        ) {
           attempt.path = "scheduled_retry";
           attempt.outcome = "retry";
           attempt.retryReason = reason;
@@ -353,8 +366,9 @@ const processAutoLabelMessage = async ({
           costUsd: undefined,
           promptTokens: 0,
         };
-        const { aiLabels, deterministicLabelIds } =
+        const { aiLabels: modelCandidates, deterministicLabelIds } =
           partitionAutoLabelCandidates(autoLabelContext.labels, message);
+        let aiLabels = modelCandidates;
         attempt.aiLabelCount = aiLabels.length;
         attempt.deterministicLabelCount = deterministicLabelIds.length;
         if (aiLabels.length > 0) {
@@ -363,7 +377,12 @@ const processAutoLabelMessage = async ({
             budgetStatus = await getBudgetStatus();
             recordStage(null);
           }
-          if (!budgetStatus.allowed) {
+          if (
+            !budgetStatus.allowed &&
+            budgetStatus.reason === "plan_ineligible"
+          ) {
+            aiLabels = [];
+          } else if (!budgetStatus.allowed) {
             if (
               deterministicLabelIds.length > 0 &&
               (serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" ||
@@ -371,6 +390,7 @@ const processAutoLabelMessage = async ({
             ) {
               recordStage("apply");
               attempt.providerMutationCount += 1;
+              await assertWorkActive?.();
               await mutateGmailMessage(accessToken, gmailMessageId, {
                 addLabelIds: deterministicLabelIds,
               });
@@ -404,23 +424,24 @@ const processAutoLabelMessage = async ({
                 userId,
               });
         recordStage(null);
-        if (aiLabels.length > 0 && autoLabelContext.memoryCandidates !== null) {
+        let memoryContext;
+        if (aiLabels.length > 0) {
           recordStage("memory");
+          const candidates = await autoLabelContext.getMemoryCandidates();
+          if (candidates !== null) {
+            memoryContext = await loadAiAgentContext({
+              agent: "auto_label",
+              candidates,
+              mailboxId,
+              onDiagnostics: (memory) => {
+                attempt.memory = memory;
+              },
+              query: buildMailMemoryQuery(message),
+              semantic: { billingMailboxId: mailboxId },
+              userId: candidates.userId,
+            });
+          }
         }
-        const memoryContext =
-          aiLabels.length === 0 || autoLabelContext.memoryCandidates === null
-            ? null
-            : await loadAiAgentContext({
-                agent: "auto_label",
-                candidates: autoLabelContext.memoryCandidates,
-                mailboxId,
-                onDiagnostics: (memory) => {
-                  attempt.memory = memory;
-                },
-                query: buildMailMemoryQuery(message),
-                semantic: { billingMailboxId: mailboxId },
-                userId: autoLabelContext.memoryCandidates.userId,
-              });
         recordStage(null);
         let aiLabelIds: string[] = [];
         if (aiLabels.length > 0) {
@@ -432,12 +453,13 @@ const processAutoLabelMessage = async ({
             userId,
           });
           recordStage("classifier");
+          await assertWorkActive?.();
           aiLabelIds = await classifyMailMessage({
             billing,
             labelHistory,
             labels: aiLabels,
             memoryContext:
-              memoryContext === null
+              memoryContext === undefined || memoryContext === null
                 ? null
                 : serializeAiAgentContext(memoryContext),
             message,
@@ -506,6 +528,7 @@ const processAutoLabelMessage = async ({
         try {
           recordStage("apply");
           attempt.providerMutationCount += 1;
+          await assertWorkActive?.();
           await mutateGmailMessage(accessToken, gmailMessageId, {
             addLabelIds: labelIds,
           });
@@ -556,6 +579,13 @@ const processAutoLabelMessage = async ({
         return { reason: "admission_busy", retryAt, status: "retry" };
       }
       const now = new Date();
+      if (
+        error instanceof GmailBackgroundQuotaDeferredError ||
+        error instanceof AiProviderDeferredError ||
+        (error instanceof ORPCError && error.code === "CONFLICT")
+      ) {
+        throw error;
+      }
       const attemptCount = event.attemptCount + 1;
       const retryAt = new Date(
         now.getTime() +
@@ -601,6 +631,7 @@ export type GmailMessageCriticalTimings = {
 
 export const processGmailMessage = async ({
   accessToken,
+  assertWorkActive,
   automationRuntime,
   autoLabelEnabled,
   extractCodes,
@@ -609,10 +640,12 @@ export const processGmailMessage = async ({
   onAttemptComplete,
   onCriticalComplete,
   organizationId,
+  recovering = false,
   triggerActions = false,
   userId,
 }: {
   accessToken: string;
+  assertWorkActive?: () => Promise<void>;
   automationRuntime: MailAutomationRuntime;
   autoLabelEnabled: boolean;
   extractCodes: boolean;
@@ -623,6 +656,7 @@ export const processGmailMessage = async ({
     timings: GmailMessageCriticalTimings
   ) => void | Promise<void>;
   organizationId: string | null;
+  recovering?: boolean;
   triggerActions?: boolean;
   userId: string;
 }) => {
@@ -679,9 +713,51 @@ export const processGmailMessage = async ({
   let verificationCodeMs = 0;
   let autoLabelMs = 0;
   try {
+    const recoveredMessage = recovering ? await loadMessage() : null;
+    const recoveredAt = Number(recoveredMessage?.internalDate);
+    const recoveredAge =
+      Number.isFinite(recoveredAt) && recoveredAt > 0
+        ? Date.now() - recoveredAt
+        : Infinity;
+    const [pendingLabel, pendingCode] = await Promise.all([
+      recovering &&
+      autoLabelEnabled &&
+      (recoveredAge > RECOVERY_LABEL_MAX_AGE_MS ||
+        recoveredMessage?.labelIds?.includes(MAILBOX_LABELS.unread) !== true)
+        ? db
+            .select({ id: gmailAutoLabelEvent.id })
+            .from(gmailAutoLabelEvent)
+            .where(
+              and(
+                eq(gmailAutoLabelEvent.mailboxId, mailboxId),
+                eq(gmailAutoLabelEvent.gmailMessageId, gmailMessageId)
+              )
+            )
+            .limit(1)
+        : undefined,
+      recovering && extractCodes && recoveredAge > RECOVERY_CODE_MAX_AGE_MS
+        ? db
+            .select({ id: mailboxVerificationCode.id })
+            .from(mailboxVerificationCode)
+            .where(
+              and(
+                eq(mailboxVerificationCode.mailboxId, mailboxId),
+                eq(mailboxVerificationCode.messageId, gmailMessageId)
+              )
+            )
+            .limit(1)
+        : undefined,
+    ]);
+    const shouldExtractCode = extractCodes && (pendingCode?.length ?? 1) > 0;
+    const shouldLabel = autoLabelEnabled && (pendingLabel?.length ?? 1) > 0;
+    if (!shouldLabel) {
+      attempt.autoLabel.outcome = "disabled";
+      attempt.autoLabel.path = "disabled";
+    }
     const [verificationCode, autoLabel] = await Promise.allSettled([
-      (extractCodes
+      (shouldExtractCode
         ? processMailVerificationCode({
+            assertWorkActive,
             loadMessage,
             mailboxId,
             messageId: gmailMessageId,
@@ -692,9 +768,10 @@ export const processGmailMessage = async ({
       ).finally(() => {
         verificationCodeMs = performance.now() - startedAt;
       }),
-      (autoLabelEnabled
+      (shouldLabel
         ? processAutoLabelMessage({
             accessToken,
+            assertWorkActive,
             attempt: attempt.autoLabel,
             getAutoLabelContext: automationRuntime.getAutoLabelContext,
             getBudgetStatus: automationRuntime.getBudgetStatus,
@@ -757,7 +834,8 @@ export const processGmailMessage = async ({
           });
         }
       }),
-      triggerActions
+      triggerActions &&
+      (!recovering || recoveredAge <= RECOVERY_ACTION_MAX_AGE_MS)
         ? loadMessage().then(async (message) => {
             if (
               message !== null &&
@@ -770,6 +848,7 @@ export const processGmailMessage = async ({
               if (!Number.isFinite(receivedAt) || receivedAt <= 0) {
                 throw new Error("Gmail message is missing its arrival time.");
               }
+              await assertWorkActive?.();
               await enqueueMailAgentMessage({
                 mailboxId,
                 messageId: message.id,

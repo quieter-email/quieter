@@ -11,15 +11,16 @@
   "dependencies": {
     "@quieter/env": "workspace:*",
     "@quieter/mail": "workspace:*",
+    "@quieter/observability": "workspace:*",
     "drizzle-orm": "catalog:",
-    "postgres": "^3.4.9",
+    "postgres": "^4.1.1",
     "sst": "^4.17.2"
   },
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
     "drizzle-kit": "catalog:",
-    "libpg-query": "^18.1.5",
+    "libpg-query": "^18.2.4",
     "typescript": "catalog:",
     "vite": "catalog:",
     "vite-plus": "catalog:"

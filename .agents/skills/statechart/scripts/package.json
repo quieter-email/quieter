@@ -1,8 +1,8 @@
 {
   "devDependencies": {
-    "jsdom": "26.1.0",
-    "mermaid": "11.16.0",
-    "pele": "1.9.0"
+    "jsdom": "31.0.1",
+    "mermaid": "12.3.0",
+    "pele": "1.13.0"
   },
   "scripts": {
     "test": "node --disable-warning=ExperimentalWarning --test test/*.test.ts"

@@ -24,6 +24,22 @@ export const mailSnoozeStatusSchema = z.enum([
 ]);
 export type MailSnoozeStatus = z.infer<typeof mailSnoozeStatusSchema>;
 
+export const MAIL_SNOOZE_LIVE_STATUSES = [
+  "preparing",
+  "active",
+  "returning",
+  "suspended",
+  "failed",
+  "uncertain",
+] as const satisfies readonly MailSnoozeStatus[];
+
+export type MailSnoozeLiveStatus = (typeof MAIL_SNOOZE_LIVE_STATUSES)[number];
+
+export const isMailSnoozeLiveStatus = (
+  status: MailSnoozeStatus
+): status is MailSnoozeLiveStatus =>
+  MAIL_SNOOZE_LIVE_STATUSES.some((liveStatus) => liveStatus === status);
+
 export const mailSnoozeCommandSchema = z.discriminatedUnion("kind", [
   z.strictObject({ kind: z.literal("snooze"), ...scheduleFields }),
   z.strictObject({ kind: z.literal("reschedule"), ...scheduleFields }),

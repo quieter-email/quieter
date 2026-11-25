@@ -51,8 +51,10 @@ CREATE TABLE "mailSnoozeOperation" (
 	CONSTRAINT "mail_snooze_operation_status_check" CHECK ("status" in ('pending', 'applied', 'failed', 'uncertain', 'superseded'))
 );
 --> statement-breakpoint
-CREATE INDEX "mail_snooze_next_wake_idx" ON "mailSnooze" ("nextWakeAt");--> statement-breakpoint
+CREATE INDEX "mail_snooze_next_wake_idx" ON "mailSnooze" ("nextWakeAt") WHERE "nextWakeAt" is not null;--> statement-breakpoint
 CREATE INDEX "mail_snooze_mailbox_status_return_idx" ON "mailSnooze" ("mailboxId","status","returnAt","id");--> statement-breakpoint
+CREATE INDEX "mail_snooze_operation_mailbox_idx" ON "mailSnoozeOperation" ("mailboxId");--> statement-breakpoint
+CREATE INDEX "mail_snooze_operation_snooze_status_idx" ON "mailSnoozeOperation" ("snoozeId","status");--> statement-breakpoint
 ALTER TABLE "mailSnooze" ADD CONSTRAINT "mailSnooze_actorUserId_user_id_fkey" FOREIGN KEY ("actorUserId") REFERENCES "user"("id") ON DELETE SET NULL;--> statement-breakpoint
 ALTER TABLE "mailSnooze" ADD CONSTRAINT "mailSnooze_hideOperationId_mailPlacementOperation_id_fkey" FOREIGN KEY ("hideOperationId") REFERENCES "mailPlacementOperation"("id") ON DELETE SET NULL;--> statement-breakpoint
 ALTER TABLE "mailSnooze" ADD CONSTRAINT "mailSnooze_mailboxId_mailbox_id_fkey" FOREIGN KEY ("mailboxId") REFERENCES "mailbox"("id") ON DELETE CASCADE;--> statement-breakpoint

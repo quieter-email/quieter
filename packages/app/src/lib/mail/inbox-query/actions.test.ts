@@ -16,6 +16,7 @@ import {
 import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/keys";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
+import { getGmailUnreadCountsQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { MailCommand } from "@quieter/mail/data-plane";
 import { QueryClient, QueryObserver } from "@tanstack/react-query";
@@ -496,8 +497,8 @@ describe("mail metadata cache updates", () => {
     queryClient.clear();
   });
 
-  test("an authoritative Snooze serializes a read without projecting placement or losing incoming mail", async () => {
-    const { queryClient, inboxKey } = setup();
+  test("an authoritative Snooze leaves the Inbox at once, serializes a read and keeps incoming mail", async () => {
+    const { queryClient, inboxKey, threadKey } = setup();
     const response =
       Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.applySnooze>>>();
     const started = Promise.withResolvers<null>();
@@ -567,18 +568,80 @@ describe("mail metadata cache updates", () => {
     await Promise.resolve();
     snoozeCompleted = true;
     response.resolve({ targets: [{ status: "applied", threadId: "thread" }] });
-    readResponse.resolve({ id: "a", isUnread: false, labelIds: ["INBOX"] });
+    readResponse.resolve({ id: "a", isUnread: false, labelIds: [] });
     await Promise.all([snooze, read]);
-    expect(beforeRead?.labelIds).toContain("INBOX");
-    expect(beforeRead?.snooze).toBeUndefined();
+    expect(beforeRead).toBeUndefined();
     expect(readSawCompletion).toBeTruthy();
-    const messages =
-      queryClient.getQueryData<MessagesQueryData>(inboxKey)?.pages[0].messages;
-    expect(messages?.find((message) => message.id === "a")).toMatchObject({
-      bodyHtml: "<p>a</p>",
-      isUnread: false,
+    const messageIds = queryClient
+      .getQueryData<MessagesQueryData>(inboxKey)
+      ?.pages[0].messages.map((message) => message.id);
+    expect(messageIds).not.toContain("a");
+    expect(messageIds).toContain("incoming");
+    expect(
+      queryClient
+        .getQueryData<ThreadMessagesResult>(threadKey)
+        ?.messages.find((message) => message.id === "a")
+    ).toMatchObject({ bodyHtml: "<p>a</p>", isUnread: false });
+    queryClient.clear();
+  });
+
+  test("a Snooze restores failed conversations to the Inbox and refreshes unread counts", async () => {
+    const queryClient = new QueryClient();
+    const messages: MessageListItem[] = ["kept", "snoozed"].map((id) => ({
+      id,
+      labelIds: ["INBOX", "UNREAD"],
+      threadId: id,
+    }));
+    const inboxKey = getMessagesQueryKey("mailbox", "inbox");
+    const unreadKey = getMessagesQueryKey("mailbox", "unread");
+    const otherMailboxKey = getMessagesQueryKey("other-mailbox", "inbox");
+    for (const key of [inboxKey, unreadKey, otherMailboxKey]) {
+      queryClient.setQueryData<MessagesQueryData>(key, {
+        pageParams: [undefined],
+        pages: [{ messages }],
+      });
+    }
+    queryClient.setQueryData(getGmailUnreadCountsQueryKey(), {});
+    const response =
+      Promise.withResolvers<Awaited<ReturnType<typeof rpc.mail.applySnooze>>>();
+    vi.mocked(rpc.mail.applySnooze).mockReturnValue(response.promise);
+    const snooze = applySnoozeInMailbox(
+      queryClient,
+      "mailbox",
+      messages.map((message) => ({
+        expectedVersion: null,
+        messageIds: [message.id],
+        threadId: message.threadId,
+      })),
+      {
+        kind: "snooze",
+        returnAt: new Date(Date.now() + 86_400_000).toISOString(),
+        timeZone: "UTC",
+      }
+    );
+    const inboxIds = () =>
+      queryClient
+        .getQueryData<MessagesQueryData>(inboxKey)
+        ?.pages[0].messages.map((message) => message.id);
+    await vi.waitFor(() => {
+      expect(inboxIds()).toHaveLength(0);
     });
-    expect(messages?.map((message) => message.id)).toContain("incoming");
+    response.resolve({
+      targets: [
+        { status: "failed", threadId: "kept" },
+        { status: "applied", threadId: "snoozed" },
+      ],
+    });
+    await snooze;
+    expect(inboxIds()).toStrictEqual(["kept"]);
+    for (const key of [unreadKey, otherMailboxKey]) {
+      expect(
+        queryClient.getQueryData<MessagesQueryData>(key)?.pages[0].messages
+      ).toHaveLength(2);
+    }
+    expect(
+      queryClient.getQueryState(getGmailUnreadCountsQueryKey())?.isInvalidated
+    ).toBeTruthy();
     queryClient.clear();
   });
 

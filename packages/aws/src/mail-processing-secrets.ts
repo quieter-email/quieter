@@ -3,6 +3,7 @@ import { Resource } from "sst";
 
 export const configureMailProcessingSecrets = () => {
   configureServerEnv({
+    GMAIL_LIVE_SYNC_TOKEN_SECRET: Resource.GmailLiveSyncTokenSecret.value,
     GMAIL_TOKEN_ENCRYPTION_KEY: Resource.GmailTokenEncryptionKey.value,
     GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT:
       Resource.GmailTokenEncryptionKeyCurrent.value,

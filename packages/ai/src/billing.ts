@@ -10,29 +10,22 @@ import { APICallError } from "ai";
 import type { LanguageModelMiddleware } from "ai";
 import { z } from "zod";
 
+import { aiProviderAdmission } from "./provider-admission";
+
 export const providerUsageResponseSchema = z.object({
   id: z.string().optional(),
   usage: z.object({ cost: z.number().nonnegative().optional() }).optional(),
 });
 
 const mailRequestBudgets = {
-  "google/gemini-3.1-flash-lite": {
-    contextLength: 1_048_576,
-    maxOutputTokens: 100,
-    maximumCostUsd: (1_048_576 * 0.25 + 100 * 1.5) / 1_000_000,
-    model: "google/gemini-3.1-flash-lite",
-    provider: {
-      max_price: { completion: 1.5, prompt: 0.25, request: 0 },
-      only: ["google-vertex"],
-    },
-  },
-  "typesafe/jev-1.13": {
-    contextLength: 262_144,
-    maximumCostUsd: (262_144 * 0.042) / 1_000_000,
-    model: "typesafe/jev-1.13",
+  "liquid/d1.2-ultra": {
+    contextLength: 65_536,
+    maximumCostUsd: (65_536 * 0.042) / 1_000_000,
+    model: "liquid/d1.2-ultra",
     provider: {
       max_price: { completion: 0, prompt: 0.042, request: 0 },
-      only: ["typesafe"],
+      only: ["liquid"],
+      zdr: true,
     },
   },
 } as const;
@@ -135,6 +128,8 @@ export const runBilledAiRequest = async <Result>(input: {
   };
   try {
     recordStage("admission");
+    const providerAdmission = aiProviderAdmission();
+    await providerAdmission?.reserve();
     const reservationId = await reserveAiCreditUsage(
       input.billing,
       input.maximumCostUsd
@@ -182,6 +177,21 @@ export const runBilledAiRequest = async <Result>(input: {
         await releaseAiCreditUsage(reservationId);
         recordStage(null);
       }
+      if (
+        providerAdmission !== undefined &&
+        APICallError.isInstance(error) &&
+        error.statusCode === 429
+      ) {
+        const retryAfter = error.responseHeaders?.["retry-after"];
+        const delay = retryAfter ? Number(retryAfter) : Number.NaN;
+        const date =
+          retryAfter === undefined ? Number.NaN : Date.parse(retryAfter);
+        await providerAdmission.observeRateLimit(
+          Number.isFinite(delay)
+            ? delay * 1000
+            : Math.max(0, Number.isFinite(date) ? date - Date.now() : 30_000)
+        );
+      }
       throw error;
     }
   } finally {
@@ -198,14 +208,23 @@ export const createAiBillingMiddleware = (
   billing: AiBillingContext,
   readCost: (metadata: unknown) => number | undefined,
   onProviderStart?: () => void,
-  maximumCostUsd?: number
+  maximumCostUsd?:
+    | number
+    | ((
+        params: Parameters<
+          NonNullable<LanguageModelMiddleware["wrapGenerate"]>
+        >[0]["params"]
+      ) => number)
 ): LanguageModelMiddleware => ({
   specificationVersion: "v4",
   wrapGenerate: async ({ doGenerate, params }) => {
     params.abortSignal?.throwIfAborted();
     return await runBilledAiRequest({
       billing,
-      maximumCostUsd,
+      maximumCostUsd:
+        typeof maximumCostUsd === "function"
+          ? maximumCostUsd(params)
+          : maximumCostUsd,
       onProviderStart,
       run: async () => {
         const result = await doGenerate();
@@ -219,7 +238,12 @@ export const createAiBillingMiddleware = (
   },
   wrapStream: async ({ doStream, params }) => {
     params.abortSignal?.throwIfAborted();
-    const reservationId = await reserveAiCreditUsage(billing, maximumCostUsd);
+    const reservationId = await reserveAiCreditUsage(
+      billing,
+      typeof maximumCostUsd === "function"
+        ? maximumCostUsd(params)
+        : maximumCostUsd
+    );
     try {
       onProviderStart?.();
       const result = await doStream();

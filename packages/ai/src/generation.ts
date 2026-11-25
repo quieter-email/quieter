@@ -8,9 +8,8 @@ import {
 } from "ai";
 import type { z } from "zod";
 
-import type { MailAiRequestBudget } from "./billing";
 import { defaultChatModel } from "./chat-models";
-import type { ChatModel } from "./chat-models";
+import type { ChatModel, GenerationModel } from "./chat-models";
 import type { AiUsageReport } from "./chat-usage";
 import { summarizeAiUsage } from "./chat-usage";
 import { createChatModel } from "./openrouter";
@@ -40,11 +39,10 @@ export const runStructuredGeneration = async <TOutput>(input: {
   billing: AiBillingContext;
   abortSignal?: AbortSignal;
   maxOutputTokens: number;
-  mailRequestBudget?: MailAiRequestBudget;
   maxRetries?: number;
   outputRetries?: 0 | 1;
   retryEmptyOutput?: boolean;
-  model?: ChatModel;
+  model?: GenerationModel;
   onUsage?: (usage: AiUsageReport) => void;
   prioritizeLatency?: boolean;
   prompt: string;
@@ -67,7 +65,6 @@ export const runStructuredGeneration = async <TOutput>(input: {
             : { maxRetries: input.maxRetries }),
           model: createChatModel(input.model ?? defaultChatModel, {
             billing: input.billing,
-            mailRequestBudget: input.mailRequestBudget,
             prioritizeLatency: input.prioritizeLatency,
           }),
           onEnd: ({ steps: attemptSteps }) => {

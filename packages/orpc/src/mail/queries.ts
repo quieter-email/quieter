@@ -1,6 +1,7 @@
 import { ORPCError } from "@orpc/server";
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import {
+  getGmailThreadChangeDelta,
   getMailboxSyncDelta,
   getMessageAttachment,
   getDraftWithContent,
@@ -40,6 +41,7 @@ import {
   parseCapturedImportanceSearch,
   processPendingMailImportance,
 } from "../mail-importance";
+import { readMailboxChanges } from "../mailbox-changes";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { getManagedMessageAttachment } from "../managed-mail/messages/attachments";
 import { getManagedDraft } from "../managed-mail/messages/get-draft";
@@ -62,10 +64,13 @@ import {
 import { loadDraftReminderIntent } from "../reminders/draft-state";
 import {
   attachMailSnoozeStates,
+  countVisibleMailSnoozes,
   filterMailSnoozeVisibility,
   listMailSnoozePage,
 } from "../snooze/queries";
 import type { MailInputs } from "./inputs";
+
+const MAX_VISIBILITY_SCAN_PAGES = 5;
 
 const hydrateGmailMessageMetadata = async <T extends MessageListItem>(
   mailboxId: string,
@@ -98,6 +103,7 @@ const listLaterMessages = async (input: {
   pageToken?: string;
 }): Promise<ListMessagesPageResult> => {
   let { pageToken } = input;
+  let pagesScanned = 0;
   while (true) {
     input.context.signal?.throwIfAborted();
     const scheduled = await listMailSnoozePage({
@@ -107,6 +113,20 @@ const listLaterMessages = async (input: {
       userId: input.context.userId,
     });
     const threadIds = scheduled.snoozes.map((snooze) => snooze.threadId);
+    pagesScanned += 1;
+    if (threadIds.length === 0) {
+      if (
+        scheduled.nextPageToken === undefined ||
+        pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+      ) {
+        return {
+          messages: [],
+          nextPageToken: scheduled.nextPageToken,
+        };
+      }
+      pageToken = scheduled.nextPageToken;
+      continue;
+    }
     const page =
       input.provider === "managed"
         ? await listManagedMessages({
@@ -147,7 +167,11 @@ const listLaterMessages = async (input: {
       const message = rows.get(threadId);
       return message && visible.has(threadId) ? [message] : [];
     });
-    if (ordered.length > 0 || scheduled.nextPageToken === undefined) {
+    if (
+      ordered.length > 0 ||
+      scheduled.nextPageToken === undefined ||
+      pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+    ) {
       return {
         historyId:
           input.provider === "gmail" && page.historyId
@@ -159,6 +183,158 @@ const listLaterMessages = async (input: {
     }
     pageToken = scheduled.nextPageToken;
   }
+};
+
+const gmailReplayFallback: MailboxSyncDelta = {
+  hasChanges: true,
+  refreshFirstPage: false,
+  removedMessageIds: [],
+  requiresFullRefresh: true,
+  updatedMessages: [],
+};
+
+const projectSnoozableGmailRows = async (input: {
+  category: MailInputs["listThreads"]["category"];
+  context: MailRequestContext;
+  mailboxId: string;
+  messages: MessageListItem[];
+}) => {
+  const { category, context, mailboxId } = input;
+  const messages = await attachMailSnoozeStates({
+    mailboxId,
+    messages: await hydrateGmailMessageMetadata(
+      mailboxId,
+      input.messages,
+      context.resHeaders
+    ),
+    userId: context.userId,
+  });
+  const visible = await filterMailSnoozeVisibility({
+    category,
+    mailboxId,
+    threadIds: messages.map((message) => message.threadId),
+    userId: context.userId,
+  });
+  return messages.filter((message) => visible.has(message.threadId));
+};
+
+const replayGmailMailbox = async ({
+  context,
+  contentRevision,
+  headVersion,
+  input,
+  providerCursor,
+  startChangeVersion,
+}: {
+  context: MailRequestContext;
+  contentRevision: number;
+  headVersion: bigint;
+  input: MailInputs["syncMailbox"];
+  providerCursor?: { provider?: string; revision?: string };
+  startChangeVersion: string;
+}): Promise<MailboxSyncDelta> => {
+  const replay = await readMailboxChanges({
+    afterVersion: startChangeVersion,
+    headVersion,
+    mailboxId: input.mailboxId,
+    userId: context.userId,
+  });
+  const important = input.category === "important";
+  const previousRevision = important
+    ? /^app:(?<revision>\d+)$/u.exec(input.startHistoryId)?.groups?.revision
+    : providerCursor?.revision;
+  const previous = Number(previousRevision);
+  if (
+    replay === null ||
+    !Number.isSafeInteger(previous) ||
+    replay.contentRevisions.length !== contentRevision - previous ||
+    replay.contentRevisions.some(
+      (revision, index) => revision !== previous + index + 1
+    )
+  ) {
+    return gmailReplayFallback;
+  }
+  const affectedThreadIds = new Set<string>();
+  const affectedMessageThreads = new Map<string, string | undefined>();
+  for (const change of replay.changes) {
+    if ("messageId" in change) {
+      affectedMessageThreads.set(
+        change.messageId,
+        change.threadId ?? affectedMessageThreads.get(change.messageId)
+      );
+    } else if (
+      change.kind === "importance.changed" ||
+      change.kind === "capture.changed"
+    ) {
+      affectedThreadIds.add(change.threadId);
+    }
+  }
+  const changeVersion = String(headVersion);
+  if (important) {
+    for (const threadId of affectedMessageThreads.values()) {
+      if (threadId === undefined) {
+        return gmailReplayFallback;
+      }
+      affectedThreadIds.add(threadId);
+    }
+    const threadIds = [...affectedThreadIds];
+    const page =
+      threadIds.length > 0
+        ? await listCapturedImportantMessages({
+            mailboxId: input.mailboxId,
+            matchingThreadIds: threadIds,
+            maxResults: threadIds.length,
+          })
+        : undefined;
+    return {
+      changeVersion,
+      hasChanges: threadIds.length > 0,
+      historyId: `app:${contentRevision}`,
+      refreshFirstPage: false,
+      refreshThreadIds: threadIds,
+      removedMessageIds: [],
+      replacedThreadIds: threadIds,
+      requiresFullRefresh: false,
+      updatedMessages: page
+        ? await attachMailSnoozeStates({
+            mailboxId: input.mailboxId,
+            messages: await hydrateUnsubscribeStatus(
+              input.mailboxId,
+              page.messages
+            ),
+            userId: context.userId,
+          })
+        : [],
+    };
+  }
+  const delta = await callGmail(
+    context,
+    input.mailboxId,
+    async (accessToken, signal) =>
+      await getGmailThreadChangeDelta(accessToken, {
+        affectedMessageThreads,
+        affectedThreadIds,
+        mailbox: input.category,
+        reconcileProvider:
+          input.targetChangeVersion === undefined ||
+          BigInt(input.targetChangeVersion) > headVersion,
+        signal,
+        startHistoryId: providerCursor?.provider ?? "",
+      })
+  );
+  return {
+    ...delta,
+    changeVersion: delta.requiresFullRefresh ? undefined : changeVersion,
+    historyId: delta.historyId
+      ? `gmail:${delta.historyId}:${contentRevision}`
+      : undefined,
+    updatedMessages: await projectSnoozableGmailRows({
+      category: input.category,
+      context,
+      mailboxId: input.mailboxId,
+      messages: delta.updatedMessages,
+    }),
+  };
 };
 
 export const queriesMailOperations = {
@@ -397,9 +573,11 @@ export const queriesMailOperations = {
                 accessToken,
                 input.threadId,
                 signal,
-                (snapshot) => {
-                  snapshots.push(snapshot);
-                }
+                input.prefetch === true
+                  ? undefined
+                  : (snapshot) => {
+                      snapshots.push(snapshot);
+                    }
               )
           ).catch((error: unknown) => {
             if (isGmailServiceError(error) && error.status === 404) {
@@ -420,53 +598,59 @@ export const queriesMailOperations = {
               context.resHeaders
             ),
           };
+    if (input.prefetch === true) {
+      return result;
+    }
     const capture = (async () => {
       try {
-        await withRequestDatabaseClient(async () => {
-          const failures: unknown[] = [];
-          for (const snapshot of snapshots) {
-            try {
-              await writeGmailCapturedMessage({
-                mailboxId: input.mailboxId,
-                snapshot,
-                source: "on_demand",
-              });
-            } catch (error) {
-              failures.push(error);
-            }
-          }
-          for (let offset = 0; offset < thread.messages.length; offset += 4) {
-            const outcomes = await Promise.allSettled(
-              thread.messages.slice(offset, offset + 4).map(
-                async (message) =>
-                  await captureMailboxMessageMemory({
-                    actorUserId: context.userId,
-                    mailboxId: input.mailboxId,
-                    message,
-                    source: "open",
-                  })
-              )
-            );
-            for (const outcome of outcomes) {
-              if (outcome.status === "rejected") {
-                failures.push(outcome.reason);
+        await withRequestDatabaseClient(
+          async () => {
+            const failures: unknown[] = [];
+            for (const snapshot of snapshots) {
+              try {
+                await writeGmailCapturedMessage({
+                  mailboxId: input.mailboxId,
+                  snapshot,
+                  source: "on_demand",
+                });
+              } catch (error) {
+                failures.push(error);
               }
             }
-          }
-          if (selectedMailbox.provider !== "managed") {
-            try {
-              await processPendingMailImportance({
-                limit: 4,
-                mailboxId: input.mailboxId,
-              });
-            } catch (error) {
-              failures.push(error);
+            for (let offset = 0; offset < thread.messages.length; offset += 4) {
+              const outcomes = await Promise.allSettled(
+                thread.messages.slice(offset, offset + 4).map(
+                  async (message) =>
+                    await captureMailboxMessageMemory({
+                      actorUserId: context.userId,
+                      mailboxId: input.mailboxId,
+                      message,
+                      source: "open",
+                    })
+                )
+              );
+              for (const outcome of outcomes) {
+                if (outcome.status === "rejected") {
+                  failures.push(outcome.reason);
+                }
+              }
             }
-          }
-          if (failures.length > 0) {
-            throw new AggregateError(failures, "Thread capture failed.");
-          }
-        });
+            if (selectedMailbox.provider !== "managed") {
+              try {
+                await processPendingMailImportance({
+                  limit: 4,
+                  mailboxId: input.mailboxId,
+                });
+              } catch (error) {
+                failures.push(error);
+              }
+            }
+            if (failures.length > 0) {
+              throw new AggregateError(failures, "Thread capture failed.");
+            }
+          },
+          { independent: context.scheduleBackgroundTask !== undefined }
+        );
       } catch (error) {
         if (!context.scheduleBackgroundTask) {
           throw error;
@@ -527,6 +711,7 @@ export const queriesMailOperations = {
     }
 
     const selectedMailbox = await assertAccessibleMailbox({
+      includeChangeVersion: true,
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
@@ -540,6 +725,7 @@ export const queriesMailOperations = {
     }
     if (selectedMailbox.provider === "managed") {
       let { pageToken } = input;
+      let pagesScanned = 0;
       while (true) {
         context.signal?.throwIfAborted();
         const page = await listManagedMessages({
@@ -561,7 +747,12 @@ export const queriesMailOperations = {
         const filtered = messages.filter((message) =>
           visible.has(message.threadId)
         );
-        if (filtered.length > 0 || page.nextPageToken === undefined) {
+        pagesScanned += 1;
+        if (
+          filtered.length > 0 ||
+          page.nextPageToken === undefined ||
+          pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+        ) {
           return { ...page, messages: filtered };
         }
         pageToken = page.nextPageToken;
@@ -609,6 +800,8 @@ export const queriesMailOperations = {
       });
       return {
         ...page,
+        changeVersion: String(selectedMailbox.mailChangeVersion),
+        historyId: `app:${selectedMailbox.contentRevision}`,
         messages: await attachMailSnoozeStates({
           mailboxId: input.mailboxId,
           messages: await hydrateUnsubscribeStatus(
@@ -619,7 +812,17 @@ export const queriesMailOperations = {
         }),
       };
     }
+    if (input.category === "later") {
+      const visibleSnoozeCount = await countVisibleMailSnoozes({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      if (visibleSnoozeCount === 0) {
+        return { messages: [] };
+      }
+    }
     let { pageToken } = input;
+    let pagesScanned = 0;
     while (true) {
       context.signal?.throwIfAborted();
       const currentPageToken = pageToken;
@@ -642,31 +845,28 @@ export const queriesMailOperations = {
                 signal,
               })
       );
-      const messages = await attachMailSnoozeStates({
-        mailboxId: input.mailboxId,
-        messages: await hydrateGmailMessageMetadata(
-          input.mailboxId,
-          page.messages,
-          context.resHeaders
-        ),
-        userId: context.userId,
-      });
-      const visible = await filterMailSnoozeVisibility({
+      const messages = await projectSnoozableGmailRows({
         category: input.category,
+        context,
         mailboxId: input.mailboxId,
-        threadIds: messages.map((message) => message.threadId),
-        userId: context.userId,
+        messages: page.messages,
       });
-      const filtered = messages.filter((message) =>
-        visible.has(message.threadId)
-      );
-      if (filtered.length > 0 || page.nextPageToken === undefined) {
+      pagesScanned += 1;
+      if (
+        messages.length > 0 ||
+        page.nextPageToken === undefined ||
+        pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
+      ) {
         return {
           ...page,
+          changeVersion:
+            input.category === "later"
+              ? undefined
+              : String(selectedMailbox.mailChangeVersion),
           historyId: page.historyId
             ? `gmail:${page.historyId}:${selectedMailbox.contentRevision}`
             : undefined,
-          messages: filtered,
+          messages,
         };
       }
       pageToken = page.nextPageToken;
@@ -700,6 +900,7 @@ export const queriesMailOperations = {
     }
 
     const selectedMailbox = await assertAccessibleMailbox({
+      includeChangeVersion: input.startChangeVersion !== undefined,
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
@@ -716,6 +917,23 @@ export const queriesMailOperations = {
       };
     }
 
+    const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(
+      input.startHistoryId
+    );
+    if (
+      input.startChangeVersion !== undefined &&
+      selectedMailbox.mailChangeVersion !== undefined
+    ) {
+      return await replayGmailMailbox({
+        contentRevision: selectedMailbox.contentRevision,
+        context,
+        headVersion: selectedMailbox.mailChangeVersion,
+        input,
+        providerCursor: token?.groups,
+        startChangeVersion: input.startChangeVersion,
+      });
+    }
+
     if (input.category === "important") {
       const historyId = `app:${selectedMailbox.contentRevision}`;
       const hasChanges = historyId !== input.startHistoryId;
@@ -728,9 +946,6 @@ export const queriesMailOperations = {
         updatedMessages: [],
       };
     }
-    const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(
-      input.startHistoryId
-    );
     const appChanged =
       token?.groups?.revision !== String(selectedMailbox.contentRevision);
     if (token !== null && appChanged) {
@@ -760,14 +975,11 @@ export const queriesMailOperations = {
         : undefined,
       refreshFirstPage: delta.refreshFirstPage || appChanged,
       requiresFullRefresh: delta.requiresFullRefresh || appChanged,
-      updatedMessages: await attachMailSnoozeStates({
+      updatedMessages: await projectSnoozableGmailRows({
+        category: input.category,
+        context,
         mailboxId: input.mailboxId,
-        messages: await hydrateGmailMessageMetadata(
-          input.mailboxId,
-          delta.updatedMessages,
-          context.resHeaders
-        ),
-        userId: context.userId,
+        messages: delta.updatedMessages,
       }),
     };
   },

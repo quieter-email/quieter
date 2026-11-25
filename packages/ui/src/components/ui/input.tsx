@@ -22,6 +22,15 @@ export const inputVariants = cva(inputControlClassName, {
       chrome: "inline",
       className: "h-5 min-w-0 p-0 text-body",
     },
+    {
+      chrome: "command",
+      className: "h-12 min-w-0 p-0 text-body",
+    },
+    {
+      chrome: "command",
+      className: "h-9 text-body-sm",
+      size: "sm",
+    },
   ],
   defaultVariants: {
     chrome: "default",
@@ -31,6 +40,10 @@ export const inputVariants = cva(inputControlClassName, {
     chrome: {
       attached:
         "border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
+      // Search field of a command palette or menu: that surface is focused, so
+      // the field carries no edge or focus ring of its own.
+      command:
+        "rounded-none border-0 bg-transparent shadow-none focus-visible:ring-0 focus-visible:ring-offset-0",
       default:
         "squircle rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,

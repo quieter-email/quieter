@@ -110,7 +110,6 @@ export const MailboxRemovalSettings = ({
               onClick={onRemove}
               pending={isPending}
               pendingLabel={isManaged ? "Deleting…" : "Removing…"}
-              size="sm"
               type="button"
               variant="destructive"
             >

@@ -47,6 +47,23 @@ describe("request rate limiting", () => {
     expect(consumeRateLimit).toHaveBeenCalledOnce();
   });
 
+  test("internal Durable Object callbacks bypass public IP rate limiting", async () => {
+    const callbacks = await Promise.all([
+      getRequestRateLimit(
+        new Request("https://quieter.email/api/internal/mail-snooze", {
+          method: "POST",
+        })
+      ),
+      getRequestRateLimit(
+        new Request("https://quieter.email/api/internal/scheduled-send", {
+          method: "POST",
+        })
+      ),
+    ]);
+    expect(callbacks).toStrictEqual([null, null]);
+    expect(consumeRateLimit).not.toHaveBeenCalled();
+  });
+
   test("caps fallback identities during an outage and admits traffic after expiry", async () => {
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-09-07T00:00:00Z"));

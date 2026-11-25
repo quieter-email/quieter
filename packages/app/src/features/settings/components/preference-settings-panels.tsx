@@ -41,6 +41,7 @@ import { ThemePicker } from "@quieter/ui/theme-picker";
 
 import { DateTimeSettings } from "./date-time-settings";
 import { DefaultMailboxSetting } from "./default-mailbox-setting";
+import { SendingSettings } from "./sending-settings";
 import {
   SettingsCard,
   SettingsRow,
@@ -58,6 +59,7 @@ export const PreferencesSettingsPanel = () => {
     <div className={settingsSurfaceVariants({ variant: "page" })}>
       <DefaultMailboxSetting />
       <DateTimeSettings />
+      <SendingSettings />
       <SettingsSection title="Appearance">
         <SettingsRows>
           <SettingsRow action={<ThemePicker />} title="Theme" />
@@ -224,12 +226,14 @@ export const DevelopmentSettingsPanel = () => {
 
 export const DevelopmentSettingsUnavailable = () => (
   <SettingsSection title="Development">
-    <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
-      <div className="flex items-start gap-3">
-        <Icon aria-hidden tone="muted" className="mt-0.5" icon={CodeIcon} />
-        <p className="text-body text-muted-fg">
-          Local demo mailbox options are only available in development builds.
-        </p>
+    <SettingsCard>
+      <div className={settingsSurfaceVariants({ variant: "body" })}>
+        <div className="flex items-start gap-3">
+          <Icon aria-hidden tone="muted" className="mt-0.5" icon={CodeIcon} />
+          <p className="text-body text-muted-fg">
+            Local demo mailbox options are only available in development builds.
+          </p>
+        </div>
       </div>
     </SettingsCard>
   </SettingsSection>

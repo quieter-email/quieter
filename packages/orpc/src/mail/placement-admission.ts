@@ -61,6 +61,7 @@ export const loadMailPlacementSnapshot = async (input: {
   threadId: string;
   anchorCount: number;
   budget: { remaining: number };
+  chargeRateLimit?: boolean;
 }): Promise<{ messages: PlacementMessage[]; incomingMessageIds: string[] }> => {
   input.context.signal?.throwIfAborted();
   if (input.budget.remaining === 0) {
@@ -134,7 +135,7 @@ export const loadMailPlacementSnapshot = async (input: {
   const count =
     source.kind === "managed" ? source.messages.length : source.messageCount;
   const additionalCost = Math.max(0, count - input.anchorCount);
-  if (additionalCost > 0) {
+  if (additionalCost > 0 && input.chargeRateLimit !== false) {
     const admission = await consumeRateLimit({
       cost: additionalCost,
       key: `mail-placement:${input.context.userId}`,

@@ -1,6 +1,10 @@
 "use client";
 
-import { Add01Icon, MoreHorizontalIcon } from "@hugeicons/core-free-icons";
+import {
+  Add01Icon,
+  CheckListIcon,
+  MoreHorizontalIcon,
+} from "@hugeicons/core-free-icons";
 import {
   SettingsCard,
   SettingsErrorState,
@@ -9,6 +13,7 @@ import {
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
+import { AI_MEMORY_BULK_DELETE_LIMIT } from "@quieter/orpc";
 import {
   AlertDialog,
   AlertDialogContent,
@@ -18,6 +23,7 @@ import {
   AlertDialogTitle,
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
+import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
@@ -28,6 +34,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { toast } from "@quieter/ui/toast";
 import {
   useInfiniteQuery,
@@ -62,7 +69,12 @@ export const PersonalizationMemories = ({
   const [query, setQuery] = useState("");
   const [category, setCategory] = useState<PersonalMemory["category"]>();
   const [editor, setEditor] = useState<PersonalMemory | "new" | null>(null);
-  const [deleting, setDeleting] = useState<PersonalMemory | null>(null);
+  const [deleting, setDeleting] = useState<string[] | null>(null);
+  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null);
+  const selecting = selection !== null;
+  const addButton = useRef<HTMLButtonElement>(null);
+  const selectButton = useRef<HTMLButtonElement>(null);
+  const bulkDeleteButton = useRef<HTMLButtonElement>(null);
   const nextPageTrigger = useRef<HTMLDivElement>(null);
   useEffect(() => {
     const timer = window.setTimeout(() => {
@@ -116,24 +128,58 @@ export const PersonalizationMemories = ({
     (total, item) => total + item.count,
     0
   );
+  const matchCount = firstPage?.total ?? 0;
+  const selectedIds =
+    selection !== null && search.trim() === query
+      ? items.filter((memory) => selection.has(memory.id)).map(({ id }) => id)
+      : [];
+  const selectedIdSet = new Set(selectedIds);
+  const selectableCount = Math.min(items.length, AI_MEMORY_BULK_DELETE_LIMIT);
+  const atSelectionLimit = selectedIds.length >= AI_MEMORY_BULK_DELETE_LIMIT;
+  const allSelected =
+    selectedIds.length > 0 && selectedIds.length >= selectableCount;
+  let selectionNote: string | null = null;
+  if (items.length > AI_MEMORY_BULK_DELETE_LIMIT) {
+    selectionNote = `Up to ${AI_MEMORY_BULK_DELETE_LIMIT} at a time. Select all picks the first ${AI_MEMORY_BULK_DELETE_LIMIT} loaded.`;
+  } else if (matchCount > items.length) {
+    selectionNote = `${items.length} of ${matchCount} loaded. Select all picks loaded memories only.`;
+  }
+  const chooseCategory = (value?: PersonalMemory["category"]) => {
+    if (category !== value && selecting) {
+      setSelection(new Set());
+    }
+    setCategory(value);
+  };
   const deletion = useMutation(
-    orpc.ai.forgetMemory.mutationOptions({
+    orpc.ai.forgetMemories.mutationOptions({
       onError(error) {
         toastError(error, {
           boundary: "ai-settings",
-          fallback: "Could not delete this memory. Please try again.",
+          fallback: "Could not delete the selected memories. Please try again.",
         });
       },
-      async onSuccess() {
+      async onSuccess({ deleted }, { memoryIds }) {
         setDeleting(null);
+        setSelection(null);
         await Promise.all([
           queryClient.invalidateQueries({ queryKey: orpc.ai.memories.key() }),
           queryClient.invalidateQueries({ queryKey: orpc.ai.settings.key() }),
         ]);
-        toast.success("Memory deleted.");
+        const result =
+          deleted === 1 ? "1 memory deleted." : `${deleted} memories deleted.`;
+        if (deleted === 0) {
+          toast.success("Already deleted.");
+        } else {
+          toast.success(
+            deleted < memoryIds.length
+              ? `${result} Some were already deleted.`
+              : result
+          );
+        }
       },
     })
   );
+  const selectionDisabled = deletion.isPending || search.trim() !== query;
   const retryMemories = async () => {
     const result = await memories.refetch();
     if (result.error) {
@@ -142,13 +188,16 @@ export const PersonalizationMemories = ({
   };
 
   return (
-    <>
+    <div className="w-full max-w-xl space-y-4">
       <div className="flex items-center gap-2">
         <Input
           aria-label="Search memories"
           className="min-w-0 flex-1"
           maxLength={500}
           onChange={(event) => {
+            if (selecting) {
+              setSelection(new Set());
+            }
             setSearch(event.target.value);
           }}
           placeholder="Search memories"
@@ -158,6 +207,7 @@ export const PersonalizationMemories = ({
         <IconButtonTooltip label="Add memory">
           <Button
             aria-label="Add memory"
+            ref={addButton}
             onClick={() => {
               setEditor("new");
             }}
@@ -166,6 +216,24 @@ export const PersonalizationMemories = ({
             <Icon aria-hidden icon={Add01Icon} />
           </Button>
         </IconButtonTooltip>
+        {items.length > 0 || selecting ? (
+          <IconButtonTooltip
+            label={selecting ? "Stop selecting" : "Select memories"}
+          >
+            <Button
+              aria-label={selecting ? "Stop selecting" : "Select memories"}
+              aria-pressed={selecting}
+              onClick={() => {
+                setSelection(selecting ? null : new Set());
+              }}
+              ref={selectButton}
+              size="icon"
+              variant={selecting ? "secondary" : "ghost"}
+            >
+              <Icon aria-hidden icon={CheckListIcon} />
+            </Button>
+          </IconButtonTooltip>
+        ) : null}
         {actions}
       </div>
       {firstPage ? (
@@ -176,7 +244,7 @@ export const PersonalizationMemories = ({
           <Button
             aria-pressed={category === undefined}
             onClick={() => {
-              setCategory(undefined);
+              chooseCategory();
             }}
             variant="chip"
           >
@@ -189,7 +257,7 @@ export const PersonalizationMemories = ({
                 aria-pressed={category === item.category}
                 key={item.category}
                 onClick={() => {
-                  setCategory(item.category);
+                  chooseCategory(item.category);
                 }}
                 variant="chip"
               >
@@ -212,16 +280,70 @@ export const PersonalizationMemories = ({
         ) : null}
         {items.length > 0 ? (
           <SettingsCard>
+            {selecting ? (
+              <div
+                className={cn(
+                  settingsSurfaceVariants({ variant: "padding" }),
+                  "space-y-1"
+                )}
+              >
+                <div className="flex items-center gap-3">
+                  <IconButtonTooltip
+                    label={allSelected ? "Clear selection" : "Select loaded"}
+                  >
+                    <Checkbox
+                      aria-label={
+                        allSelected
+                          ? "Clear selected memories"
+                          : `Select ${selectableCount} loaded ${selectableCount === 1 ? "memory" : "memories"}`
+                      }
+                      checked={allSelected}
+                      disabled={selectionDisabled}
+                      indeterminate={selectedIds.length > 0 && !allSelected}
+                      onCheckedChange={(checked) => {
+                        setSelection(
+                          new Set(
+                            checked
+                              ? items
+                                  .slice(0, AI_MEMORY_BULK_DELETE_LIMIT)
+                                  .map(({ id }) => id)
+                              : []
+                          )
+                        );
+                      }}
+                    >
+                      <CheckboxIndicator />
+                    </Checkbox>
+                  </IconButtonTooltip>
+                  <p
+                    aria-live="polite"
+                    className="text-body-sm text-fg tabular-nums"
+                  >
+                    {selectedIds.length} selected
+                  </p>
+                  <Button
+                    disabled={selectionDisabled || selectedIds.length === 0}
+                    onClick={() => {
+                      setDeleting(selectedIds);
+                    }}
+                    ref={bulkDeleteButton}
+                    size="sm"
+                    variant="destructive"
+                  >
+                    Delete
+                  </Button>
+                </div>
+                {selectionNote ? (
+                  <p className="pl-7 text-caption text-muted-fg">
+                    {selectionNote}
+                  </p>
+                ) : null}
+              </div>
+            ) : null}
             <ul className={settingsSurfaceVariants({ variant: "divide" })}>
-              {items.map((memory) => (
-                <li
-                  className={cn(
-                    settingsSurfaceVariants({ variant: "padding" }),
-                    "flex items-start gap-3"
-                  )}
-                  key={memory.id}
-                >
-                  <div className="min-w-0 flex-1 space-y-1">
+              {items.map((memory) => {
+                const details = (
+                  <div className="min-w-0 flex-1 space-y-0.5">
                     <p className="text-caption text-muted-fg">
                       {memoryCategoryLabels[memory.category]}
                     </p>
@@ -230,40 +352,94 @@ export const PersonalizationMemories = ({
                     </p>
                     <MemoryProvenance provenance={memory.provenance} />
                   </div>
-                  <DropdownMenu>
-                    <IconButtonTooltip label="Memory actions">
-                      <DropdownMenuTrigger
-                        render={
-                          <Button
-                            aria-label="Memory actions"
-                            size="icon-xs"
-                            variant="ghost"
-                          />
-                        }
+                );
+                if (selecting) {
+                  const selected = selectedIdSet.has(memory.id);
+                  return (
+                    <li className="relative" key={memory.id}>
+                      {selected ? (
+                        <span
+                          aria-hidden
+                          className={mailListRowParts.overlay}
+                        />
+                      ) : null}
+                      <label
+                        className={cn(
+                          settingsSurfaceVariants({ variant: "padding" }),
+                          "relative flex items-start gap-3",
+                          {
+                            "cursor-not-allowed":
+                              selectionDisabled ||
+                              (atSelectionLimit && !selected),
+                          }
+                        )}
                       >
-                        <Icon aria-hidden icon={MoreHorizontalIcon} />
-                      </DropdownMenuTrigger>
-                    </IconButtonTooltip>
-                    <DropdownMenuContent align="end" size="compact">
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setEditor(memory);
-                        }}
-                      >
-                        Edit
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onSelect={() => {
-                          setDeleting(memory);
-                        }}
-                        tone="destructive"
-                      >
-                        Delete
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </li>
-              ))}
+                        <Checkbox
+                          checked={selected}
+                          disabled={
+                            selectionDisabled || (atSelectionLimit && !selected)
+                          }
+                          onCheckedChange={(checked) => {
+                            setSelection(
+                              new Set(
+                                checked
+                                  ? [...selectedIds, memory.id]
+                                  : selectedIds.filter((id) => id !== memory.id)
+                              )
+                            );
+                          }}
+                        >
+                          <CheckboxIndicator />
+                        </Checkbox>
+                        {details}
+                      </label>
+                    </li>
+                  );
+                }
+                return (
+                  <li
+                    className={cn(
+                      settingsSurfaceVariants({ variant: "padding" }),
+                      "flex items-start gap-3"
+                    )}
+                    key={memory.id}
+                  >
+                    {details}
+                    <DropdownMenu>
+                      <IconButtonTooltip label="Memory actions">
+                        <DropdownMenuTrigger
+                          render={
+                            <Button
+                              aria-label="Memory actions"
+                              size="icon-xs"
+                              variant="ghost"
+                            />
+                          }
+                        >
+                          <Icon aria-hidden icon={MoreHorizontalIcon} />
+                        </DropdownMenuTrigger>
+                      </IconButtonTooltip>
+                      <DropdownMenuContent align="end" size="compact">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setEditor(memory);
+                          }}
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setDeleting([memory.id]);
+                          }}
+                          tone="destructive"
+                        >
+                          Delete
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </li>
+                );
+              })}
             </ul>
           </SettingsCard>
         ) : null}
@@ -307,9 +483,20 @@ export const PersonalizationMemories = ({
         }}
         open={deleting !== null}
       >
-        <AlertDialogContent>
+        <AlertDialogContent
+          finalFocus={() =>
+            bulkDeleteButton.current ??
+            selectButton.current ??
+            addButton.current ??
+            true
+          }
+        >
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete memory?</AlertDialogTitle>
+            <AlertDialogTitle>
+              {(deleting?.length ?? 0) > 1
+                ? `Delete ${deleting?.length} memories?`
+                : "Delete memory?"}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               This cannot be undone.
             </AlertDialogDescription>
@@ -328,7 +515,7 @@ export const PersonalizationMemories = ({
               disabled={deletion.isPending || deleting === null}
               onClick={() => {
                 if (deleting) {
-                  deletion.mutate({ memoryId: deleting.id });
+                  deletion.mutate({ memoryIds: deleting });
                 }
               }}
               pending={deletion.isPending}
@@ -340,6 +527,6 @@ export const PersonalizationMemories = ({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </>
+    </div>
   );
 };

@@ -1,7 +1,7 @@
-import type { ChatModel, ChatModelGroup } from "@quieter/ai/chat-models";
 import type { CommandMenuItem } from "@quieter/ui/command-menu";
 
-import { chatModelLabs, getChatModelOptions } from "./chat-model-options";
+import { getChatModelItems } from "./chat-model-options";
+import type { ChatModelItem } from "./chat-model-options";
 
 type ChatSlashCommand = {
   from: number;
@@ -10,12 +10,13 @@ type ChatSlashCommand = {
   query: string;
 };
 
-type ChatSlashItem = Omit<CommandMenuItem, "icon"> &
-  (
-    | { kind: "search"; command: "model" | "snippet" }
-    | { kind: "model"; lab?: ChatModelGroup; model: ChatModel | "auto" }
-    | { kind: "snippet"; text: string }
-  );
+type ChatSlashItem =
+  | ChatModelItem
+  | (Omit<CommandMenuItem, "icon"> &
+      (
+        | { kind: "search"; command: "model" | "snippet" }
+        | { kind: "snippet"; text: string }
+      ));
 
 const commands: ChatSlashItem[] = [
   {
@@ -69,30 +70,7 @@ export const getChatSlashItems = (
   snippets: readonly { bodyText: string; id: string; name: string }[]
 ): ChatSlashItem[] => {
   if (command.kind === "model") {
-    const { autoMatches, groups } = getChatModelOptions(command.query);
-    const items: ChatSlashItem[] = [];
-    if (autoMatches) {
-      items.push({
-        group: "Models",
-        id: "model-auto",
-        kind: "model",
-        label: "Auto",
-        model: "auto",
-      });
-    }
-    for (const { group, options } of groups) {
-      for (const model of options) {
-        items.push({
-          group: chatModelLabs[group].label,
-          id: model.value,
-          kind: "model",
-          lab: group,
-          label: model.label,
-          model: model.value,
-        });
-      }
-    }
-    return items;
+    return getChatModelItems(command.query);
   }
   const search = command.query.toLocaleLowerCase().replaceAll(/\s+/gu, "");
   const matchingSnippets: ChatSlashItem[] = snippets

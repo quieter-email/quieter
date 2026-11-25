@@ -21,6 +21,7 @@ import { z } from "zod";
 
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { publishMailUpdate } from "../mail-updates";
+import { signalGmailMailbox } from "../mailbox/gmail-mailbox-signal";
 import { assertAgentMailboxAccess } from "./access";
 import { assertPersonalAgentSettingAccess } from "./authority";
 import {
@@ -817,5 +818,11 @@ export const enqueueManualMailAgentRun = async (input: {
     },
     { recipientUserIds: [input.userId] }
   );
+  if (access.provider === "gmail") {
+    await signalGmailMailbox({
+      kind: "actions",
+      mailboxId: input.mailboxId,
+    });
+  }
   return run;
 };

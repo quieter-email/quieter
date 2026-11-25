@@ -26,6 +26,8 @@ import { convert } from "html-to-text";
 import { assertCanUseAi } from "../ai-access";
 import { getMailAutomationAiBudgetStatus } from "../mail-automation/ai-budget";
 import { queriesMailOperations } from "../mail/queries";
+import { mailboxAutomationFilter } from "../mailbox/automation-scope";
+import type { MailboxAutomationScope } from "../mailbox/automation-scope";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { createReminder, getReminder } from "./service";
 import {
@@ -120,12 +122,15 @@ const suggestionResponse = (row: SuggestionRow): SuggestionResponse => {
   };
 };
 
-const reportSuggestionUsage = async () => {
+export const reportPendingReminderSuggestionUsage = async (
+  input: MailboxAutomationScope = {}
+) => {
   const rows = await db
     .select()
     .from(mailReminderSuggestion)
     .where(
       and(
+        mailboxAutomationFilter(mailReminderSuggestion.mailboxId, input),
         isNotNull(mailReminderSuggestion.usage),
         isNull(mailReminderSuggestion.usageReportedAt)
       )
@@ -429,7 +434,10 @@ export const getReminderSuggestion = async (
     return { status: "none", suggestion: null };
   }
   if (row.status === "pending") {
-    const claimed = await claimReminderSuggestion(row.id);
+    const claimed = await claimReminderSuggestion({
+      id: row.id,
+      mailboxId: input.mailboxId,
+    });
     if (claimed) {
       await processSuggestion(claimed);
     }
@@ -439,7 +447,7 @@ export const getReminderSuggestion = async (
     .from(mailReminderSuggestion)
     .where(eq(mailReminderSuggestion.id, row.id))
     .limit(1);
-  await reportSuggestionUsage();
+  await reportPendingReminderSuggestionUsage(input);
   return current === undefined
     ? { status: "none", suggestion: null }
     : suggestionResponse(current);
@@ -558,17 +566,17 @@ export const dismissReminderSuggestion = async (
 };
 
 export const processReminderSuggestions = async (
-  input: { limit?: number; allowLocal?: boolean } = {}
+  input: MailboxAutomationScope & { limit?: number; allowLocal?: boolean } = {}
 ) => {
-  await reportSuggestionUsage();
+  await reportPendingReminderSuggestionUsage(input);
   let count = 0;
   for (; count < Math.min(input.limit ?? 2, 5); count += 1) {
-    const claimed = await claimReminderSuggestion();
+    const claimed = await claimReminderSuggestion(input);
     if (!claimed) {
       break;
     }
     await processSuggestion(claimed, input.allowLocal);
   }
-  await reportSuggestionUsage();
+  await reportPendingReminderSuggestionUsage(input);
   return count;
 };

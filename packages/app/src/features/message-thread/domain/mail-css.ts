@@ -7,6 +7,7 @@ const BLOCKED_PROPERTIES = new Set([
   "-ms-behavior",
   "-moz-binding",
   "-webkit-user-modify",
+  "color-scheme",
   "view-transition-name",
 ]);
 const BLOCKED_FUNCTIONS = new Set([
@@ -28,6 +29,34 @@ const GROUPING_AT_RULES = new Set(["media", "supports"]);
 type MailCssOptions = {
   context: "declarationList" | "stylesheet";
   resolveImage: (value: string) => string | null;
+};
+
+const applyLightColorScheme = (query: CssNode) => {
+  walk(query, {
+    enter(feature) {
+      if (
+        feature.kind !== "media" ||
+        ident.decode(feature.name).toLowerCase() !== "prefers-color-scheme" ||
+        feature.value?.type !== "Identifier"
+      ) {
+        return;
+      }
+
+      const scheme = ident.decode(feature.value.name).toLowerCase();
+      if (scheme !== "light" && scheme !== "dark") {
+        return;
+      }
+
+      // Mail uses a light canvas. Color depth is nonnegative, so these
+      // comparisons pin the preference while preserving compound queries.
+      feature.name = scheme === "light" ? "min-color" : "max-color";
+      feature.value = {
+        type: "Number",
+        value: scheme === "light" ? "0" : "-1",
+      };
+    },
+    visit: "Feature",
+  });
 };
 
 const sanitizeValue = (
@@ -145,6 +174,7 @@ const sanitizeChildren = (
       node.block !== null &&
       sanitizeValue(node.prelude, resolveImage)
     ) {
+      applyLightColorScheme(node.prelude);
       sanitizeChildren(node.block.children, resolveImage, declarations);
       if (node.block.children.isEmpty) {
         children.remove(item);
@@ -165,7 +195,7 @@ export const sanitizeMailCss = (
     const ast = parse(source, {
       context,
       onParseError: (_error, fallback) => {
-        if (fallback.type !== "Raw") {
+        if (fallback !== null && fallback.type !== "Raw") {
           unknownRecovery = true;
         }
       },
@@ -190,5 +220,15 @@ export const sanitizeMailCss = (
     return generate(ast).replaceAll(/<(?=\/style)/giu, "\\3c ");
   } catch {
     return "";
+  }
+};
+
+export const normalizeMailMedia = (source: string): string => {
+  try {
+    const query = parse(source, { context: "mediaQueryList" });
+    applyLightColorScheme(query);
+    return generate(query);
+  } catch {
+    return source;
   }
 };

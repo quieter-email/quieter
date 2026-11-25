@@ -1,155 +1,1375 @@
 {
-  "version": "8",
+  "type": "base",
+  "version": "10",
   "dialect": "postgres",
   "id": "7314cf2f-aba9-48aa-b2cf-81a4cd0f58df",
   "prevIds": ["00000000-0000-0000-0000-000000000000"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|tbl|public.account",
+        "n|tbl|public.account",
+        "e|tbl|public.account",
+        "n|rel|public.account",
+        "n|type|public.account",
+        "n|rel|public.account_pkey",
+        "n|rel|public.account_providerId_accountId_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "apikey"],
+      "writes": [
+        "s|tbl|public.apikey",
+        "n|tbl|public.apikey",
+        "e|tbl|public.apikey",
+        "n|rel|public.apikey",
+        "n|type|public.apikey",
+        "n|rel|public.apikey_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "billingSubscription"],
+      "writes": [
+        "s|tbl|public.billingSubscription",
+        "n|tbl|public.billingSubscription",
+        "e|tbl|public.billingSubscription",
+        "n|rel|public.billingSubscription",
+        "n|type|public.billingSubscription",
+        "n|rel|public.billingSubscription_pkey",
+        "n|rel|public.billing_subscription_provider_subscription_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "chat"],
+      "writes": [
+        "s|tbl|public.chat",
+        "n|tbl|public.chat",
+        "e|tbl|public.chat",
+        "n|rel|public.chat",
+        "n|type|public.chat",
+        "n|rel|public.chat_pkey",
+        "n|rel|public.chat_id_user_id_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "chatMessage"],
+      "writes": [
+        "s|tbl|public.chatMessage",
+        "n|tbl|public.chatMessage",
+        "e|tbl|public.chatMessage",
+        "n|rel|public.chatMessage",
+        "n|type|public.chatMessage",
+        "n|rel|public.chatMessage_pkey",
+        "n|rel|public.chat_message_chat_id_position_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "gmailCredential"],
+      "writes": [
+        "s|tbl|public.gmailCredential",
+        "n|tbl|public.gmailCredential",
+        "e|tbl|public.gmailCredential",
+        "n|rel|public.gmailCredential",
+        "n|type|public.gmailCredential",
+        "n|rel|public.gmailCredential_pkey",
+        "n|rel|public.gmail_credential_google_subject_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "gmailOAuthState"],
+      "writes": [
+        "s|tbl|public.gmailOAuthState",
+        "n|tbl|public.gmailOAuthState",
+        "e|tbl|public.gmailOAuthState",
+        "n|rel|public.gmailOAuthState",
+        "n|type|public.gmailOAuthState",
+        "n|rel|public.gmailOAuthState_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "invitation"],
+      "writes": [
+        "s|tbl|public.invitation",
+        "n|tbl|public.invitation",
+        "e|tbl|public.invitation",
+        "n|rel|public.invitation",
+        "n|type|public.invitation",
+        "n|rel|public.invitation_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailDomain"],
+      "writes": [
+        "s|tbl|public.mailDomain",
+        "n|tbl|public.mailDomain",
+        "e|tbl|public.mailDomain",
+        "n|rel|public.mailDomain",
+        "n|type|public.mailDomain",
+        "n|rel|public.mailDomain_pkey",
+        "n|rel|public.mail_domain_domain_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailbox"],
+      "writes": [
+        "s|tbl|public.mailbox",
+        "n|tbl|public.mailbox",
+        "e|tbl|public.mailbox",
+        "n|rel|public.mailbox",
+        "n|type|public.mailbox",
+        "n|rel|public.mailbox_pkey",
+        "n|rel|public.mailbox_email_address_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailboxGrant"],
+      "writes": [
+        "s|tbl|public.mailboxGrant",
+        "n|tbl|public.mailboxGrant",
+        "e|tbl|public.mailboxGrant",
+        "n|rel|public.mailboxGrant",
+        "n|type|public.mailboxGrant",
+        "n|rel|public.mailboxGrant_pkey",
+        "n|rel|public.mailbox_grant_mailbox_id_user_id_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "managedMailMessage"],
+      "writes": [
+        "s|tbl|public.managedMailMessage",
+        "n|tbl|public.managedMailMessage",
+        "e|tbl|public.managedMailMessage",
+        "n|rel|public.managedMailMessage",
+        "n|type|public.managedMailMessage",
+        "n|rel|public.managedMailMessage_pkey",
+        "n|rel|public.managed_mail_message_mailbox_provider_message_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "member"],
+      "writes": [
+        "s|tbl|public.member",
+        "n|tbl|public.member",
+        "e|tbl|public.member",
+        "n|rel|public.member",
+        "n|type|public.member",
+        "n|rel|public.member_pkey",
+        "n|rel|public.member_organization_id_user_id_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "organization"],
+      "writes": [
+        "s|tbl|public.organization",
+        "n|tbl|public.organization",
+        "e|tbl|public.organization",
+        "n|rel|public.organization",
+        "n|type|public.organization",
+        "n|rel|public.organization_pkey",
+        "n|rel|public.organization_slug_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "organizationMailUsageAlertEvent"],
+      "writes": [
+        "s|tbl|public.organizationMailUsageAlertEvent",
+        "n|tbl|public.organizationMailUsageAlertEvent",
+        "e|tbl|public.organizationMailUsageAlertEvent",
+        "n|rel|public.organizationMailUsageAlertEvent",
+        "n|type|public.organizationMailUsageAlertEvent",
+        "n|rel|public.organizationMailUsageAlertEvent_pkey",
+        "n|rel|public.organization_mail_usage_alert_event_period_milestone_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "organizationMailUsageEvent"],
+      "writes": [
+        "s|tbl|public.organizationMailUsageEvent",
+        "n|tbl|public.organizationMailUsageEvent",
+        "e|tbl|public.organizationMailUsageEvent",
+        "n|rel|public.organizationMailUsageEvent",
+        "n|type|public.organizationMailUsageEvent",
+        "n|rel|public.organizationMailUsageEvent_pkey",
+        "n|rel|public.organization_mail_usage_event_dedupe_key_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "organizationMailUsageSettings"],
+      "writes": [
+        "s|tbl|public.organizationMailUsageSettings",
+        "n|tbl|public.organizationMailUsageSettings",
+        "e|tbl|public.organizationMailUsageSettings",
+        "n|rel|public.organizationMailUsageSettings",
+        "n|type|public.organizationMailUsageSettings",
+        "n|rel|public.organizationMailUsageSettings_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "passkey"],
+      "writes": [
+        "s|tbl|public.passkey",
+        "n|tbl|public.passkey",
+        "e|tbl|public.passkey",
+        "n|rel|public.passkey",
+        "n|type|public.passkey",
+        "n|rel|public.passkey_pkey",
+        "n|rel|public.passkey_credential_id_unique"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "session"],
+      "writes": [
+        "s|tbl|public.session",
+        "n|tbl|public.session",
+        "e|tbl|public.session",
+        "n|rel|public.session",
+        "n|type|public.session",
+        "n|rel|public.session_pkey",
+        "n|rel|public.session_token_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "user"],
+      "writes": [
+        "s|tbl|public.user",
+        "n|tbl|public.user",
+        "e|tbl|public.user",
+        "n|rel|public.user",
+        "n|type|public.user",
+        "n|rel|public.user_pkey",
+        "n|rel|public.user_email_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "verification"],
+      "writes": [
+        "s|tbl|public.verification",
+        "n|tbl|public.verification",
+        "e|tbl|public.verification",
+        "n|rel|public.verification",
+        "n|type|public.verification",
+        "n|rel|public.verification_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "waitlistSignup"],
+      "writes": [
+        "s|tbl|public.waitlistSignup",
+        "n|tbl|public.waitlistSignup",
+        "e|tbl|public.waitlistSignup",
+        "n|rel|public.waitlistSignup",
+        "n|type|public.waitlistSignup",
+        "n|rel|public.waitlistSignup_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "apikey", "apikey_config_id_idx"],
+      "writes": [
+        "s|idx|public.apikey_config_id_idx",
+        "n|idx|public.apikey_config_id_idx",
+        "e|idx|public.apikey_config_id_idx",
+        "n|rel|public.apikey_config_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.apikey",
+        "n|sch|public",
+        "n|col|public.apikey.configId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "apikey",
+        "apikey_reference_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.apikey_reference_id_idx",
+        "n|idx|public.apikey_reference_id_idx",
+        "e|idx|public.apikey_reference_id_idx",
+        "n|rel|public.apikey_reference_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.apikey",
+        "n|sch|public",
+        "n|col|public.apikey.referenceId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "apikey", "apikey_key_idx"],
+      "writes": [
+        "s|idx|public.apikey_key_idx",
+        "n|idx|public.apikey_key_idx",
+        "e|idx|public.apikey_key_idx",
+        "n|rel|public.apikey_key_idx"
+      ],
+      "reads": [
+        "n|tbl|public.apikey",
+        "n|sch|public",
+        "n|col|public.apikey.key"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "billingSubscription",
+        "billing_subscription_user_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.billing_subscription_user_id_idx",
+        "n|idx|public.billing_subscription_user_id_idx",
+        "e|idx|public.billing_subscription_user_id_idx",
+        "n|rel|public.billing_subscription_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.billingSubscription",
+        "n|sch|public",
+        "n|col|public.billingSubscription.userId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "billingSubscription",
+        "billing_subscription_provider_subscription_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.billing_subscription_provider_subscription_id_idx",
+        "n|idx|public.billing_subscription_provider_subscription_id_idx",
+        "e|idx|public.billing_subscription_provider_subscription_id_idx",
+        "n|rel|public.billing_subscription_provider_subscription_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.billingSubscription",
+        "n|sch|public",
+        "n|col|public.billingSubscription.providerSubscriptionId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "chat",
+        "chat_mailbox_id_user_id_updated_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.chat_mailbox_id_user_id_updated_at_idx",
+        "n|idx|public.chat_mailbox_id_user_id_updated_at_idx",
+        "e|idx|public.chat_mailbox_id_user_id_updated_at_idx",
+        "n|rel|public.chat_mailbox_id_user_id_updated_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.chat",
+        "n|sch|public",
+        "n|col|public.chat.mailboxId",
+        "n|col|public.chat.userId",
+        "n|col|public.chat.updatedAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailOAuthState",
+        "gmail_oauth_state_user_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_oauth_state_user_id_idx",
+        "n|idx|public.gmail_oauth_state_user_id_idx",
+        "e|idx|public.gmail_oauth_state_user_id_idx",
+        "n|rel|public.gmail_oauth_state_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailOAuthState",
+        "n|sch|public",
+        "n|col|public.gmailOAuthState.userId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailOAuthState",
+        "gmail_oauth_state_expires_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_oauth_state_expires_at_idx",
+        "n|idx|public.gmail_oauth_state_expires_at_idx",
+        "e|idx|public.gmail_oauth_state_expires_at_idx",
+        "n|rel|public.gmail_oauth_state_expires_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailOAuthState",
+        "n|sch|public",
+        "n|col|public.gmailOAuthState.expiresAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "invitation",
+        "invitation_organization_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.invitation_organization_id_idx",
+        "n|idx|public.invitation_organization_id_idx",
+        "e|idx|public.invitation_organization_id_idx",
+        "n|rel|public.invitation_organization_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.invitation",
+        "n|sch|public",
+        "n|col|public.invitation.organizationId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "invitation",
+        "invitation_email_idx"
+      ],
+      "writes": [
+        "s|idx|public.invitation_email_idx",
+        "n|idx|public.invitation_email_idx",
+        "e|idx|public.invitation_email_idx",
+        "n|rel|public.invitation_email_idx"
+      ],
+      "reads": [
+        "n|tbl|public.invitation",
+        "n|sch|public",
+        "n|col|public.invitation.email"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailDomain",
+        "mail_domain_organization_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_domain_organization_id_idx",
+        "n|idx|public.mail_domain_organization_id_idx",
+        "e|idx|public.mail_domain_organization_id_idx",
+        "n|rel|public.mail_domain_organization_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailDomain",
+        "n|sch|public",
+        "n|col|public.mailDomain.organizationId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailbox",
+        "mailbox_owner_user_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.mailbox_owner_user_id_idx",
+        "n|idx|public.mailbox_owner_user_id_idx",
+        "e|idx|public.mailbox_owner_user_id_idx",
+        "n|rel|public.mailbox_owner_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailbox.ownerUserId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailbox",
+        "mailbox_organization_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.mailbox_organization_id_idx",
+        "n|idx|public.mailbox_organization_id_idx",
+        "e|idx|public.mailbox_organization_id_idx",
+        "n|rel|public.mailbox_organization_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailbox.organizationId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailboxGrant",
+        "mailbox_grant_mailbox_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.mailbox_grant_mailbox_id_idx",
+        "n|idx|public.mailbox_grant_mailbox_id_idx",
+        "e|idx|public.mailbox_grant_mailbox_id_idx",
+        "n|rel|public.mailbox_grant_mailbox_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxGrant",
+        "n|sch|public",
+        "n|col|public.mailboxGrant.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailboxGrant",
+        "mailbox_grant_user_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.mailbox_grant_user_id_idx",
+        "n|idx|public.mailbox_grant_user_id_idx",
+        "e|idx|public.mailbox_grant_user_id_idx",
+        "n|rel|public.mailbox_grant_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxGrant",
+        "n|sch|public",
+        "n|col|public.mailboxGrant.userId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "managedMailMessage",
+        "managed_mail_message_mailbox_direction_sent_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.managed_mail_message_mailbox_direction_sent_at_idx",
+        "n|idx|public.managed_mail_message_mailbox_direction_sent_at_idx",
+        "e|idx|public.managed_mail_message_mailbox_direction_sent_at_idx",
+        "n|rel|public.managed_mail_message_mailbox_direction_sent_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.managedMailMessage",
+        "n|sch|public",
+        "n|col|public.managedMailMessage.mailboxId",
+        "n|col|public.managedMailMessage.direction",
+        "n|col|public.managedMailMessage.sentAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "managedMailMessage",
+        "managed_mail_message_mailbox_thread_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.managed_mail_message_mailbox_thread_id_idx",
+        "n|idx|public.managed_mail_message_mailbox_thread_id_idx",
+        "e|idx|public.managed_mail_message_mailbox_thread_id_idx",
+        "n|rel|public.managed_mail_message_mailbox_thread_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.managedMailMessage",
+        "n|sch|public",
+        "n|col|public.managedMailMessage.mailboxId",
+        "n|col|public.managedMailMessage.threadId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "managedMailMessage",
+        "managed_mail_message_s3_bucket_key_idx"
+      ],
+      "writes": [
+        "s|idx|public.managed_mail_message_s3_bucket_key_idx",
+        "n|idx|public.managed_mail_message_s3_bucket_key_idx",
+        "e|idx|public.managed_mail_message_s3_bucket_key_idx",
+        "n|rel|public.managed_mail_message_s3_bucket_key_idx"
+      ],
+      "reads": [
+        "n|tbl|public.managedMailMessage",
+        "n|sch|public",
+        "n|col|public.managedMailMessage.s3Bucket",
+        "n|col|public.managedMailMessage.s3Key"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "member",
+        "member_organization_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.member_organization_id_idx",
+        "n|idx|public.member_organization_id_idx",
+        "e|idx|public.member_organization_id_idx",
+        "n|rel|public.member_organization_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|col|public.member.organizationId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "member", "member_user_id_idx"],
+      "writes": [
+        "s|idx|public.member_user_id_idx",
+        "n|idx|public.member_user_id_idx",
+        "e|idx|public.member_user_id_idx",
+        "n|rel|public.member_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|col|public.member.userId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "organizationMailUsageAlertEvent",
+        "organization_mail_usage_alert_event_organization_period_idx"
+      ],
+      "writes": [
+        "s|idx|public.organization_mail_usage_alert_event_organization_period_idx",
+        "n|idx|public.organization_mail_usage_alert_event_organization_period_idx",
+        "e|idx|public.organization_mail_usage_alert_event_organization_period_idx",
+        "n|rel|public.organization_mail_usage_alert_event_organization_period_idx"
+      ],
+      "reads": [
+        "n|tbl|public.organizationMailUsageAlertEvent",
+        "n|sch|public",
+        "n|col|public.organizationMailUsageAlertEvent.organizationId",
+        "n|col|public.organizationMailUsageAlertEvent.periodStart"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "organizationMailUsageEvent",
+        "organization_mail_usage_event_organization_created_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.organization_mail_usage_event_organization_created_at_idx",
+        "n|idx|public.organization_mail_usage_event_organization_created_at_idx",
+        "e|idx|public.organization_mail_usage_event_organization_created_at_idx",
+        "n|rel|public.organization_mail_usage_event_organization_created_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.organizationMailUsageEvent",
+        "n|sch|public",
+        "n|col|public.organizationMailUsageEvent.organizationId",
+        "n|col|public.organizationMailUsageEvent.createdAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "passkey", "passkey_user_id_idx"],
+      "writes": [
+        "s|idx|public.passkey_user_id_idx",
+        "n|idx|public.passkey_user_id_idx",
+        "e|idx|public.passkey_user_id_idx",
+        "n|rel|public.passkey_user_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.passkey",
+        "n|sch|public",
+        "n|col|public.passkey.userId"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|fk|public.account.account_userId_user_id_fkey",
+        "n|fk|public.account.account_userId_user_id_fkey",
+        "e|fk|public.account.account_userId_user_id_fkey",
+        "n|con|public.account.account_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.account.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "billingSubscription"],
+      "writes": [
+        "s|fk|public.billingSubscription.billingSubscription_userId_user_id_fkey",
+        "n|fk|public.billingSubscription.billingSubscription_userId_user_id_fkey",
+        "e|fk|public.billingSubscription.billingSubscription_userId_user_id_fkey",
+        "n|con|public.billingSubscription.billingSubscription_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.billingSubscription",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.billingSubscription.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "chat"],
+      "writes": [
+        "s|fk|public.chat.chat_mailboxId_mailbox_id_fkey",
+        "n|fk|public.chat.chat_mailboxId_mailbox_id_fkey",
+        "e|fk|public.chat.chat_mailboxId_mailbox_id_fkey",
+        "n|con|public.chat.chat_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.chat",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.chat.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "chat"],
+      "writes": [
+        "s|fk|public.chat.chat_userId_user_id_fkey",
+        "n|fk|public.chat.chat_userId_user_id_fkey",
+        "e|fk|public.chat.chat_userId_user_id_fkey",
+        "n|con|public.chat.chat_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.chat",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.chat.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "chatMessage"],
+      "writes": [
+        "s|fk|public.chatMessage.chat_message_chat_id_user_id_fkey",
+        "n|fk|public.chatMessage.chat_message_chat_id_user_id_fkey",
+        "e|fk|public.chatMessage.chat_message_chat_id_user_id_fkey",
+        "n|con|public.chatMessage.chat_message_chat_id_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.chatMessage",
+        "n|sch|public",
+        "n|tbl|public.chat",
+        "n|sch|public",
+        "n|col|public.chatMessage.chatId",
+        "n|col|public.chatMessage.userId",
+        "n|col|public.chat.id",
+        "n|col|public.chat.userId",
+        "e|uniqueness|public.chat.id.userId"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "gmailCredential"],
+      "writes": [
+        "s|fk|public.gmailCredential.gmailCredential_mailboxId_mailbox_id_fkey",
+        "n|fk|public.gmailCredential.gmailCredential_mailboxId_mailbox_id_fkey",
+        "e|fk|public.gmailCredential.gmailCredential_mailboxId_mailbox_id_fkey",
+        "n|con|public.gmailCredential.gmailCredential_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.gmailCredential",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.gmailCredential.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "gmailOAuthState"],
+      "writes": [
+        "s|fk|public.gmailOAuthState.gmailOAuthState_userId_user_id_fkey",
+        "n|fk|public.gmailOAuthState.gmailOAuthState_userId_user_id_fkey",
+        "e|fk|public.gmailOAuthState.gmailOAuthState_userId_user_id_fkey",
+        "n|con|public.gmailOAuthState.gmailOAuthState_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.gmailOAuthState",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.gmailOAuthState.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "gmailOAuthState"],
+      "writes": [
+        "s|fk|public.gmailOAuthState.gmailOAuthState_mailboxId_mailbox_id_fkey",
+        "n|fk|public.gmailOAuthState.gmailOAuthState_mailboxId_mailbox_id_fkey",
+        "e|fk|public.gmailOAuthState.gmailOAuthState_mailboxId_mailbox_id_fkey",
+        "n|con|public.gmailOAuthState.gmailOAuthState_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.gmailOAuthState",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.gmailOAuthState.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "gmailOAuthState"],
+      "writes": [
+        "s|fk|public.gmailOAuthState.gmailOAuthState_organizationId_organization_id_fkey",
+        "n|fk|public.gmailOAuthState.gmailOAuthState_organizationId_organization_id_fkey",
+        "e|fk|public.gmailOAuthState.gmailOAuthState_organizationId_organization_id_fkey",
+        "n|con|public.gmailOAuthState.gmailOAuthState_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.gmailOAuthState",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.gmailOAuthState.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "invitation"],
+      "writes": [
+        "s|fk|public.invitation.invitation_organizationId_organization_id_fkey",
+        "n|fk|public.invitation.invitation_organizationId_organization_id_fkey",
+        "e|fk|public.invitation.invitation_organizationId_organization_id_fkey",
+        "n|con|public.invitation.invitation_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.invitation",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.invitation.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "invitation"],
+      "writes": [
+        "s|fk|public.invitation.invitation_inviterId_user_id_fkey",
+        "n|fk|public.invitation.invitation_inviterId_user_id_fkey",
+        "e|fk|public.invitation.invitation_inviterId_user_id_fkey",
+        "n|con|public.invitation.invitation_inviterId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.invitation",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.invitation.inviterId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailDomain"],
+      "writes": [
+        "s|fk|public.mailDomain.mailDomain_organizationId_organization_id_fkey",
+        "n|fk|public.mailDomain.mailDomain_organizationId_organization_id_fkey",
+        "e|fk|public.mailDomain.mailDomain_organizationId_organization_id_fkey",
+        "n|con|public.mailDomain.mailDomain_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailDomain",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.mailDomain.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailbox"],
+      "writes": [
+        "s|fk|public.mailbox.mailbox_ownerUserId_user_id_fkey",
+        "n|fk|public.mailbox.mailbox_ownerUserId_user_id_fkey",
+        "e|fk|public.mailbox.mailbox_ownerUserId_user_id_fkey",
+        "n|con|public.mailbox.mailbox_ownerUserId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.mailbox.ownerUserId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailbox"],
+      "writes": [
+        "s|fk|public.mailbox.mailbox_organizationId_organization_id_fkey",
+        "n|fk|public.mailbox.mailbox_organizationId_organization_id_fkey",
+        "e|fk|public.mailbox.mailbox_organizationId_organization_id_fkey",
+        "n|con|public.mailbox.mailbox_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.mailbox.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailboxGrant"],
+      "writes": [
+        "s|fk|public.mailboxGrant.mailboxGrant_mailboxId_mailbox_id_fkey",
+        "n|fk|public.mailboxGrant.mailboxGrant_mailboxId_mailbox_id_fkey",
+        "e|fk|public.mailboxGrant.mailboxGrant_mailboxId_mailbox_id_fkey",
+        "n|con|public.mailboxGrant.mailboxGrant_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxGrant",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailboxGrant.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailboxGrant"],
+      "writes": [
+        "s|fk|public.mailboxGrant.mailboxGrant_userId_user_id_fkey",
+        "n|fk|public.mailboxGrant.mailboxGrant_userId_user_id_fkey",
+        "e|fk|public.mailboxGrant.mailboxGrant_userId_user_id_fkey",
+        "n|con|public.mailboxGrant.mailboxGrant_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxGrant",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.mailboxGrant.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "managedMailMessage"],
+      "writes": [
+        "s|fk|public.managedMailMessage.managedMailMessage_mailboxId_mailbox_id_fkey",
+        "n|fk|public.managedMailMessage.managedMailMessage_mailboxId_mailbox_id_fkey",
+        "e|fk|public.managedMailMessage.managedMailMessage_mailboxId_mailbox_id_fkey",
+        "n|con|public.managedMailMessage.managedMailMessage_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.managedMailMessage",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.managedMailMessage.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "member"],
+      "writes": [
+        "s|fk|public.member.member_organizationId_organization_id_fkey",
+        "n|fk|public.member.member_organizationId_organization_id_fkey",
+        "e|fk|public.member.member_organizationId_organization_id_fkey",
+        "n|con|public.member.member_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.member.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "member"],
+      "writes": [
+        "s|fk|public.member.member_userId_user_id_fkey",
+        "n|fk|public.member.member_userId_user_id_fkey",
+        "e|fk|public.member.member_userId_user_id_fkey",
+        "n|con|public.member.member_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.member",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.member.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "organizationMailUsageAlertEvent"],
+      "writes": [
+        "s|fk|public.organizationMailUsageAlertEvent.organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
+        "n|fk|public.organizationMailUsageAlertEvent.organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
+        "e|fk|public.organizationMailUsageAlertEvent.organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
+        "n|con|public.organizationMailUsageAlertEvent.organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.organizationMailUsageAlertEvent",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.organizationMailUsageAlertEvent.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "organizationMailUsageEvent"],
+      "writes": [
+        "s|fk|public.organizationMailUsageEvent.organizationMailUsageEvent_organizationId_organization_id_fkey",
+        "n|fk|public.organizationMailUsageEvent.organizationMailUsageEvent_organizationId_organization_id_fkey",
+        "e|fk|public.organizationMailUsageEvent.organizationMailUsageEvent_organizationId_organization_id_fkey",
+        "n|con|public.organizationMailUsageEvent.organizationMailUsageEvent_organizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.organizationMailUsageEvent",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.organizationMailUsageEvent.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "organizationMailUsageSettings"],
+      "writes": [
+        "s|fk|public.organizationMailUsageSettings.organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
+        "n|fk|public.organizationMailUsageSettings.organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
+        "e|fk|public.organizationMailUsageSettings.organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
+        "n|con|public.organizationMailUsageSettings.organizationMailUsageSettings_HFx0SA0zm7qR_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.organizationMailUsageSettings",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.organizationMailUsageSettings.organizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "passkey"],
+      "writes": [
+        "s|fk|public.passkey.passkey_userId_user_id_fkey",
+        "n|fk|public.passkey.passkey_userId_user_id_fkey",
+        "e|fk|public.passkey.passkey_userId_user_id_fkey",
+        "n|con|public.passkey.passkey_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.passkey",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.passkey.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "session"],
+      "writes": [
+        "s|fk|public.session.session_activeOrganizationId_organization_id_fkey",
+        "n|fk|public.session.session_activeOrganizationId_organization_id_fkey",
+        "e|fk|public.session.session_activeOrganizationId_organization_id_fkey",
+        "n|con|public.session.session_activeOrganizationId_organization_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|tbl|public.organization",
+        "n|sch|public",
+        "n|col|public.session.activeOrganizationId",
+        "n|col|public.organization.id",
+        "e|uniqueness|public.organization.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "session"],
+      "writes": [
+        "s|fk|public.session.session_userId_user_id_fkey",
+        "n|fk|public.session.session_userId_user_id_fkey",
+        "e|fk|public.session.session_userId_user_id_fkey",
+        "n|con|public.session.session_userId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.session",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.session.userId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    }
+  ],
   "ddl": [
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "account",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "apikey",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "billingSubscription",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "chat",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "chatMessage",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "gmailCredential",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "gmailOAuthState",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "invitation",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "mailDomain",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "mailbox",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "mailboxGrant",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "managedMailMessage",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "member",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "organization",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "organizationMailUsageAlertEvent",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "organizationMailUsageEvent",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "organizationMailUsageSettings",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "passkey",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "session",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "user",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "isRlsEnabled": false,
+      "schema": "public",
       "name": "verification",
-      "entityType": "tables",
-      "schema": "public"
-    },
-    {
       "isRlsEnabled": false,
+      "entityType": "tables"
+    },
+    {
+      "schema": "public",
       "name": "waitlistSignup",
-      "entityType": "tables",
-      "schema": "public"
+      "isRlsEnabled": false,
+      "entityType": "tables"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
       "schema": "public",
-      "table": "account"
-    },
-    {
+      "table": "account",
+      "name": "id",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -157,12 +1377,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accountId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -170,12 +1390,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "providerId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -183,25 +1403,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accessToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -209,12 +1429,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "refreshToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -222,25 +1442,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "idToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "accessTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
@@ -248,25 +1468,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "refreshTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "scope",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -274,25 +1494,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "password",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "account",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -300,12 +1520,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "account"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "account",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
+      "name": "id",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -313,12 +1546,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "apikey",
+      "name": "configId",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -326,25 +1559,12 @@
       "default": "'default'",
       "generated": null,
       "identity": null,
-      "name": "configId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "apikey",
       "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -352,12 +1572,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "start",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -365,25 +1585,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "prefix",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -391,25 +1611,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "referenceId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
-      "type": "integer",
+      "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "refillInterval",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": false,
@@ -417,12 +1637,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "refillAmount",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "apikey",
+      "name": "refillAmount",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
+      "name": "lastRefillAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
@@ -430,25 +1663,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "lastRefillAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
-      "type": "boolean",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": "true",
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "apikey",
       "name": "enabled",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": false,
@@ -456,25 +1676,25 @@
       "default": "true",
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "rateLimitEnabled",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
-      "type": "integer",
+      "type": "boolean",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
-      "default": null,
+      "default": "true",
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "rateLimitTimeWindow",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "integer",
       "typeSchema": null,
       "notNull": false,
@@ -482,12 +1702,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "rateLimitMax",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "apikey",
+      "name": "rateLimitMax",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
+      "name": "requestCount",
       "type": "integer",
       "typeSchema": null,
       "notNull": false,
@@ -495,38 +1728,25 @@
       "default": "0",
       "generated": null,
       "identity": null,
-      "name": "requestCount",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "columns"
     },
     {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "apikey",
       "name": "remaining",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
-      "type": "timestamp",
+      "type": "integer",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "lastRequest",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
@@ -534,25 +1754,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -560,25 +1780,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "permissions",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -586,64 +1806,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
       "name": "metadata",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "apikey"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "providerSubscriptionId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -651,25 +1819,77 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "id",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "userId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "provider",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "providerSubscriptionId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "providerCustomerId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "providerProductId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -677,12 +1897,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "plan",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -690,25 +1910,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "currentPeriodStart",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -716,12 +1936,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "currentPeriodEnd",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "currentPeriodEnd",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "metadata",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -729,25 +1962,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "metadata",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -755,25 +1975,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "billingSubscription",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "billingSubscription"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chat",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -781,12 +2001,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chat",
       "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -794,12 +2014,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "chat",
+      "name": "userId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chat",
+      "name": "title",
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -807,25 +2040,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "title",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "chat",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -833,25 +2053,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chat",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chat"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chatMessage",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -859,12 +2079,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chatMessage",
       "name": "chatId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -872,12 +2092,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "userId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "position",
       "type": "integer",
       "typeSchema": null,
       "notNull": true,
@@ -885,12 +2118,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "position",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "role",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -898,25 +2131,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "role",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "columns"
     },
     {
-      "type": "jsonb",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "chatMessage",
       "name": "parts",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "createdAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -924,25 +2157,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -950,25 +2170,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "googleSubject",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "encryptedAccessToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -976,51 +2196,51 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "encryptedRefreshToken",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "accessTokenExpiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "scopes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1028,25 +2248,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailCredential",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailCredential"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1054,25 +2274,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1080,25 +2300,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "organizationId",
       "type": "text",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "codeVerifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1106,25 +2326,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "returnTo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1132,25 +2352,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "gmailOAuthState",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "gmailOAuthState"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1158,12 +2378,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1171,12 +2391,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1184,12 +2404,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "role",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1197,38 +2417,51 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
+      "schema": "public",
+      "table": "invitation",
+      "name": "status",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "invitation",
       "name": "inviterId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "invitation",
+      "name": "createdAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1236,25 +2469,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "mailDomain",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1262,12 +2482,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1275,12 +2495,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "domain",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1288,12 +2508,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "mailFromDomain",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1301,25 +2521,38 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
-      "type": "jsonb",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "requiredDnsRecords",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "mailDomain",
+      "name": "lastCheckResult",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -1327,25 +2560,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "lastCheckResult",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "mailDomain",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1353,12 +2573,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailDomain",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "mailDomain",
+      "name": "verifiedAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
@@ -1366,25 +2599,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "verifiedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailDomain"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "mailbox",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1392,12 +2612,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
       "name": "provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1405,25 +2625,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
       "name": "emailAddress",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
       "name": "displayName",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1431,12 +2651,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
       "name": "ownerUserId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1444,12 +2664,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "organizationId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "status",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1457,25 +2690,12 @@
       "default": "'connected'",
       "generated": null,
       "identity": null,
-      "name": "status",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "mailbox",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1483,25 +2703,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailbox",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1509,12 +2729,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1522,12 +2742,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1535,25 +2755,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "role",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
-      "type": "timestamp",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1561,25 +2781,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1587,12 +2807,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "mailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1600,12 +2820,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "direction",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1613,12 +2833,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "providerMessageId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1626,51 +2846,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "threadId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "messageHeaderId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "inReplyTo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "references",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1678,25 +2859,64 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "messageHeaderId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "inReplyTo",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "references",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "from",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "to",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1704,12 +2924,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "cc",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1717,12 +2937,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "bcc",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1730,12 +2950,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "replyTo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1743,12 +2963,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "subject",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1756,12 +2976,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "snippet",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1769,12 +2989,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "bodyHtml",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1782,12 +3002,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "bodyText",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "bodyText",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "headers",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -1795,12 +3028,12 @@
       "default": "'[]'",
       "generated": null,
       "identity": null,
-      "name": "headers",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "isRead",
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -1808,38 +3041,25 @@
       "default": "false",
       "generated": null,
       "identity": null,
-      "name": "isRead",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "sentAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "s3Bucket",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -1847,38 +3067,38 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "s3Key",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "integer",
+      "type": "text",
       "typeSchema": null,
       "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "rawSizeBytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "timestamp",
+      "type": "integer",
       "typeSchema": null,
-      "notNull": true,
+      "notNull": false,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1886,25 +3106,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
-      "type": "text",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "member"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1912,12 +3132,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "member"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1925,12 +3145,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "member"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1938,12 +3158,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "role",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "member"
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "member",
+      "name": "createdAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -1951,25 +3184,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "member"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "organization",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1977,12 +3197,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organization",
       "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -1990,25 +3210,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organization",
       "name": "slug",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
-    },
-    {
       "type": "text",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organization",
       "name": "logo",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -2016,12 +3236,25 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organization",
       "name": "metadata",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organization",
+      "name": "createdAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -2029,324 +3262,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "organization",
       "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organization"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "periodStart",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "periodEnd",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "target",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "milestonePercent",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "thresholdMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "usageMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "direction",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "provider",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "providerMessageId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "dedupeKey",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "recipientCount",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "messageCount",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "messageSizeBytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "attachmentSizeBytes",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "integer",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "incomingChunkCount",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "sesCostMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "includedSesCostMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "type": "bigint",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "billableCostMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": false,
@@ -2354,12 +3275,324 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "polarEventReportedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "id",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "organizationId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "periodStart",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "periodEnd",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "target",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "milestonePercent",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "thresholdMicroCents",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "usageMicroCents",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "createdAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "id",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "organizationId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "direction",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "provider",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "providerMessageId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "dedupeKey",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "recipientCount",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "messageCount",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "messageSizeBytes",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "attachmentSizeBytes",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "incomingChunkCount",
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "sesCostMicroCents",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "includedSesCostMicroCents",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "billableCostMicroCents",
+      "type": "bigint",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "polarEventReportedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "metadata",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -2367,12 +3600,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "metadata",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "createdAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -2380,12 +3613,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "organizationId",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2393,12 +3626,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "organizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "overageEnabled",
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -2406,12 +3639,12 @@
       "default": "true",
       "generated": null,
       "identity": null,
-      "name": "overageEnabled",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "monthlyOverageLimitMicroCents",
       "type": "bigint",
       "typeSchema": null,
       "notNull": false,
@@ -2419,12 +3652,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "monthlyOverageLimitMicroCents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "alertMilestonePercents",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": true,
@@ -2432,25 +3665,12 @@
       "default": "'[50,80,100]'",
       "generated": null,
       "identity": null,
-      "name": "alertMilestonePercents",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -2458,12 +3678,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "id",
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2471,12 +3704,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "passkey",
+      "name": "name",
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -2484,25 +3717,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "passkey",
       "name": "publicKey",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2510,12 +3730,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
       "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2523,12 +3743,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "credentialID",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "passkey",
+      "name": "credentialID",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "counter",
       "type": "bigint",
       "typeSchema": null,
       "notNull": true,
@@ -2536,246 +3769,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "counter",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "columns"
     },
     {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "passkey",
       "name": "deviceType",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "boolean",
+      "type": "text",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
       "name": "backedUp",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "transports",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "aaguid",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "passkey"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "token",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "ipAddress",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userAgent",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": false,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "activeOrganizationId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "userId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "session"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "name",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "boolean",
       "typeSchema": null,
       "notNull": true,
@@ -2783,25 +3795,233 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "transports",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "createdAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "aaguid",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "id",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "expiresAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "token",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "createdAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "ipAddress",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "userAgent",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "activeOrganizationId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "userId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
+      "name": "id",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
+      "name": "name",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
+      "name": "email",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
       "name": "emailVerified",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
-      "type": "text",
+      "type": "boolean",
       "typeSchema": null,
-      "notNull": false,
+      "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
       "name": "image",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": false,
@@ -2809,12 +4029,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "defaultMailboxId",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "user",
+      "name": "defaultMailboxId",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "user",
+      "name": "mailboxSwitcherOrder",
       "type": "jsonb",
       "typeSchema": null,
       "notNull": false,
@@ -2822,25 +4055,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "mailboxSwitcherOrder",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
+      "schema": "public",
+      "table": "user",
       "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
-    },
-    {
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -2848,25 +4068,25 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "user"
+      "entityType": "columns"
     },
     {
-      "type": "text",
+      "schema": "public",
+      "table": "user",
+      "name": "updatedAt",
+      "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
       "dimensions": 0,
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
       "name": "id",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2874,12 +4094,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
       "name": "identifier",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2887,51 +4107,12 @@
       "default": null,
       "generated": null,
       "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
       "name": "value",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "expiresAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
-      "type": "timestamp",
-      "typeSchema": null,
-      "notNull": true,
-      "dimensions": 0,
-      "default": null,
-      "generated": null,
-      "identity": null,
-      "name": "updatedAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "verification"
-    },
-    {
       "type": "text",
       "typeSchema": null,
       "notNull": true,
@@ -2939,12 +4120,12 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "email",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "waitlistSignup"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "expiresAt",
       "type": "timestamp",
       "typeSchema": null,
       "notNull": true,
@@ -2952,12 +4133,64 @@
       "default": null,
       "generated": null,
       "identity": null,
-      "name": "createdAt",
-      "entityType": "columns",
-      "schema": "public",
-      "table": "waitlistSignup"
+      "entityType": "columns"
     },
     {
+      "schema": "public",
+      "table": "verification",
+      "name": "createdAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "verification",
+      "name": "updatedAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "waitlistSignup",
+      "name": "email",
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "waitlistSignup",
+      "name": "createdAt",
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "entityType": "columns"
+    },
+    {
+      "schema": "public",
+      "table": "apikey",
+      "name": "apikey_config_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -2972,13 +4205,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "apikey_config_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "apikey",
+      "name": "apikey_reference_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -2993,13 +4225,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "apikey_reference_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "apikey",
+      "name": "apikey_key_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3014,13 +4245,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "apikey_key_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "apikey"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "billing_subscription_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3035,13 +4265,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "billing_subscription_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "billing_subscription_provider_subscription_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3056,13 +4285,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "billing_subscription_provider_subscription_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "chat",
+      "name": "chat_mailbox_id_user_id_updated_at_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3091,13 +4319,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "chat_mailbox_id_user_id_updated_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "gmail_oauth_state_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3112,13 +4339,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "gmail_oauth_state_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "gmail_oauth_state_expires_at_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3133,13 +4359,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "gmail_oauth_state_expires_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "invitation",
+      "name": "invitation_organization_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3154,13 +4379,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "invitation_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "invitation",
+      "name": "invitation_email_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3175,13 +4399,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "invitation_email_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "mailDomain",
+      "name": "mail_domain_organization_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3196,13 +4419,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "mail_domain_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "mailDomain"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "mailbox_owner_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3217,13 +4439,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "mailbox_owner_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "mailbox_organization_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3238,13 +4459,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "mailbox_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "mailboxGrant",
+      "name": "mailbox_grant_mailbox_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3259,13 +4479,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "mailbox_grant_mailbox_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "mailboxGrant"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "mailboxGrant",
+      "name": "mailbox_grant_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3280,13 +4499,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "mailbox_grant_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "mailboxGrant"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "managed_mail_message_mailbox_direction_sent_at_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3315,13 +4533,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "managed_mail_message_mailbox_direction_sent_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "managed_mail_message_mailbox_thread_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3343,13 +4560,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "managed_mail_message_mailbox_thread_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "managed_mail_message_s3_bucket_key_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3371,13 +4587,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "managed_mail_message_s3_bucket_key_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "member",
+      "name": "member_organization_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3392,13 +4607,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "member_organization_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "member"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "member",
+      "name": "member_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3413,13 +4627,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "member_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "member"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "organization_mail_usage_alert_event_organization_period_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3441,13 +4654,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "organization_mail_usage_alert_event_organization_period_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "organization_mail_usage_event_organization_created_at_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3469,13 +4681,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "organization_mail_usage_event_organization_created_at_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
+      "entityType": "indexes"
     },
     {
+      "schema": "public",
+      "table": "passkey",
+      "name": "passkey_user_id_idx",
       "nameExplicit": true,
       "columns": [
         {
@@ -3490,26 +4701,12 @@
       "where": null,
       "with": "",
       "method": "btree",
-      "concurrently": false,
-      "name": "passkey_user_id_idx",
-      "entityType": "indexes",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "indexes"
     },
     {
-      "nameExplicit": false,
-      "columns": ["userId"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
+      "schema": "public",
+      "table": "account",
       "name": "account_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "account"
-    },
-    {
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -3517,12 +4714,25 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "billingSubscription_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "billingSubscription_userId_user_id_fkey",
+      "nameExplicit": false,
+      "columns": ["userId"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "chat",
+      "name": "chat_mailboxId_mailbox_id_fkey",
       "nameExplicit": false,
       "columns": ["mailboxId"],
       "schemaTo": "public",
@@ -3530,12 +4740,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "chat_mailboxId_mailbox_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "chat",
+      "name": "chat_userId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -3543,12 +4753,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "chat_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "chat_message_chat_id_user_id_fkey",
       "nameExplicit": true,
       "columns": ["chatId", "userId"],
       "schemaTo": "public",
@@ -3556,12 +4766,12 @@
       "columnsTo": ["id", "userId"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "chat_message_chat_id_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "gmailCredential",
+      "name": "gmailCredential_mailboxId_mailbox_id_fkey",
       "nameExplicit": false,
       "columns": ["mailboxId"],
       "schemaTo": "public",
@@ -3569,12 +4779,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "gmailCredential_mailboxId_mailbox_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "gmailCredential"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "gmailOAuthState_userId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -3582,12 +4792,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "gmailOAuthState_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "gmailOAuthState_mailboxId_mailbox_id_fkey",
       "nameExplicit": false,
       "columns": ["mailboxId"],
       "schemaTo": "public",
@@ -3595,12 +4805,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "gmailOAuthState_mailboxId_mailbox_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "gmailOAuthState",
+      "name": "gmailOAuthState_organizationId_organization_id_fkey",
       "nameExplicit": false,
       "columns": ["organizationId"],
       "schemaTo": "public",
@@ -3608,12 +4818,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "gmailOAuthState_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "gmailOAuthState"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "invitation",
+      "name": "invitation_organizationId_organization_id_fkey",
       "nameExplicit": false,
       "columns": ["organizationId"],
       "schemaTo": "public",
@@ -3621,12 +4831,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "invitation_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "invitation",
+      "name": "invitation_inviterId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["inviterId"],
       "schemaTo": "public",
@@ -3634,12 +4844,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "invitation_inviterId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "invitation"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "mailDomain",
+      "name": "mailDomain_organizationId_organization_id_fkey",
       "nameExplicit": false,
       "columns": ["organizationId"],
       "schemaTo": "public",
@@ -3647,12 +4857,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "mailDomain_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "mailDomain"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "mailbox_ownerUserId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["ownerUserId"],
       "schemaTo": "public",
@@ -3660,51 +4870,25 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
-      "name": "mailbox_ownerUserId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "fks"
     },
     {
-      "nameExplicit": false,
-      "columns": ["organizationId"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
+      "schema": "public",
+      "table": "mailbox",
       "name": "mailbox_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "mailbox"
-    },
-    {
       "nameExplicit": false,
-      "columns": ["mailboxId"],
+      "columns": ["organizationId"],
       "schemaTo": "public",
-      "tableTo": "mailbox",
+      "tableTo": "organization",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "mailboxGrant_mailboxId_mailbox_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["userId"],
-      "schemaTo": "public",
-      "tableTo": "user",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "CASCADE",
-      "name": "mailboxGrant_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "mailboxGrant"
-    },
-    {
       "nameExplicit": false,
       "columns": ["mailboxId"],
       "schemaTo": "public",
@@ -3712,77 +4896,51 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "CASCADE",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "mailboxGrant",
+      "name": "mailboxGrant_userId_user_id_fkey",
+      "nameExplicit": false,
+      "columns": ["userId"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "CASCADE",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "managedMailMessage",
       "name": "managedMailMessage_mailboxId_mailbox_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "managedMailMessage"
-    },
-    {
       "nameExplicit": false,
-      "columns": ["organizationId"],
+      "columns": ["mailboxId"],
       "schemaTo": "public",
-      "tableTo": "organization",
+      "tableTo": "mailbox",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
+      "onDelete": "CASCADE",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "member_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "member"
-    },
-    {
       "nameExplicit": false,
-      "columns": ["userId"],
+      "columns": ["organizationId"],
       "schemaTo": "public",
-      "tableTo": "user",
+      "tableTo": "organization",
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "member",
       "name": "member_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "member"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organizationId"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organizationId"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "organizationMailUsageEvent_organizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
-    },
-    {
-      "nameExplicit": false,
-      "columns": ["organizationId"],
-      "schemaTo": "public",
-      "tableTo": "organization",
-      "columnsTo": ["id"],
-      "onUpdate": "NO ACTION",
-      "onDelete": "NO ACTION",
-      "name": "organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "organizationMailUsageSettings"
-    },
-    {
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -3790,12 +4948,64 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "passkey_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "organizationMailUsageAlertEvent_ROF4Zd0q45Cy_fkey",
+      "nameExplicit": false,
+      "columns": ["organizationId"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "organizationMailUsageEvent_organizationId_organization_id_fkey",
+      "nameExplicit": false,
+      "columns": ["organizationId"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "organizationMailUsageSettings",
+      "name": "organizationMailUsageSettings_HFx0SA0zm7qR_fkey",
+      "nameExplicit": false,
+      "columns": ["organizationId"],
+      "schemaTo": "public",
+      "tableTo": "organization",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "passkey",
+      "name": "passkey_userId_user_id_fkey",
+      "nameExplicit": false,
+      "columns": ["userId"],
+      "schemaTo": "public",
+      "tableTo": "user",
+      "columnsTo": ["id"],
+      "onUpdate": "NO ACTION",
+      "onDelete": "NO ACTION",
+      "entityType": "fks"
+    },
+    {
+      "schema": "public",
+      "table": "session",
+      "name": "session_activeOrganizationId_organization_id_fkey",
       "nameExplicit": false,
       "columns": ["activeOrganizationId"],
       "schemaTo": "public",
@@ -3803,12 +5013,12 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "session_activeOrganizationId_organization_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "session"
+      "entityType": "fks"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "session_userId_user_id_fkey",
       "nameExplicit": false,
       "columns": ["userId"],
       "schemaTo": "public",
@@ -3816,287 +5026,287 @@
       "columnsTo": ["id"],
       "onUpdate": "NO ACTION",
       "onDelete": "NO ACTION",
-      "name": "session_userId_user_id_fkey",
-      "entityType": "fks",
-      "schema": "public",
-      "table": "session"
+      "entityType": "fks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "account_pkey",
       "schema": "public",
       "table": "account",
+      "name": "account_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "apikey_pkey",
       "schema": "public",
       "table": "apikey",
+      "name": "apikey_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "billingSubscription_pkey",
       "schema": "public",
       "table": "billingSubscription",
+      "name": "billingSubscription_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "chat_pkey",
       "schema": "public",
       "table": "chat",
+      "name": "chat_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "chatMessage_pkey",
       "schema": "public",
       "table": "chatMessage",
+      "name": "chatMessage_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["mailboxId"],
-      "nameExplicit": false,
-      "name": "gmailCredential_pkey",
       "schema": "public",
       "table": "gmailCredential",
+      "name": "gmailCredential_pkey",
+      "columns": ["mailboxId"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "gmailOAuthState_pkey",
       "schema": "public",
       "table": "gmailOAuthState",
+      "name": "gmailOAuthState_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "invitation_pkey",
       "schema": "public",
       "table": "invitation",
+      "name": "invitation_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "mailDomain_pkey",
       "schema": "public",
       "table": "mailDomain",
+      "name": "mailDomain_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "mailbox_pkey",
       "schema": "public",
       "table": "mailbox",
+      "name": "mailbox_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "mailboxGrant_pkey",
       "schema": "public",
       "table": "mailboxGrant",
+      "name": "mailboxGrant_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "managedMailMessage_pkey",
       "schema": "public",
       "table": "managedMailMessage",
+      "name": "managedMailMessage_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "member_pkey",
       "schema": "public",
       "table": "member",
+      "name": "member_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "organization_pkey",
       "schema": "public",
       "table": "organization",
+      "name": "organization_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "organizationMailUsageAlertEvent_pkey",
       "schema": "public",
       "table": "organizationMailUsageAlertEvent",
+      "name": "organizationMailUsageAlertEvent_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "organizationMailUsageEvent_pkey",
       "schema": "public",
       "table": "organizationMailUsageEvent",
+      "name": "organizationMailUsageEvent_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["organizationId"],
-      "nameExplicit": false,
-      "name": "organizationMailUsageSettings_pkey",
       "schema": "public",
       "table": "organizationMailUsageSettings",
+      "name": "organizationMailUsageSettings_pkey",
+      "columns": ["organizationId"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "passkey_pkey",
       "schema": "public",
       "table": "passkey",
+      "name": "passkey_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "session_pkey",
       "schema": "public",
       "table": "session",
+      "name": "session_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["id"],
-      "nameExplicit": false,
-      "name": "user_pkey",
       "schema": "public",
       "table": "user",
-      "entityType": "pks"
-    },
-    {
+      "name": "user_pkey",
       "columns": ["id"],
       "nameExplicit": false,
-      "name": "verification_pkey",
+      "entityType": "pks"
+    },
+    {
       "schema": "public",
       "table": "verification",
+      "name": "verification_pkey",
+      "columns": ["id"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
-      "columns": ["email"],
-      "nameExplicit": false,
-      "name": "waitlistSignup_pkey",
       "schema": "public",
       "table": "waitlistSignup",
+      "name": "waitlistSignup_pkey",
+      "columns": ["email"],
+      "nameExplicit": false,
       "entityType": "pks"
     },
     {
+      "schema": "public",
+      "table": "account",
+      "name": "account_providerId_accountId_unique",
       "nameExplicit": false,
       "columns": ["providerId", "accountId"],
       "nullsNotDistinct": false,
-      "name": "account_providerId_accountId_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "account"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "billingSubscription",
+      "name": "billing_subscription_provider_subscription_unique",
       "nameExplicit": true,
       "columns": ["provider", "providerSubscriptionId"],
       "nullsNotDistinct": false,
-      "name": "billing_subscription_provider_subscription_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "billingSubscription"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "chat",
+      "name": "chat_id_user_id_unique",
       "nameExplicit": true,
       "columns": ["id", "userId"],
       "nullsNotDistinct": false,
-      "name": "chat_id_user_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "chat"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "chatMessage",
+      "name": "chat_message_chat_id_position_unique",
       "nameExplicit": true,
       "columns": ["chatId", "position"],
       "nullsNotDistinct": false,
-      "name": "chat_message_chat_id_position_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "chatMessage"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "gmailCredential",
+      "name": "gmail_credential_google_subject_unique",
       "nameExplicit": true,
       "columns": ["googleSubject"],
       "nullsNotDistinct": false,
-      "name": "gmail_credential_google_subject_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "gmailCredential"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "mailDomain",
+      "name": "mail_domain_domain_unique",
       "nameExplicit": true,
       "columns": ["domain"],
       "nullsNotDistinct": false,
-      "name": "mail_domain_domain_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "mailDomain"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "mailbox",
+      "name": "mailbox_email_address_unique",
       "nameExplicit": true,
       "columns": ["emailAddress"],
       "nullsNotDistinct": false,
-      "name": "mailbox_email_address_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "mailbox"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "mailboxGrant",
+      "name": "mailbox_grant_mailbox_id_user_id_unique",
       "nameExplicit": true,
       "columns": ["mailboxId", "userId"],
       "nullsNotDistinct": false,
-      "name": "mailbox_grant_mailbox_id_user_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "mailboxGrant"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "managedMailMessage",
+      "name": "managed_mail_message_mailbox_provider_message_unique",
       "nameExplicit": true,
       "columns": ["mailboxId", "providerMessageId"],
       "nullsNotDistinct": false,
-      "name": "managed_mail_message_mailbox_provider_message_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "managedMailMessage"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "member",
+      "name": "member_organization_id_user_id_unique",
       "nameExplicit": true,
       "columns": ["organizationId", "userId"],
       "nullsNotDistinct": false,
-      "name": "member_organization_id_user_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "member"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "organization",
+      "name": "organization_slug_unique",
       "nameExplicit": true,
       "columns": ["slug"],
       "nullsNotDistinct": false,
-      "name": "organization_slug_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "organization"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageAlertEvent",
+      "name": "organization_mail_usage_alert_event_period_milestone_unique",
       "nameExplicit": true,
       "columns": [
         "organizationId",
@@ -4105,82 +5315,78 @@
         "milestonePercent"
       ],
       "nullsNotDistinct": false,
-      "name": "organization_mail_usage_alert_event_period_milestone_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "organizationMailUsageAlertEvent"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "organizationMailUsageEvent",
+      "name": "organization_mail_usage_event_dedupe_key_unique",
       "nameExplicit": true,
       "columns": ["dedupeKey"],
       "nullsNotDistinct": false,
-      "name": "organization_mail_usage_event_dedupe_key_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "organizationMailUsageEvent"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "passkey",
+      "name": "passkey_credential_id_unique",
       "nameExplicit": true,
       "columns": ["credentialID"],
       "nullsNotDistinct": false,
-      "name": "passkey_credential_id_unique",
-      "entityType": "uniques",
-      "schema": "public",
-      "table": "passkey"
+      "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "session",
+      "name": "session_token_key",
       "nameExplicit": false,
       "columns": ["token"],
       "nullsNotDistinct": false,
-      "name": "session_token_key",
-      "schema": "public",
-      "table": "session",
       "entityType": "uniques"
     },
     {
+      "schema": "public",
+      "table": "user",
+      "name": "user_email_key",
       "nameExplicit": false,
       "columns": ["email"],
       "nullsNotDistinct": false,
-      "name": "user_email_key",
-      "schema": "public",
-      "table": "user",
       "entityType": "uniques"
     },
     {
-      "value": "(\n        (\"provider\" = 'gmail' and \"ownerUserId\" is not null)\n        or\n        (\"provider\" = 'managed' and \"ownerUserId\" is null and \"organizationId\" is not null)\n      )",
+      "schema": "public",
+      "table": "mailbox",
       "name": "mailbox_provider_ownership_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "mailbox"
+      "value": "(\n        (\"provider\" = 'gmail' and \"ownerUserId\" is not null)\n        or\n        (\"provider\" = 'managed' and \"ownerUserId\" is null and \"organizationId\" is not null)\n      )",
+      "entityType": "checks"
     },
     {
-      "value": "\"provider\" in ('gmail', 'managed')",
+      "schema": "public",
+      "table": "mailbox",
       "name": "mailbox_provider_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "mailbox"
+      "value": "\"provider\" in ('gmail', 'managed')",
+      "entityType": "checks"
     },
     {
-      "value": "\"status\" in ('connected', 'needs_reconnect')",
+      "schema": "public",
+      "table": "mailbox",
       "name": "mailbox_status_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "mailbox"
+      "value": "\"status\" in ('connected', 'needs_reconnect')",
+      "entityType": "checks"
     },
     {
-      "value": "\"role\" in ('reader', 'responder', 'manager')",
+      "schema": "public",
+      "table": "mailboxGrant",
       "name": "mailbox_grant_role_check",
-      "entityType": "checks",
-      "schema": "public",
-      "table": "mailboxGrant"
+      "value": "\"role\" in ('reader', 'responder', 'manager')",
+      "entityType": "checks"
     },
     {
-      "value": "\"direction\" in ('inbound', 'outbound')",
-      "name": "managed_mail_message_direction_check",
-      "entityType": "checks",
       "schema": "public",
-      "table": "managedMailMessage"
+      "table": "managedMailMessage",
+      "name": "managed_mail_message_direction_check",
+      "value": "\"direction\" in ('inbound', 'outbound')",
+      "entityType": "checks"
     }
-  ],
-  "renames": []
+  ]
 }

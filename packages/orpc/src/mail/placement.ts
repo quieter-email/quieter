@@ -18,7 +18,7 @@ import type {
   MailMutationTargetResult,
 } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
-import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { consumeRateLimit } from "../abuse-protection";
 import { callGmail } from "../gmail-request";
@@ -32,6 +32,7 @@ import {
   loadMailPlacementSnapshot,
 } from "./placement-admission";
 import { resolvePlacementMessageIds } from "./placement-model";
+import type { PlacementMessage } from "./placement-model";
 
 export type MailSnoozePlacement = {
   id: string;
@@ -85,20 +86,33 @@ const lockPlacementSnooze = async (input: {
 export const supersedePendingMailPlacement = async (input: {
   context: MailRequestContext;
   mailboxId: string;
+  matchHiddenMessageIdsOnly?: boolean;
   messageId?: string;
+  messageIds?: string[];
+  retireSnoozes?: boolean;
   threadIds?: string[];
 }) => {
+  const requestedMessageIds = [
+    ...new Set([
+      ...(input.messageIds ?? []),
+      ...(input.messageId === undefined ? [] : [input.messageId]),
+    ]),
+  ];
+  const requestedThreadIds =
+    input.threadIds === undefined ? [] : [...new Set(input.threadIds)];
+  if (requestedMessageIds.length === 0 && requestedThreadIds.length === 0) {
+    return;
+  }
   const selected = await authorizeMailPlacement(input.context, input.mailboxId);
-  let threadIds = input.threadIds ?? [];
-  const { messageId } = input;
-  if (messageId !== undefined) {
+  let threadIds = requestedThreadIds;
+  if (requestedMessageIds.length > 0) {
     const associations =
       selected.provider === "managed"
         ? await loadMailPlacementAssociations({
             context: input.context,
             database: db,
             mailboxId: input.mailboxId,
-            messageIds: [messageId],
+            messageIds: requestedMessageIds,
             provider: selected.provider,
           })
         : await callGmail(
@@ -110,42 +124,65 @@ export const supersedePendingMailPlacement = async (input: {
                 context: input.context,
                 database: db,
                 mailboxId: input.mailboxId,
-                messageIds: [messageId],
+                messageIds: requestedMessageIds,
                 provider: selected.provider,
               })
           );
-    threadIds = associations.map((item) => item.threadId);
+    threadIds = [
+      ...new Set([...threadIds, ...associations.map((item) => item.threadId)]),
+    ];
   }
+  const messageConditions = requestedMessageIds.map(
+    (id) =>
+      sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([id])}::text::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([id])}::text::jsonb)`
+  );
+  const hiddenMessageConditions = requestedMessageIds.map(
+    (id) =>
+      sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([id])}::text::jsonb`
+  );
   const targetCondition =
-    input.messageId === undefined
-      ? inArray(mailPlacementOperation.threadId, input.threadIds ?? [])
-      : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::jsonb)`;
+    requestedMessageIds.length === 0
+      ? inArray(mailPlacementOperation.threadId, threadIds)
+      : or(
+          ...(threadIds.length > 0
+            ? [inArray(mailPlacementOperation.threadId, threadIds)]
+            : []),
+          ...messageConditions
+        );
+  const retireSnoozes = input.retireSnoozes !== false;
   await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
       .where(eq(mailbox.id, input.mailboxId))
       .for("update");
-    const retired = await tx
-      .update(mailSnooze)
-      .set({
-        code: "newer_intent",
-        leaseToken: null,
-        leaseUntil: null,
-        message: null,
-        nextWakeAt: null,
-        status: "superseded",
-        updatedAt: new Date(),
-        version: sql`${mailSnooze.version} + 1`,
-      })
-      .where(
-        and(
-          eq(mailSnooze.mailboxId, input.mailboxId),
-          inArray(mailSnooze.threadId, threadIds),
-          inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
-        )
-      )
-      .returning({ id: mailSnooze.id });
+    const retired =
+      retireSnoozes && threadIds.length > 0
+        ? await tx
+            .update(mailSnooze)
+            .set({
+              code: "newer_intent",
+              leaseToken: null,
+              leaseUntil: null,
+              message: null,
+              nextWakeAt: null,
+              status: "superseded",
+              updatedAt: new Date(),
+              version: sql`${mailSnooze.version} + 1`,
+            })
+            .where(
+              and(
+                eq(mailSnooze.mailboxId, input.mailboxId),
+                inArray(mailSnooze.threadId, threadIds),
+                inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES),
+                input.matchHiddenMessageIdsOnly === true &&
+                  hiddenMessageConditions.length > 0
+                  ? or(...hiddenMessageConditions)
+                  : undefined
+              )
+            )
+            .returning({ id: mailSnooze.id })
+        : [];
     if (retired.length > 0) {
       await tx
         .update(mailbox)
@@ -235,11 +272,21 @@ export const hashMailPlacementRequest = ({
     .digest("hex");
 
 export const applyMailPlacement = async ({
+  chargeRateLimit = true,
   context: requestContext,
   input,
+  prefetched,
   snooze,
 }: {
+  chargeRateLimit?: boolean;
   context: MailRequestContext;
+  prefetched?: {
+    associations?: readonly { id: string; threadId: string }[];
+    snapshot?: {
+      incomingMessageIds: string[];
+      messages: PlacementMessage[];
+    };
+  };
   snooze?: MailSnoozePlacement;
   input: MailInputs["applyChanges"] & {
     command: { kind: "set-placement"; placement: "done" | "inbox" };
@@ -295,13 +342,19 @@ export const applyMailPlacement = async ({
   let operations = await readExistingRequest(db);
   const ownedIds = new Set<string>();
   if (operations.length === 0) {
-    const budget = await consumeRateLimit({
-      ...workBudget,
-      cost: input.targets.reduce(
-        (total, target) => total + Math.max(1, target.messageIds.length),
-        0
-      ),
-    });
+    const budget = chargeRateLimit
+      ? await consumeRateLimit({
+          ...workBudget,
+          cost: input.targets.reduce(
+            (total, target) => total + Math.max(1, target.messageIds.length),
+            0
+          ),
+        })
+      : {
+          allowed: true as const,
+          remaining: workBudget.limit,
+          resetAt: new Date(),
+        };
     if (budget.allowed) {
       const reserve = async (accessToken?: string) =>
         await db.transaction(async (tx) => {
@@ -341,12 +394,17 @@ export const applyMailPlacement = async ({
               const predecessorId =
                 currentSnooze.returnOperationId ??
                 currentSnooze.hideOperationId;
+              const duePredecessorValid =
+                currentSnooze.returnAt.getTime() <= Date.now() &&
+                currentSnooze.hideOperationId !== null &&
+                ((currentSnooze.returnOperationId === null &&
+                  latest?.id === currentSnooze.hideOperationId &&
+                  latest.status === "applied") ||
+                  (currentSnooze.returnOperationId !== null &&
+                    latest?.id === currentSnooze.returnOperationId &&
+                    latest.status === "failed"));
               if (
-                (snooze.trigger === "due" &&
-                  (currentSnooze.returnAt.getTime() > Date.now() ||
-                    !currentSnooze.hideOperationId ||
-                    latest?.id !== currentSnooze.hideOperationId ||
-                    latest.status !== "applied")) ||
+                (snooze.trigger === "due" && !duePredecessorValid) ||
                 (snooze.trigger === "manual" &&
                   latest?.id !== (predecessorId ?? undefined))
               ) {
@@ -360,14 +418,16 @@ export const applyMailPlacement = async ({
           const anchorIds = [
             ...new Set(input.targets.flatMap((target) => target.messageIds)),
           ];
-          const associations = await loadMailPlacementAssociations({
-            accessToken,
-            context,
-            database: tx,
-            mailboxId: input.mailboxId,
-            messageIds: anchorIds,
-            provider: selected.provider,
-          });
+          const associations =
+            prefetched?.associations ??
+            (await loadMailPlacementAssociations({
+              accessToken,
+              context,
+              database: tx,
+              mailboxId: input.mailboxId,
+              messageIds: anchorIds,
+              provider: selected.provider,
+            }));
           context.signal?.throwIfAborted();
           const threadIdsByMessageId = new Map(
             associations.map((message) => [message.id, message.threadId])
@@ -380,6 +440,38 @@ export const applyMailPlacement = async ({
               )
           );
           if (admittedTargets.length === 0) {
+            if (currentSnooze !== undefined && snooze !== undefined) {
+              const retiredAt = new Date();
+              await tx
+                .update(mailSnooze)
+                .set({
+                  code: "source_changed",
+                  leaseToken: null,
+                  leaseUntil: null,
+                  message:
+                    "This conversation changed and is no longer snoozed.",
+                  nextWakeAt: null,
+                  status: "superseded",
+                  updatedAt: retiredAt,
+                  version: sql`${mailSnooze.version} + 1`,
+                })
+                .where(
+                  and(
+                    eq(mailSnooze.id, currentSnooze.id),
+                    eq(mailSnooze.version, snooze.version),
+                    snooze.leaseToken === null
+                      ? isNull(mailSnooze.leaseToken)
+                      : eq(mailSnooze.leaseToken, snooze.leaseToken)
+                  )
+                );
+              await tx
+                .update(mailbox)
+                .set({
+                  contentRevision: sql`${mailbox.contentRevision} + 1`,
+                  updatedAt: retiredAt,
+                })
+                .where(eq(mailbox.id, input.mailboxId));
+            }
             return { operations: [], ownedIds: new Set<string>() };
           }
           const now = new Date();
@@ -462,7 +554,7 @@ export const applyMailPlacement = async ({
           };
         });
       const reserved =
-        selected.provider === "gmail"
+        selected.provider === "gmail" && prefetched?.associations === undefined
           ? await callGmail(
               context,
               input.mailboxId,
@@ -513,14 +605,18 @@ export const applyMailPlacement = async ({
     let dispatched = false;
     try {
       context.signal?.throwIfAborted();
-      const { messages, incomingMessageIds } = await loadMailPlacementSnapshot({
-        anchorCount: target.messageIds.length,
-        budget: sourceBudget,
-        context,
-        mailboxId: input.mailboxId,
-        provider: selected.provider,
-        threadId: target.threadId,
-      });
+      const { messages, incomingMessageIds } =
+        prefetched?.snapshot !== undefined && input.targets.length === 1
+          ? prefetched.snapshot
+          : await loadMailPlacementSnapshot({
+              anchorCount: target.messageIds.length,
+              budget: sourceBudget,
+              chargeRateLimit,
+              context,
+              mailboxId: input.mailboxId,
+              provider: selected.provider,
+              threadId: target.threadId,
+            });
       let messageIds: string[] | null;
       let currentSnooze: typeof mailSnooze.$inferSelect | undefined;
       // oxlint-disable-next-line unicorn/no-negated-condition -- Ordinary placement resolves a prefix, snooze restores its saved exact set.
@@ -780,6 +876,7 @@ export const applyMailPlacement = async ({
             await tx
               .update(mailSnooze)
               .set({
+                ...(snooze.kind === "snooze-hide" ? { attempts: 0 } : {}),
                 code: null,
                 leaseToken: null,
                 leaseUntil: null,
@@ -938,6 +1035,22 @@ export const applyMailPlacement = async ({
         )
         .returning();
       if (snooze !== undefined) {
+        if (snooze.leaseToken !== null && !dispatched) {
+          const isTerminalSnoozeError =
+            (placementError instanceof ORPCError &&
+              typeof placementError.code === "string" &&
+              [
+                "BAD_REQUEST",
+                "CONFLICT",
+                "SNOOZE_REOPENED",
+                "SNOOZE_SOURCE_CHANGED",
+              ].includes(placementError.code)) ||
+            (isGmailServiceError(placementError) &&
+              (placementError.status === 400 || placementError.status === 404));
+          if (!isTerminalSnoozeError) {
+            throw placementError;
+          }
+        }
         await db.transaction(async (tx) => {
           await tx
             .select({ id: mailbox.id })

@@ -68,7 +68,7 @@ export const buttonVariants = cva(
       {
         auxiliaryPress: false,
         className: "active:bg-fg/15",
-        variant: "overlay",
+        variant: ["overlay", "row-action"],
       },
       {
         auxiliaryPress: false,
@@ -143,12 +143,15 @@ export const buttonVariants = cva(
         outline: "border-border bg-control text-fg hover:bg-control-hover",
         // Outline treatment for dark backdrops, e.g. the status screens.
         overlay: "border-fg/20 bg-transparent text-fg hover:bg-fg/10",
-        // Compact pill-shaped action matching the mail metadata pills.
-        pill: "squircle h-auto rounded-sm bg-muted px-2 py-1 text-micro/none text-muted-fg hover:bg-control-hover hover:text-fg active:bg-control-active [&_svg]:size-3",
         // Full-width result row, e.g. settings search. The active look
         // follows data-active so callers only pass the state.
         result:
           "h-auto w-full justify-start bg-transparent py-4 text-left font-normal whitespace-normal text-muted-fg hover:bg-muted hover:text-fg data-[active=true]:bg-accent",
+        // Action chip revealed on a mail row. It shares the xs Pill box so it
+        // lines up with the row's metadata and label pills; translucent fills
+        // keep contrast on hovered, active and selected row surfaces.
+        "row-action":
+          "squircle h-auto gap-1 rounded-sm border-0 bg-fg/8 px-2 py-1 text-micro/none text-fg hover:bg-fg/12 [&_svg]:size-3",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",

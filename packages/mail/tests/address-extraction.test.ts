@@ -83,13 +83,16 @@ describe("shared address extraction", () => {
     expect(
       getSendEnvelopeAddressList(splitMailAddressList(list))
     ).toStrictEqual(["recipient@example.com", "other@example.com"]);
+    const baseRecipients = {
+      bcc: "",
+      cc: "",
+      to: "recipient@example.com",
+    };
     for (const field of ["to", "cc", "bcc"]) {
       for (const value of malformedAddresses) {
         expect(
           composeRecipientFieldsSchema.safeParse({
-            bcc: "",
-            cc: "",
-            to: "recipient@example.com",
+            ...baseRecipients,
             [field]: value,
           }).success
         ).toBeFalsy();

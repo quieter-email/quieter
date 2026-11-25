@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AlarmClockIcon,
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   Flag01Icon,
   Delete01Icon,
@@ -29,6 +31,7 @@ import {
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -47,7 +50,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
-import { snoozeLiveStatuses } from "../../mailbox/components/mail-snooze-dialog";
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
 
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
@@ -55,6 +58,7 @@ type MessageActionsSharedProps = {
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
   mailbox: MailboxCategory;
+  snoozeEntry?: { action: MailSnoozeAction; onOpen: () => void };
   threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
@@ -279,7 +283,7 @@ const createFolderEntries = (
   const hasInbox = props.threadLabelIds.includes("INBOX");
   const hasSnooze =
     props.message.snooze !== undefined &&
-    snoozeLiveStatuses.has(props.message.snooze.status);
+    isMailSnoozeLiveStatus(props.message.snooze.status);
   const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
     props.mailbox
   );
@@ -315,14 +319,30 @@ const createFolderEntries = (
       type: "item",
     });
   }
-  if (canChangePlacement && hasSnooze && props.actions.onApplySnooze) {
+  const { snoozeEntry } = props;
+  if (canChangePlacement && snoozeEntry && props.actions.onApplySnooze) {
+    entries.push({
+      disabled: isBusy,
+      icon: AlarmClockIcon,
+      id: "snooze",
+      label: `${snoozeEntry.action === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: snoozeEntry.onOpen,
+      type: "item",
+    });
+  }
+  if (
+    canChangePlacement &&
+    hasSnooze &&
+    props.message.snooze?.status !== "returning" &&
+    props.actions.onApplySnooze
+  ) {
     const keepInDone =
       props.message.snooze?.status === "active" &&
       !hasInbox &&
       (props.message.threadInboxIncomingMessageIds?.length ?? 0) === 0;
     entries.push({
       disabled: isBusy,
-      icon: CheckmarkCircle02Icon,
+      icon: CancelCircleIcon,
       id: "cancel-snooze",
       label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
       onAction: () => {

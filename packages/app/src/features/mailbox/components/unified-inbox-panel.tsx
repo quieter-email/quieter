@@ -663,7 +663,7 @@ export const UnifiedInboxPanel = ({
                 key={mailbox.id}
               >
                 <label
-                  className="flex cursor-pointer items-start gap-2"
+                  className="flex cursor-default items-start gap-2"
                   htmlFor={`unified-inbox-${mailbox.id}`}
                 >
                   <Checkbox

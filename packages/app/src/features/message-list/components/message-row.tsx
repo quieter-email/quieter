@@ -26,6 +26,7 @@ import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -45,7 +46,11 @@ import { m, useReducedMotion } from "motion/react";
 import type { KeyboardEvent, MouseEvent, ReactNode } from "react";
 import { useState } from "react";
 
-import { MailSnoozeStatus } from "../../mailbox/components/mail-snooze-dialog";
+import { MailSnoozeRowStatus } from "../../mailbox/components/mail-snooze-dialog";
+import {
+  getMailSnoozeAction,
+  getMailSnoozeStatusText,
+} from "../../mailbox/domain/mail-snooze";
 import { createMessageRowHandlers } from "./message-row-handlers";
 
 type MessageRowSelectionGesture = {
@@ -152,6 +157,7 @@ type MessageRowProps = {
   onKeyboardOpen?: () => void;
   onThreadFocus: (threadId: string | null) => void;
   onThreadIntent: (threadId: string | null) => void;
+  onThreadSnooze: (thread: ThreadListEntry) => void;
   onThreadPress: ReturnType<
     typeof useMessageListSelection
   >["handleThreadPress"];
@@ -278,7 +284,7 @@ const MessageRowSelectionButton = ({
 
 const MessageRowDetails = ({
   wideCompactRows,
-  action,
+  actions,
   badge,
   date,
   deliveryStatus,
@@ -292,7 +298,7 @@ const MessageRowDetails = ({
   unread,
   verificationCode,
 }: {
-  action?: ReactNode;
+  actions?: ReactNode;
   badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
@@ -308,6 +314,7 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
+    actions={actions}
     active={isActive}
     badge={badge}
     layout={wideCompactRows === true ? "adaptive" : "stacked"}
@@ -327,7 +334,6 @@ const MessageRowDetails = ({
           messageCount={thread.messageCount}
           title={getMessageRowCountsTitle(thread)}
         />
-        {action}
       </>
     }
     sender={senderLabel}
@@ -353,10 +359,9 @@ const MessageRowDetails = ({
     }
     subjectTrailing={
       <>
-        {thread.anchorMessage.snooze ? (
-          <div className="max-w-60 min-w-0 truncate">
-            <MailSnoozeStatus snooze={thread.anchorMessage.snooze} />
-          </div>
+        {thread.anchorMessage.snooze !== undefined &&
+        isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status) ? (
+          <MailSnoozeRowStatus snooze={thread.anchorMessage.snooze} />
         ) : null}
         {verificationCode && (
           <CopyVerificationCode code={verificationCode} size="xs" />
@@ -397,6 +402,7 @@ type MessageRowSurfaceProps = {
   onThreadFocus: (threadId: string | null) => void;
   onThreadIntent: (threadId: string | null) => void;
   onThreadPress: MessageRowProps["onThreadPress"];
+  onThreadSnooze: MessageRowProps["onThreadSnooze"];
   onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
   openAriaLabel: string;
   reducedMotion: boolean | null;
@@ -438,6 +444,7 @@ const MessageRowSurface = ({
   onThreadFocus,
   onThreadIntent,
   onThreadPress,
+  onThreadSnooze,
   onThreadSelectionPress,
   openAriaLabel,
   reducedMotion,
@@ -475,42 +482,60 @@ const MessageRowSurface = ({
     thread,
     unread,
   });
+  const rowMailboxContext = mailboxContextsByThreadId?.get(thread.threadId);
+  const rowMailboxActions = rowMailboxContext?.mailboxActions ?? mailboxActions;
+  const rowMailboxProvider =
+    rowMailboxContext?.mailboxProvider ?? mailboxProvider;
   const threadActions = createMailboxThreadMessageActionHandlers({
-    mailboxActions,
+    mailboxActions: rowMailboxActions,
     onOpenDraft,
-    supportsFolders: mailboxProvider === "gmail",
-    supportsLabels: mailboxProvider !== "api",
-    supportsReadState: mailboxProvider !== "api",
-    supportsUnsubscribe: mailboxProvider === "gmail",
+    supportsFolders: rowMailboxProvider === "gmail",
+    supportsLabels: rowMailboxProvider !== "api",
+    supportsReadState: rowMailboxProvider !== "api",
+    supportsUnsubscribe: rowMailboxProvider === "gmail",
   });
+  const { snooze } = anchorMessage;
+  const liveSnooze =
+    snooze !== undefined && isMailSnoozeLiveStatus(snooze.status)
+      ? snooze
+      : undefined;
+  const snoozeAction = getMailSnoozeAction(snooze, thread.messages);
   const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
-  const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
-    activeMailbox
-  );
-  const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${mailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
-  const placementAction =
-    canChangePlacement &&
-    (returnsToInbox
-      ? threadActions.onReturnToInbox !== undefined
-      : threadActions.onMarkDone !== undefined) ? (
+  const { onApplySnooze } = threadActions;
+  const returnsSnoozeNow =
+    returnsToInbox && onApplySnooze !== undefined && liveSnooze !== undefined;
+  let placementAction = returnsToInbox
+    ? threadActions.onReturnToInbox
+    : threadActions.onMarkDone;
+  if (returnsSnoozeNow) {
+    placementAction = async (threadId: string) => {
+      await onApplySnooze(threadId, { kind: "return-now" });
+    };
+  }
+  const placementLabel = `${returnsToInbox ? "Return conversation to Inbox" : "Mark conversation Done"}${rowMailboxActions.placementScope === "shared" ? " for everyone" : ""}`;
+  const rowActions =
+    placementAction !== undefined &&
+    !["drafts", "spam", "trash", "sent"].includes(activeMailbox) ? (
       <IconButtonTooltip label={placementLabel}>
         <Button
           aria-label={placementLabel}
-          className="pointer-events-auto"
+          disabled={isActionPending}
+          fullWidth
           onClick={() => {
-            void (
-              returnsToInbox
-                ? threadActions.onReturnToInbox
-                : threadActions.onMarkDone
-            )?.(thread.threadId);
+            void placementAction(thread.threadId);
           }}
-          pending={isActionPending}
-          variant="pill"
+          size="xs"
+          variant="row-action"
         >
           <Icon
             aria-hidden
             icon={returnsToInbox ? InboxIcon : CheckmarkCircle02Icon}
           />
+          {wideCompactRows === true && (
+            <span className="hidden @3xl:inline">
+              {returnsToInbox ? "Inbox" : "Done"}
+            </span>
+          )}
         </Button>
       </IconButtonTooltip>
     ) : undefined;
@@ -581,11 +606,21 @@ const MessageRowSurface = ({
           mailboxId={mailboxId}
           mailbox={activeMailbox}
           message={{ ...anchorMessage, threadIsImportant: thread.isImportant }}
+          snoozeEntry={
+            snoozeAction === null
+              ? undefined
+              : {
+                  action: snoozeAction,
+                  onOpen: () => {
+                    onThreadSnooze(thread);
+                  },
+                }
+          }
           threadLabelIds={thread.threadLabelIds}
           triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
           <button
-            aria-label={`${openAriaLabel}${thread.isImportant ? ", Important" : ""}`}
+            aria-label={`${openAriaLabel}${thread.isImportant ? ", Important" : ""}${liveSnooze === undefined ? "" : `, ${getMailSnoozeStatusText(liveSnooze)}`}`}
             title={
               badge !== undefined && badge !== null ? openAriaLabel : undefined
             }
@@ -611,7 +646,7 @@ const MessageRowSurface = ({
           />
           <MessageRowDetails
             wideCompactRows={wideCompactRows}
-            action={placementAction}
+            actions={rowActions}
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}
@@ -648,6 +683,7 @@ const MessageRowContent = ({
   onThreadFocus,
   onThreadIntent,
   onThreadPress,
+  onThreadSnooze,
   onThreadSelectionPress,
   pendingActions,
   state,
@@ -713,6 +749,7 @@ const MessageRowContent = ({
       onThreadFocus={onThreadFocus}
       onThreadIntent={onThreadIntent}
       onThreadPress={onThreadPress}
+      onThreadSnooze={onThreadSnooze}
       onThreadSelectionPress={onThreadSelectionPress}
       openAriaLabel={openAriaLabel}
       reducedMotion={reducedMotion}
@@ -754,6 +791,7 @@ export const MessageRow = ({
   onThreadFocus,
   onThreadIntent,
   onThreadPress,
+  onThreadSnooze,
   onThreadSelectionPress,
   pendingActions,
   rowRef,
@@ -783,6 +821,7 @@ export const MessageRow = ({
       onThreadFocus={onThreadFocus}
       onThreadIntent={onThreadIntent}
       onThreadPress={onThreadPress}
+      onThreadSnooze={onThreadSnooze}
       onThreadSelectionPress={onThreadSelectionPress}
       pendingActions={pendingActions}
       state={state}

@@ -6,6 +6,7 @@ import type { MessageListItem } from "@quieter/mail/messages";
 import {
   and,
   asc,
+  count,
   eq,
   exists,
   gt,
@@ -22,7 +23,7 @@ import { z } from "zod";
 
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
-  getMailSnoozeStates,
+  getMailSnoozeStateEntries,
   MAIL_SNOOZE_LIVE_STATUSES,
   reconcileMailSnoozeSource,
   serializeMailSnoozeState,
@@ -160,16 +161,40 @@ export const listMailSnoozePage = async (input: {
   };
 };
 
+export const countVisibleMailSnoozes = async (input: {
+  userId: string;
+  mailboxId: string;
+}): Promise<number> => {
+  await assertAccessibleMailbox(input);
+  const [row] = await db
+    .select({ total: count() })
+    .from(mailSnooze)
+    .where(
+      and(
+        eq(mailSnooze.mailboxId, input.mailboxId),
+        mailSnoozeVisibilityCondition({
+          kind: "later",
+          mailboxId: mailSnooze.mailboxId,
+          threadId: mailSnooze.threadId,
+        })
+      )
+    );
+  return row?.total ?? 0;
+};
+
 export const attachMailSnoozeStates = async (input: {
   userId: string;
   mailboxId: string;
   messages: MessageListItem[];
 }): Promise<MessageListItem[]> => {
-  const states = await getMailSnoozeStates({
+  const entries = await getMailSnoozeStateEntries({
     mailboxId: input.mailboxId,
     threadIds: [...new Set(input.messages.map((message) => message.threadId))],
     userId: input.userId,
   });
+  const states = new Map(
+    [...entries.entries()].map(([threadId, entry]) => [threadId, entry.state])
+  );
   const inboxIncomingMessageIdsByThreadId = new Map<string, Set<string>>();
   for (const message of input.messages) {
     const messageIds =
@@ -188,16 +213,18 @@ export const attachMailSnoozeStates = async (input: {
     }
     inboxIncomingMessageIdsByThreadId.set(message.threadId, messageIds);
   }
-  for (const [threadId, state] of states) {
+  for (const [threadId, entry] of entries) {
     const inboxIncomingMessageIds =
       inboxIncomingMessageIdsByThreadId.get(threadId);
     if (
-      state.status === "active" &&
+      entry.state.status === "active" &&
       inboxIncomingMessageIds !== undefined &&
-      inboxIncomingMessageIds.size > 0
+      [...inboxIncomingMessageIds].some(
+        (id) => !entry.knownIncomingMessageIds.includes(id)
+      )
     ) {
       const current = await reconcileMailSnoozeSource({
-        expectedVersion: state.version,
+        expectedVersion: entry.state.version,
         inboxIncomingMessageIds: [...inboxIncomingMessageIds],
         mailboxId: input.mailboxId,
         threadId,

@@ -18,6 +18,7 @@ import type {
 } from "@quieter/app/features/chat/domain/tool-activity";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import {
   Collapsible,
   CollapsiblePanel,
@@ -251,9 +252,11 @@ export const ToolActivity = ({
           icon={icon}
           tone="muted"
         />
-        <Text as="span" size="sm" tone="muted">
-          {current.title}
-        </Text>
+        <span className={cn({ "status-shimmer": current.phase === "running" })}>
+          <Text as="span" size="sm" tone="muted">
+            {current.title}
+          </Text>
+        </span>
       </output>
     );
   }
@@ -266,7 +269,12 @@ export const ToolActivity = ({
           animation={current.phase === "running" ? "spin" : undefined}
           icon={icon}
         />
-        <span aria-live="polite" className="truncate">
+        <span
+          aria-live="polite"
+          className={cn("truncate", {
+            "status-shimmer": current.phase === "running",
+          })}
+        >
           {current.title}
         </span>
       </CollapsibleTrigger>

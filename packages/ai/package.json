@@ -27,6 +27,7 @@
     "./transcription-format": "./src/transcription-format.ts",
     "./chat-transcript": "./src/chat-transcript.ts",
     "./errors": "./src/errors.ts",
+    "./provider-admission": "./src/provider-admission.ts",
     "./model-config": "./src/model-config.ts",
     "./mail-importance": "./src/mail-importance.ts"
   },

@@ -135,7 +135,10 @@ export const seedLocalManagedMail = async (
       mailboxId,
       messages,
       storage: "local",
-      url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+      url: new URL(
+        `/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+        serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000"
+      ).href,
     };
   }
   const messageKey =
@@ -186,6 +189,9 @@ export const seedLocalManagedMail = async (
   return {
     mailboxId,
     storage: "local",
-    url: `http://localhost:3000/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+    url: new URL(
+      `/?mailboxId=${mailboxId}&mailbox=inbox&query=&view=inbox`,
+      serverEnv.BETTER_AUTH_URL ?? "http://localhost:3000"
+    ).href,
   };
 };

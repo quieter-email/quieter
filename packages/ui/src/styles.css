@@ -36,6 +36,7 @@
   --font-geist-mono: "Geist Mono Variable", monospace;
   --canvas: oklch(0.925 0.006 264);
   --panel: oklch(0.993 0.002 264);
+  --panel-edge: color-mix(in srgb, var(--panel), var(--fg) 24%);
   --section: oklch(0.955 0.006 264);
   --detail: oklch(0.89 0.01 264);
   --selection: color-mix(in srgb, var(--canvas), var(--fg) 20%);
@@ -144,6 +145,7 @@
   --auth-particle-tint: var(--primary);
   --canvas: #0a0a0b;
   --panel: #131315;
+  --panel-edge: color-mix(in srgb, var(--panel), var(--fg) 14%);
   --section: #1b1b1e;
   --detail: #26262a;
   --selection: var(--detail);
@@ -324,6 +326,9 @@
   --color-panel: var(--panel);
   --color-section: var(--section);
   --color-detail: var(--detail);
+  --color-panel-edge: var(--panel-edge);
+  --color-section-edge: color-mix(in srgb, var(--section), var(--fg) 12%);
+  --color-detail-edge: color-mix(in srgb, var(--detail), var(--fg) 12%);
   --color-selection: var(--selection);
   --color-brand-bg: var(--brand-bg);
   --color-auth-visual-bg: var(--auth-visual-bg);
@@ -430,8 +435,7 @@
   --radius-3xl: calc(var(--radius) + 10px);
   --radius-4xl: calc(var(--radius) + 12px);
   --radius-5xl: calc(var(--radius) + 14px);
-  /* xl (radius + 6px) plus the 16px inset around search and toolbar icon buttons. */
-  --radius-panel: calc(var(--radius) + 6px + 1rem);
+  --radius-panel: calc(var(--radius) + 12px);
   --radius-section: calc(var(--radius-panel) - 3px);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
@@ -489,6 +493,62 @@
 @utility squircle {
   @supports (corner-shape: squircle) {
     corner-shape: superellipse(1.825);
+  }
+}
+
+@property --scroll-fade-y-start {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@property --scroll-fade-y-end {
+  syntax: "<length>";
+  inherits: false;
+  initial-value: 0px;
+}
+
+@keyframes scroll-fade-y-start {
+  from {
+    --scroll-fade-y-start: 0px;
+  }
+  to {
+    --scroll-fade-y-start: calc(var(--spacing) * 4);
+  }
+}
+
+@keyframes scroll-fade-y-end {
+  from {
+    --scroll-fade-y-end: calc(var(--spacing) * 4);
+  }
+  to {
+    --scroll-fade-y-end: 0px;
+  }
+}
+
+/* Fades a vertical scroll container's edge only while content is hidden past
+   it; each fade grows with the hidden distance, up to 1rem. Without overflow
+   the scroll timeline is inactive, so both fades stay 0 and nothing is masked.
+   Scroll padding keeps focused controls clear of the fades. Browsers without
+   scroll-driven animations keep the plain scroll edge. */
+@utility scroll-fade-y {
+  @supports (animation-timeline: scroll()) {
+    scroll-padding-block: calc(var(--spacing) * 4);
+    mask-image: linear-gradient(
+      to bottom,
+      transparent 0,
+      black var(--scroll-fade-y-start),
+      black calc(100% - var(--scroll-fade-y-end)),
+      transparent 100%
+    );
+    animation-name: scroll-fade-y-start, scroll-fade-y-end;
+    animation-duration: auto;
+    animation-timing-function: linear;
+    animation-fill-mode: both;
+    animation-timeline: scroll(self block);
+    animation-range:
+      0 calc(var(--spacing) * 4),
+      calc(100% - var(--spacing) * 4) 100%;
   }
 }
 

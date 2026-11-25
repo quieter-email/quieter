@@ -3,8 +3,54 @@ import { db } from "@quieter/database/client";
 import {
   gmailComposeOperation,
   scheduledMailSend,
+  scheduledMailSendAbandonment,
 } from "@quieter/database/schema";
-import { and, eq, inArray, or } from "drizzle-orm";
+import { and, eq, inArray, ne, or } from "drizzle-orm";
+
+export const assertComposeSendAttemptActive = async (input: {
+  mailboxId: string;
+  userId: string;
+  sendOperationId: string;
+  scheduledSendId?: string;
+}) => {
+  const [delivery] = await db
+    .select({ id: scheduledMailSend.id })
+    .from(scheduledMailSend)
+    .where(
+      and(
+        eq(scheduledMailSend.mailboxId, input.mailboxId),
+        eq(scheduledMailSend.userId, input.userId),
+        eq(scheduledMailSend.sendOperationId, input.sendOperationId),
+        input.scheduledSendId
+          ? ne(scheduledMailSend.id, input.scheduledSendId)
+          : undefined
+      )
+    )
+    .limit(1);
+  if (delivery !== undefined) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This send attempt is already recorded. Check its delivery status before sending again.",
+    });
+  }
+  const [abandoned] = await db
+    .select({ sendOperationId: scheduledMailSendAbandonment.sendOperationId })
+    .from(scheduledMailSendAbandonment)
+    .where(
+      and(
+        eq(scheduledMailSendAbandonment.mailboxId, input.mailboxId),
+        eq(scheduledMailSendAbandonment.userId, input.userId),
+        eq(scheduledMailSendAbandonment.sendOperationId, input.sendOperationId)
+      )
+    )
+    .limit(1);
+  if (abandoned !== undefined) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        "This send attempt was canceled. Return to your draft before sending again.",
+    });
+  }
+};
 
 export const resolveComposeSourceDraftId = async (input: {
   provider: "gmail" | "managed";
@@ -53,6 +99,9 @@ export const assertComposeNotScheduled = async (input: {
           "failed",
           "uncertain",
         ]),
+        input.scheduledSendId
+          ? ne(scheduledMailSend.id, input.scheduledSendId)
+          : undefined,
         or(
           eq(scheduledMailSend.sourceLocalId, input.localId),
           input.draftId
@@ -65,7 +114,7 @@ export const assertComposeNotScheduled = async (input: {
       )
     )
     .limit(1);
-  if (reserved !== undefined && reserved.id !== input.scheduledSendId) {
+  if (reserved !== undefined) {
     throw new ORPCError("CONFLICT", {
       data: { scheduledSendConflict: true },
       message:

@@ -8,8 +8,6 @@ struct Params {
   seed: vec3f,
   fadeTop: f32,
   fadeBottom: f32,
-  fadeColorTop: vec3f,
-  fadeColorBottom: vec3f,
   danger: f32,
   closing: f32,
   mood: f32,
@@ -88,6 +86,25 @@ fn ridge(p: vec2f, phase: f32, thickness: f32, hard: f32, cs: vec2f, freq: f32) 
 
 fn layerLight(a: f32, b: f32) -> f32 {
   return a + b * (1.0 - a);
+}
+
+fn over(dst: vec4f, srcColor: vec3f, srcAlpha: f32) -> vec4f {
+  let a = clamp(srcAlpha, 0.0, 1.0);
+  return vec4f(srcColor * a + dst.rgb * (1.0 - a), a + dst.a * (1.0 - a));
+}
+
+fn edgeDissolve(
+  distance: f32,
+  px: f32,
+  lane: f32,
+  t: f32,
+  baseSpan: f32,
+  contourAmp: f32,
+) -> f32 {
+  let sweep = valueNoise3(vec3f(px * 1.35 + params.seed.x * 7.0, lane + params.seed.y * 5.0, t * 0.05)) - 0.5;
+  let ripple = valueNoise3(vec3f(px * 2.9 + params.seed.z * 3.0, lane + 3.0, t * 0.07)) - 0.5;
+  let span = max(baseSpan + (sweep * 0.72 + ripple * 0.28) * contourAmp, 0.16);
+  return smoothstep(0.0, span, distance);
 }
 
 @fragment fn fs_main(@location(0) inputUv: vec2f) -> @location(0) vec4f {
@@ -171,42 +188,45 @@ fn layerLight(a: f32, b: f32) -> f32 {
     softGlow(q, vec2f(-0.42, 0.2), vec2f(0.28, 0.12)) * 0.4;
   highlight *= 1.0 - valley * mix(0.35, 0.55, mood);
 
-  let textSafe = softGlow(p, vec2f(0.0, 0.02), vec2f(0.7, 0.36));
+  let bothEdges = params.fadeTop > 0.5 && params.fadeBottom > 0.5;
+  let fadeSpan = select(0.32, 0.25, bothEdges);
+  let fadeAmp = select(0.11, 0.095, bothEdges);
+  var edgeFade = 1.0;
+  if (params.fadeBottom > 0.5) {
+    edgeFade *= edgeDissolve(uv.y, p.x, 0.0, t, fadeSpan, fadeAmp);
+  }
+  if (params.fadeTop > 0.5) {
+    edgeFade *= edgeDissolve(1.0 - uv.y, p.x, 11.0, t, fadeSpan, fadeAmp);
+  }
+  highlight *= mix(0.42, 1.0, edgeFade);
+
+  let safeY = select(0.02, 0.14, params.fadeBottom > 0.5 && params.fadeTop < 0.5);
+  let textSafe = softGlow(p, vec2f(0.0, safeY), vec2f(0.7, 0.36));
   highlight *= mix(1.0, 0.3, textSafe * 0.9);
   ambient *= mix(1.0, 0.6, textSafe * 0.65);
   highlight *= max(0.0, 1.0 + materialGrain * params.grain * 0.022);
   ambient *= max(0.0, 1.0 + materialGrain * params.grain * 0.016);
 
-  let black = vec3f(0.0);
-  let charcoal = mix(mix(vec3f(0.045, 0.05, 0.06), vec3f(0.025, 0.038, 0.05), params.closing), vec3f(0.052, 0.032, 0.034), params.danger);
-  let navy = mix(mix(vec3f(0.07, 0.09, 0.13), vec3f(0.035, 0.08, 0.125), params.closing), vec3f(0.14, 0.04, 0.05), params.danger);
+  let charcoal = mix(mix(vec3f(0.045, 0.05, 0.06), vec3f(0.042, 0.048, 0.062), params.closing), vec3f(0.052, 0.04, 0.042), params.danger);
+  let navy = mix(mix(vec3f(0.07, 0.09, 0.13), vec3f(0.045, 0.08, 0.125), params.closing), vec3f(0.14, 0.04, 0.05), params.danger);
   let dustyBlue = mix(mix(vec3f(0.15, 0.19, 0.27), vec3f(0.07, 0.2, 0.33), params.closing), vec3f(0.3, 0.08, 0.09), params.danger);
   let steel = mix(mix(vec3f(0.32, 0.36, 0.42), vec3f(0.25, 0.42, 0.55), params.closing), vec3f(0.4, 0.26, 0.26), params.danger);
   let offWhite = mix(mix(vec3f(0.8, 0.82, 0.86), vec3f(0.73, 0.86, 0.94), params.closing), vec3f(0.84, 0.78, 0.77), params.danger);
 
   let blueAmt = mix(0.4, 0.85, mood) * mix(1.0, 1.25, params.closing) * mix(1.0, 1.12, params.danger);
   let blueTone = valueNoise3(vec3f(q * 1.6 + params.seed.xy, t * 0.12));
-  var color = mix(black, charcoal, clamp(ambient + 0.3, 0.0, 1.0));
-  color = mix(color, navy, clamp(blueField * 0.65 * blueAmt * mix(0.7, 1.15, blueTone), 0.0, 1.0));
-  color = mix(
-    color,
-    dustyBlue,
-    clamp(blueField * 0.28 * blueAmt * mix(0.5, 1.2, 1.0 - blueTone), 0.0, 1.0)
-  );
-  color = mix(color, steel, smoothstep(0.12, 0.5, highlight) * 0.55);
-  color = mix(color, offWhite, pow(smoothstep(0.32, 0.92, highlight), mix(1.5, 2.3, hardness)));
+  var color = over(vec4f(0.0), charcoal, clamp(ambient + 0.3, 0.0, 1.0));
+  color = over(color, navy, blueField * 0.65 * blueAmt * mix(0.7, 1.15, blueTone));
+  color = over(color, dustyBlue, blueField * 0.28 * blueAmt * mix(0.5, 1.2, 1.0 - blueTone));
+  color = over(color, steel, smoothstep(0.12, 0.5, highlight) * 0.55);
+  let whiteRamp = smoothstep(0.32, 0.92, highlight);
+  color = over(color, offWhite, select(0.0, pow(whiteRamp, mix(1.5, 2.3, hardness)), whiteRamp > 0.0));
 
   let side = min(uv.x, 1.0 - uv.x);
   let fromTop = 1.0 - uv.y;
   let edgeMask = smoothstep(0.0, 0.1, side) * smoothstep(0.0, 0.14, fromTop);
   color *= mix(0.88, 1.0, edgeMask);
+  color *= edgeFade;
 
-  if (params.fadeBottom > 0.5) {
-    color = mix(params.fadeColorBottom, color, smoothstep(0.0, 0.16, uv.y));
-  }
-  if (params.fadeTop > 0.5) {
-    color = mix(params.fadeColorTop, color, smoothstep(0.0, 0.16, 1.0 - uv.y));
-  }
-
-  return vec4f(clamp(color, vec3f(0.0), vec3f(1.0)), 1.0);
+  return clamp(color, vec4f(0.0), vec4f(1.0));
 }

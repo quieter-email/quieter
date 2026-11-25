@@ -1,0 +1,61 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "ea17bda0-cd93-401a-b50f-0edd4d7d1577",
+  "prevIds": ["5d27b031-0c9d-4e00-b0f4-0961d537d9fa"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "semanticIndexRequest",
+        "semantic_index_request_ready_mailbox_idx"
+      ],
+      "writes": [
+        "s|idx|public.semantic_index_request_ready_mailbox_idx",
+        "n|idx|public.semantic_index_request_ready_mailbox_idx",
+        "e|idx|public.semantic_index_request_ready_mailbox_idx",
+        "n|rel|public.semantic_index_request_ready_mailbox_idx"
+      ],
+      "reads": [
+        "n|tbl|public.semanticIndexRequest",
+        "n|sch|public",
+        "n|col|public.semanticIndexRequest.mailboxId"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "semanticIndexRequest",
+        "name": "semantic_index_request_ready_mailbox_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "greatest(\"availableAt\", \"leaseExpiresAt\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

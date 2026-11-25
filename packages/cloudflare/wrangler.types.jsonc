@@ -7,12 +7,68 @@
   "compatibility_flags": ["nodejs_compat"],
   "services": [
     {
+      "binding": "MAIL_MAINTENANCE",
+      "service": "quieter-mail-maintenance-types",
+    },
+    {
       "binding": "GmailProcessingWorker",
       "service": "quieter-gmail-processing-types",
     },
   ],
   "queues": {
     "producers": [
+      {
+        "binding": "MailDispatchRepairQueue",
+        "queue": "quieter-types-mail-dispatch-repair",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue0",
+        "queue": "quieter-types-gmail-mailbox-automation-0",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue1",
+        "queue": "quieter-types-gmail-mailbox-automation-1",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue2",
+        "queue": "quieter-types-gmail-mailbox-automation-2",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue3",
+        "queue": "quieter-types-gmail-mailbox-automation-3",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue0",
+        "queue": "quieter-types-gmail-mailbox-fresh-0",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue1",
+        "queue": "quieter-types-gmail-mailbox-fresh-1",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue2",
+        "queue": "quieter-types-gmail-mailbox-fresh-2",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue3",
+        "queue": "quieter-types-gmail-mailbox-fresh-3",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue0",
+        "queue": "quieter-types-gmail-mailbox-catchup-0",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue1",
+        "queue": "quieter-types-gmail-mailbox-catchup-1",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue2",
+        "queue": "quieter-types-gmail-mailbox-catchup-2",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue3",
+        "queue": "quieter-types-gmail-mailbox-catchup-3",
+      },
       {
         "binding": "GmailProcessingQueue",
         "queue": "quieter-gmail-processing-types",
@@ -60,9 +116,19 @@
   ],
   "durable_objects": {
     "bindings": [
+      { "name": "GmailProjectQuota", "class_name": "GmailProjectQuota" },
+
+      {
+        "name": "GmailMailboxScheduler",
+        "class_name": "GmailMailboxScheduler",
+      },
       {
         "name": "GmailFreshExecutor",
         "class_name": "GmailFreshExecutor",
+      },
+      {
+        "name": "MailMaintenanceScheduler",
+        "class_name": "MailMaintenanceScheduler",
       },
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
@@ -77,12 +143,21 @@
   "migrations": [
     { "tag": "fresh-v1", "new_sqlite_classes": ["GmailFreshExecutor"] },
     {
+      "tag": "mailbox-scheduler-v1",
+      "new_sqlite_classes": ["GmailMailboxScheduler"],
+    },
+    {
       "tag": "v2",
       "new_sqlite_classes": ["GmailLiveSyncMailboxV2"],
+    },
+    {
+      "tag": "maintenance-v1",
+      "new_sqlite_classes": ["MailMaintenanceScheduler"],
     },
     { "tag": "mail-user-v1", "new_sqlite_classes": ["MailLiveUser"] },
     { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },
     { "tag": "scheduled-send-v1", "new_sqlite_classes": ["ScheduledSend"] },
+    { "tag": "gmail-quota-v1", "new_sqlite_classes": ["GmailProjectQuota"] },
     { "tag": "mail-snooze-v1", "new_sqlite_classes": ["MailSnooze"] },
   ],
   "observability": {

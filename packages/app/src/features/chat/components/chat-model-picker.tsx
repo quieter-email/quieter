@@ -1,9 +1,10 @@
 import { ArrowDown01Icon, SparklesIcon } from "@hugeicons/core-free-icons";
-import { chatModels } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { Button } from "@quieter/ui/button";
+import { CommandMenu } from "@quieter/ui/command-menu";
 import { Icon } from "@quieter/ui/icon";
+import { CheckIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import {
   Popover,
@@ -11,12 +12,20 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@quieter/ui/popover";
-import { useState } from "react";
+import { useId, useState } from "react";
+import type { KeyboardEvent } from "react";
 
 import {
-  chatModelLabs,
-  getChatModelOptions,
+  getChatModelItems,
+  getSelectedChatModel,
 } from "../domain/chat-model-options";
+
+export const CurrentChatModelMark = () => (
+  <span className="flex shrink-0">
+    <CheckIcon className="size-3.5" />
+    <span className="sr-only">Current model</span>
+  </span>
+);
 
 export const ChatModelPicker = ({
   disabled,
@@ -29,15 +38,57 @@ export const ChatModelPicker = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { autoMatches, groups } = getChatModelOptions(search);
-  const selectedModel = chatModels.find(
-    (option) =>
-      option.value === model ||
-      option.versions.some((version) => version === model)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const listId = useId();
+  const items = getChatModelItems(search);
+  const activeIndex = Math.max(
+    0,
+    items.findIndex(({ id }) => id === highlightedId)
   );
-  const selectModel = (value: ChatModel | "auto") => {
-    onModelChange(value);
-    setOpen(false);
+  const selectedModel = getSelectedChatModel(model);
+  const currentModel = selectedModel?.value ?? "auto";
+
+  const selectModel = (index: number) => {
+    const item = items[index];
+    if (item !== undefined) {
+      onModelChange(item.model);
+      setOpen(false);
+    }
+  };
+
+  const highlightModel = (index: number) => {
+    setHighlightedId(items[index]?.id ?? null);
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Safari can clear isComposing before the IME confirmation key event.
+    // oxlint-disable-next-line typescript/no-deprecated
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      selectModel(activeIndex);
+      return;
+    }
+    if (
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      event.preventDefault();
+      if (items.length > 0) {
+        const nextIndex =
+          (activeIndex + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length;
+        highlightModel(nextIndex);
+        document
+          .querySelector(`#${CSS.escape(`${listId}-${nextIndex}`)}`)
+          ?.scrollIntoView({ block: "nearest" });
+      }
+    }
   };
 
   return (
@@ -46,6 +97,7 @@ export const ChatModelPicker = ({
         setOpen(nextOpen);
         if (nextOpen) {
           setSearch("");
+          setHighlightedId(null);
         }
       }}
       open={open}
@@ -53,105 +105,71 @@ export const ChatModelPicker = ({
       <PopoverTrigger
         aria-label="Choose model"
         disabled={disabled}
-        render={<Button className="max-w-full" size="sm" variant="ghost" />}
+        render={
+          <Button className="-ms-1.25 max-w-full" size="sm" variant="ghost" />
+        }
       >
         {selectedModel ? (
           <ModelLabLogo lab={selectedModel.group} />
         ) : (
           <Icon aria-hidden icon={SparklesIcon} />
         )}
-        <span className="truncate">{selectedModel?.label ?? "Auto"}</span>
+        <span className="truncate">{selectedModel?.shortLabel ?? "Auto"}</span>
         <Icon aria-hidden icon={ArrowDown01Icon} />
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex max-h-(--available-height) w-90 flex-col"
+        chrome="bare"
         collisionPadding={16}
         data-assistant-panel
         side="top"
-        size="sm"
       >
         <PopoverTitle className="sr-only">Choose model</PopoverTitle>
-        <Input
-          aria-label="Search models"
-          onChange={(event) => {
-            setSearch(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.nativeEvent.isComposing) {
-              return;
-            }
-            event.preventDefault();
-            const firstMatch = groups.at(0)?.options.at(0);
-            if (autoMatches) {
-              selectModel("auto");
-            } else if (firstMatch) {
-              selectModel(firstMatch.value);
-            }
-          }}
-          placeholder="Search models or labs…"
-          size="sm"
-          type="search"
-          value={search}
+        <CommandMenu
+          activeIndex={activeIndex}
+          id={listId}
+          items={items.map((item) => ({
+            ...item,
+            icon:
+              item.lab === undefined ? (
+                <Icon icon={SparklesIcon} />
+              ) : (
+                <ModelLabLogo lab={item.lab} />
+              ),
+            shortcut:
+              item.model === currentModel ? (
+                <CurrentChatModelMark />
+              ) : undefined,
+          }))}
+          label="Models"
+          onHighlight={highlightModel}
+          onSelect={selectModel}
+          search={
+            <Input
+              aria-activedescendant={
+                items.length > 0 ? `${listId}-${activeIndex}` : undefined
+              }
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-expanded={open}
+              aria-label="Search models"
+              autoComplete="off"
+              chrome="command"
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHighlightedId(null);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search models or labs…"
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Input renders an input with an external model listbox.
+              role="combobox"
+              size="sm"
+              value={search}
+            />
+          }
+          selectionHint={false}
+          status={items.length === 0 ? "No matching models." : undefined}
         />
-        <div className="mt-2 flex max-h-72 min-h-0 flex-col gap-2 overflow-y-auto">
-          {autoMatches ? (
-            <div className="flex items-start gap-2">
-              <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
-                <Icon
-                  aria-hidden
-                  size={14}
-
-                  icon={SparklesIcon}
-                />
-                Automatic
-              </span>
-              <Button
-                aria-pressed={model === "auto"}
-                onClick={() => {
-                  selectModel("auto");
-                }}
-                size="compact"
-                variant="option"
-              >
-                Auto
-              </Button>
-            </div>
-          ) : null}
-          {groups.map(({ group, options }) => (
-            <fieldset
-              aria-label={`${chatModelLabs[group].label} models`}
-              className="flex items-start gap-2"
-              key={group}
-            >
-              <span className="flex w-24 shrink-0 items-center gap-1.5 py-1.5 text-caption text-muted-fg">
-                <ModelLabLogo lab={group} />
-                {chatModelLabs[group].label}
-              </span>
-              <div className="flex min-w-0 flex-1 flex-wrap gap-1">
-                {options.map((option) => (
-                  <Button
-                    aria-label={option.label}
-                    aria-pressed={selectedModel === option}
-                    key={option.value}
-                    onClick={() => {
-                      selectModel(option.value);
-                    }}
-                    size="compact"
-                    variant="option"
-                  >
-                    {option.label.replace(/^(?:Gemini|DeepSeek|GLM) /u, "")}
-                  </Button>
-                ))}
-              </div>
-            </fieldset>
-          ))}
-          {groups.length === 0 && !autoMatches ? (
-            <output className="py-3 text-caption text-muted-fg">
-              No matching models.
-            </output>
-          ) : null}
-        </div>
       </PopoverContent>
     </Popover>
   );
