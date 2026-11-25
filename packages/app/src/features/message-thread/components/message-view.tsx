@@ -491,20 +491,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             </p>
           )}
           <div className="flex shrink-0 items-center gap-1 empty:hidden">
-            {mailboxProvider !== "api" &&
-            !isSandboxMailboxId(mailboxId) &&
-            activeMailbox !== "drafts" &&
-            !message.draftId &&
-            message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true &&
-            onOpenConversation ? (
-              <CorrespondentHistoryAction
-                mailboxEmail={currentUserEmail ?? null}
-                mailboxId={mailboxId}
-                messages={threadMessages}
-                onOpenConversation={onOpenConversation}
-                threadId={message.threadId}
-              />
-            ) : null}
             {toggleThreadPlacement && (
               <IconButtonTooltip label={placementLabel}>
                 <Button
@@ -525,6 +511,20 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 </Button>
               </IconButtonTooltip>
             )}
+            {mailboxProvider !== "api" &&
+            !isSandboxMailboxId(mailboxId) &&
+            activeMailbox !== "drafts" &&
+            !message.draftId &&
+            message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true &&
+            onOpenConversation ? (
+              <CorrespondentHistoryAction
+                mailboxEmail={currentUserEmail ?? null}
+                mailboxId={mailboxId}
+                messages={threadMessages}
+                onOpenConversation={onOpenConversation}
+                threadId={message.threadId}
+              />
+            ) : null}
             {mailboxProvider !== "api" && (
               <div className="-me-2.25 shrink-0">
                 <MessageActionsDropdown

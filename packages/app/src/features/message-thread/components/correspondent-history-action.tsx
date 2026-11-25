@@ -129,11 +129,12 @@ const MailHistoryRows = ({
             ) : null}
             <button
               aria-busy={pending || undefined}
+              aria-disabled={pending || undefined}
               aria-label={`Open conversation, ${thread.subject}`}
               className={mailListRowParts.trigger}
-              disabled={unavailable || stale || pending}
+              disabled={unavailable || stale}
               onClick={() => {
-                if (source) {
+                if (source && !pending) {
                   void history.openSource(source, "mail");
                 }
               }}
@@ -360,9 +361,11 @@ const HistorySectionContent = ({
   if (view.source.kind === "stale") {
     sourceFeedback = (
       <div className="flex flex-wrap items-center gap-2">
-        <Text size="sm" tone="muted">
-          This mail changed. Refresh history before opening it.
-        </Text>
+        <output>
+          <Text as="span" size="sm" tone="muted">
+            This mail changed. Refresh history before opening it.
+          </Text>
+        </output>
         <Button
           onClick={() => {
             if (view.source.kind === "stale") {
@@ -393,29 +396,9 @@ const HistorySectionContent = ({
   }
   return (
     <div aria-busy={query.isFetching} className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <Text aria-live="polite" size="caption" tone="muted">
-          {status}
-        </Text>
-        {query.isError || query.hasNextPage ? (
-          <Button
-            disabled={query.isFetching}
-            onClick={() => {
-              if (query.isError && !query.isFetchNextPageError) {
-                history.retrySection(view.section);
-              } else {
-                history.loadMore(view.section);
-              }
-            }}
-            pending={query.isFetchingNextPage}
-            pendingLabel="Loading"
-            size="sm"
-            variant="secondary"
-          >
-            {query.isError ? "Try again" : "Load more"}
-          </Button>
-        ) : null}
-      </div>
+      <Text aria-live="polite" size="caption" tone="muted">
+        {status}
+      </Text>
       {query.isError ? (
         <Text role="alert" size="sm" tone="muted">
           {query.isFetchNextPageError
@@ -423,8 +406,29 @@ const HistorySectionContent = ({
             : "Could not load this section. Please try again."}
         </Text>
       ) : null}
+      {view.source.kind === "opening" ? (
+        <output className="sr-only">Opening conversation</output>
+      ) : null}
       {sourceFeedback}
       {rows}
+      {query.isError || query.hasNextPage ? (
+        <Button
+          disabled={query.isFetching}
+          onClick={() => {
+            if (query.isError && !query.isFetchNextPageError) {
+              history.retrySection(view.section);
+            } else {
+              history.loadMore(view.section);
+            }
+          }}
+          pending={query.isFetchingNextPage}
+          pendingLabel="Loading"
+          size="sm"
+          variant="secondary"
+        >
+          {query.isError ? "Try again" : "Load more"}
+        </Button>
+      ) : null}
     </div>
   );
 };

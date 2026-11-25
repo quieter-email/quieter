@@ -107,7 +107,6 @@ const contextFields = [
   "calendarId",
   "calendarTimeZone",
   "calendarView",
-  "chatId",
   "compose",
   "mailto",
   "reminderId",
@@ -347,6 +346,11 @@ describe("correspondent history destination navigation", () => {
       expect(
         contextFields.filter((field) => settledSearch[field] !== undefined)
       ).toHaveLength(0);
+      expect(settledSearch.chatId).toBe(
+        destination.mailboxId === initialSearch.mailboxId
+          ? initialSearch.chatId
+          : undefined
+      );
       expect(selections).toHaveLength(1);
       expect(selections).toMatchObject([
         {

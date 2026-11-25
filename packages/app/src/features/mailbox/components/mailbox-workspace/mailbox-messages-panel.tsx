@@ -182,6 +182,7 @@ export const MailboxMessagesPanel = ({
     MessageViewProps["onOpenConversation"]
   > = async (target, { signal }) => {
     const currentLocation = router.state.location;
+    const currentSearch = mailboxSearchSchema.parse(currentLocation.search);
     const patch = {
       calendarConnectionId: null,
       calendarDate: null,
@@ -189,7 +190,7 @@ export const MailboxMessagesPanel = ({
       calendarId: null,
       calendarTimeZone: null,
       calendarView: null,
-      chatId: null,
+      chatId: target.mailboxId === mailboxId ? undefined : null,
       compose: null,
       mailboxId: target.mailboxId,
       mailto: null,
@@ -199,11 +200,13 @@ export const MailboxMessagesPanel = ({
       threadId: target.threadId,
       workspace: null,
     };
-    const expectedSearch = applyMailboxSearchPatch(
-      mailboxSearchSchema.parse(currentLocation.search),
-      patch
-    );
-    await setMailboxSearch(patch, { signal });
+    const expectedSearch = applyMailboxSearchPatch(currentSearch, patch);
+    const replace =
+      currentSearch.query === "" &&
+      currentSearch.mailboxId === target.mailboxId &&
+      currentSearch.messageId === target.messageId &&
+      currentSearch.threadId === target.threadId;
+    await setMailboxSearch(patch, { replace, signal });
     signal.throwIfAborted();
     const settledLocation = router.state.location;
     const settledSearch = mailboxSearchSchema.parse(settledLocation.search);
