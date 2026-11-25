@@ -144,6 +144,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     onBackToList,
     onOpenConversation,
     onManageSnippets,
+    pendingActions,
     subject,
     threadAttachments,
     threadIsUnread,
@@ -529,7 +530,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               <div className="-me-2.25 shrink-0">
                 <MessageActionsDropdown
                   actions={threadActions}
-                  isPending={isActionPending}
+                  isMessageActionPending={pendingActions.isMessageActionPending(
+                    message.id
+                  )}
+                  isThreadActionPending={pendingActions.isThreadActionPending(
+                    message.threadId
+                  )}
                   isUnread={threadIsUnread}
                   mailbox={activeMailbox}
                   mailboxId={mailboxId}
