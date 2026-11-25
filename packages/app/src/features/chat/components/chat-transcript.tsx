@@ -96,7 +96,11 @@ export const ChatTranscript = ({
         scrollHeight: viewport.scrollHeight,
         scrollTop: viewport.scrollTop,
       };
-      if (wasFollowing) {
+      if (
+        wasFollowing &&
+        viewport.querySelector("[data-chat-message-editor]:focus-within") ===
+          null
+      ) {
         scrollToLatest("auto");
       }
     });
