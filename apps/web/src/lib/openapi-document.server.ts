@@ -135,6 +135,15 @@ export const openApiDocument = {
             type: "string",
           },
           headers: {
+            description:
+              "Custom email headers. For topic-specific unsubscribe, set List-ID to a stable identifier for the topic and List-Unsubscribe to your recipient-specific unsubscribe URL in angle brackets. Your endpoint manages the subscription.",
+            examples: [
+              {
+                "List-ID": "<product-updates.example.com>",
+                "List-Unsubscribe":
+                  "<https://example.com/unsubscribe/product-updates/signed-token>",
+              },
+            ],
             oneOf: [
               { additionalProperties: { type: "string" }, type: "object" },
               {

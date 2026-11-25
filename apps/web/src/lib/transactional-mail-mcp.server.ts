@@ -79,7 +79,7 @@ const sendEmailInputSchema = z.object({
     .record(z.string(), z.string())
     .optional()
     .describe(
-      "Extra headers as name and value pairs. Structural headers such as From, To, and Subject are not allowed."
+      "Extra email headers as name and value pairs. Use List-ID to identify a topic and List-Unsubscribe for your recipient-specific unsubscribe URL in angle brackets. Structural headers such as From, To, and Subject are not allowed."
     ),
   html: z
     .string()

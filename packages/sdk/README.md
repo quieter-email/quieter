@@ -47,6 +47,26 @@ await quieter.send({
 
 Version 0.0.3 moves React input to `quieter/react`. Existing React callers need to change that import. API credentials and the fetch implementation are private, and internal attachment-normalization helpers are no longer exported. `openTracking` is supported by the shared send contract.
 
+## Unsubscribe by topic
+
+Set `List-ID` to a stable identifier for the topic and `List-Unsubscribe` to your own URL in angle brackets. Send a separate message to each recipient so the URL can identify their subscription to that topic. Your endpoint handles the opt-out.
+
+```ts
+await quieter.send({
+  from: "Updates <updates@example.com>",
+  to: "person@example.net",
+  subject: "Product updates",
+  text: "Here's what's new.",
+  headers: {
+    "List-ID": "<product-updates.example.com>",
+    "List-Unsubscribe":
+      "<https://example.com/unsubscribe/product-updates/signed-token>",
+  },
+});
+```
+
+For one-click unsubscribe, also send `"List-Unsubscribe-Post": "List-Unsubscribe=One-Click"` when your HTTPS endpoint handles the one-click POST. The receiving client checks that DKIM covers both unsubscribe headers. See [RFC 8058](https://www.rfc-editor.org/rfc/rfc8058.html#section-3).
+
 ## Verification codes
 
 Send an [experimental OTP-Token header](https://mikewest.github.io/otp-token/draft-goto-otp-token.html) with a verification email. Use the canonical origin of your site without a trailing slash. The React client accepts the same option.
