@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
@@ -159,6 +159,7 @@ const toMessageListItem = async (
     attachmentCount?: number;
     attachmentNames?: string[];
     labelIds?: string[];
+    sourceLabelIds?: string[];
     threadLabelIds?: string[];
     threadInboxIncomingMessageIds?: string[];
     threadMessageCount?: number;
@@ -194,7 +195,17 @@ const toMessageListItem = async (
     headers: record.direction === "inbound" ? record.headers : [],
   }),
   snippet: record.snippet ?? undefined,
-  sourceRevision: record.updatedAt.toISOString(),
+  sourceRevision:
+    options.sourceLabelIds === undefined
+      ? undefined
+      : createHash("sha256")
+          .update(
+            JSON.stringify([
+              record.updatedAt.toISOString(),
+              options.sourceLabelIds.toSorted(),
+            ])
+          )
+          .digest("base64url"),
   subject: record.subject ?? undefined,
   threadAttachmentCount: options.attachmentCount,
   threadAttachmentNames: options.attachmentNames,
@@ -406,6 +417,12 @@ export const listManagedMessages = async (input: {
                 string[]
               >`coalesce(jsonb_agg(distinct ${managedMailMessageLabel.labelId}) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '[]'::jsonb)`,
               messageCount: countDistinct(managedMailMessage.id),
+              sourceLabels:
+                correspondentEmail === undefined
+                  ? sql<[string, string][]>`'[]'::jsonb`
+                  : sql<
+                      [string, string][]
+                    >`coalesce(jsonb_agg(distinct jsonb_build_array(${managedMailMessage.id}, ${managedMailMessageLabel.labelId})) filter (where ${isNotNull(managedMailMessageLabel.labelId)}), '[]'::jsonb)`,
               threadId: managedMailMessage.threadId,
             })
             .from(managedMailMessage)
@@ -526,6 +543,13 @@ export const listManagedMessages = async (input: {
                   .get(record.threadId)
                   ?.attachments.map((attachment) => attachment.fileName) ?? [],
               labelIds: labelIdsByThreadId.get(record.threadId) ?? [],
+              sourceLabelIds:
+                correspondentEmail === undefined
+                  ? undefined
+                  : (attachmentSummaryByThreadId
+                      .get(record.threadId)
+                      ?.sourceLabels.filter(([id]) => id === record.id)
+                      .map(([, labelId]) => labelId) ?? []),
               threadInboxIncomingMessageIds:
                 inboxIncomingMessageIdsByThreadId.get(record.threadId) ?? [],
               threadLabelIds: [
@@ -644,6 +668,7 @@ export const getManagedThread = async (input: {
           attachments: attachmentsByMessageId.get(record.id) ?? [],
           inlineImages: inlineImagesByMessageId.get(record.id) ?? [],
           labelIds: labelIdsByMessageId.get(record.id) ?? [],
+          sourceLabelIds: labelIdsByMessageId.get(record.id) ?? [],
           threadMessageCount: records.length,
         })
     )
