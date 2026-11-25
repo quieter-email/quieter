@@ -3,6 +3,7 @@ import {
   createEmptyComposeDraft,
   escapeComposeHtml,
   normalizeComposeBodyHtml,
+  textToComposeBodyHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type {
   ComposeDraftState,
@@ -360,11 +361,13 @@ export const hasDistinctReplyAllRecipients = (
 
 export const buildComposeDraftFromMessageAction = ({
   action,
+  authoredBodyText = "",
   currentUserEmail,
   existingDraftMessage,
   message,
 }: {
   action: ComposeActionType;
+  authoredBodyText?: string;
   currentUserEmail: string | null | undefined;
   existingDraftMessage?: MessageListItem | null;
   message: MessageListItem;
@@ -458,6 +461,7 @@ export const buildComposeDraftFromMessageAction = ({
   }
 
   const draft = existingDraft ?? createEmptyComposeDraft();
+  const authoredHtml = textToComposeBodyHtml(authoredBodyText) || "<p><br></p>";
   const replyContext = buildReplyContext(message);
   const draftAnchor = buildDraftAnchor(message, action);
 
@@ -466,9 +470,9 @@ export const buildComposeDraftFromMessageAction = ({
       ...draft,
       actionQuote,
       attachments: forwardedAttachments,
-      bodyHtml: `<p><br></p>${forwardHtml}`,
+      bodyHtml: `${authoredHtml}${forwardHtml}`,
       bodyText: [
-        "",
+        authoredBodyText,
         "",
         "---------- Forwarded message ---------",
         ...forwardedHeaderLines,
@@ -491,10 +495,13 @@ export const buildComposeDraftFromMessageAction = ({
   return {
     ...draft,
     actionQuote,
-    bodyHtml: `<p><br></p>${replyHtml}`,
-    bodyText: ["", "", lead, quotePlainText(getMessageBodyText(message))].join(
-      "\n"
-    ),
+    bodyHtml: `${authoredHtml}${replyHtml}`,
+    bodyText: [
+      authoredBodyText,
+      "",
+      lead,
+      quotePlainText(getMessageBodyText(message)),
+    ].join("\n"),
     draftAnchor,
     inlineImages: quotedImages,
     recipients,

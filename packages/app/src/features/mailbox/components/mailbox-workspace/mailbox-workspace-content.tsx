@@ -18,6 +18,7 @@ import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/dr
 import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { FirstRunManagedMailSetup } from "@quieter/app/features/mailbox/components/mailbox-workspace/first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-messages-panel";
@@ -68,6 +69,8 @@ import {
   useState,
 } from "react";
 import type { ComponentProps, ReactNode } from "react";
+
+import { useCommandPalette } from "../../../hotkeys/components/command-palette-context";
 
 const CalendarWorkspace = lazy(loadCalendarWorkspace);
 
@@ -575,6 +578,8 @@ const MailboxWorkspaceContentInner = ({
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
   const agentWorkspace = useAgentWorkspace();
+  const commandPalette = useCommandPalette();
+  const { openKeyboardShortcuts } = useKeyboardShortcuts();
   const restoreAssistantTriggerFocus = () => {
     window.requestAnimationFrame(() => {
       const trigger = assistantTriggerRef.current;
@@ -596,6 +601,86 @@ const MailboxWorkspaceContentInner = ({
       visibleTrigger?.focus();
     });
   };
+  const revealWorkspace = ({ restoreFocus = true } = {}) => {
+    if (assistantNarrow && assistantOpen) {
+      assistantAutoCollapsedRef.current = false;
+      if (
+        restoreFocus &&
+        document.activeElement?.closest("[data-assistant-sidebar]")
+      ) {
+        restoreAssistantTriggerFocus();
+      }
+      setAssistantOpen(false);
+    }
+  };
+  const showReminders = (request: ReminderOpenRequest | null) => {
+    assistantAutoCollapsedRef.current = false;
+    setAssistantTab("reminders");
+    setReminderRequest(request);
+    setAssistantOpened(true);
+    setAssistantFocusRequest((current) => current + 1);
+    setAssistantOpen(true);
+  };
+  const openReminders = useEffectEvent(() => {
+    showReminders(null);
+  });
+  const openSearch = useEffectEvent(async (generation: number) => {
+    const deadline = performance.now() + 2500;
+    let reason = "Open a conversation list to search mail.";
+    while (agentWorkspace?.control.isCurrent(generation) === true) {
+      const commands =
+        commandPalette?.getEntries().flatMap(([, entries]) => entries) ?? [];
+      const search = commands.findLast(
+        (command) => command.id === "focus-search" && !command.fallback
+      );
+      if (search?.state === "available") {
+        if (assistantNarrow) {
+          revealWorkspace({ restoreFocus: false });
+          const frame = Promise.withResolvers<number>();
+          requestAnimationFrame(frame.resolve);
+          await frame.promise;
+        }
+        if (!agentWorkspace.control.isCurrent(generation)) {
+          break;
+        }
+        await search.execute();
+        return;
+      }
+      reason = search?.reason ?? reason;
+      if (performance.now() >= deadline) {
+        throw new Error(reason);
+      }
+      const pending = Promise.withResolvers<null>();
+      window.setTimeout(() => {
+        pending.resolve(null);
+      }, 50);
+      await pending.promise;
+    }
+    throw new Error("The request was stopped.");
+  });
+  useLayoutEffect((): (() => void) | undefined => {
+    if (!agentWorkspace || !commandPalette) {
+      return undefined;
+    }
+    const unregister = [
+      agentWorkspace.registerPanel(
+        "command-palette",
+        commandPalette.requestOpen
+      ),
+      agentWorkspace.registerPanel("keyboard-shortcuts", openKeyboardShortcuts),
+      agentWorkspace.registerPanel("mail-search", async (generation) => {
+        await openSearch(generation);
+      }),
+      agentWorkspace.registerPanel("reminders", () => {
+        openReminders();
+      }),
+    ];
+    return () => {
+      for (const remove of unregister) {
+        remove();
+      }
+    };
+  }, [agentWorkspace, commandPalette, openKeyboardShortcuts]);
   useLayoutEffect(() => {
     let closed = false;
     try {
@@ -946,19 +1031,6 @@ const MailboxWorkspaceContentInner = ({
           selectedMailboxId && selectedMailboxProvider !== "api"
             ? {
                 onCreateReminder: async (input) => {
-                  const show = () => {
-                    assistantAutoCollapsedRef.current = false;
-                    setAssistantTab("reminders");
-                    setReminderRequest({
-                      id: crypto.randomUUID(),
-                      mailboxId: input.mailboxId,
-                      target: input.target,
-                      title: input.title,
-                    });
-                    setAssistantOpened(true);
-                    setAssistantFocusRequest((current) => current + 1);
-                    setAssistantOpen(true);
-                  };
                   if (input.mailboxId !== selectedMailboxId) {
                     await setMailboxSearch({
                       mailbox: "inbox",
@@ -967,7 +1039,12 @@ const MailboxWorkspaceContentInner = ({
                       threadId: null,
                     });
                   }
-                  show();
+                  showReminders({
+                    id: crypto.randomUUID(),
+                    mailboxId: input.mailboxId,
+                    target: input.target,
+                    title: input.title,
+                  });
                 },
                 onOpen: (trigger) => {
                   assistantTriggerRef.current = trigger;
@@ -988,24 +1065,6 @@ const MailboxWorkspaceContentInner = ({
                   if (trigger) {
                     assistantTriggerRef.current = trigger;
                   }
-                  const show = () => {
-                    assistantAutoCollapsedRef.current = false;
-                    setAssistantTab("reminders");
-                    setReminderRequest(
-                      selection
-                        ? {
-                            id: crypto.randomUUID(),
-                            mailboxId: mailboxId ?? selectedMailboxId,
-                            ...(selection.kind === "edit"
-                              ? { reminder: selection.reminder }
-                              : { reminderId: selection.reminderId }),
-                          }
-                        : null
-                    );
-                    setAssistantOpened(true);
-                    setAssistantFocusRequest((current) => current + 1);
-                    setAssistantOpen(true);
-                  };
                   if (mailboxId && mailboxId !== selectedMailboxId) {
                     await setMailboxSearch({
                       mailbox: "inbox",
@@ -1014,7 +1073,17 @@ const MailboxWorkspaceContentInner = ({
                       threadId: null,
                     });
                   }
-                  show();
+                  showReminders(
+                    selection
+                      ? {
+                          id: crypto.randomUUID(),
+                          mailboxId: mailboxId ?? selectedMailboxId,
+                          ...(selection.kind === "edit"
+                            ? { reminder: selection.reminder }
+                            : { reminderId: selection.reminderId }),
+                        }
+                      : null
+                  );
                 },
                 open: assistantOpen,
                 panelId: assistantPanelId,
@@ -1151,6 +1220,7 @@ const MailboxWorkspaceContentInner = ({
                             )?.id ?? ""
                           }
                           onChatIdChange={onChatIdChange}
+                          onRevealWorkspace={revealWorkspace}
                         />
                       </>
                     ) : null}
@@ -1199,12 +1269,8 @@ export const MailboxWorkspaceContent = (
   props: MailboxWorkspaceContentProps
 ) => (
   <AgentWorkspaceProvider
-    key={
-      props.selectedView === "all-inboxes"
-        ? `all-inboxes:${props.userId}`
-        : (props.selectedMailboxId ?? "empty")
-    }
     mailboxId={props.selectedMailboxId ?? ""}
+    mailboxProvider={props.selectedMailboxProvider}
     onComposeDraftRequested={props.onComposeDraftRequested}
   >
     <MailboxWorkspaceContentInner {...props} />
