@@ -821,7 +821,7 @@ export const deleteGmailComposeDraft = async (
         throw new ORPCError("CONFLICT", {
           data: { draftConflict: true },
           message:
-            "The original draft is no longer available. Check Sent before scheduling it again.",
+            "The original draft is no longer available. Check Sent before trying again.",
         });
       }
       if (!(isGmailServiceError(error) && error.status === 404)) {

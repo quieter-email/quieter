@@ -49,6 +49,14 @@ export const getMessageText = (parts: UIMessage["parts"]) =>
     )
     .join("\n\n");
 
+export const hasAssistantContent = (parts: UIMessage["parts"]) =>
+  parts.some(
+    (part) =>
+      part.type === "reasoning" ||
+      isToolUIPart(part) ||
+      (part.type === "text" && part.text.trim() !== "")
+  );
+
 export const getAssistantProgress = (
   parts: UIMessage["parts"],
   isStreaming: boolean
@@ -65,7 +73,7 @@ export const getAssistantProgress = (
       }
       continue;
     }
-    if (part?.type === "step-start" || part?.type === "reasoning") {
+    if (part?.type === "reasoning") {
       return "Thinking…";
     }
     if (part !== undefined && isToolUIPart(part)) {
@@ -73,5 +81,5 @@ export const getAssistantProgress = (
     }
   }
 
-  return "Thinking…";
+  return null;
 };

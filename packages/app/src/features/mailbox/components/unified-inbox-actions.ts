@@ -122,7 +122,7 @@ export const createUnifiedInboxActions = ({
     }
   };
   const mailboxActions: MailboxActions = {
-    applyThreadSnooze: async (id, command, expectedVersion) => {
+    applyThreadSnooze: async (id, command, expectedVersion, attempt) => {
       const context = contextsByThreadId.get(id);
       const thread = originalThreadById.get(id);
       if (!context || !thread) {
@@ -133,10 +133,11 @@ export const createUnifiedInboxActions = ({
       await context.mailboxActions.applyThreadSnooze(
         thread.threadId,
         command,
-        expectedVersion
+        expectedVersion,
+        attempt
       );
     },
-    applyThreadsSnooze: async (threads, command) => {
+    applyThreadsSnooze: async (threads, command, attempt = new Map()) => {
       const groups = new Map<
         string,
         { context: MessageListMailboxContext; threads: ThreadListEntry[] }
@@ -184,10 +185,16 @@ export const createUnifiedInboxActions = ({
       const results = await Promise.allSettled(
         [...groups.values()].map(
           async ({ context, threads: sourceThreads }) => {
-            await context.mailboxActions.applyThreadsSnooze(
-              sourceThreads,
-              command
-            );
+            const apply = async () => {
+              await context.mailboxActions.applyThreadsSnooze(
+                sourceThreads,
+                command,
+                attempt
+              );
+              attempt.delete(context.mailboxId);
+            };
+            attempt.set(context.mailboxId, apply);
+            await apply();
           }
         )
       );

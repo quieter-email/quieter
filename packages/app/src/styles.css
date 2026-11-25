@@ -78,6 +78,35 @@
   }
 }
 
+/* Mask stops specify alpha values independently of the text color. */
+.status-shimmer {
+  animation: status-shimmer 2s linear infinite;
+  mask-image: linear-gradient(
+    90deg,
+    black 35%,
+    rgb(0 0 0 / 70%) 50%,
+    black 65%
+  );
+  mask-size: 250% 100%;
+}
+
+@keyframes status-shimmer {
+  from {
+    mask-position: 100% 0;
+  }
+
+  to {
+    mask-position: 0 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-shimmer {
+    animation: none;
+    mask-image: none;
+  }
+}
+
 /* Dead-end screens: the landing page's entrance, without the JS */
 .status-enter {
   animation: status-enter 0.8s var(--app-motion-ease-out) both;

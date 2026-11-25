@@ -306,10 +306,20 @@ describe(refreshLoadedMessagesPages, () => {
       );
       expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
     });
-    expect(client.getQueryData<MessagesQueryData>(key)).toMatchObject({
-      pages: [{ historyId: "old", nextPageToken: undefined, refreshing: true }],
-    });
-    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(1);
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(3);
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages[0]).toMatchObject(
+      {
+        historyId: "old",
+        nextPageToken: "fresh-2",
+        refreshing: true,
+      }
+    );
+    expect(
+      client
+        .getQueryData<MessagesQueryData>(key)
+        ?.pages.slice(1)
+        .flatMap((page) => page.messages.map((item) => item.id))
+    ).toStrictEqual(["b", "c"]);
     second.resolve({ messages: [message("b")], nextPageToken: "fresh-3" });
     await refreshing;
     const refreshed = client.getQueryData<MessagesQueryData>(key);
@@ -379,6 +389,9 @@ describe(refreshLoadedMessagesPages, () => {
             messages: [{ id: "arrival" }],
             nextPageToken: "fresh-2",
           },
+          {
+            messages: [{ id: "b" }],
+          },
         ],
       });
       expect(
@@ -392,6 +405,75 @@ describe(refreshLoadedMessagesPages, () => {
       expect(
         client.getQueryData<MessagesQueryData>(key)?.pages[0].historyId
       ).toBe("retried");
+      client.clear();
+    }
+  );
+
+  test.each([
+    {
+      calls: 3,
+      ids: ["arrival", "a", "b", "d", "e"],
+      outcome: "complete",
+      token: "old-after-e",
+    },
+    {
+      calls: 3,
+      ids: ["arrival", "a", "c", "d", "e"],
+      outcome: "abort",
+      token: "old-after-e",
+    },
+    { calls: 2, ids: ["arrival", "a"], outcome: "exhausted", token: undefined },
+  ])(
+    "keeps the preserved tail continuation of a deep list across prefix publications ($outcome)",
+    async ({ calls, ids, outcome, token }) => {
+      const client = new QueryClient();
+      const key = getMessagesQueryKey("mailbox", "inbox");
+      client.setQueryData<MessagesQueryData>(key, {
+        pageParams: [undefined, "old-2", "old-3", "old-4", "old-5"],
+        pages: ["a", "b", "c", "d", "e"].map((id) => ({
+          historyId: "old",
+          messages: [message(id)],
+          nextPageToken: `old-after-${id}`,
+        })),
+      });
+      const third = Promise.withResolvers<ListMessagesPageResult>();
+      const controller = new AbortController();
+      vi.mocked(rpc.mail.listThreads)
+        .mockResolvedValueOnce({
+          historyId: "fresh",
+          messages: [message("arrival")],
+          nextPageToken: "fresh-2",
+        })
+        .mockResolvedValueOnce({
+          messages: [message("a")],
+          ...(outcome === "exhausted" ? {} : { nextPageToken: "fresh-3" }),
+        })
+        .mockReturnValueOnce(third.promise);
+      const refreshing = Promise.allSettled([
+        refreshLoadedMessagesPages(client, "mailbox", "inbox", undefined, {
+          signal: controller.signal,
+        }),
+      ]);
+      await vi.waitFor(() => {
+        expect(rpc.mail.listThreads).toHaveBeenCalledTimes(calls);
+      });
+      expect(
+        client.getQueryData<MessagesQueryData>(key)?.pages.at(-1)?.nextPageToken
+      ).toBeUndefined();
+      if (outcome === "abort") {
+        controller.abort();
+      }
+      third.resolve({ messages: [message("b")], nextPageToken: "fresh-4" });
+      const [settled] = await refreshing;
+      expect(settled.status).toBe(
+        outcome === "abort" ? "rejected" : "fulfilled"
+      );
+      const refreshed = client.getQueryData<MessagesQueryData>(key);
+      expect(refreshed?.pages[0]?.refreshing).toBeUndefined();
+      expect(
+        refreshed?.pages.flatMap((page) => page.messages.map((item) => item.id))
+      ).toStrictEqual(ids);
+      expect(refreshed?.pages.at(-1)?.nextPageToken).toBe(token);
       client.clear();
     }
   );
@@ -463,7 +545,6 @@ describe(refreshLoadedMessagesPages, () => {
       .mockResolvedValueOnce({
         historyId: "newest",
         messages: [message("newest")],
-        nextPageToken: "newest-2",
       });
     const older = refreshLoadedMessagesPages(client, "mailbox", "inbox");
     const olderOutcome = Promise.allSettled([older]);
@@ -472,16 +553,9 @@ describe(refreshLoadedMessagesPages, () => {
         client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
       ).toBeTruthy();
     });
-    const observer = new InfiniteQueryObserver(client, {
-      ...messagesQueryOptions("mailbox", "inbox"),
-      enabled: false,
-    });
-    const unsubscribe = observer.subscribe(() => {});
-    await observer.fetchNextPage();
     expect(
-      client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
-    ).toBeTruthy();
-    expect(rpc.mail.listThreads).toHaveBeenCalledTimes(2);
+      client.getQueryData<MessagesQueryData>(key)?.pages.at(-1)?.nextPageToken
+    ).toBeUndefined();
     await refreshLoadedMessagesPages(client, "mailbox", "inbox");
     continuation.resolve({
       messages: [message("stale")],
@@ -495,18 +569,16 @@ describe(refreshLoadedMessagesPages, () => {
         {
           historyId: "newest",
           messages: [{ id: "newest" }],
-          nextPageToken: "newest-2",
         },
       ],
     });
     expect(
       client.getQueryData<MessagesQueryData>(key)?.pages[0]?.refreshing
     ).toBeUndefined();
-    unsubscribe();
     client.clear();
   });
 
-  test("a delta head repair keeps only its fresh page chain before advancing its covered checkpoint", async () => {
+  test("a delta head repair keeps the loaded tail behind its covered checkpoint", async () => {
     const client = new QueryClient();
     const key = getMessagesQueryKey("mailbox", "inbox");
     client.setQueryData<MessagesQueryData>(key, {
@@ -530,7 +602,7 @@ describe(refreshLoadedMessagesPages, () => {
       nextPageToken: "fresh-2",
     });
     await syncMessages(client, "mailbox", "inbox");
-    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(1);
+    expect(client.getQueryData<MessagesQueryData>(key)?.pages).toHaveLength(2);
     expect(client.getQueryData<MessagesQueryData>(key)?.pages[0]).toMatchObject(
       {
         historyId: "covered",
@@ -538,6 +610,9 @@ describe(refreshLoadedMessagesPages, () => {
         nextPageToken: "fresh-2",
       }
     );
+    expect(
+      client.getQueryData<MessagesQueryData>(key)?.pages[1]?.messages
+    ).toStrictEqual([expect.objectContaining({ id: "b" })]);
     client.clear();
   });
 

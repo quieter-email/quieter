@@ -1,0 +1,1 @@
+ALTER TABLE "gmailMessageWork" ADD COLUMN "liveArrival" boolean;

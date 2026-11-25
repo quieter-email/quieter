@@ -9,11 +9,16 @@ on:
         default: inspect
         options:
           - inspect
+          - inspect-ai-memory-usage
           - grant-unlimited
           - write-off-deferred
       user_id:
-        description: Exact internal user ID, never an email or display name
-        required: true
+        description: Exact internal user ID for other actions. The AI memory report uses a production secret.
+        required: false
+        type: string
+      report_request_id:
+        description: Random request ID for the protected AI memory report.
+        required: false
         type: string
       event_id:
         description: Exact deferred ledger event ID, required for write-off
@@ -62,6 +67,12 @@ jobs:
           test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" --jq '.permission')" = admin
           test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_TRIGGERING_ACTOR/permission" --jq '.permission')" = admin
           test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+      - name: Reject public account inputs for the AI memory report
+        if: >-
+          inputs.action == 'inspect-ai-memory-usage' && (inputs.user_id != '' || inputs.event_id != '' || inputs.reason != '' || inputs.expires_at != '' || inputs.permanent || inputs.accept_unfunded_owned_organizations)
+        run: |
+          echo '::error::For the AI memory report, supply only the random report request ID.'
+          exit 1
       - name: Require fully deployed reporting guards before write-off
         if: inputs.action == 'write-off-deferred'
         env:
@@ -104,6 +115,7 @@ jobs:
       - name: Build environment configuration
         run: vp run @quieter/env#build
       - name: Inspect or administer exact account billing
+        if: inputs.action != 'inspect-ai-memory-usage'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
@@ -125,3 +137,39 @@ jobs:
           if [[ -n "$BILLING_EXPIRES_AT" ]]; then args+=(--expires-at "$BILLING_EXPIRES_AT"); fi
           if [[ "$BILLING_ACCEPT_FUNDING" == true ]]; then args+=(--accept-unfunded-owned-organizations); fi
           vp exec node packages/database/scripts/billing-account-admin.ts "${args[@]}"
+      - name: Encrypt the AI memory usage report
+        if: inputs.action == 'inspect-ai-memory-usage'
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          BILLING_AI_MEMORY_REPORT_REQUEST: ${{ secrets.BILLING_AI_MEMORY_REPORT_REQUEST }}
+          BILLING_REPORT_REQUEST_ID: ${{ inputs.report_request_id }}
+          POLAR_PRODUCT_MANAGED_ID: ${{ vars.POLAR_PRODUCT_MANAGED_ID }}
+          POLAR_PRODUCT_PRO_ID: ${{ vars.POLAR_PRODUCT_PRO_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "$BILLING_AI_MEMORY_REPORT_REQUEST" ]]; then
+            echo '::error::Set the protected BILLING_AI_MEMORY_REPORT_REQUEST secret before running the report.'
+            exit 1
+          fi
+          recipient=$(mktemp)
+          trap 'rm -f "$recipient"' EXIT
+          if [[ ! "$BILLING_REPORT_REQUEST_ID" =~ ^[a-f0-9]{32}$ ]] ||
+            ! jq -e --arg id "$BILLING_REPORT_REQUEST_ID" '.requestId == $id' <<< "$BILLING_AI_MEMORY_REPORT_REQUEST" >/dev/null 2>&1; then
+            echo '::error::The report request ID must match the protected AI memory report request.'
+            exit 1
+          fi
+          if ! user_id=$(jq -er '.userId | strings | select(test("^[a-zA-Z0-9_-]{1,200}$"))' <<< "$BILLING_AI_MEMORY_REPORT_REQUEST" 2>/dev/null) ||
+            ! jq -er '.recipientCertificate | strings' <<< "$BILLING_AI_MEMORY_REPORT_REQUEST" > "$recipient" 2>/dev/null ||
+            ! openssl x509 -in "$recipient" -noout 2>/dev/null; then
+            echo '::error::The protected AI memory report request must contain an internal user ID and a PEM recipient certificate.'
+            exit 1
+          fi
+          printf '::add-mask::%s\n' "$user_id"
+          unset BILLING_AI_MEMORY_REPORT_REQUEST
+          encrypted_report=$(
+            vp exec node packages/database/scripts/billing-account-admin.ts --action inspect-ai-memory-usage --user-id "$user_id" |
+              openssl cms -encrypt -binary -aes-256-gcm -outform DER -recip "$recipient" |
+              base64 -w0
+          )
+          printf 'Encrypted AI memory report %s\n' "$encrypted_report"

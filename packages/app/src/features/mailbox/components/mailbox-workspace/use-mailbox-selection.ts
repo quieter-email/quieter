@@ -68,6 +68,7 @@ const toMailboxGroup = (
   id: group.id,
   kind: group.kind,
   mailboxes: group.mailboxes.map((mailbox) => ({
+    accessMode: "accessMode" in mailbox ? mailbox.accessMode : null,
     capabilities: mailbox.capabilities,
     connectionStatus: mailbox.connectionStatus,
     displayName: mailbox.displayName,
@@ -155,7 +156,10 @@ export const useMailboxSelection = ({
     isEmptyPreviewPersona
   );
   const { data: queriedMailboxesData, isPending: isMailboxesPending } =
-    useQuery(mailboxesQueryOptions(!isSandboxMode));
+    useQuery({
+      ...mailboxesQueryOptions(!isSandboxMode),
+      refetchOnMount: true,
+    });
   const selectionQueryKey = getMailboxSelectionQueryKey({
     isDemoMode,
     isEmptyPreviewPersona,

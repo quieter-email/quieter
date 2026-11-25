@@ -134,11 +134,11 @@ export const supersedePendingMailPlacement = async (input: {
   }
   const messageConditions = requestedMessageIds.map(
     (id) =>
-      sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([id])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([id])}::jsonb)`
+      sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([id])}::text::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([id])}::text::jsonb)`
   );
   const hiddenMessageConditions = requestedMessageIds.map(
     (id) =>
-      sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([id])}::jsonb`
+      sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([id])}::text::jsonb`
   );
   const targetCondition =
     requestedMessageIds.length === 0

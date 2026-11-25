@@ -23,6 +23,12 @@ import type { MailCommand } from "@quieter/mail/data-plane";
 import type { MailSnoozeCommand, MailSnoozeState } from "@quieter/mail/snooze";
 import type { QueryClient } from "@tanstack/react-query";
 
+import { settleMailSnoozeRequest } from "../domain/mail-snooze";
+import type {
+  MailSnoozeAttempt,
+  PendingMailSnoozeRequest,
+} from "../domain/mail-snooze";
+
 type LabelChangeSet = {
   addLabelIds?: string[];
   removeLabelIds?: string[];
@@ -300,7 +306,8 @@ export const createMailboxActionHandlers = ({
       snooze?: MailSnoozeState;
       expectedVersion?: number | null;
     }[],
-    command: MailSnoozeCommand
+    command: MailSnoozeCommand,
+    attempt: MailSnoozeAttempt = new Map()
   ) => {
     const mailbox = queryClient
       .getQueryData(mailboxesQueryOptions().queryKey)
@@ -321,12 +328,11 @@ export const createMailboxActionHandlers = ({
       return;
     }
     const threadIds = targets.map((target) => target.threadId);
-    setThreadActionsPending(threadIds, true);
-    try {
-      const result = await applySnoozeInMailbox(
-        queryClient,
-        mailboxId,
-        targets.map((target) => {
+    let pending: PendingMailSnoozeRequest[] = [
+      {
+        openThreadIds: new Set(threadIds),
+        requestId: crypto.randomUUID(),
+        targets: targets.map((target) => {
           const states = [
             target.snooze,
             ...target.messages.map((message) => message.snooze),
@@ -351,22 +357,54 @@ export const createMailboxActionHandlers = ({
             threadId: target.threadId,
           };
         }),
-        command
-      );
-      await refreshSearchResultsIfNeeded();
-      const failure = result.targets.find(
-        (target) => target.status === "failed"
-      );
-      if (failure) {
-        throw new ORPCError("CONFLICT", {
-          message:
-            failure.message ??
-            "Some conversations could not be updated. Refresh before trying again.",
-        });
+      },
+    ];
+    const resume = async () => {
+      setThreadActionsPending(threadIds, true);
+      let failure: Error | undefined;
+      try {
+        const remaining: PendingMailSnoozeRequest[] = [];
+        for (const request of pending) {
+          try {
+            const settled = settleMailSnoozeRequest(
+              request,
+              await applySnoozeInMailbox(
+                queryClient,
+                mailboxId,
+                request.targets,
+                command,
+                request.requestId
+              )
+            );
+            remaining.push(...settled.pending);
+            if (settled.failure) {
+              failure ??= new ORPCError("CONFLICT", {
+                message:
+                  settled.failure.message ??
+                  "Some conversations could not be updated. Refresh before trying again.",
+              });
+            }
+          } catch (error) {
+            // The response may be lost after the server accepted the request.
+            remaining.push(request);
+            failure ??=
+              error instanceof Error
+                ? error
+                : new Error("Mailbox action failed.", { cause: error });
+          }
+        }
+        pending = remaining;
+        await refreshSearchResultsIfNeeded();
+      } finally {
+        setThreadActionsPending(threadIds, false);
       }
-    } finally {
-      setThreadActionsPending(threadIds, false);
-    }
+      if (failure) {
+        throw failure;
+      }
+      attempt.delete(mailboxId);
+    };
+    attempt.set(mailboxId, resume);
+    await resume();
   };
 
   const deleteDraft = async (message: MessageListItem) => {
@@ -422,7 +460,8 @@ export const createMailboxActionHandlers = ({
     applyThreadSnooze: async (
       threadId: string,
       command: MailSnoozeCommand,
-      expectedVersion?: number | null
+      expectedVersion?: number | null,
+      attempt?: MailSnoozeAttempt
     ) => {
       const thread = queryClient.getQueryData<ThreadMessagesResult>(
         getThreadQueryKey(mailboxId, threadId)
@@ -443,14 +482,16 @@ export const createMailboxActionHandlers = ({
             threadId,
           },
         ],
-        command
+        command,
+        attempt
       );
     },
     applyThreadsSnooze: async (
       threads: ThreadListEntry[],
-      command: MailSnoozeCommand
+      command: MailSnoozeCommand,
+      attempt?: MailSnoozeAttempt
     ) => {
-      await applySnooze(threads, command);
+      await applySnooze(threads, command, attempt);
     },
     get canMarkRead() {
       return (

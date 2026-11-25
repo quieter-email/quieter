@@ -217,8 +217,29 @@ export const useMessageViewData = ({
   const messagesMissingLoadedBody =
     getMessagesMissingLoadedBody(visibleMessages);
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
+  const openedPrefetchedThread =
+    mailboxProvider !== "api" && threadData?.prefetched === true;
+  const hasCompletePrefetchedThread =
+    threadData?.prefetched === true &&
+    !shouldRefreshThreadContent(threadData, {
+      id: message.id,
+      includeDrafts: includeDraftsInThreadCount,
+      threadMessageCount: message.threadMessageCount,
+    });
   const isBodyRefreshPending =
-    isThreadPending || isThreadFetching || hasMissingLoadedBody;
+    isThreadPending ||
+    (isThreadFetching && !hasCompletePrefetchedThread) ||
+    hasMissingLoadedBody;
+  useEffect(() => {
+    if (openedPrefetchedThread) {
+      void Promise.allSettled([
+        queryClient.query({
+          ...getThreadWithDetailsOptions(mailboxId, message.threadId),
+          staleTime: 0,
+        }),
+      ]);
+    }
+  }, [mailboxId, message.threadId, openedPrefetchedThread, queryClient]);
   const subject = resolveThreadSubject(
     visibleMessages,
     threadData?.subject,

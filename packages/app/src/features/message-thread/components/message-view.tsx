@@ -1,10 +1,10 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   ArrowLeft01Icon,
   ArrowRightDoubleIcon,
   CheckmarkCircle02Icon,
-  Clock01Icon,
   InboxIcon,
   Edit01Icon,
   Flag01Icon,
@@ -17,6 +17,7 @@ import {
 import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -51,6 +52,7 @@ import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query"
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
+import type { MailSnoozeState } from "@quieter/mail/snooze";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -69,6 +71,7 @@ import {
   Suspense,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
@@ -77,6 +80,8 @@ import {
   MailSnoozeDialog,
   MailSnoozeStatus,
 } from "../../mailbox/components/mail-snooze-dialog";
+import { getMailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
 import { useMessageViewHotkeys } from "./use-message-view-hotkeys";
 
 const InlineComposeSurface = lazy(
@@ -106,7 +111,12 @@ type MessageViewContentProps = MessageViewProps &
   };
 
 const MessageViewContent = (props: MessageViewContentProps) => {
-  const [snoozeOpen, setSnoozeOpen] = useState(false);
+  // Frozen when opened, because the cache can gain the schedule mid-attempt.
+  const [snoozeDialog, setSnoozeDialog] = useState<{
+    action: MailSnoozeAction;
+    open: boolean;
+    snooze?: MailSnoozeState;
+  }>({ action: "snooze", open: false });
   const {
     activeMailbox,
     apiSource,
@@ -171,6 +181,44 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         block: "nearest",
       });
     });
+  };
+  // Undo can finish after the inline composer closed, so the restore callback
+  // reads the latest thread state instead of its closure.
+  const restoreTargetRef = useRef({
+    inlineDraft,
+    mailboxId,
+    mounted: false,
+    openInlineCompose,
+    threadId: message.threadId,
+  });
+  useLayoutEffect(() => {
+    restoreTargetRef.current = {
+      inlineDraft,
+      mailboxId,
+      mounted: true,
+      openInlineCompose,
+      threadId: message.threadId,
+    };
+  });
+  useEffect(
+    () => () => {
+      restoreTargetRef.current.mounted = false;
+    },
+    []
+  );
+  const restoreUndoneSend: RestoreUndoneDraft = (draft, draftMailboxId) => {
+    const target = restoreTargetRef.current;
+    if (
+      !target.mounted ||
+      target.inlineDraft !== null ||
+      target.mailboxId !== draftMailboxId ||
+      (draft.replyContext?.threadId ?? draft.draftAnchor?.sourceThreadId) !==
+        target.threadId
+    ) {
+      return false;
+    }
+    target.openInlineCompose(draft);
+    return true;
   };
   const suggestReply = useMutation(orpc.ai.suggestReply.mutationOptions());
   const requestSuggestedReply = () => {
@@ -256,20 +304,17 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       .at(0) ?? message.snooze;
   const hasSnooze =
     snooze !== undefined && isMailSnoozeLiveStatus(snooze.status);
-  const canSnooze =
-    canSetThreadPlacement &&
-    ((hasSnooze &&
-      (snooze?.status === "active" || snooze?.status === "suspended")) ||
-      (!hasSnooze &&
-        threadMessages.some(
-          (item) =>
-            (item.threadInboxIncomingMessageIds?.length ?? 0) > 0 ||
-            (item.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
-              !item.labelIds.some((id) =>
-                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
-              ))
-        )));
+  const snoozeAction = canSetThreadPlacement
+    ? getMailSnoozeAction(snooze, threadMessages)
+    : null;
+  const openSnooze =
+    snoozeAction === null
+      ? undefined
+      : () => {
+          setSnoozeDialog({ action: snoozeAction, open: true, snooze });
+        };
   const sharedPlacement = mailboxActions.placementScope === "shared";
+  const snoozeLabel = `${snoozeAction === "reschedule" ? "Change return time" : "Snooze conversation"}${sharedPlacement ? " for everyone" : ""}`;
   const placementLabel = returnThreadToInbox
     ? `Return conversation to Inbox${sharedPlacement ? " for everyone" : ""}`
     : `Mark conversation Done${sharedPlacement ? " for everyone" : ""}`;
@@ -393,22 +438,26 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       className="@container flex min-h-0 w-full flex-1 flex-col"
     >
       <MailSnoozeDialog
-        initial={snooze}
-        onApply={async (command, expectedVersion) => {
+        initial={snoozeDialog.snooze}
+        onApplied={(command) => {
+          if (command.kind === "snooze") {
+            onBackToList?.();
+          }
+        }}
+        onApply={async (command, expectedVersion, attempt) => {
           await mailboxActions.applyThreadSnooze(
             message.threadId,
             command,
-            expectedVersion
+            expectedVersion,
+            attempt
           );
-          if (command.kind === "snooze" && onBackToList) {
-            setSnoozeOpen(false);
-            onBackToList();
-          }
         }}
-        onOpenChange={setSnoozeOpen}
-        open={snoozeOpen}
+        onOpenChange={(open) => {
+          setSnoozeDialog((current) => ({ ...current, open }));
+        }}
+        open={snoozeDialog.open}
         preview={isSandboxMailboxId(mailboxId)}
-        reschedule={hasSnooze}
+        reschedule={snoozeDialog.action === "reschedule"}
         shared={sharedPlacement}
       />
       <WorkspaceHeader>
@@ -474,26 +523,22 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               </Button>
             </IconButtonTooltip>
           )}
-          {canSnooze && (
-            <IconButtonTooltip
-              label={`${hasSnooze ? "Change return time" : "Snooze conversation"}${sharedPlacement ? " for everyone" : ""}`}
-            >
-              <Button
-                aria-label={
-                  hasSnooze ? "Change return time" : "Snooze conversation"
-                }
-                chrome="toolbar"
-                disabled={isActionPending}
-                onClick={() => {
-                  setSnoozeOpen(true);
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon aria-hidden icon={Clock01Icon} />
-              </Button>
-            </IconButtonTooltip>
+          {openSnooze !== undefined && (
+            <div className="hidden shrink-0 @md:block">
+              <IconButtonTooltip label={snoozeLabel}>
+                <Button
+                  aria-label={snoozeLabel}
+                  chrome="toolbar"
+                  disabled={isActionPending}
+                  onClick={openSnooze}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={AlarmClockIcon} />
+                </Button>
+              </IconButtonTooltip>
+            </div>
           )}
           {toggleThreadImportance && (
             <IconButtonTooltip label={importanceLabel}>
@@ -528,6 +573,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   snooze,
                   threadIsImportant,
                 }}
+                snoozeEntry={
+                  snoozeAction === null || openSnooze === undefined
+                    ? undefined
+                    : { action: snoozeAction, onOpen: openSnooze }
+                }
                 threadLabelIds={threadLabelIds}
               />
             </div>
@@ -728,6 +778,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                               setActionDraft(null);
                             }}
                             onManageSnippets={onManageSnippets}
+                            onRestoreUndoneSend={restoreUndoneSend}
                             persistDrafts={composePersistDrafts}
                             senderEmail={currentUserEmail}
                             senderMailbox={composeSenderMailbox}

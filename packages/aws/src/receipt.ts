@@ -3,6 +3,7 @@ import {
   HeadObjectCommand,
   S3Client,
 } from "@aws-sdk/client-s3";
+import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
 import { Resource } from "sst";
 
@@ -269,15 +270,18 @@ export const handler = withSentry(
   "MailReceiptProcessor",
   async (event: SnsEvent) => {
     configureMailProcessingSecrets();
-    await Promise.all(
-      (event.Records ?? []).map(async (record) => {
-        try {
-          await processReceiptRecord(record);
-        } catch (error) {
-          await reportAwsError(error, "MailReceiptProcessorRecord");
-          throw error;
-        }
-      })
+    await withRequestDatabaseClient(
+      async () =>
+        await Promise.all(
+          (event.Records ?? []).map(async (record) => {
+            try {
+              await processReceiptRecord(record);
+            } catch (error) {
+              await reportAwsError(error, "MailReceiptProcessorRecord");
+              throw error;
+            }
+          })
+        )
     );
   }
 );

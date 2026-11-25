@@ -1,6 +1,7 @@
 "use client";
 
 import { LoadingPage } from "@quieter/app/components/loading-page";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
 import { shouldIgnoreAppShortcut } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
@@ -24,6 +25,7 @@ import {
 import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
+import { scheduleBackgroundPrefetch } from "@quieter/app/lib/background-prefetch";
 import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
 import {
   chatsQueryOptions,
@@ -37,12 +39,13 @@ import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Text } from "@quieter/ui/text";
-import { useHotkey, useHotkeySequence } from "@tanstack/react-hotkeys";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useRouter } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -240,8 +243,41 @@ const useMailboxWorkspaceCompose = ({
     }
   };
 
+  // Undo can finish after the composer has closed and this host re-rendered,
+  // so the restore callback reads the latest state instead of its closure.
+  const restoreTargetRef = useRef({
+    isComposeMailbox,
+    mounted: false,
+    openComposeWorkspace,
+  });
+  useLayoutEffect(() => {
+    restoreTargetRef.current = {
+      isComposeMailbox,
+      mounted: true,
+      openComposeWorkspace,
+    };
+  });
+  useEffect(
+    () => () => {
+      restoreTargetRef.current.mounted = false;
+    },
+    []
+  );
+  const handleRestoreUndoneSend: RestoreUndoneDraft = (
+    draft,
+    draftMailboxId
+  ) => {
+    const target = restoreTargetRef.current;
+    if (!target.mounted || target.isComposeMailbox) {
+      return false;
+    }
+    target.openComposeWorkspace(draft, draftMailboxId);
+    return true;
+  };
+
   return {
     composeSession,
+    handleRestoreUndoneSend,
     launchedMailtoRef,
     openComposeWorkspace,
     switchComposeSenderMailbox,
@@ -704,7 +740,7 @@ const useMailboxWorkspaceHotkeys = ({
     { enabled: isWorkspaceReady, ignoreInputs: true }
   );
 
-  useHotkeySequence(
+  useHotkey(
     ["G", "I"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -713,7 +749,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "T"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -722,7 +758,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "D"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -731,7 +767,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "U"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -740,7 +776,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "S"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -749,7 +785,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "R"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -758,7 +794,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "M"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -767,7 +803,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "E"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -776,7 +812,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "L"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -785,7 +821,7 @@ const useMailboxWorkspaceHotkeys = ({
     },
     { enabled, ignoreInputs: true }
   );
-  useHotkeySequence(
+  useHotkey(
     ["G", "C"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
@@ -910,6 +946,7 @@ const MailboxSessionNotice = ({
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const initialSearch = useLocation({
     select: (location) => location.searchStr,
   });
@@ -997,6 +1034,62 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     sessionMatchesUser &&
     (isSandboxMode ||
       (!mailboxesQuery.isPending && !isCompletingGmailConnection));
+  const sessionUserId = session.data?.user.id;
+  useEffect(() => {
+    const enabled = isWorkspaceReady && Boolean(sessionUserId);
+    return enabled
+      ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
+          await Promise.allSettled([
+            router.loadRouteChunk(router.routesByPath["/settings"]),
+            (async () => {
+              const { loadPreferenceSettingsPanels, prefetchSettingsOverview } =
+                await import("@quieter/app/features/settings/components/settings-prefetch");
+              if (!signal.aborted) {
+                await Promise.allSettled([
+                  loadPreferenceSettingsPanels(),
+                  previewPersona === null && !isSandboxMode
+                    ? prefetchSettingsOverview(queryClient)
+                    : undefined,
+                ]);
+              }
+            })(),
+            loadComposeWorkspace(),
+            loadSnippetWorkspace(),
+          ]);
+        })
+      : undefined;
+  }, [
+    isSandboxMode,
+    isWorkspaceReady,
+    previewPersona,
+    queryClient,
+    router,
+    sessionUserId,
+  ]);
+  const calendarActive = workspace === "calendar";
+  useEffect(() => {
+    const enabled =
+      isWorkspaceReady && sessionUserId !== undefined && !calendarActive;
+    return enabled
+      ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
+          const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
+          if (!signal.aborted && previewPersona === null) {
+            await prefetchCalendarWorkspace(queryClient, {
+              route: mailboxSearchSchema.parse(router.state.location.search),
+              signal,
+              userId: sessionUserId,
+            });
+          }
+        })
+      : undefined;
+  }, [
+    calendarActive,
+    isWorkspaceReady,
+    previewPersona,
+    queryClient,
+    router,
+    sessionUserId,
+  ]);
   useEffect(() => {
     if (!isWorkspaceReady || startupViewAppliedRef.current) {
       return;
@@ -1105,7 +1198,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     onCompose: workspaceActions.createComposeDraft,
     onManageSnippets: workspaceActions.manageSnippets,
     onOpenCalendar: async () => {
-      const calendarUserId = user.id ?? user.email ?? "preview";
+      const calendarUserId =
+        sessionUserId ?? user.id ?? user.email ?? "preview";
       void loadCalendarWorkspace();
       if (calendarUserId !== "preview" && previewPersona === null) {
         void Promise.allSettled([
@@ -1166,7 +1260,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   return (
     <MailboxWorkspaceBody
-      userId={user.id ?? user.email ?? "preview"}
+      userId={sessionUserId ?? user.id ?? user.email ?? "preview"}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}
@@ -1185,6 +1279,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
         await composeWorkspace.switchComposeSenderMailbox(nextMailboxId);
         workspaceActions.resetDraftChatKey();
       }}
+      onRestoreUndoneSend={composeWorkspace.handleRestoreUndoneSend}
       onConnectGmail={() => {
         void connectGmail();
       }}

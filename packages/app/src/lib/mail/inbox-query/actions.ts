@@ -59,9 +59,9 @@ export const applySnoozeInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
   targets: MailSnoozeApplyInput["targets"],
-  command: MailSnoozeCommand
+  command: MailSnoozeCommand,
+  requestId: string = crypto.randomUUID()
 ) => {
-  const requestId = crypto.randomUUID();
   let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
   // Snoozed conversations leave the Inbox; Later membership needs the
   // server-assigned schedule, so it is left to the refetch below.

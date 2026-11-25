@@ -1,15 +1,25 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 
 import type { createAppDatabase } from "./database";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { appOrigin, deploymentEnvironment, production, stage } from "./stage";
+import {
+  appOrigin,
+  deploymentEnvironment,
+  getEnvironmentValue,
+  production,
+  stage,
+} from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailUpdateResources = (
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  mailDispatchUrl: string
 ) => {
   const domain = production
     ? "updates.quieter.email"
@@ -27,12 +37,18 @@ export const createMailUpdateResources = (
     className: "MailSnooze",
   });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
+    build: cloudflareWorkerBuild,
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
     environment: {
       BETTER_AUTH_URL: appOrigin,
+      MAIL_DISPATCH_URL: mailDispatchUrl,
       MAIL_UPDATES_URL: `wss://${domain}/mail/live`,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: getEnvironmentValue(
+        "QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED",
+        "false"
+      ),
       SENTRY_ENVIRONMENT: stage,
     },
     handler: "packages/cloudflare/src/mail-update-worker.ts",

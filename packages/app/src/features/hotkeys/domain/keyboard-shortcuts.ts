@@ -1,8 +1,8 @@
-import { formatForDisplay } from "@tanstack/react-hotkeys";
+import { formatForDisplay } from "@tanstack/hotkeys";
 import type {
   HotkeySequence,
-  RegisterableHotkey,
-} from "@tanstack/react-hotkeys";
+  RegisterableHotkeyChord,
+} from "@tanstack/hotkeys";
 
 export type KeyboardShortcutCategory =
   | "Global"
@@ -22,7 +22,7 @@ type KeyboardShortcutBase = {
 
 export type KeyboardShortcut =
   | (KeyboardShortcutBase & {
-      keys: readonly RegisterableHotkey[];
+      keys: readonly RegisterableHotkeyChord[];
       sequence?: never;
     })
   | (KeyboardShortcutBase & {

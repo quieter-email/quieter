@@ -23,7 +23,10 @@ import {
   getDraftStatusMessage,
   useComposeDialogController,
 } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
-import type { ComposeDialogController } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
+import type {
+  ComposeDialogController,
+  PreparedComposeSenderSwitch,
+} from "@quieter/app/features/compose/components/use-compose-dialog-controller";
 import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
   appendComposeSignature,
@@ -129,6 +132,9 @@ import {
   useState,
 } from "react";
 
+import { HeldSendNotice } from "./held-send-notice";
+import type { RestoreUndoneDraft } from "./held-send-toast";
+
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
@@ -151,12 +157,17 @@ export type ComposeSurfaceProps = {
   onClose: () => void;
   onManageSnippets?: () => void;
   onOpenSidebar?: () => void;
+  onRestoreUndoneSend?: RestoreUndoneDraft;
   onSenderSwitch?: (
     mailboxId: string,
     currentDraft: ComposeDraftState,
     transferDraft: ComposeDraftState,
-    hasAuthoredContent: boolean
-  ) => Promise<void> | void;
+    hasAuthoredContent: boolean,
+    handoff: Pick<
+      PreparedComposeSenderSwitch,
+      "completeSenderSwitch" | "isCurrent"
+    >
+  ) => Promise<boolean>;
   persistDrafts?: boolean;
   senderEmail?: string | null;
   senderMailbox?: ComposeSenderMailbox | null;
@@ -310,6 +321,7 @@ const ReadyComposeSurface = ({
   onClose,
   onManageSnippets,
   onOpenSidebar,
+  onRestoreUndoneSend,
   onSenderSwitch,
   persistDrafts = true,
   senderEmail,
@@ -378,6 +390,7 @@ const ReadyComposeSurface = ({
       composeEditorRef.current?.normalizeHtml(html) ?? html,
     onClose,
     onRecipientProblem: focusComposeRecipientField,
+    onRestoreUndoneSend,
     persistDrafts,
     signature,
   });
@@ -440,6 +453,15 @@ const ReadyComposeSurface = ({
     !state.isFinishing &&
     !switchingSender &&
     !!mailboxId;
+  const focusEditorAfterRestoreRef = useRef(false);
+  // The Undo button unmounts once the draft is editable again, so focus returns
+  // to the body after the editor has re-enabled itself.
+  useEffect(() => {
+    if (canEditBody && focusEditorAfterRestoreRef.current) {
+      focusEditorAfterRestoreRef.current = false;
+      composeEditorRef.current?.focus();
+    }
+  }, [canEditBody]);
   const audioBusy =
     audioRecorder.isStarting ||
     audioRecorder.isRecording ||
@@ -453,6 +475,20 @@ const ReadyComposeSurface = ({
         !switchingSender &&
         !!mailboxId)) &&
     !audioBusy;
+  const holding =
+    state.draft.holdAttempt === true && state.draft.sendUncertain === true;
+  const heldStatus = compose.heldSendQuery.data?.status;
+  const heldQueryError = compose.heldSendQuery.isError;
+  const canRestoreHeld =
+    compose.heldSendQuery.data?.canUndo === true ||
+    heldStatus === "failed" ||
+    heldStatus === "canceled";
+  const showSendButton =
+    !holding ||
+    heldQueryError ||
+    (heldStatus !== "held" &&
+      heldStatus !== "preparing" &&
+      heldStatus !== "failed");
   const isInline = variant === "inline";
   let sendButtonLabel = state.draft.scheduleAttempt ? "Scheduling…" : "Send";
   if (state.draft.sendUncertain === true) {
@@ -511,12 +547,12 @@ const ReadyComposeSurface = ({
       return;
     }
     setSwitchingSender(true);
-    let preparedTransfer: ComposeDraftState | null = null;
+    let prepared: PreparedComposeSenderSwitch | null = null;
     let senderTransferred = false;
     try {
       const drafts = await compose.prepareSenderSwitch(senderUnavailable);
       if (drafts) {
-        preparedTransfer = drafts.transferDraft;
+        prepared = drafts;
         const nextSender = senderMailboxes?.find(
           (sender) => sender.id === nextMailboxId
         );
@@ -557,27 +593,28 @@ const ReadyComposeSurface = ({
           text: nextSender?.signatureText ?? null,
         });
         compose.allowSenderRouteChange(nextMailboxId);
-        await onSenderSwitch?.(
-          nextMailboxId,
-          drafts.currentDraft,
-          transferDraft,
-          hasAuthoredContent
-        );
-        senderTransferred = true;
-        await compose.completeSenderSwitch();
-      } else {
-        setSwitchingSender(false);
+        senderTransferred =
+          (await onSenderSwitch?.(
+            nextMailboxId,
+            drafts.currentDraft,
+            transferDraft,
+            hasAuthoredContent,
+            drafts
+          )) === true;
       }
     } catch (error) {
-      if (!senderTransferred && preparedTransfer) {
-        clearComposeDraftRuntimeFiles(preparedTransfer);
-      }
-      setSwitchingSender(false);
       toastError(error, {
         boundary: "compose-switch-sender",
         fallback: "Could not change the sending address. Please try again.",
       });
     } finally {
+      if (!senderTransferred) {
+        if (prepared) {
+          clearComposeDraftRuntimeFiles(prepared.transferDraft);
+        }
+        setSwitchingSender(false);
+      }
+      prepared?.release();
       compose.clearSenderRouteChange();
     }
   };
@@ -711,7 +748,7 @@ const ReadyComposeSurface = ({
       }
     },
     {
-      enabled: canSubmitCompose,
+      enabled: canSubmitCompose && showSendButton,
       ignoreInputs: false,
     }
   );
@@ -826,6 +863,11 @@ const ReadyComposeSurface = ({
           }
         }}
         onKeyDown={(event) => {
+          // Safari may clear isComposing before the IME confirmation key event.
+          // oxlint-disable-next-line typescript/no-deprecated
+          if (event.nativeEvent.isComposing || event.keyCode === 229) {
+            return;
+          }
           // Enter in a single-line field would implicitly submit the form and
           // send an unfinished message. The send button and shortcut still send.
           if (
@@ -1377,33 +1419,69 @@ const ReadyComposeSurface = ({
                       chrome="footer"
                       leading={
                         <div className="flex items-center gap-1">
-                          <ToolbarButton
-                            disabled={!canSubmitCompose}
-                            onClick={
-                              state.draft.sendUncertain === true
-                                ? () => {
-                                    void compose.checkSendDelivery();
-                                  }
-                                : undefined
-                            }
-                            type={
-                              state.draft.sendUncertain === true
-                                ? "button"
-                                : "submit"
-                            }
-                            variant="primary"
-                          >
-                            {state.draft.saveStatus === "sending" ? (
-                              <Icon animation="spin" icon={Loading03Icon} />
-                            ) : (
-                              <Icon icon={MailSend02Icon} />
-                            )}
-                            {sendButtonLabel}
-                            <ShortcutHint
-                              className="ml-2 hidden @sm:inline-flex"
-                              shortcutId="compose-send"
-                            />
-                          </ToolbarButton>
+                          {holding && canRestoreHeld ? (
+                            <ToolbarButton
+                              disabled={state.isFinishing}
+                              onClick={() => {
+                                focusEditorAfterRestoreRef.current = true;
+                                void compose.restoreHeldMessage();
+                              }}
+                              type="button"
+                              variant="primary"
+                            >
+                              {heldStatus === "failed" ||
+                              heldStatus === "canceled"
+                                ? "Return to draft"
+                                : "Undo send"}
+                            </ToolbarButton>
+                          ) : null}
+                          {showSendButton ? (
+                            <ToolbarButton
+                              disabled={!canSubmitCompose}
+                              onClick={
+                                state.draft.sendUncertain === true
+                                  ? () => {
+                                      void compose.checkSendDelivery();
+                                    }
+                                  : undefined
+                              }
+                              type={
+                                state.draft.sendUncertain === true
+                                  ? "button"
+                                  : "submit"
+                              }
+                              variant={
+                                holding && canRestoreHeld
+                                  ? "default"
+                                  : "primary"
+                              }
+                            >
+                              {state.draft.saveStatus === "sending" ? (
+                                <Icon animation="spin" icon={Loading03Icon} />
+                              ) : (
+                                <Icon icon={MailSend02Icon} />
+                              )}
+                              {sendButtonLabel}
+                              <ShortcutHint
+                                className="ml-2 hidden @sm:inline-flex"
+                                shortcutId="compose-send"
+                              />
+                            </ToolbarButton>
+                          ) : null}
+                          {state.draft.assistantUnsaved === true &&
+                          state.draft.sendUncertain !== true ? (
+                            <ToolbarButton
+                              disabled={
+                                !canEditBody || senderUnavailable || audioBusy
+                              }
+                              onClick={() => {
+                                void compose.saveDraft();
+                              }}
+                              type="button"
+                            >
+                              Save draft
+                            </ToolbarButton>
+                          ) : null}
                           <ComposeScheduleSend
                             disabled={
                               !canEditBody ||
@@ -1510,6 +1588,12 @@ const ReadyComposeSurface = ({
             )}
           </form.Field>
 
+          {holding ? (
+            <HeldSendNotice
+              held={compose.heldSendQuery.data}
+              isError={heldQueryError}
+            />
+          ) : null}
           {senderUnavailable ? (
             <Text as="div" role="alert" tone="destructive">
               This sending address is no longer available. You can keep editing,
@@ -1580,7 +1664,6 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     !!initialDraft &&
     demoMode !== true &&
     managedDemoMode !== true &&
-    props.initialDraftNeedsSave !== true &&
     (!!initialDraft.draftId ||
       [...initialDraft.attachments, ...initialDraft.inlineImages].some(
         (asset) => !!asset.gmailAttachmentId
@@ -1655,7 +1738,11 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
       if (draft.sendUncertain === true) {
         return draft;
       }
-      if (seed.draftId) {
+      if (
+        seed.draftId &&
+        draft.assistantUnsaved !== true &&
+        props.initialDraftNeedsSave !== true
+      ) {
         const saved = await rpc.mail.getDraft(
           { draftId: seed.draftId, mailboxId },
           { signal }
@@ -1805,6 +1892,7 @@ export const ComposeWorkspace = ({
   onClose,
   onManageSnippets,
   onOpenSidebar,
+  onRestoreUndoneSend,
   onSwitchSenderMailbox,
   persistDrafts,
   senderEmail,
@@ -1845,6 +1933,7 @@ export const ComposeWorkspace = ({
       ([sourceMailboxId, draft]) =>
         sourceMailboxId !== senderSession.mailboxId &&
         sourceMailboxId !== "" &&
+        draft.assistantUnsaved !== true &&
         (draft.draftId?.trim() ?? "") !== ""
     );
     cleanupPromiseRef.current = (async () => {
@@ -1921,42 +2010,51 @@ export const ComposeWorkspace = ({
               }
             : undefined
         }
+        onRestoreUndoneSend={onRestoreUndoneSend}
         onSenderSwitch={async (
           nextMailboxId,
           currentDraft,
           transferDraft,
-          hasAuthoredContent
+          hasAuthoredContent,
+          handoff
         ) => {
-          if (senderSession.mailboxId && selectedSender !== undefined) {
-            savedSenderDrafts.current.set(
-              senderSession.mailboxId,
-              currentDraft
-            );
-          }
           await onSwitchSenderMailbox?.(nextMailboxId);
-          const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
-          setSenderSession({
-            draft: savedDraft
-              ? {
-                  ...savedDraft,
-                  attachments: transferDraft.attachments,
-                  bodyHtml: transferDraft.bodyHtml,
-                  bodyText: transferDraft.bodyText,
-                  errorMessage: null,
-                  followUpReminder: transferDraft.followUpReminder,
-                  inlineImages: transferDraft.inlineImages,
-                  recipients: transferDraft.recipients,
-                  saveStatus: "idle",
-                  subject: transferDraft.subject,
-                  updatedAt: Date.now(),
-                }
-              : transferDraft,
-            mailboxId: nextMailboxId,
-            needsSave:
-              (savedDraft?.draftId?.trim() ?? "") !== "" || hasAuthoredContent,
-            senderEmail:
-              senderMailboxes?.find((sender) => sender.id === nextMailboxId)
-                ?.emailAddress ?? null,
+          if (!handoff.isCurrent()) {
+            return false;
+          }
+          return await handoff.completeSenderSwitch(() => {
+            if (senderSession.mailboxId && selectedSender !== undefined) {
+              savedSenderDrafts.current.set(
+                senderSession.mailboxId,
+                currentDraft
+              );
+            }
+            const savedDraft = savedSenderDrafts.current.get(nextMailboxId);
+            setSenderSession({
+              draft: savedDraft
+                ? {
+                    ...savedDraft,
+                    assistantUnsaved: transferDraft.assistantUnsaved,
+                    attachments: transferDraft.attachments,
+                    bodyHtml: transferDraft.bodyHtml,
+                    bodyText: transferDraft.bodyText,
+                    errorMessage: null,
+                    followUpReminder: transferDraft.followUpReminder,
+                    inlineImages: transferDraft.inlineImages,
+                    recipients: transferDraft.recipients,
+                    saveStatus: "idle",
+                    subject: transferDraft.subject,
+                    updatedAt: Date.now(),
+                  }
+                : transferDraft,
+              mailboxId: nextMailboxId,
+              needsSave:
+                (savedDraft?.draftId?.trim() ?? "") !== "" ||
+                hasAuthoredContent,
+              senderEmail:
+                senderMailboxes?.find((sender) => sender.id === nextMailboxId)
+                  ?.emailAddress ?? null,
+            });
           });
         }}
         persistDrafts={persistDrafts}

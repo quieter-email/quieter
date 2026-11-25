@@ -6,6 +6,7 @@ import {
 } from "@quieter/mail/compose/schema";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
+import { mailChangeVersionSchema } from "@quieter/mail/updates";
 import { z } from "zod";
 
 const updateLabelsInputSchema = z
@@ -178,6 +179,7 @@ export const mailInputSchemas = {
   }),
   getThread: z.object({
     mailboxId: z.string().trim().min(1),
+    prefetch: z.boolean().optional(),
     threadId: z.string(),
   }),
   listLabels: z.object({
@@ -241,7 +243,9 @@ export const mailInputSchemas = {
       "trash",
     ]),
     mailboxId: z.string().trim().min(1),
+    startChangeVersion: mailChangeVersionSchema.optional(),
     startHistoryId: z.string().min(1),
+    targetChangeVersion: mailChangeVersionSchema.optional(),
   }),
   unsubscribeFromMessage: z.object({
     mailboxId: z.string().trim().min(1),

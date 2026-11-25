@@ -30,7 +30,11 @@ export default $config({
 
     const { createInfrastructure } = await import("./infra/app");
     const { createSecretInfrastructure } = await import("./infra/secrets");
-    const secrets = createSecretInfrastructure();
+    const { createSstConfigEnv } = await import("@quieter/env/sst");
+    const env = createSstConfigEnv({ production: $app.stage === "production" });
+    const secrets = createSecretInfrastructure(
+      env.GMAIL_BODY_STORAGE_ENABLED === true
+    );
     return createInfrastructure(secrets);
   },
 });

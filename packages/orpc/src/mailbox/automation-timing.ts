@@ -1,0 +1,3 @@
+export const AI_MEMORY_EVENT_LEASE_MS = 120_000;
+export const BOOTSTRAP_LEASE_MS = 300_000;
+export const SENT_REMINDER_RETRY_MS = 30_000;

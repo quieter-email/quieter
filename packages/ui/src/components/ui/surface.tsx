@@ -17,6 +17,11 @@ export const surfaceVariants = cva("", {
       chrome: "inset",
       className: "rounded-[calc(var(--radius-section)_-_var(--spacing)*0.5)]",
     },
+    {
+      chrome: "inset",
+      className: "inset-ring inset-ring-detail-edge/30",
+      variant: "detail",
+    },
   ],
   defaultVariants: {
     chrome: "default",
@@ -32,7 +37,7 @@ export const surfaceVariants = cva("", {
     },
     padding: {
       comfortable: "p-6",
-      compact: "p-0.5",
+      compact: "p-2",
       default: "p-4",
       dense: "p-2",
       none: "p-0",
@@ -40,8 +45,9 @@ export const surfaceVariants = cva("", {
     },
     variant: {
       detail: "rounded-md bg-detail",
-      panel: "rounded-panel bg-panel",
-      section: "rounded-section bg-section",
+      panel: "rounded-panel bg-panel inset-ring inset-ring-panel-edge/30",
+      section:
+        "rounded-section bg-section inset-ring inset-ring-section-edge/30",
       selection: "rounded-md bg-selection",
     },
   },

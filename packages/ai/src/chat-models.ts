@@ -3,99 +3,87 @@ import { z } from "zod";
 export const chatModels = [
   {
     group: "anthropic",
-    label: "Haiku",
-    value: "~anthropic/claude-haiku-latest",
-    versions: ["anthropic/claude-haiku-4.5"],
+    label: "Claude Haiku 5.5",
+    shortLabel: "Haiku",
+    value: "anthropic/claude-haiku-5.5",
+    versions: ["~anthropic/claude-haiku-latest", "anthropic/claude-haiku-4.5"],
   },
   {
     group: "anthropic",
-    label: "Sonnet",
-    value: "~anthropic/claude-sonnet-latest",
-    versions: ["anthropic/claude-sonnet-5"],
+    label: "Claude Sonnet 5.5",
+    shortLabel: "Sonnet",
+    value: "anthropic/claude-sonnet-5.5",
+    versions: ["~anthropic/claude-sonnet-latest", "anthropic/claude-sonnet-5"],
   },
   {
     group: "anthropic",
-    label: "Opus",
-    value: "~anthropic/claude-opus-latest",
-    versions: ["anthropic/claude-opus-5"],
+    label: "Claude Opus 5.5",
+    shortLabel: "Opus",
+    value: "anthropic/claude-opus-5.5",
+    versions: ["~anthropic/claude-opus-latest", "anthropic/claude-opus-5"],
   },
   {
     group: "anthropic",
-    label: "Fable",
-    value: "~anthropic/claude-fable-latest",
+    label: "Claude Fable 5.2",
+    shortLabel: "Fable",
+    value: "anthropic/claude-fable-5.2",
     versions: [],
   },
   {
     group: "openai",
-    label: "Luna",
-    value: "~openai/gpt-luna-latest",
-    versions: ["openai/gpt-5.6-luna"],
+    label: "GPT-6 Luna",
+    shortLabel: "Luna",
+    value: "openai/gpt-6-luna",
+    versions: ["~openai/gpt-luna-latest", "openai/gpt-5.6-luna"],
   },
   {
     group: "openai",
-    label: "Terra",
-    value: "~openai/gpt-terra-latest",
-    versions: ["openai/gpt-5.6-terra"],
+    label: "GPT-6.1 Terra",
+    shortLabel: "Terra",
+    value: "openai/gpt-6.1-terra",
+    versions: ["~openai/gpt-terra-latest", "openai/gpt-5.6-terra"],
   },
   {
     group: "openai",
-    label: "Sol",
-    value: "~openai/gpt-sol-latest",
-    versions: ["openai/gpt-5.6-sol"],
+    label: "GPT-6.2 Sol",
+    shortLabel: "Sol",
+    value: "openai/gpt-6.2-sol",
+    versions: ["~openai/gpt-sol-latest", "openai/gpt-5.6-sol"],
   },
   {
     group: "openai",
-    label: "Astra",
-    value: "~openai/gpt-astra-latest",
+    label: "GPT-6.2 Astra",
+    shortLabel: "Astra",
+    value: "openai/gpt-6.2-astra",
+    versions: ["~openai/gpt-astra-latest"],
+  },
+  {
+    group: "google",
+    label: "Gemini 4 Hydrogen",
+    shortLabel: "Hydrogen",
+    value: "google/gemini-4-hydrogen",
+    versions: [
+      "~google/gemini-flash-latest",
+      "google/gemini-3.6-flash",
+      "google/gemini-3.7-flash",
+      "google/gemini-3.5-flash-lite",
+      "google/gemini-3.1-flash-lite",
+      "google/gemini-2.5-flash-lite",
+    ],
+  },
+  {
+    group: "google",
+    label: "Gemini 4 Neon",
+    shortLabel: "Neon",
+    value: "google/gemini-4-neon",
     versions: [],
   },
   {
     group: "google",
-    label: "Gemini Flash Lite",
-    value: "google/gemini-3.5-flash-lite",
-    versions: ["google/gemini-2.5-flash-lite", "google/gemini-3.1-flash-lite"],
-  },
-  {
-    group: "google",
-    label: "Gemini Flash",
-    value: "~google/gemini-flash-latest",
-    versions: ["google/gemini-3.6-flash", "google/gemini-3.7-flash"],
-  },
-  {
-    group: "google",
-    label: "Gemini Pro",
-    value: "~google/gemini-pro-latest",
-    versions: ["google/gemini-3.1-pro-preview"],
-  },
-  {
-    group: "deepseek",
-    label: "DeepSeek Flash",
-    value: "~deepseek/deepseek-flash-latest",
-    versions: ["deepseek/deepseek-v4-flash"],
-  },
-  {
-    group: "deepseek",
-    label: "DeepSeek Pro",
-    value: "~deepseek/deepseek-pro-latest",
-    versions: ["deepseek/deepseek-v4-pro"],
-  },
-  {
-    group: "z-ai",
-    label: "GLM Flash",
-    value: "~z-ai/glm-flash-latest",
-    versions: [],
-  },
-  {
-    group: "z-ai",
-    label: "GLM",
-    value: "~z-ai/glm-latest",
-    versions: ["z-ai/glm-5.2"],
-  },
-  {
-    group: "moonshotai",
-    label: "Kimi",
-    value: "~moonshotai/kimi-latest",
-    versions: ["moonshotai/kimi-k3"],
+    label: "Gemini 4 Carbon",
+    shortLabel: "Carbon",
+    value: "google/gemini-4-carbon",
+    versions: ["~google/gemini-pro-latest", "google/gemini-3.1-pro-preview"],
   },
 ] as const;
 
@@ -109,6 +97,23 @@ export const chatModelSchema = z.enum(
   chatModels.flatMap(({ value, versions }) => [value, ...versions])
 );
 export type ChatModel = z.infer<typeof chatModelSchema>;
+
+export const retiredChatModelSchema = z.enum([
+  "~anthropic/claude-fable-latest",
+  "google/gemini-4-argon",
+  "~deepseek/deepseek-flash-latest",
+  "deepseek/deepseek-v4-flash",
+  "~deepseek/deepseek-pro-latest",
+  "deepseek/deepseek-v4-pro",
+  "~z-ai/glm-flash-latest",
+  "~z-ai/glm-latest",
+  "z-ai/glm-5.2",
+  "~moonshotai/kimi-latest",
+  "moonshotai/kimi-k3",
+]);
+export const recordedChatModelSchema = chatModelSchema.or(
+  retiredChatModelSchema
+);
 
 const MODEL_FALLBACK_ORDER: readonly ChatModel[] = [
   "openai/gpt-5.6-luna",
@@ -129,5 +134,8 @@ export const resolveModelFallbacks = (model: ChatModel): ChatModel[] => {
     .slice(0, 3);
 };
 
-export const defaultChatModel: ChatModel = "google/gemini-3.7-flash";
+export const defaultChatModel: ChatModel = "google/gemini-4-hydrogen";
 export const defaultBackgroundModel: ChatModel = "google/gemini-3.5-flash-lite";
+export const memoryLearningModel = "openai/gpt-6-luna";
+export const memoryLearningMaxOutputTokens = 1300;
+export type GenerationModel = ChatModel | typeof memoryLearningModel;

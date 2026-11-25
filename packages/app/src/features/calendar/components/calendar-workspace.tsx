@@ -15,10 +15,9 @@ import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/a
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
+import { scheduleBackgroundPrefetch } from "@quieter/app/lib/background-prefetch";
 import {
   calendarEventQueryOptions,
-  calendarEventsQueryOptions,
-  getCalendarCacheMonthRanges,
   getCalendarQueryKey,
 } from "@quieter/app/lib/calendar-query";
 import { openConnectorLink } from "@quieter/app/lib/connectors-query";
@@ -36,7 +35,6 @@ import type {
 } from "@quieter/calendar";
 import {
   calendarWallTimeToInstant,
-  getCalendarRange,
   getZonedDateTimeFields,
   moveCalendarEventTime,
 } from "@quieter/calendar/time";
@@ -95,7 +93,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import { z } from "zod";
 
 import { createCalendarEventEditorStore } from "../domain/calendar-event-editor";
 import {
@@ -109,7 +106,14 @@ import {
   getVisibleCalendarEventRef,
   toggleCalendarGroupVisibility,
 } from "../domain/calendar-groups";
+import {
+  getCalendarPreferencesKey,
+  readCalendarPreferences,
+} from "../domain/calendar-preferences";
+import type { CalendarPreferences } from "../domain/calendar-preferences";
+import { prefetchAdjacentCalendarEvents } from "../domain/calendar-prefetch";
 import { getCalendarSchedule } from "../domain/calendar-schedule";
+import { getCalendarWorkspaceRange } from "../domain/calendar-workspace-range";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
@@ -136,11 +140,6 @@ type CalendarWorkspaceProps = {
   onMobileSidebarOpenChange: (open: boolean) => void;
 };
 
-const calendarPreferencesSchema = z.object({
-  hiddenCalendarKeys: z.array(z.string()).max(100),
-  sidebarCollapsed: z.boolean().default(false),
-});
-type CalendarPreferences = z.infer<typeof calendarPreferencesSchema>;
 const viewOptions = [
   { label: "Day", value: "day" },
   { label: "Week", value: "week" },
@@ -222,42 +221,15 @@ const CalendarWorkspaceContent = ({
   });
   const date = route.calendarDate ?? now.date;
   const view = route.calendarView ?? "week";
-  const range = useMemo(() => {
-    const visible = getCalendarRange({ date, timeZone, view, weekStartsOn });
-    if (view !== "month") {
-      return visible;
-    }
-    const first = addCalendarDays(visible.dates[0] ?? date, -28);
-    const dates = Array.from(
-      { length: visible.dates.length + 56 },
-      (_, index) => addCalendarDays(first, index)
-    );
-    return {
-      dates,
-      end: getCalendarRange({
-        date: addCalendarDays(first, dates.length),
-        timeZone,
-        view: "day",
-      }).start,
-      start: getCalendarRange({ date: first, timeZone, view: "day" }).start,
-    };
-  }, [date, timeZone, view, weekStartsOn]);
-  const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
-  const initialPreferences = useMemo<CalendarPreferences>(() => {
-    const fallback = {
-      hiddenCalendarKeys: [],
-      sidebarCollapsed: false,
-    };
-    try {
-      const parsed: unknown = JSON.parse(
-        window.localStorage.getItem(preferencesKey) ?? "null"
-      );
-      const preferences = calendarPreferencesSchema.safeParse(parsed);
-      return preferences.success ? preferences.data : fallback;
-    } catch {
-      return fallback;
-    }
-  }, [preferencesKey]);
+  const range = useMemo(
+    () => getCalendarWorkspaceRange({ date, timeZone, view, weekStartsOn }),
+    [date, timeZone, view, weekStartsOn]
+  );
+  const preferencesKey = getCalendarPreferencesKey(userId, preview);
+  const initialPreferences = useMemo(
+    () => readCalendarPreferences(preferencesKey),
+    [preferencesKey]
+  );
   const store = useCreateStore<CalendarUiState>({
     ...initialPreferences,
     confirmation: null,
@@ -459,55 +431,39 @@ const CalendarWorkspaceContent = ({
       }),
     [agentWorkspace, store]
   );
+  const prefetchRefs = visibleRefs.filter((ref) =>
+    data.accounts.some(
+      (account) =>
+        account.id === ref.connectionId && account.status === "connected"
+    )
+  );
   const prefetchFingerprint = JSON.stringify({
     date,
+    online,
+    prefetchRefs,
     preview,
     timeZone,
     userId,
     view,
-    visibleRefs,
+    weekStartsOn,
   });
   const prefetchAdjacent = useEffectEvent(async (signal: AbortSignal) => {
-    const first = new Date(`${range.dates[0] ?? date}T12:00:00Z`);
-    const last = new Date(`${range.dates.at(-1) ?? date}T12:00:00Z`);
-    first.setUTCDate(1);
-    first.setUTCMonth(first.getUTCMonth() - 1);
-    last.setUTCDate(1);
-    last.setUTCMonth(last.getUTCMonth() + 1);
-    const neighbors = [first, last].flatMap((neighbor) =>
-      getCalendarCacheMonthRanges({
-        ...getCalendarRange({
-          date: neighbor.toISOString().slice(0, 10),
-          timeZone,
-          view: "day",
-        }),
-        timeZone,
-      })
-    );
-    for (const ref of visibleRefs) {
-      if (signal.aborted || preview !== null || !navigator.onLine) {
-        return;
-      }
-      await Promise.allSettled(
-        neighbors.map(async (neighbor) => {
-          await queryClient.query(
-            calendarEventsQueryOptions(userId, ref, {
-              end: neighbor.end,
-              start: neighbor.start,
-              timeZone,
-            })
-          );
-        })
-      );
+    if (preview === null) {
+      await prefetchAdjacentCalendarEvents(queryClient, {
+        calendars: prefetchRefs,
+        range: { end: range.end, start: range.start, timeZone },
+        signal,
+        userId,
+      });
     }
   });
-  useEffect(() => {
-    const controller = new AbortController();
-    void prefetchAdjacent(controller.signal);
-    return () => {
-      controller.abort();
-    };
-  }, [prefetchFingerprint]);
+  useEffect(
+    () =>
+      scheduleBackgroundPrefetch(queryClient, async (signal) => {
+        await prefetchAdjacent(signal);
+      }),
+    [prefetchFingerprint, queryClient]
+  );
   const closeEvent = () => {
     store.setState((current) =>
       current.editor === null ? current : { ...current, editor: null }
@@ -1039,7 +995,7 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1190,10 +1146,10 @@ const CalendarWorkspaceContent = ({
         preview={preview !== null}
         pendingConnection={ui.pendingConnection}
         onUpdateCalendarColor={async (calendar, color) =>
-          await data.colorMutation.mutateAsync({ calendar, color }).then(
-            () => true,
-            () => false
-          )
+          await data.colorMutation
+            .mutateAsync({ calendar, color })
+            .then(() => true)
+            .catch(() => false)
         }
         pendingCalendarColorKey={
           data.colorMutation.isPending
@@ -1471,7 +1427,7 @@ const CalendarWorkspaceContent = ({
         ) : null}
         <div
           className={cn("flex min-h-0 flex-1", {
-            "-mt-0.5": data.failures.length === 0,
+            "-mt-2": data.failures.length === 0,
           })}
           ref={workspaceRef}
         >
@@ -1686,7 +1642,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="-ml-0.5 flex w-88 shrink-0 flex-col"
+              className="-ml-2 flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div
@@ -1701,7 +1657,7 @@ const CalendarWorkspaceContent = ({
               ) : (
                 (details ?? (
                   <Surface
-                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    className="m-2 flex min-h-0 flex-1 flex-col"
                     padding="none"
                     variant="section"
                   >
@@ -1852,3 +1808,5 @@ export const CalendarWorkspace = (props: CalendarWorkspaceProps) => {
     />
   );
 };
+
+export { prefetchCalendarWorkspace } from "../domain/calendar-prefetch";

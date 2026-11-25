@@ -48,3 +48,22 @@ Use the existing development configuration and local Worker commands. Keep share
 The database change adds storage and optional analysis fields. Apply the additive migration through the protected deployment workflow before deploying code that reads the new tables. Existing mailboxes become eligible for background initialization without reconnecting. Do not run production migrations locally.
 
 The local verification uses a disposable loopback database named `quieter_migration_test`. It covers migration replay and synthetic provider responses without using real mailbox contents, sending mail, or invoking a model. Never run destructive migration tests against `quieter_dev`.
+
+### Encrypted Gmail bodies
+
+When enabled, capture stores text and HTML together in a private R2 object. The AES-256-GCM envelope authenticates the mailbox, message, object, key version, and provider revision at which the body was stored. Label-only updates retain that body revision and reuse the object. Legacy snapshots remain readable during the migration.
+
+Importance search keeps the exact body text as a cleartext SQL projection for substring matching. A positional full-text document preserves phrase matching in text, HTML, headers, and attachment names. Messages that exceed PostgreSQL's vector size limit use overlapping windows for phrase searches and match unquoted terms across all windows. Semantic indexing reads the same text projection and the existing HTML-derived analysis. Treat the search projections, derived analysis, and their indexes as sensitive mail data. PostgreSQL needs `pg_trgm` for the substring index. [PostgreSQL trigram indexes](https://www.postgresql.org/docs/current/pgtrgm.html)
+
+1. Apply the schema and index migrations through the protected workflow. Schedule the concurrent index builds during low database traffic. Deploy all capture readers and writers with `GMAIL_BODY_STORAGE_ENABLED` off. Retire older web versions and drain older background executors before enabling writes.
+2. Set the stage's `GmailBodyEncryptionKey` SST secret to 32 random bytes encoded as hex. To introduce a second key, deploy all readers with both keys in the comma-separated secret, then deploy with the new key first so writers select it. Keep keys that still protect stored objects and keep the R2 bucket available to compatible readers, including while new encrypted writes are paused.
+3. Enable `GMAIL_BODY_STORAGE_ENABLED` for the stage. Mail maintenance migrates bounded batches of live inline snapshots. It compares the selected revision and snapshot at write time, so retries skip migrated rows and concurrent captures win. Failed rows get a later retry time so other mailboxes can continue. The backlog is the count of live snapshots with no `bodyObject`. Investigate `gmail:body-backfill` failures if the backlog stops shrinking.
+4. To pause the backfill and new encrypted writes, turn the flag off and keep the compatible release running. Captures that already point to encrypted objects remain readable.
+
+Uploads run before the transaction that publishes the pointer. The mail object cleanup worker reclaims abandoned staging objects after a day and replaced or deleted objects after an hour. The shorter delay gives in-flight readers time to finish. Mailbox deletion uses the same cleanup queue through the database cascade.
+
+For local verification, use a disposable loopback database with the migrations applied and the native local R2 bucket. Supply a separate development key in the ignored local configuration or its SST secret, enable the flag, and run `vp run env:doctor`. The local mail-recovery trigger runs one backfill batch and the existing cleanup pass. Local capture rejects encrypted writes against the shared development database because the resulting object pointers would only resolve in your local R2 bucket.
+
+## Repair legacy Gmail labels
+
+After all capture workers run the updated metadata writer, run the protected production deployment with `repair_gmail_capture_labels=true` to repair older snapshots whose label arrays were stored as JSON strings. The job updates snapshots in primary-key order, commits each page, and reports the number of rows repaired. It preserves message bodies and skips rows already repaired or updated by capture. Re-running the same operation is safe.

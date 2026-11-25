@@ -17,6 +17,7 @@ import {
   cancelScheduledSend,
   createScheduledSend,
   dispatchScheduledSend,
+  recoverScheduledSendAttempt,
   validateScheduledSendTime,
 } from "../src/scheduled-send/service";
 
@@ -26,18 +27,31 @@ const fixture = vi.hoisted(() => ({
   getStatus: vi.fn<typeof composeMailOperations.getComposeSendStatus>(),
   originalDraft:
     vi.fn<() => Promise<{ messageId: string; baseRevision: string }>>(),
+  publishMailUpdate: vi.fn<() => Promise<void>>(),
   query:
     vi.fn<
       (query: string, params: unknown[]) => Promise<{ rows: unknown[][] }>
     >(),
   readObject: vi.fn<() => Promise<Uint8Array>>(),
-  saveDraft: vi.fn<typeof composeMailOperations.saveDraft>(),
+  saveDraft:
+    vi.fn<
+      (
+        input: Parameters<typeof composeMailOperations.saveDraft>[0]
+      ) => Promise<{ draftId: string }>
+    >(),
   send: vi.fn<typeof composeMailOperations.sendMessage>(),
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- The proxy replaces the driver for focused state-flow tests.
 vi.mock("@quieter/database/client", async () => {
   const { drizzle } = await import("drizzle-orm/pg-proxy");
-  return { db: drizzle(fixture.query) };
+  const database = drizzle(fixture.query);
+  return {
+    db: Object.assign(database, {
+      transaction: async <Result>(
+        run: (transaction: typeof database) => Promise<Result>
+      ) => await run(database),
+    }),
+  };
 });
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only provider boundaries used by scheduling are mocked.
 vi.mock("../src/mail/compose", () => ({
@@ -52,7 +66,7 @@ vi.mock(import("../src/mailbox/service"), () => ({
   assertAccessibleMailbox: fixture.access,
 }));
 vi.mock(import("../src/mail-updates"), () => ({
-  publishMailUpdate: vi.fn<() => Promise<void>>(),
+  publishMailUpdate: fixture.publishMailUpdate,
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- Only the original-draft read boundary is needed.
 vi.mock("../src/mail/queries", () => ({
@@ -86,6 +100,7 @@ describe("scheduled send execution", () => {
     row = {
       ...scope,
       createdAt: new Date(),
+      deliveryKind: "scheduled",
       draftRemovedAt: new Date(),
       errorMessage: null,
       leaseToken: null,
@@ -202,6 +217,199 @@ describe("scheduled send execution", () => {
     expect(row.payloadRetiredAt).toBeNull();
     expect(result.nextWakeAt).toBeNull();
     expect(fixture.send).not.toHaveBeenCalled();
+    expect(fixture.publishMailUpdate).toHaveBeenCalledWith({
+      mailboxId: scope.mailboxId,
+      type: "mailbox.changed",
+    });
+  });
+
+  test("rejects cancellation once submission can have started", async () => {
+    row.status = "sending";
+    // oxlint-disable-next-line eslint/require-await -- The driver returns no updated row when the status predicate rejects cancellation.
+    fixture.query.mockImplementation(async (query) => {
+      if (query.startsWith("select")) {
+        return {
+          rows: [
+            Object.keys(getTableColumns(scheduledMailSend)).map(
+              (key) => Object.entries(row).find(([name]) => name === key)?.[1]
+            ),
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    await expect(cancelScheduledSend(scope)).rejects.toMatchObject({
+      code: "CONFLICT",
+    });
+    expect(fixture.saveDraft).not.toHaveBeenCalled();
+  });
+
+  test("cancels a preparing held send even while preparation holds an active lease", async () => {
+    row.deliveryKind = "undo";
+    row.status = "preparing";
+    row.leaseToken = "active-prepare-lease";
+    row.leaseUntil = new Date(Date.now() + 120_000);
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.saveDraft.mockResolvedValue({
+      draftId: "restored-draft",
+    });
+    const result = await cancelScheduledSend(scope);
+    expect(result.status).toBe("cancelled");
+    expect(result.draftId).toBe("restored-draft");
+    expect(fixture.saveDraft).toHaveBeenCalledOnce();
+    const cancelUpdate = fixture.query.mock.calls.find(
+      ([query]) =>
+        query.startsWith('update "scheduledMailSend"') &&
+        query.includes('"status" = $')
+    );
+    expect(cancelUpdate?.[0]).toContain('"scheduledMailSend"."status" = ');
+  });
+
+  test("clamps nextWakeAt forward and respects backoff when claimSend loses a race", async () => {
+    row.deliveryKind = "undo";
+    row.sendAt = new Date(Date.now() - 500);
+    row.nextWakeAt = new Date(Date.now() + 60_000);
+    // oxlint-disable-next-line eslint/require-await -- The driver simulates a rejected claim update while the row remains scheduled.
+    fixture.query.mockImplementation(async (query) => {
+      if (query.startsWith("select")) {
+        return {
+          rows: [
+            Object.keys(getTableColumns(scheduledMailSend)).map(
+              (key) => Object.entries(row).find(([name]) => name === key)?.[1]
+            ),
+          ],
+        };
+      }
+      return { rows: [] };
+    });
+    const result = await dispatchScheduledSend(scope);
+    expect(result.nextWakeAt).toBe(row.nextWakeAt.getTime());
+    expect(fixture.send).not.toHaveBeenCalled();
+  });
+
+  test("truncates undo preparation timestamps to milliseconds so later claims match", async () => {
+    row.deliveryKind = "undo";
+    row.status = "preparing";
+    row.draftRemovedAt = null;
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    await dispatchScheduledSend(scope);
+    const prepareUpdate = fixture.query.mock.calls.find(
+      ([query]) =>
+        query.startsWith('update "scheduledMailSend"') &&
+        query.includes("date_trunc('milliseconds', clock_timestamp())")
+    );
+    expect(prepareUpdate).toBeDefined();
+  });
+
+  test("allows canceling a retrying undo send whose initial hold deadline passed before submission", async () => {
+    row.deliveryKind = "undo";
+    row.status = "scheduled";
+    row.sendAt = new Date(Date.now() - 60_000);
+    row.errorMessage =
+      "Sending could not start. Your message is saved and will retry shortly.";
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.saveDraft.mockResolvedValue({ draftId: "restored-draft" });
+    const result = await cancelScheduledSend(scope);
+    expect(result.status).toBe("cancelled");
+    expect(result.draftId).toBe("restored-draft");
+    const cancelUpdate = fixture.query.mock.calls.find(
+      ([query]) =>
+        query.startsWith('update "scheduledMailSend"') &&
+        query.includes('"errorMessage" is not null')
+    );
+    expect(cancelUpdate).toBeDefined();
+  });
+
+  test("reuses an intact original draft when canceling a failed preparation without creating a duplicate", async () => {
+    row.status = "failed";
+    row.draftRemovedAt = null;
+    fixture.readObject.mockResolvedValue(
+      new TextEncoder().encode(
+        JSON.stringify({
+          attachments: [],
+          baseRevision: "rev-1",
+          bodyHtml: "<p>Hello</p>",
+          bodyText: "Hello",
+          draftId: "original-draft",
+          inlineImages: [],
+          localId: "source",
+          recipients: { bcc: "", cc: "", to: "person@example.test" },
+          saveStatus: "saved",
+          subject: "Message",
+          updatedAt: Date.now(),
+        })
+      )
+    );
+    fixture.originalDraft.mockResolvedValue({
+      baseRevision: "rev-1",
+      messageId: "internal-draft",
+    });
+    const result = await cancelScheduledSend(scope);
+    expect(result.status).toBe("cancelled");
+    expect(result.draftId).toBe("original-draft");
+    expect(fixture.saveDraft).not.toHaveBeenCalled();
+  });
+
+  test("rejects attempt recovery for read-only mailbox readers", async () => {
+    fixture.access.mockResolvedValueOnce({
+      capabilities: getMailboxCapabilities({
+        provider: "managed",
+        role: "reader",
+      }),
+      contentRevision: 0,
+      id: "mailbox",
+      organizationId: "org",
+      provider: "managed",
+    });
+    await expect(
+      recoverScheduledSendAttempt({
+        mailboxId: scope.mailboxId,
+        sendOperationId: row.sendOperationId,
+        userId: scope.userId,
+      })
+    ).rejects.toMatchObject({ code: "FORBIDDEN" });
   });
 
   test("keeps an uncertain submission reserved when access is later revoked", async () => {
@@ -358,25 +566,6 @@ describe("scheduled send execution", () => {
     ).rejects.toMatchObject({ code: "CONFLICT" });
     expect(fixture.deleteDraft).not.toHaveBeenCalled();
     expect(fixture.send).not.toHaveBeenCalled();
-  });
-
-  test("rejects cancellation once submission can have started", async () => {
-    row.status = "sending";
-    // A real database refuses this conditional update once status has changed.
-    // oxlint-disable-next-line eslint/require-await -- The driver refuses the state transition without I/O.
-    fixture.query.mockImplementation(async (query) => ({
-      rows: query.startsWith("select")
-        ? [
-            Object.keys(getTableColumns(scheduledMailSend)).map(
-              (key) => Object.entries(row).find(([name]) => name === key)?.[1]
-            ),
-          ]
-        : [],
-    }));
-    await expect(cancelScheduledSend(scope)).rejects.toMatchObject({
-      code: "CONFLICT",
-    });
-    expect(fixture.saveDraft).not.toHaveBeenCalled();
   });
 });
 

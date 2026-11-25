@@ -18,7 +18,7 @@ export const createAuthStorage = (onWriteError: () => void) => {
     },
     initialize: async () => {
       if (
-        !safeStorage.isEncryptionAvailable() ||
+        !(await safeStorage.isAsyncEncryptionAvailable()) ||
         (process.platform === "linux" &&
           safeStorage.getSelectedStorageBackend() === "basic_text")
       ) {

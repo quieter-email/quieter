@@ -1,5 +1,8 @@
 export const { stage } = $app;
 export const production = stage === "production";
+export const mailDispatchDomain = production
+  ? "dispatch.quieter.email"
+  : `${stage}-dispatch.quieter.email`;
 
 export const getEnvironmentValue = (name: string, fallback: string) => {
   const value = process.env[name];

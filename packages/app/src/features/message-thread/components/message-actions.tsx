@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   CancelCircleIcon,
   CheckmarkCircle02Icon,
   Flag01Icon,
@@ -49,12 +50,15 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
   mailboxId: string;
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
   mailbox: MailboxCategory;
+  snoozeEntry?: { action: MailSnoozeAction; onOpen: () => void };
   threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
@@ -315,7 +319,23 @@ const createFolderEntries = (
       type: "item",
     });
   }
-  if (canChangePlacement && hasSnooze && props.actions.onApplySnooze) {
+  const { snoozeEntry } = props;
+  if (canChangePlacement && snoozeEntry && props.actions.onApplySnooze) {
+    entries.push({
+      disabled: isBusy,
+      icon: AlarmClockIcon,
+      id: "snooze",
+      label: `${snoozeEntry.action === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: snoozeEntry.onOpen,
+      type: "item",
+    });
+  }
+  if (
+    canChangePlacement &&
+    hasSnooze &&
+    props.message.snooze?.status !== "returning" &&
+    props.actions.onApplySnooze
+  ) {
     const keepInDone =
       props.message.snooze?.status === "active" &&
       !hasInbox &&

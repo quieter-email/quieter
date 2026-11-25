@@ -49,6 +49,7 @@ import type {
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
+import { NoObjectGeneratedError, NoOutputGeneratedError } from "ai";
 import {
   and,
   asc,
@@ -71,9 +72,13 @@ import { z } from "zod";
 
 import { assertCanUseAi } from "./ai-access";
 import { serializeAiMemoryProvenance } from "./ai-memory-provenance";
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
+import { AI_MEMORY_EVENT_LEASE_MS } from "./mailbox/automation-timing";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 const MEMORY_EVENT_METADATA_STRING_LIMIT = 600;
+const MEMORY_OUTPUT_ERROR = "The memory model returned an incomplete update.";
 export const AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH = 6000;
 export const DEFAULT_AI_MEMORY_LEARNING_PROMPT = `Build a concise, useful understanding of the user from their own chat, writing, and mail activity. Learn their language, tone, vocabulary, greetings and sign-offs, relationships they describe, work and routines, reading interests, priorities, organization habits, and how preferences vary by recipient or context. Connect repeated labeling, reading, reply requests, and brief feedback into durable patterns. Distinguish dismissing from disliking, and deferring from ignoring. Keep uncertain evidence provisional, update contradictions, expire temporary context, and never retain raw correspondence or secrets.`;
 
@@ -408,10 +413,12 @@ const listScopeMemories = async (userId: string) =>
     .orderBy(asc(aiMemory.id));
 
 const listConsolidationMemories = async ({
+  automatic = false,
   mailboxId,
   events,
   scope,
 }: {
+  automatic?: boolean;
   events: Pick<typeof userAiContextEvent.$inferSelect, "kind" | "metadata">[];
   mailboxId?: string;
   scope: UserMemoryOwner;
@@ -464,7 +471,7 @@ const listConsolidationMemories = async ({
       : or(
           ...contacts.map(
             (contact) =>
-              sql`${aiMemory.metadata} @> ${JSON.stringify({ correspondents: [contact] })}::jsonb`
+              sql`${aiMemory.metadata} @> ${JSON.stringify({ correspondents: [contact] })}::text::jsonb`
           )
         );
   const usable = and(
@@ -500,7 +507,7 @@ const listConsolidationMemories = async ({
         categories.map((category) => sql`${category}`),
         sql`, `
       )})
-  ) balanced where position <= 8)`;
+  ) balanced where position <= ${automatic ? 2 : 8})`;
   const [general, matchingText, matchingContacts] = await Promise.all([
     db
       .select(memoryColumns)
@@ -515,13 +522,13 @@ const listConsolidationMemories = async ({
         desc(sql`ts_rank_cd(${document}, ${textQuery})`),
         asc(aiMemory.id)
       )
-      .limit(32),
+      .limit(automatic ? 8 : 32),
     db
       .select(memoryColumns)
       .from(aiMemory)
       .where(and(usable, contactMatch))
       .orderBy(desc(aiMemory.lastConfirmedAt), asc(aiMemory.id))
-      .limit(32),
+      .limit(automatic ? 8 : 32),
   ]);
   return [
     ...new Map(
@@ -651,19 +658,19 @@ const eraseAiMemoryRecords = async ({
               and snapshot->'metadata' @> ${JSON.stringify({
                 category: "labeling",
                 sourceMailboxId: member.mailboxId,
-              } satisfies AiMemoryMetadata)}::jsonb
+              } satisfies AiMemoryMetadata)}::text::jsonb
               and (
                 snapshot->'metadata' @> ${JSON.stringify({
                   feedbackMembers: [
                     { labelId: member.labelId, source: member.source },
                   ],
-                })}::jsonb
+                })}::text::jsonb
                 or (
                   not (snapshot->'metadata' ? 'feedbackMembers')
                   and snapshot->'metadata' @> ${JSON.stringify({
                     feedbackSource: member.source,
                     labelId: member.labelId,
-                  } satisfies AiMemoryMetadata)}::jsonb
+                  } satisfies AiMemoryMetadata)}::text::jsonb
                 )
               )
           )`
@@ -1156,9 +1163,11 @@ const applyAiMemoryPlanOnce = async ({
 
 const applyAiMemoryPlan = async (
   input: Parameters<typeof applyAiMemoryPlanOnce>[0] & {
+    maxReplans?: number;
     recallAndReplan?: (memories: MemoryRow[]) => Promise<{
       expectedVersions: ReadonlyMap<string, number>;
       plan: AiMemoryUpdatePlan;
+      sourceClaimedAt?: Date;
     }>;
   }
 ) => {
@@ -1171,7 +1180,7 @@ const applyAiMemoryPlan = async (
       if (
         !(error instanceof AiMemoryRecallRequiredError) ||
         !input.recallAndReplan ||
-        attempt >= 2
+        attempt >= (input.maxReplans ?? 2)
       ) {
         throw error;
       }
@@ -1924,13 +1933,16 @@ export const refreshAiMemoryFromEvent = async ({
           isNull(userAiContextEvent.skippedAt),
           or(
             isNull(userAiContextEvent.processingAt),
-            lt(userAiContextEvent.processingAt, new Date(Date.now() - 120_000))
+            lt(
+              userAiContextEvent.processingAt,
+              new Date(Date.now() - AI_MEMORY_EVENT_LEASE_MS)
+            )
           )
         )
       );
     return { status: "skipped" as const };
   }
-  const claimedAt = new Date();
+  let claimedAt = new Date();
   const [event] = await db
     .update(userAiContextEvent)
     .set({ processingAt: claimedAt, updatedAt: claimedAt })
@@ -1943,7 +1955,7 @@ export const refreshAiMemoryFromEvent = async ({
           isNull(userAiContextEvent.processingAt),
           lt(
             userAiContextEvent.processingAt,
-            new Date(claimedAt.getTime() - 120_000)
+            new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
           )
         )
       )
@@ -2060,7 +2072,8 @@ export const refreshAiMemoryFromEvent = async ({
       );
     return { status: "skipped" as const };
   }
-  const siblingLimit = isExplicit ? 0 : 3;
+  const retryingInvalidOutput = event.lastError === MEMORY_OUTPUT_ERROR;
+  const siblingLimit = isExplicit || retryingInvalidOutput ? 0 : 3;
   const pending = await db
     .select({ id: userAiContextEvent.id })
     .from(userAiContextEvent)
@@ -2073,11 +2086,12 @@ export const refreshAiMemoryFromEvent = async ({
         eq(sql<string>`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
         isNull(userAiContextEvent.mergedAt),
         isNull(userAiContextEvent.skippedAt),
+        sql`${userAiContextEvent.lastError} is distinct from ${MEMORY_OUTPUT_ERROR}`,
         or(
           isNull(userAiContextEvent.processingAt),
           lt(
             userAiContextEvent.processingAt,
-            new Date(claimedAt.getTime() - 120_000)
+            new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
           )
         )
       )
@@ -2098,11 +2112,12 @@ export const refreshAiMemoryFromEvent = async ({
               ),
               isNull(userAiContextEvent.mergedAt),
               isNull(userAiContextEvent.skippedAt),
+              sql`${userAiContextEvent.lastError} is distinct from ${MEMORY_OUTPUT_ERROR}`,
               or(
                 isNull(userAiContextEvent.processingAt),
                 lt(
                   userAiContextEvent.processingAt,
-                  new Date(claimedAt.getTime() - 120_000)
+                  new Date(claimedAt.getTime() - AI_MEMORY_EVENT_LEASE_MS)
                 )
               )
             )
@@ -2225,10 +2240,10 @@ export const refreshAiMemoryFromEvent = async ({
     );
   const request =
     "Consolidate these observations into the user's current profile. Learn durable context automatically and update existing concepts instead of duplicating them.";
-  const usage = createUsageCollector();
 
   try {
     const current = await listConsolidationMemories({
+      automatic: !isExplicit,
       events,
       mailboxId: event.mailboxId,
       scope,
@@ -2244,6 +2259,27 @@ export const refreshAiMemoryFromEvent = async ({
         }
       }
       planningAttempt += 1;
+      const renewedAt = new Date();
+      await db.transaction(async (tx) => {
+        const claims = await tx
+          .update(userAiContextEvent)
+          .set({ processingAt: renewedAt, updatedAt: renewedAt })
+          .where(
+            and(
+              inArray(userAiContextEvent.id, sourceEventIds),
+              eq(userAiContextEvent.processingAt, claimedAt),
+              isNull(userAiContextEvent.mergedAt),
+              isNull(userAiContextEvent.skippedAt)
+            )
+          )
+          .returning({ id: userAiContextEvent.id });
+        if (claims.length !== sourceEventIds.length) {
+          throw new ORPCError("CONFLICT", {
+            message: "These observations were already processed or forgotten.",
+          });
+        }
+      });
+      claimedAt = renewedAt;
       const plan = await planAiMemoryUpdate({
         billing: await createMailboxAiBillingContext({
           externalId: `ai-memory-event:${event.id}:plan:${planningAttempt}`,
@@ -2252,10 +2288,12 @@ export const refreshAiMemoryFromEvent = async ({
           userId: event.userId,
         }),
         currentMemories: current.map(toEditorMemory),
-        learningGuidance: config.learningPrompt,
-
+        learningGuidance:
+          !isExplicit &&
+          config.learningPrompt === DEFAULT_AI_MEMORY_LEARNING_PROMPT
+            ? undefined
+            : config.learningPrompt,
         observations,
-        onUsage: usage.collect,
         request,
         source: memorySource,
         userMessages,
@@ -2265,10 +2303,11 @@ export const refreshAiMemoryFromEvent = async ({
           current.map(({ id, version }) => [id, version])
         ),
         plan,
+        sourceClaimedAt: claimedAt,
       };
     };
     const prepared = await recallAndReplan([]);
-    const changeSet = await applyAiMemoryPlan({
+    await applyAiMemoryPlan({
       actorUserId: event.userId,
       allowDirectUserFactUpdates: events.every(
         (observation) =>
@@ -2279,23 +2318,21 @@ export const refreshAiMemoryFromEvent = async ({
       ),
       changeSetSource: resolveChangeSetSource(event.kind),
       expectedRevision: config.revision,
+      maxReplans: isExplicit ? 2 : 1,
       ...prepared,
       recallAndReplan,
       scope,
       source: memorySource,
-      sourceClaimedAt: claimedAt,
       sourceEventId: events[0]?.id ?? event.id,
       sourceEventIds,
       sourceEventMailboxId: event.mailboxId,
     });
-    await reportMemoryUsage({
-      externalId: `ai-memory-event:${event.id}:${changeSet.id}`,
-      mailboxId: event.mailboxId,
-      usage: usage.usage(),
-      userId: event.userId,
-    });
     return { status: "refreshed" as const };
   } catch (error) {
+    const invalidOutput =
+      !isExplicit &&
+      (NoObjectGeneratedError.isInstance(error) ||
+        NoOutputGeneratedError.isInstance(error));
     if (
       !isAiCreditAdmissionBusy(error) &&
       (!(error instanceof ORPCError) || error.status >= 500)
@@ -2304,16 +2341,15 @@ export const refreshAiMemoryFromEvent = async ({
         operation: "ai-memory:consolidate-observations",
       });
     }
-    await reportMemoryUsage({
-      externalId: `ai-memory-event:${event.id}:failed:${claimedAt.getTime()}`,
-      mailboxId: event.mailboxId,
-      usage: usage.usage(),
-      userId: event.userId,
-    });
     await db
       .update(userAiContextEvent)
       .set({
-        lastError: "The memory update could not be applied.",
+        lastError: invalidOutput
+          ? MEMORY_OUTPUT_ERROR
+          : "The memory update could not be applied.",
+        ...(invalidOutput && retryingInvalidOutput
+          ? { metadata: {}, skippedAt: new Date() }
+          : {}),
         processingAt: null,
         updatedAt: new Date(),
       })
@@ -2329,15 +2365,24 @@ export const refreshAiMemoryFromEvent = async ({
   }
 };
 
-export const processPendingAiMemoryEvents = async ({
-  allowLocal = false,
-  userId,
-}: { allowLocal?: boolean; userId?: string } = {}) => {
+export const processPendingAiMemoryEvents = async (
+  input: MailboxAutomationScope & {
+    allowLocal?: boolean;
+    userId?: string;
+    unscopedOnly?: boolean;
+    limit?: number;
+  } = {}
+) => {
+  const { allowLocal = false, userId } = input;
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
     return { failed: 0, processed: 0 };
   }
-  const cutoff = new Date(Date.now() - 120_000);
+  const cutoff = new Date(Date.now() - AI_MEMORY_EVENT_LEASE_MS);
   const eligible = and(
+    mailboxAutomationFilter(userAiContextEvent.mailboxId, input),
+    input.unscopedOnly === true
+      ? isNull(userAiContextEvent.mailboxId)
+      : undefined,
     isNull(userAiContextEvent.mergedAt),
     isNull(userAiContextEvent.skippedAt),
     eq(sql`${userAiContextEvent.metadata}->>'memoryScope'`, "user"),
@@ -2346,7 +2391,9 @@ export const processPendingAiMemoryEvents = async ({
       isNull(userAiContextEvent.processingAt),
       lt(userAiContextEvent.processingAt, cutoff)
     ),
-    allowLocal ? undefined : lt(userAiContextEvent.updatedAt, cutoff)
+    allowLocal && input.mailboxId === undefined
+      ? undefined
+      : lt(userAiContextEvent.updatedAt, cutoff)
   );
   const deadline = Date.now() + 60_000;
   const pending = await retryIdempotentDatabaseQuery(
@@ -2369,9 +2416,10 @@ export const processPendingAiMemoryEvents = async ({
   );
   let processed = 0;
   let failed = 0;
+  let remaining = input.limit ?? Infinity;
   await Promise.all(
     Array.from({ length: Math.min(4, turns.length) }, async () => {
-      while (Date.now() < deadline) {
+      while (remaining > 0 && Date.now() < deadline) {
         const turn = turns.shift();
         if (turn === undefined) {
           return;
@@ -2394,9 +2442,10 @@ export const processPendingAiMemoryEvents = async ({
                 .orderBy(userAiContextEvent.updatedAt, userAiContextEvent.id)
                 .limit(1)
           );
-          if (event === undefined || Date.now() >= deadline) {
+          if (event === undefined || remaining <= 0 || Date.now() >= deadline) {
             continue;
           }
+          remaining -= 1;
           turn.attemptedIds.push(event.id);
           const result = await refreshAiMemoryFromEvent({ eventId: event.id });
           if (result.status === "refreshed") {
@@ -2930,11 +2979,11 @@ export const saveAiMemory = async ({
   });
 };
 
-export const forgetAiMemory = async ({
-  memoryId,
+export const forgetAiMemories = async ({
+  memoryIds,
   userId,
 }: {
-  memoryId: string;
+  memoryIds: string[];
   userId: string;
 }) => {
   const target = userScope(userId);
@@ -2945,16 +2994,30 @@ export const forgetAiMemory = async ({
       .from(aiMemory)
       .where(
         and(
-          eq(aiMemory.id, memoryId),
+          inArray(aiMemory.id, memoryIds),
           eq(aiMemory.scopeKey, target.scopeKey),
           eq(aiMemory.userId, userId)
         )
       )
       .for("update");
+    if (memories.length === 0) {
+      return { deleted: 0 };
+    }
     await eraseAiMemoryRecords({ executor: tx, memories, scope: target });
     await advanceAiMemoryScopeRevision(tx, target);
-    return { deleted: true };
+    return { deleted: memories.length };
   });
+};
+
+export const forgetAiMemory = async ({
+  memoryId,
+  userId,
+}: {
+  memoryId: string;
+  userId: string;
+}) => {
+  await forgetAiMemories({ memoryIds: [memoryId], userId });
+  return { deleted: true };
 };
 
 export const purgePersonalAiMemory = async (userId: string) =>

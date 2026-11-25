@@ -1,0 +1,2 @@
+-- quieter:no-transaction
+CREATE INDEX CONCURRENTLY "gmail_message_work_finished_mailbox_idx" ON "gmailMessageWork" ("mailboxId","updatedAt") WHERE "completedAt" is not null and "lastError" is null and ("triggerActions" is false or "actionsCompletedAt" is not null);

@@ -1,0 +1,67 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "e7e89a31-f0ee-42b1-a3c6-c84a79a1c75f",
+  "prevIds": ["079005f5-f206-4d1f-89df-c3ae06c64eb8"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "scheduledMailSend",
+        "deliveryKind"
+      ],
+      "writes": [
+        "s|col|public.scheduledMailSend.deliveryKind",
+        "n|col|public.scheduledMailSend.deliveryKind",
+        "e|col|public.scheduledMailSend.deliveryKind"
+      ],
+      "reads": ["n|tbl|public.scheduledMailSend", "n|sch|public"]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "scheduledMailSend"],
+      "writes": [
+        "s|ck|public.scheduledMailSend.scheduled_mail_send_delivery_kind_check",
+        "n|ck|public.scheduledMailSend.scheduled_mail_send_delivery_kind_check",
+        "e|ck|public.scheduledMailSend.scheduled_mail_send_delivery_kind_check",
+        "n|con|public.scheduledMailSend.scheduled_mail_send_delivery_kind_check"
+      ],
+      "reads": [
+        "n|tbl|public.scheduledMailSend",
+        "n|sch|public",
+        "n|col|public.scheduledMailSend.deliveryKind"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "scheduledMailSend",
+        "name": "deliveryKind",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'scheduled'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "scheduledMailSend",
+        "name": "scheduled_mail_send_delivery_kind_check",
+        "value": "\"deliveryKind\" in ('scheduled', 'undo')",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

@@ -78,7 +78,7 @@ export const OrganizationBillingSettings = ({
 
   return (
     <SettingsCard>
-      <SettingsInsetRow className="justify-between gap-4">
+      <SettingsInsetRow className="justify-between">
         <SettingsRowText title="Billing account">
           {billing.billingOwnerIsCurrentUser
             ? "Your account plan and usage balance are shared across the teams you pay for."
@@ -96,7 +96,7 @@ export const OrganizationBillingSettings = ({
         )}
       </SettingsInsetRow>
       {billing.canTakeOverBilling && (
-        <SettingsInsetRow className="justify-between gap-4">
+        <SettingsInsetRow className="justify-between">
           <SettingsRowText title="Pay from your account">
             Take responsibility for new usage for this team using your own plan
             and shared balance. Your account and team spending limits apply.

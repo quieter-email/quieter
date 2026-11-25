@@ -57,7 +57,7 @@ const post = async (from: string, compatible = true) => {
     }),
   });
   if (!(response instanceof Response)) {
-    throw new Error("The send route did not return a response.");
+    throw new TypeError("The send route did not return a response.");
   }
   return response;
 };

@@ -26,6 +26,7 @@ import {
   desc,
   eq,
   exists,
+  gte,
   isNotNull,
   isNull,
   lt,
@@ -47,6 +48,9 @@ import {
 } from "./ai-memory";
 import { runAuthorizedGmailMailbox } from "./gmail-mailbox-access";
 import { getAuthorizedManagedMailbox } from "./mailbox/access";
+import { mailboxAutomationFilter } from "./mailbox/automation-scope";
+import type { MailboxAutomationScope } from "./mailbox/automation-scope";
+import { BOOTSTRAP_LEASE_MS } from "./mailbox/automation-timing";
 
 export { extractAuthoredMailText } from "./ai-mail-authorship";
 
@@ -74,7 +78,8 @@ type MemoryMailbox = Pick<
 
 const BOOTSTRAP_MESSAGE_LIMIT = 50;
 const BOOTSTRAP_PAGE_SIZE = 10;
-const BOOTSTRAP_LEASE_MS = 5 * 60_000;
+const BOOTSTRAP_LOOKBACK_MS = 7 * 24 * 60 * 60_000;
+const GMAIL_BOOTSTRAP_CURSOR_PREFIX = "recent:";
 const managedCursorSchema = z.tuple([z.iso.datetime(), z.string().min(1)]);
 
 export const listMemoryCorrespondents = (addresses: string | undefined) => [
@@ -632,8 +637,19 @@ const captureBootstrapDirection = async (input: {
   userId: string;
 }) => {
   const sent = input.direction === "sent";
-  const count = sent ? input.state.sentCount : input.state.receivedCount;
   const cursor = sent ? input.state.sentCursor : input.state.receivedCursor;
+  const gmail = input.selected.provider === "gmail";
+  const gmailPageToken =
+    cursor !== null && cursor.startsWith(GMAIL_BOOTSTRAP_CURSOR_PREFIX)
+      ? cursor.slice(GMAIL_BOOTSTRAP_CURSOR_PREFIX.length)
+      : undefined;
+  const previousCount = sent
+    ? input.state.sentCount
+    : input.state.receivedCount;
+  // Gmail page tokens belong to the query that created them.
+  const count = gmail && cursor !== null && !gmailPageToken ? 0 : previousCount;
+  const snapshotTime = input.state.createdAt.getTime();
+  const cutoff = new Date(snapshotTime - BOOTSTRAP_LOOKBACK_MS);
   const maxResults = Math.min(
     BOOTSTRAP_PAGE_SIZE,
     BOOTSTRAP_MESSAGE_LIMIT - count
@@ -641,14 +657,14 @@ const captureBootstrapDirection = async (input: {
   if (maxResults <= 0) {
     return { complete: true, count, cursor: null };
   }
-  if (input.selected.provider === "gmail") {
+  if (gmail) {
     return await runAuthorizedGmailMailbox(
       { mailboxId: input.selected.id, userId: input.userId },
       async (accessToken) => {
         const page = await listGmailMessageIds(accessToken, {
           maxResults,
-          pageToken: cursor ?? undefined,
-          query: `${sent ? "in:sent" : "-in:sent -in:drafts"} before:${Math.floor(input.state.createdAt.getTime() / 1000) + 1}`,
+          pageToken: gmailPageToken,
+          query: `${sent ? "in:sent" : "-in:sent -in:drafts"} after:${Math.floor(cutoff.getTime() / 1000)} before:${Math.floor(snapshotTime / 1000) + 1}`,
         });
         for (let index = 0; index < page.messageIds.length; index += 4) {
           const captured = await Promise.allSettled(
@@ -682,7 +698,9 @@ const captureBootstrapDirection = async (input: {
         return {
           complete: !page.nextPageToken || nextCount >= BOOTSTRAP_MESSAGE_LIMIT,
           count: nextCount,
-          cursor: page.nextPageToken ?? null,
+          cursor: page.nextPageToken
+            ? `${GMAIL_BOOTSTRAP_CURSOR_PREFIX}${page.nextPageToken}`
+            : null,
         };
       }
     );
@@ -696,6 +714,7 @@ const captureBootstrapDirection = async (input: {
       and(
         eq(managedMailMessage.mailboxId, input.selected.id),
         eq(managedMailMessage.direction, sent ? "outbound" : "inbound"),
+        gte(managedMailMessage.sentAt, cutoff),
         lte(managedMailMessage.createdAt, input.state.createdAt),
         // Drafts are provisional evidence and must never seed the sent-mail voice profile.
         sent ? ne(managedMailMessage.mailboxState, "draft") : undefined,
@@ -730,14 +749,10 @@ const captureBootstrapDirection = async (input: {
   };
 };
 
-export const processPendingMailMemoryBootstrap = async ({
-  allowLocal = false,
-  limit = 2,
-  userId,
-}: { allowLocal?: boolean; limit?: number; userId?: string } = {}) => {
-  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
-    return { failed: 0, processed: 0 };
-  }
+export const seedMissingMailMemoryBootstrap = async (
+  input: MailboxAutomationScope & { limit?: number; userId?: string } = {}
+) => {
+  const { limit = 2, userId } = input;
   const missing = await retryIdempotentDatabaseQuery(
     async () =>
       await db
@@ -762,6 +777,12 @@ export const processPendingMailMemoryBootstrap = async ({
         .where(
           and(
             eq(mailbox.status, "connected"),
+            input.mailboxId === undefined
+              ? undefined
+              : eq(mailbox.id, input.mailboxId),
+            input.provider === undefined
+              ? undefined
+              : eq(mailbox.provider, input.provider),
             or(
               isNull(aiMemoryMailboxState.mailboxId),
               sql`${aiMemoryMailboxState.userId} is distinct from case when ${mailbox.provider} = 'gmail' then ${mailbox.ownerUserId} else ${mailbox.managedOwnerUserId} end`
@@ -821,6 +842,23 @@ export const processPendingMailMemoryBootstrap = async ({
       }
     }
   }
+};
+
+export const processPendingMailMemoryBootstrap = async (
+  input: MailboxAutomationScope & {
+    allowLocal?: boolean;
+    limit?: number;
+    seedMissing?: boolean;
+    userId?: string;
+  } = {}
+) => {
+  const { allowLocal = false, limit = 2, userId } = input;
+  if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local" && !allowLocal) {
+    return { failed: 0, processed: 0 };
+  }
+  if (input.seedMissing !== false) {
+    await seedMissingMailMemoryBootstrap(input);
+  }
   const cutoff = new Date(Date.now() - BOOTSTRAP_LEASE_MS);
   const pending = await retryIdempotentDatabaseQuery(
     async () =>
@@ -829,6 +867,8 @@ export const processPendingMailMemoryBootstrap = async ({
         .from(aiMemoryMailboxState)
         .where(
           and(
+            mailboxAutomationFilter(aiMemoryMailboxState.mailboxId, input),
+            isNotNull(aiMemoryMailboxState.userId),
             exists(
               db
                 .select({ id: mailbox.id })
