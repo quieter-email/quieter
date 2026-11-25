@@ -875,6 +875,7 @@ export const queriesMailOperations = {
       });
       pagesScanned += 1;
       if (
+        category === undefined ||
         messages.length > 0 ||
         page.nextPageToken === undefined ||
         pagesScanned >= MAX_VISIBILITY_SCAN_PAGES

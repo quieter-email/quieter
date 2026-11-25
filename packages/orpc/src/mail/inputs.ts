@@ -191,7 +191,12 @@ export const mailInputSchemas = {
   }),
   listThreads: z.object({
     category: mailCategorySchema,
-    correspondentEmail: z.email().trim().toLowerCase().optional(),
+    correspondentEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.email())
+      .optional(),
     mailboxId: z.string().trim().min(1),
     maxResults: z.number().int().positive().max(100).optional(),
     pageToken: z.string().optional(),
