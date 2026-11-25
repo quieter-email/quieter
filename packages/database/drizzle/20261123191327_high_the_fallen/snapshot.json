@@ -1,0 +1,62 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "cff640aa-a416-457f-a9db-ce8d4f4f5021",
+  "prevIds": ["5333dbf0-6ebc-4b5a-9bc7-1e4e8851af51"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailDispatchEvent",
+        "mail_dispatch_event_created_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_dispatch_event_created_idx",
+        "n|idx|public.mail_dispatch_event_created_idx",
+        "e|idx|public.mail_dispatch_event_created_idx",
+        "n|rel|public.mail_dispatch_event_created_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailDispatchEvent",
+        "n|sch|public",
+        "n|col|public.mailDispatchEvent.createdAt",
+        "n|col|public.mailDispatchEvent.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "mail_dispatch_event_created_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "createdAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

@@ -7,6 +7,7 @@ import {
   Loading03Icon,
   RefreshIcon,
   Search01Icon,
+  SidebarLeftIcon,
 } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
@@ -14,10 +15,9 @@ import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/a
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
 import { useMailboxRouteSearch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
+import { scheduleBackgroundPrefetch } from "@quieter/app/lib/background-prefetch";
 import {
   calendarEventQueryOptions,
-  calendarEventsQueryOptions,
-  getCalendarCacheMonthRanges,
   getCalendarQueryKey,
 } from "@quieter/app/lib/calendar-query";
 import { openConnectorLink } from "@quieter/app/lib/connectors-query";
@@ -35,7 +35,6 @@ import type {
 } from "@quieter/calendar";
 import {
   calendarWallTimeToInstant,
-  getCalendarRange,
   getZonedDateTimeFields,
   moveCalendarEventTime,
 } from "@quieter/calendar/time";
@@ -94,7 +93,6 @@ import {
   useSyncExternalStore,
 } from "react";
 import type { ReactNode } from "react";
-import { z } from "zod";
 
 import { createCalendarEventEditorStore } from "../domain/calendar-event-editor";
 import {
@@ -108,7 +106,14 @@ import {
   getVisibleCalendarEventRef,
   toggleCalendarGroupVisibility,
 } from "../domain/calendar-groups";
+import {
+  getCalendarPreferencesKey,
+  readCalendarPreferences,
+} from "../domain/calendar-preferences";
+import type { CalendarPreferences } from "../domain/calendar-preferences";
+import { prefetchAdjacentCalendarEvents } from "../domain/calendar-prefetch";
 import { getCalendarSchedule } from "../domain/calendar-schedule";
+import { getCalendarWorkspaceRange } from "../domain/calendar-workspace-range";
 import { CalendarEventDetails } from "./calendar-event-details";
 import { CalendarEventEditor } from "./calendar-event-editor";
 import { CalendarSidebar } from "./calendar-sidebar";
@@ -120,10 +125,9 @@ type CalendarConfirmation =
   | { kind: "delete"; event: CalendarEvent; scope: "occurrence" | "series" }
   | { kind: "move"; event: CalendarEvent; time: CalendarEventTime };
 
-type CalendarUiState = {
+type CalendarUiState = CalendarPreferences & {
   confirmation: CalendarConfirmation | null;
   editor: CalendarEditor | null;
-  hiddenCalendarKeys: string[];
   loadingSeries: boolean;
   pendingConnection: CalendarConnectionTarget | null;
   recurringAction: CalendarEvent | null;
@@ -136,9 +140,6 @@ type CalendarWorkspaceProps = {
   onMobileSidebarOpenChange: (open: boolean) => void;
 };
 
-const calendarPreferencesSchema = z.object({
-  hiddenCalendarKeys: z.array(z.string()).max(100),
-});
 const viewOptions = [
   { label: "Day", value: "day" },
   { label: "Week", value: "week" },
@@ -220,48 +221,40 @@ const CalendarWorkspaceContent = ({
   });
   const date = route.calendarDate ?? now.date;
   const view = route.calendarView ?? "week";
-  const range = useMemo(() => {
-    const visible = getCalendarRange({ date, timeZone, view, weekStartsOn });
-    if (view !== "month") {
-      return visible;
-    }
-    const first = addCalendarDays(visible.dates[0] ?? date, -28);
-    const dates = Array.from(
-      { length: visible.dates.length + 56 },
-      (_, index) => addCalendarDays(first, index)
-    );
-    return {
-      dates,
-      end: getCalendarRange({
-        date: addCalendarDays(first, dates.length),
-        timeZone,
-        view: "day",
-      }).start,
-      start: getCalendarRange({ date: first, timeZone, view: "day" }).start,
-    };
-  }, [date, timeZone, view, weekStartsOn]);
-  const preferencesKey = `quieter:calendar-preferences:${userId}:${preview ?? "live"}`;
-  const initialPreferences = useMemo<string[]>(() => {
-    try {
-      const parsed: unknown = JSON.parse(
-        window.localStorage.getItem(preferencesKey) ?? "null"
-      );
-      const preferences = calendarPreferencesSchema.safeParse(parsed);
-      return preferences.success ? preferences.data.hiddenCalendarKeys : [];
-    } catch {
-      return [];
-    }
-  }, [preferencesKey]);
+  const range = useMemo(
+    () => getCalendarWorkspaceRange({ date, timeZone, view, weekStartsOn }),
+    [date, timeZone, view, weekStartsOn]
+  );
+  const preferencesKey = getCalendarPreferencesKey(userId, preview);
+  const initialPreferences = useMemo(
+    () => readCalendarPreferences(preferencesKey),
+    [preferencesKey]
+  );
   const store = useCreateStore<CalendarUiState>({
+    ...initialPreferences,
     confirmation: null,
     editor: null,
-    hiddenCalendarKeys: initialPreferences,
     loadingSeries: false,
     pendingConnection: null,
     recurringAction: null,
     search: "",
   });
   const ui = useSelector(store, (current) => current);
+  const updatePreferences = (changes: Partial<CalendarPreferences>) => {
+    store.setState((current) => ({ ...current, ...changes }));
+    const { hiddenCalendarKeys, sidebarCollapsed } = store.get();
+    try {
+      window.localStorage.setItem(
+        preferencesKey,
+        JSON.stringify({
+          hiddenCalendarKeys,
+          sidebarCollapsed,
+        } satisfies CalendarPreferences)
+      );
+    } catch {
+      // Persistence is optional.
+    }
+  };
   const [editorSession, setEditorSession] = useState<{
     key: string;
     store: ReturnType<typeof createCalendarEventEditorStore>;
@@ -438,55 +431,39 @@ const CalendarWorkspaceContent = ({
       }),
     [agentWorkspace, store]
   );
+  const prefetchRefs = visibleRefs.filter((ref) =>
+    data.accounts.some(
+      (account) =>
+        account.id === ref.connectionId && account.status === "connected"
+    )
+  );
   const prefetchFingerprint = JSON.stringify({
     date,
+    online,
+    prefetchRefs,
     preview,
     timeZone,
     userId,
     view,
-    visibleRefs,
+    weekStartsOn,
   });
   const prefetchAdjacent = useEffectEvent(async (signal: AbortSignal) => {
-    const first = new Date(`${range.dates[0] ?? date}T12:00:00Z`);
-    const last = new Date(`${range.dates.at(-1) ?? date}T12:00:00Z`);
-    first.setUTCDate(1);
-    first.setUTCMonth(first.getUTCMonth() - 1);
-    last.setUTCDate(1);
-    last.setUTCMonth(last.getUTCMonth() + 1);
-    const neighbors = [first, last].flatMap((neighbor) =>
-      getCalendarCacheMonthRanges({
-        ...getCalendarRange({
-          date: neighbor.toISOString().slice(0, 10),
-          timeZone,
-          view: "day",
-        }),
-        timeZone,
-      })
-    );
-    for (const ref of visibleRefs) {
-      if (signal.aborted || preview !== null || !navigator.onLine) {
-        return;
-      }
-      await Promise.allSettled(
-        neighbors.map(async (neighbor) => {
-          await queryClient.query(
-            calendarEventsQueryOptions(userId, ref, {
-              end: neighbor.end,
-              start: neighbor.start,
-              timeZone,
-            })
-          );
-        })
-      );
+    if (preview === null) {
+      await prefetchAdjacentCalendarEvents(queryClient, {
+        calendars: prefetchRefs,
+        range: { end: range.end, start: range.start, timeZone },
+        signal,
+        userId,
+      });
     }
   });
-  useEffect(() => {
-    const controller = new AbortController();
-    void prefetchAdjacent(controller.signal);
-    return () => {
-      controller.abort();
-    };
-  }, [prefetchFingerprint]);
+  useEffect(
+    () =>
+      scheduleBackgroundPrefetch(queryClient, async (signal) => {
+        await prefetchAdjacent(signal);
+      }),
+    [prefetchFingerprint, queryClient]
+  );
   const closeEvent = () => {
     store.setState((current) =>
       current.editor === null ? current : { ...current, editor: null }
@@ -1018,7 +995,7 @@ const CalendarWorkspaceContent = ({
             {selectedDescription}
           </Text>
         </div>
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             <Button
               onClick={closeEvent}
@@ -1092,13 +1069,33 @@ const CalendarWorkspaceContent = ({
   } else if (ui.confirmation?.kind === "move") {
     confirmationDescription = `This changes ${ui.confirmation.event.recurringEventId || ui.confirmation.event.recurrence.length > 0 ? "this occurrence only" : "the event time"}.${ui.confirmation.event.attendees.some((guest) => !guest.self) ? " Guests will be notified." : ""}`;
   }
-  const rangeHeading = new Intl.DateTimeFormat(undefined, {
+  const headingParts = new Intl.DateTimeFormat(undefined, {
     month: "long",
     timeZone,
     year: "numeric",
-  }).format(
+  }).formatToParts(
     new Date(calendarWallTimeToInstant({ date, time: "12:00", timeZone }))
   );
+  const headingMonth =
+    headingParts.find((part) => part.type === "month")?.value ?? "";
+  const headingYear =
+    headingParts.find((part) => part.type === "year")?.value ?? "";
+  const weekThursday = new Date(`${date}T12:00:00Z`);
+  weekThursday.setUTCDate(
+    weekThursday.getUTCDate() + 3 - ((weekThursday.getUTCDay() + 6) % 7)
+  );
+  const weekNumber =
+    Math.floor(
+      (weekThursday.getTime() - Date.UTC(weekThursday.getUTCFullYear(), 0, 1)) /
+        (7 * 86_400_000)
+    ) + 1;
+  const timeZoneLabel = new Intl.DateTimeFormat("en", {
+    timeZone,
+    timeZoneName: "shortOffset",
+  })
+    .formatToParts(new Date(currentInstant))
+    .find((part) => part.type === "timeZoneName")
+    ?.value.replace("GMT", "UTC");
   return (
     <div
       className={cn(
@@ -1111,8 +1108,14 @@ const CalendarWorkspaceContent = ({
         calendars={data.calendars}
         canConnectMicrosoft={data.microsoftConfigured}
         canCreate={writableCalendars.length > 0}
+        collapsed={ui.sidebarCollapsed}
         date={date}
         hiddenCalendarKeys={data.hiddenCalendarKeys}
+        highlightedDates={
+          view === "week" && range.dates[0]
+            ? { end: range.dates.at(-1) ?? date, start: range.dates[0] }
+            : undefined
+        }
         isConfigured={data.googleConfigured}
         isMobileOpen={isMobileSidebarOpen}
         onConnect={(target) => {
@@ -1131,7 +1134,7 @@ const CalendarWorkspaceContent = ({
             groups: data.calendarGroups,
             hiddenCalendarKeys: ui.hiddenCalendarKeys,
           });
-          store.setState((current) => ({ ...current, hiddenCalendarKeys }));
+          updatePreferences({ hiddenCalendarKeys });
           if (
             selectedRef &&
             calendar.calendarId === selectedRef.calendarId &&
@@ -1139,22 +1142,14 @@ const CalendarWorkspaceContent = ({
           ) {
             closeEvent();
           }
-          try {
-            window.localStorage.setItem(
-              preferencesKey,
-              JSON.stringify({ hiddenCalendarKeys })
-            );
-          } catch {
-            // Persistence is optional.
-          }
         }}
         preview={preview !== null}
         pendingConnection={ui.pendingConnection}
         onUpdateCalendarColor={async (calendar, color) =>
-          await data.colorMutation.mutateAsync({ calendar, color }).then(
-            () => true,
-            () => false
-          )
+          await data.colorMutation
+            .mutateAsync({ calendar, color })
+            .then(() => true)
+            .catch(() => false)
         }
         pendingCalendarColorKey={
           data.colorMutation.isPending
@@ -1177,6 +1172,70 @@ const CalendarWorkspaceContent = ({
         <WorkspaceHeader>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
             <div className="flex max-w-full min-w-0 items-center gap-2">
+              <IconButtonTooltip
+                label={
+                  ui.sidebarCollapsed
+                    ? "Show calendar sidebar"
+                    : "Hide calendar sidebar"
+                }
+              >
+                <Button
+                  chrome="toolbar"
+                  aria-label={
+                    ui.sidebarCollapsed
+                      ? "Show calendar sidebar"
+                      : "Hide calendar sidebar"
+                  }
+                  aria-pressed={!ui.sidebarCollapsed}
+                  className="hidden shrink-0 lg:-ms-1.75 lg:inline-flex"
+                  onClick={() => {
+                    updatePreferences({
+                      sidebarCollapsed: !ui.sidebarCollapsed,
+                    });
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={SidebarLeftIcon} />
+                </Button>
+              </IconButtonTooltip>
+              <Text
+                as="h2"
+                className="min-w-0"
+                size="lg"
+                truncate
+                weight="medium"
+              >
+                <LazyMotion features={domAnimation}>
+                  <m.span
+                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
+                    className="block truncate"
+                    key={`${headingMonth} ${headingYear}`}
+                  >
+                    {headingMonth}{" "}
+                    <span className="font-normal text-muted-fg">
+                      {headingYear}
+                    </span>
+                  </m.span>
+                </LazyMotion>
+              </Text>
+              {view === "week" || view === "day" ? (
+                <Text
+                  as="span"
+                  aria-label={`Week ${weekNumber}`}
+                  className="shrink-0"
+                  size="sm"
+                  tone="muted"
+                >
+                  W{weekNumber}
+                </Text>
+              ) : null}
+            </div>
+            <div
+              className={cn("flex min-w-0 flex-wrap items-center gap-2", {
+                "-me-1.75": preview !== null || online,
+              })}
+            >
               <div className="flex shrink-0 items-center gap-1">
                 <IconButtonTooltip label="Previous date range">
                   <Button
@@ -1231,36 +1290,6 @@ const CalendarWorkspaceContent = ({
                   </Button>
                 </IconButtonTooltip>
               </div>
-              <Text
-                as="h2"
-                className="min-w-0"
-                size="lg"
-                truncate
-                weight="medium"
-              >
-                <LazyMotion features={domAnimation}>
-                  <m.span
-                    {...getAppPresenceMotion({ distance: 4, reducedMotion })}
-                    className="block truncate"
-                    key={rangeHeading}
-                  >
-                    {rangeHeading}
-                  </m.span>
-                </LazyMotion>
-              </Text>
-              <Button
-                chrome="toolbar"
-                className="shrink-0"
-                onClick={() => {
-                  void setMailboxSearch({ calendarDate: now.date });
-                }}
-                size="sm"
-                variant="secondary"
-              >
-                Today
-              </Button>
-            </div>
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
               <Select
                 items={viewOptions}
                 onValueChange={(value) => {
@@ -1292,6 +1321,17 @@ const CalendarWorkspaceContent = ({
                   ))}
                 </SelectContent>
               </Select>
+              <Button
+                chrome="toolbar"
+                className="shrink-0"
+                onClick={() => {
+                  void setMailboxSearch({ calendarDate: now.date });
+                }}
+                size="sm"
+                variant="secondary"
+              >
+                Today
+              </Button>
               <CalendarTimeZonePicker
                 chrome="toolbar"
                 aria-label="Display time zone"
@@ -1369,7 +1409,7 @@ const CalendarWorkspaceContent = ({
           </div>
         </WorkspaceHeader>
         {data.failures.length > 0 ? (
-          <output className="flex items-center gap-3 border-b border-border px-5 py-2">
+          <output className="flex items-center gap-3 border-b border-border px-4 py-2">
             <p className="flex-1 text-caption text-muted-fg">
               Some calendars could not refresh. Saved events may be out of date.
             </p>
@@ -1385,7 +1425,12 @@ const CalendarWorkspaceContent = ({
             </Button>
           </output>
         ) : null}
-        <div className="flex min-h-0 flex-1" ref={workspaceRef}>
+        <div
+          className={cn("flex min-h-0 flex-1", {
+            "-mt-2": data.failures.length === 0,
+          })}
+          ref={workspaceRef}
+        >
           {data.accounts.length === 0 && !requestedEventRef ? (
             <EmptyMessageState
               action={
@@ -1585,6 +1630,7 @@ const CalendarWorkspaceContent = ({
               onSlotCreate={createEvent}
               onEmptyClick={closeEvent}
               selectedDate={date}
+              timeZoneLabel={timeZoneLabel}
               selectedId={
                 draftId ??
                 (selectedEvent ? getCalendarEventKey(selectedEvent) : undefined)
@@ -1596,7 +1642,7 @@ const CalendarWorkspaceContent = ({
           {wide ? (
             <aside
               aria-label="Event details"
-              className="ml-auto flex w-88 shrink-0 flex-col"
+              className="-ml-2 flex w-88 shrink-0 flex-col"
             >
               {details && activeEditor?.kind === "create" ? (
                 <div
@@ -1611,7 +1657,7 @@ const CalendarWorkspaceContent = ({
               ) : (
                 (details ?? (
                   <Surface
-                    className="m-0.5 flex min-h-0 flex-1 flex-col"
+                    className="m-2 flex min-h-0 flex-1 flex-col"
                     padding="none"
                     variant="section"
                   >
@@ -1762,3 +1808,5 @@ export const CalendarWorkspace = (props: CalendarWorkspaceProps) => {
     />
   );
 };
+
+export { prefetchCalendarWorkspace } from "../domain/calendar-prefetch";

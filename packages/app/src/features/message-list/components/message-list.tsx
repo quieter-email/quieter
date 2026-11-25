@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AlarmClockIcon,
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   InboxIcon,
   Flag01Icon,
@@ -32,12 +34,20 @@ import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
+import { useElementVisible } from "@quieter/app/lib/use-element-visible";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
 import { m, useReducedMotion } from "motion/react";
-import { useState } from "react";
+import { useRef, useState } from "react";
+
+import { MailSnoozeDialog } from "../../mailbox/components/mail-snooze-dialog";
+import { getMailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+import { useMessageListCommands } from "./use-message-list-commands";
 
 const buildDraftListEntry = (
   message: MessageListItem,
@@ -85,8 +95,14 @@ const threadActionSuccessMessage = {
     `${formatConversationCount(threads.length)} removed from Spam.`,
 } as const;
 
+const DONE_BULK_ACTION_IDS: ReadonlySet<string> = new Set([
+  "mark-threads-done",
+  "return-threads-to-inbox",
+]);
+
 type MessageListHotkeyContext = {
   actionHotkeysEnabled: boolean;
+  bulkActions: MessageListBulkAction[];
   canMarkRead: boolean;
   activeMailbox: MailboxCategory;
   activeMessageId: string | null | undefined;
@@ -94,6 +110,7 @@ type MessageListHotkeyContext = {
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
   onDeactivateActiveMessage: MessageListProps["onDeactivateActiveMessage"];
+  openAdjacentThread: (offset: 1 | -1) => void;
   openBulkLabels: () => void;
   openFocusedThread: () => void;
   runActionThreads: (
@@ -113,20 +130,28 @@ const buildMessageListHotkeys = (
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
+      if ((context.activeMessageId?.trim() ?? "") !== "") {
+        context.openAdjacentThread(1);
+        return;
+      }
       context.selection.focusThreadByOffset(1);
     },
     hotkey: "J",
-    options: { enabled: context.listNavigationHotkeysEnabled },
+    options: { enabled: context.threadedMessages.length > 0 },
   },
   {
     callback: (event: KeyboardEvent) => {
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
+      if ((context.activeMessageId?.trim() ?? "") !== "") {
+        context.openAdjacentThread(-1);
+        return;
+      }
       context.selection.focusThreadByOffset(-1);
     },
     hotkey: "K",
-    options: { enabled: context.listNavigationHotkeysEnabled },
+    options: { enabled: context.threadedMessages.length > 0 },
   },
   {
     callback: (event: KeyboardEvent) => {
@@ -267,6 +292,40 @@ const buildMessageListHotkeys = (
       enabled: context.actionHotkeysEnabled && context.userLabels.length > 0,
     },
   },
+  {
+    callback: (event: KeyboardEvent) => {
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
+      void context.bulkActions
+        .find((action) => DONE_BULK_ACTION_IDS.has(action.id))
+        ?.onSelect();
+    },
+    hotkey: "E",
+    options: {
+      enabled:
+        context.actionHotkeysEnabled &&
+        context.bulkActions.some((action) =>
+          DONE_BULK_ACTION_IDS.has(action.id)
+        ),
+    },
+  },
+  {
+    callback: (event: KeyboardEvent) => {
+      if (shouldIgnoreAppShortcut(event)) {
+        return;
+      }
+      void context.bulkActions
+        .find((action) => action.id === "toggle-importance")
+        ?.onSelect();
+    },
+    hotkey: "I",
+    options: {
+      enabled:
+        context.actionHotkeysEnabled &&
+        context.bulkActions.some((action) => action.id === "toggle-importance"),
+    },
+  },
 ];
 
 const getActionThreads = (
@@ -282,6 +341,17 @@ const getActionThreads = (
   return [];
 };
 
+const getThreadsSnoozeAction = (
+  threads: readonly ThreadListEntry[]
+): MailSnoozeAction | null => {
+  const [action, ...others] = new Set(
+    threads.map((thread) =>
+      getMailSnoozeAction(thread.anchorMessage.snooze, thread.messages)
+    )
+  );
+  return others.length === 0 ? (action ?? null) : null;
+};
+
 const buildMessageListBulkActions = ({
   activeMailbox,
   mailboxActions,
@@ -292,12 +362,14 @@ const buildMessageListBulkActions = ({
   canSetPlacement,
   sharedPlacement,
   canMarkRead,
+  onSnooze,
 }: {
   actionThreads: ThreadListEntry[];
   canSetImportance: boolean;
   canSetPlacement: boolean;
   sharedPlacement: boolean;
   canMarkRead: boolean;
+  onSnooze: () => void;
   activeMailbox: MailboxCategory;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxProvider: MessageListProps["mailboxProvider"];
@@ -329,11 +401,24 @@ const buildMessageListBulkActions = ({
   }
 
   const actions: MessageListBulkAction[] = [];
-  if (
+  const canSnoozeInMailbox =
     canSetPlacement &&
-    !["drafts", "sent", "spam", "trash"].includes(activeMailbox)
-  ) {
-    const returnToInbox = activeMailbox === "done";
+    !["drafts", "sent", "spam", "trash"].includes(activeMailbox);
+  const allSnoozed =
+    actionThreads.length > 0 &&
+    actionThreads.every(
+      (thread) =>
+        thread.anchorMessage.snooze !== undefined &&
+        isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status)
+    );
+  if (canSnoozeInMailbox) {
+    const returnToInbox =
+      activeMailbox === "done" ||
+      activeMailbox === "later" ||
+      (allSnoozed &&
+        actionThreads.every(
+          (thread) => !thread.threadLabelIds.includes("INBOX")
+        ));
     actions.push({
       icon: returnToInbox ? InboxIcon : CheckmarkCircle02Icon,
       id: returnToInbox ? "return-threads-to-inbox" : "mark-threads-done",
@@ -341,13 +426,75 @@ const buildMessageListBulkActions = ({
       onSelect: async () => {
         await runActionThreads(
           returnToInbox
-            ? mailboxActions.returnThreadsToInbox
+            ? async (threads) => {
+                const scheduled = threads.filter(
+                  (thread) =>
+                    thread.anchorMessage.snooze !== undefined &&
+                    isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status)
+                );
+                const ordinary = threads.filter(
+                  (thread) => !scheduled.includes(thread)
+                );
+                if (scheduled.length > 0) {
+                  await mailboxActions.applyThreadsSnooze(scheduled, {
+                    kind: "return-now",
+                  });
+                }
+                if (ordinary.length > 0) {
+                  await mailboxActions.returnThreadsToInbox(ordinary);
+                }
+              }
             : mailboxActions.markThreadsDone,
           (threads) =>
             `${formatConversationCount(threads.length)} ${returnToInbox ? "returned to Inbox" : "marked Done"}.`
         );
       },
       promoted: true,
+    });
+  }
+  const snoozeAction = getThreadsSnoozeAction(actionThreads);
+  if (canSnoozeInMailbox && snoozeAction !== null) {
+    actions.push({
+      icon: AlarmClockIcon,
+      id: "snooze-threads",
+      label: `${snoozeAction === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onSelect: onSnooze,
+      promoted: true,
+    });
+  }
+  if (
+    canSnoozeInMailbox &&
+    allSnoozed &&
+    actionThreads.every(
+      (thread) => thread.anchorMessage.snooze?.status !== "returning"
+    )
+  ) {
+    const keepInDone = actionThreads.every(
+      (thread) =>
+        thread.anchorMessage.snooze?.status === "active" &&
+        !thread.threadLabelIds.includes("INBOX") &&
+        thread.messages.every(
+          (message) =>
+            (message.threadInboxIncomingMessageIds?.length ?? 0) === 0
+        )
+    );
+    actions.push({
+      icon: CancelCircleIcon,
+      id: "cancel-thread-snoozes",
+      label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
+      onSelect: async () => {
+        await runActionThreads(
+          async (threads) => {
+            await mailboxActions.applyThreadsSnooze(threads, {
+              kind: "cancel",
+            });
+          },
+          (threads) =>
+            keepInDone
+              ? `${formatConversationCount(threads.length)} kept in Done. Return canceled.`
+              : `Return canceled for ${formatConversationCount(threads.length)}.`
+        );
+      },
     });
   }
   if (canSetImportance) {
@@ -453,23 +600,36 @@ type MessageListSelection = ReturnType<typeof useMessageListSelection>;
 
 const useMessageListInteractions = ({
   actionMailboxProvider,
+  activeThreadId,
+  canFocusSearch,
+  isSelecting,
   labelMailboxActions,
   labelMailboxId,
+  onFocusSearch,
   props,
   selection,
   threadedMessages,
   userLabels,
 }: {
   actionMailboxProvider: MessageListProps["mailboxProvider"];
+  activeThreadId: string | null;
+  canFocusSearch: boolean;
+  isSelecting: boolean;
   labelMailboxActions: MessageListProps["mailboxActions"] | null;
   labelMailboxId: string | null;
+  onFocusSearch: () => void;
   props: MessageListProps;
   selection: MessageListSelection;
   threadedMessages: ThreadListEntry[];
   userLabels: { type: string }[];
 }) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
-  const isBulkActionPending = selection.selectedThreads.some((thread) => {
+  const [snoozeThreads, setSnoozeThreads] = useState<ThreadListEntry[]>([]);
+  const actionThreads = getActionThreads(
+    selection.selectedThreads,
+    selection.focusedThread
+  );
+  const isBulkActionPending = actionThreads.some((thread) => {
     const pendingActions =
       props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
       props.pendingActions;
@@ -525,28 +685,17 @@ const useMessageListInteractions = ({
 
     setIsBulkLabelsOpen(true);
   };
-  const openFocusedThread = () => {
-    const thread = selection.focusedThread;
-    const context =
-      thread === null
-        ? undefined
-        : props.mailboxContextsByThreadId?.get(thread.threadId);
-    const isPending =
-      thread !== null &&
-      ((context?.pendingActions ?? props.pendingActions).isMessageActionPending(
-        thread.anchorMessage.id
-      ) ||
-        (context?.pendingActions ?? props.pendingActions).isThreadActionPending(
-          thread.threadId
-        ));
+  const markKeyboardOpenedThreadRead = (thread: ThreadListEntry) => {
+    const context = props.mailboxContextsByThreadId?.get(thread.threadId);
+    const pendingActions = context?.pendingActions ?? props.pendingActions;
     if (
-      thread !== null &&
       selection.selectedThreadIds.size === 0 &&
       thread.unreadCount > 0 &&
       (props.mailboxContextsByThreadId
         ? context?.mailboxActions.canMarkRead === true
         : props.mailboxActions.canMarkRead) &&
-      !isPending
+      !pendingActions.isMessageActionPending(thread.anchorMessage.id) &&
+      !pendingActions.isThreadActionPending(thread.threadId)
     ) {
       void (async () => {
         try {
@@ -558,27 +707,85 @@ const useMessageListInteractions = ({
         }
       })();
     }
-    if (props.activeMailbox !== "drafts" && thread !== null) {
-      props.onKeyboardOpenMessage?.();
+  };
+  const openFocusedThread = () => {
+    const thread = selection.focusedThread;
+    if (thread !== null) {
+      markKeyboardOpenedThreadRead(thread);
+      if (props.activeMailbox !== "drafts") {
+        props.onKeyboardOpenMessage?.();
+      }
     }
     selection.openFocusedThread();
   };
+  const activeThreadIndex =
+    activeThreadId === null
+      ? -1
+      : threadedMessages.findIndex(
+          (thread) => thread.threadId === activeThreadId
+        );
+  const openAdjacentThread = (offset: 1 | -1) => {
+    const thread =
+      activeThreadIndex === -1
+        ? undefined
+        : threadedMessages[activeThreadIndex + offset];
+    if (thread === undefined) {
+      return;
+    }
+    markKeyboardOpenedThreadRead(thread);
+    props.onKeyboardOpenMessage?.();
+    selection.openThread(thread);
+  };
 
-  const canMarkRead = getActionThreads(
-    selection.selectedThreads,
-    selection.focusedThread
-  ).every((thread) =>
+  const canMarkRead = actionThreads.every((thread) =>
     props.mailboxContextsByThreadId
       ? props.mailboxContextsByThreadId.get(thread.threadId)?.mailboxActions
           .canMarkRead === true
       : props.mailboxActions.canMarkRead
   );
+  const hasActiveMessage = (props.activeMessageId?.trim() ?? "") !== "";
   const actionHotkeysEnabled =
     actionMailboxProvider !== "api" &&
-    (props.activeMessageId?.trim() ?? "") === "" &&
+    !hasActiveMessage &&
     props.activeMailbox !== "drafts";
   const listNavigationHotkeysEnabled =
-    threadedMessages.length > 0 && (props.activeMessageId?.trim() ?? "") === "";
+    threadedMessages.length > 0 && !hasActiveMessage;
+  const bulkActions = buildMessageListBulkActions({
+    actionThreads,
+    activeMailbox: props.activeMailbox,
+    canMarkRead,
+    canSetImportance:
+      actionThreads.every(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).canSetImportance
+      ) && props.mailboxActions.canSetImportance,
+    canSetPlacement:
+      actionThreads.every(
+        (thread) =>
+          (
+            props.mailboxContextsByThreadId?.get(thread.threadId)
+              ?.mailboxActions ?? props.mailboxActions
+          ).canSetPlacement
+      ) && props.mailboxActions.canSetPlacement,
+    mailboxActions: props.mailboxActions,
+    mailboxProvider: actionMailboxProvider,
+    onSnooze: () => {
+      if (!isBulkActionPending) {
+        setSnoozeThreads(actionThreads);
+      }
+    },
+    runActionThreads,
+    sharedPlacement: actionThreads.some(
+      (thread) =>
+        (
+          props.mailboxContextsByThreadId?.get(thread.threadId)
+            ?.mailboxActions ?? props.mailboxActions
+        ).placementScope === "shared"
+    ),
+  });
 
   useHotkeys(
     omitDisabledHotkeys(
@@ -586,11 +793,13 @@ const useMessageListInteractions = ({
         actionHotkeysEnabled,
         activeMailbox: props.activeMailbox,
         activeMessageId: props.activeMessageId,
+        bulkActions,
         canMarkRead,
         listNavigationHotkeysEnabled,
         mailboxActions: props.mailboxActions,
         mailboxProvider: actionMailboxProvider,
         onDeactivateActiveMessage: props.onDeactivateActiveMessage,
+        openAdjacentThread,
         openBulkLabels,
         openFocusedThread,
         runActionThreads,
@@ -630,55 +839,97 @@ const useMessageListInteractions = ({
           })),
         };
 
+  useMessageListCommands({
+    actions: bulkActions,
+    activeMailbox: props.activeMailbox,
+    canFocusSearch,
+    focusedSubject: selection.focusedThread?.subject ?? "",
+    hasActiveMessage,
+    hasFocusedThread: selection.focusedThread !== null,
+    hasLabelTarget: labelMailboxId !== null && labelMailboxActions !== null,
+    hasNextConversation:
+      activeThreadIndex !== -1 &&
+      activeThreadIndex < threadedMessages.length - 1,
+    hasPreviousConversation: activeThreadIndex > 0,
+    hasUserLabels: userLabels.length > 0,
+    isPending: isBulkActionPending,
+    isSelecting,
+    loadedCount: threadedMessages.length,
+    onClearSelection: selection.clearSelection,
+    onFocusSearch,
+    onOpenFocusedThread: openFocusedThread,
+    onOpenLabels: openBulkLabels,
+    onOpenNextConversation: () => {
+      openAdjacentThread(1);
+    },
+    onOpenPreviousConversation: () => {
+      openAdjacentThread(-1);
+    },
+    onSelectAll: () => {
+      selection.toggleAllLoadedThreads(true);
+    },
+    onToggleFocusedSelection: selection.toggleFocusedThreadSelection,
+    scopeKey: JSON.stringify([
+      props.mailboxId,
+      props.selectionScopeKey,
+      props.activeMailbox,
+      props.activeMessageId ?? null,
+      props.searchQuery,
+      selection.focusedThread?.threadId,
+      actionThreads.map((thread) => thread.threadId).toSorted(),
+    ]),
+    selectedCount: selection.selectedThreads.length,
+    supportsSelection: actionMailboxProvider !== "api",
+  });
   return {
-    bulkActions: buildMessageListBulkActions({
-      actionThreads: getActionThreads(
-        selection.selectedThreads,
-        selection.focusedThread
-      ),
-      activeMailbox: props.activeMailbox,
-      canMarkRead,
-      canSetImportance:
-        getActionThreads(
-          selection.selectedThreads,
-          selection.focusedThread
-        ).every(
-          (thread) =>
-            (
-              props.mailboxContextsByThreadId?.get(thread.threadId)
-                ?.mailboxActions ?? props.mailboxActions
-            ).canSetImportance
-        ) && props.mailboxActions.canSetImportance,
-      canSetPlacement:
-        getActionThreads(
-          selection.selectedThreads,
-          selection.focusedThread
-        ).every(
-          (thread) =>
-            (
-              props.mailboxContextsByThreadId?.get(thread.threadId)
-                ?.mailboxActions ?? props.mailboxActions
-            ).canSetPlacement
-        ) && props.mailboxActions.canSetPlacement,
-      mailboxActions: props.mailboxActions,
-      mailboxProvider: actionMailboxProvider,
-      runActionThreads,
-      sharedPlacement: getActionThreads(
-        selection.selectedThreads,
-        selection.focusedThread
-      ).some(
-        (thread) =>
-          (
-            props.mailboxContextsByThreadId?.get(thread.threadId)
-              ?.mailboxActions ?? props.mailboxActions
-          ).placementScope === "shared"
-      ),
-    }),
+    bulkActions,
     bulkLabels,
     handleClearSelection: selection.clearSelection,
     handleScrollListToTop: selection.scrollListToTop,
     handleToggleAllLoadedThreads: selection.toggleAllLoadedThreads,
     isBulkActionPending,
+    openThreadSnooze: (thread: ThreadListEntry) => {
+      setSnoozeThreads([thread]);
+    },
+    snoozeDialog: (
+      <MailSnoozeDialog
+        initial={
+          snoozeThreads.length === 1
+            ? snoozeThreads[0]?.anchorMessage.snooze
+            : undefined
+        }
+        onApplied={() => {
+          selection.clearSelection();
+        }}
+        onApply={async (command, _expectedVersion, attempt) => {
+          await props.mailboxActions.applyThreadsSnooze(
+            snoozeThreads,
+            command,
+            attempt
+          );
+        }}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSnoozeThreads([]);
+          }
+        }}
+        open={snoozeThreads.length > 0}
+        preview={snoozeThreads.some((thread) =>
+          isSandboxMailboxId(
+            props.mailboxContextsByThreadId?.get(thread.threadId)?.mailboxId ??
+              props.mailboxId
+          )
+        )}
+        reschedule={getThreadsSnoozeAction(snoozeThreads) === "reschedule"}
+        shared={snoozeThreads.some(
+          (thread) =>
+            (
+              props.mailboxContextsByThreadId?.get(thread.threadId)
+                ?.mailboxActions ?? props.mailboxActions
+            ).placementScope === "shared"
+        )}
+      />
+    ),
   };
 };
 
@@ -774,6 +1025,11 @@ export const MessageList = (props: MessageListProps) => {
   const userLabels = (labelsByMailboxId.get(labelMailboxId ?? "") ?? []).filter(
     (label) => label.type === "user"
   );
+  const listContainerRef = useRef<HTMLDivElement>(null);
+  const focusSearchRef = useRef<(() => void) | null>(null);
+  const isListVisible = useElementVisible(listContainerRef);
+  const isSelecting =
+    selection.selectedThreadIds.size > 0 && actionMailboxProvider !== "api";
   const {
     bulkActions,
     bulkLabels,
@@ -781,28 +1037,39 @@ export const MessageList = (props: MessageListProps) => {
     handleScrollListToTop,
     handleToggleAllLoadedThreads,
     isBulkActionPending,
+    openThreadSnooze,
+    snoozeDialog,
   } = useMessageListInteractions({
     actionMailboxProvider,
+    activeThreadId,
+    canFocusSearch: isListVisible,
+    isSelecting,
     labelMailboxActions,
     labelMailboxId,
+    onFocusSearch: () => {
+      focusSearchRef.current?.();
+    },
     props,
     selection,
     threadedMessages,
     userLabels,
   });
 
-  const isSelecting =
-    selection.selectedThreadIds.size > 0 && actionMailboxProvider !== "api";
   const scrollPaneKey =
     props.selectionScopeKey ??
     `${props.mailboxId}:${props.activeMailbox}:${props.searchQuery}`;
 
   return (
-    <div className="@container flex min-h-0 flex-1 flex-col">
+    <div
+      className="@container flex min-h-0 flex-1 flex-col"
+      ref={listContainerRef}
+    >
+      {snoozeDialog}
       <MessageListHeader
         onOpenSidebar={props.onOpenSidebar}
         search={
           <MessageListSearch
+            focusSearchRef={focusSearchRef}
             isRefreshing={props.isRefreshing}
             mailboxId={props.mailboxId}
             mailboxProvider={props.mailboxProvider}
@@ -874,6 +1141,7 @@ export const MessageList = (props: MessageListProps) => {
           gmailLabelsByMailboxId={labelsByMailboxId}
           list={props}
           onKeyboardOpenMessage={props.onKeyboardOpenMessage}
+          onThreadSnooze={openThreadSnooze}
           selection={selection}
           threadedMessages={threadedMessages}
         />

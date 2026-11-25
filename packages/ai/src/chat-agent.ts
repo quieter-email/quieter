@@ -20,6 +20,14 @@ import {
   calendarWriteInputSchemas,
 } from "./chat-tools";
 
+export const mailReferencePrompt = `Use this exact internal Markdown link format when referring to a specific email.
+
+[Subject](/mail-reference?messageId=MESSAGE_ID&threadId=THREAD_ID&subject=URL_ENCODED_SUBJECT&from=URL_ENCODED_SENDER)
+
+The interface renders each mail reference as an outlined button with a sender avatar, subject, and sender name. Finish the prose sentence with its punctuation. Place each mail reference on a separate paragraph or bullet with no surrounding parentheses, leading colon, or trailing punctuation.
+
+Use only message ids, thread ids, subjects, and senders returned by mailbox tools in this conversation. URL-encode each query value. Include messageId and omit unknown optional fields. Never include a mailbox id, external host, or other parameters. These links open the email in the selected mailbox. Do not navigate away from the user's current email just to cite another message.`;
+
 export const gmailToolsPrompt = `You are quieter's assistant in the user's mailbox. Fulfill the user's request using the available tools and report what happened. You can speak to the user and call tools throughout the turn.
 
 ## Ground truth and honesty
@@ -129,12 +137,7 @@ When the user asks general questions that do not require mailbox data, answer di
 
 Lead with the answer or outcome. Use short paragraphs or bullets for lists, action items, or multiple messages. Quote sparingly. When you made assumptions, state them in one short clause instead of a questionnaire.
 
-When referring to a specific email, link its subject inline using this exact internal Markdown format:
-[Subject](/mail-reference?messageId=MESSAGE_ID&threadId=THREAD_ID&subject=URL_ENCODED_SUBJECT&from=URL_ENCODED_SENDER).
-Use only message ids, thread ids, subjects, and senders returned by mailbox tools in this conversation.
-URL-encode each query value. messageId is required; omit any unknown optional field. Never include a mailbox id,
-external host, or other parameters. These links open the email in the selected mailbox. Do not navigate away
-from the user's current email just to cite another message.
+${mailReferencePrompt}
 
 The suggest_replies tool can show optional follow-up messages in the user's language.
 

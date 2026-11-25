@@ -98,7 +98,6 @@ export const MessageListSearchView = ({
     selectDatePreset,
     setDateTokenRef,
     setSegmentRef,
-    suppressNextBlurCommit,
     textInputRef,
     textInputIndex,
     toggleLabelToken,
@@ -116,6 +115,12 @@ export const MessageListSearchView = ({
       );
     }
   }
+  const hasSearch =
+    currentState.text.length > 0 || currentState.filters.length > 0;
+  const selectedDate = activeDateFilter
+    ? parseDateFilterValue(activeDateFilter.value)
+    : undefined;
+  const calendarMonth = selectedDate ?? calendarFallbackMonth;
   const filterTypeOccurrences = new Map<string, number>();
   const removeFilterOnMiddlePointer = (
     event: ReactPointerEvent<HTMLElement>,
@@ -200,7 +205,7 @@ export const MessageListSearchView = ({
                       style={filterStyle}
                       onClick={(event) => {
                         event.stopPropagation();
-                        cycleFilterFromPointer(index);
+                        cycleFilterFromPointer(index, event.detail === 0);
                       }}
                       onFocus={openSearchDropdown}
                       onKeyDown={(event) => {
@@ -212,9 +217,6 @@ export const MessageListSearchView = ({
                       onPointerDown={(event) => {
                         if (removeFilterOnMiddlePointer(event, index)) {
                           return;
-                        }
-                        if (document.activeElement === event.currentTarget) {
-                          suppressNextBlurCommit();
                         }
                         event.preventDefault();
                         event.stopPropagation();
@@ -245,7 +247,7 @@ export const MessageListSearchView = ({
                       style={{ order: index * 2 + 1 }}
                       onClick={(event) => {
                         event.stopPropagation();
-                        cycleFilterFromPointer(index);
+                        cycleFilterFromPointer(index, event.detail === 0);
                       }}
                       onFocus={openSearchDropdown}
                       onKeyDown={(event) => {
@@ -257,9 +259,6 @@ export const MessageListSearchView = ({
                       onPointerDown={(event) => {
                         if (removeFilterOnMiddlePointer(event, index)) {
                           return;
-                        }
-                        if (document.activeElement === event.currentTarget) {
-                          suppressNextBlurCommit();
                         }
                         event.preventDefault();
                         event.stopPropagation();
@@ -281,8 +280,7 @@ export const MessageListSearchView = ({
                 return (
                   <div
                     className={cn(messageListSearchChipClassName, "gap-1", {
-                      "bg-control-active ring-1 ring-ring":
-                        activeDateFilterIndex === index,
+                      "bg-control-active": activeDateFilterIndex === index,
                     })}
                     key={filterRenderKey}
                     onPointerDown={(event) => {
@@ -302,17 +300,14 @@ export const MessageListSearchView = ({
                             )} filter`
                           : `Exclude ${getFilterLabel(filter.type)} filter`
                       }
-                      className="inline-flex shrink-0 items-center gap-1 rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
+                      className="inline-flex shrink-0 items-center gap-1 rounded-xs text-muted-fg transition-colors duration-150 ease-out hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset motion-reduce:transition-none"
                       onClick={(event) => {
                         event.stopPropagation();
-                        cycleFilterFromPointer(index);
+                        cycleFilterFromPointer(index, event.detail === 0);
                       }}
                       onPointerDown={(event) => {
                         if (removeFilterOnMiddlePointer(event, index)) {
                           return;
-                        }
-                        if (document.activeElement === event.currentTarget) {
-                          suppressNextBlurCommit();
                         }
                         event.preventDefault();
                         event.stopPropagation();
@@ -362,17 +357,14 @@ export const MessageListSearchView = ({
                       aria-label={`Remove ${getFilterLabel(
                         filter.type
                       )} filter`}
-                      className="flex size-4 shrink-0 items-center justify-center rounded-sm text-muted-fg hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden"
+                      className="-me-1.5 flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-fg transition-colors duration-150 ease-out hover:bg-fg/8 hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset motion-reduce:transition-none"
                       onClick={(event) => {
                         event.stopPropagation();
-                        removeFilterFromPointer(index);
+                        removeFilterFromPointer(index, event.detail === 0);
                       }}
                       onPointerDown={(event) => {
                         if (removeFilterOnMiddlePointer(event, index)) {
                           return;
-                        }
-                        if (document.activeElement === event.currentTarget) {
-                          suppressNextBlurCommit();
                         }
                         event.preventDefault();
                         event.stopPropagation();
@@ -412,14 +404,6 @@ export const MessageListSearchView = ({
               />
             </div>
 
-            {currentState.text.length === 0 &&
-            currentState.filters.length === 0 &&
-            !isDropdownOpen ? (
-              <ShortcutHint
-                className="mx-2 hidden sm:inline-flex"
-                shortcutId="focus-search"
-              />
-            ) : null}
             <LazyMotion features={domAnimation}>
               <AnimatePresence>
                 {currentState.text.trim().length > 0 && (
@@ -454,37 +438,34 @@ export const MessageListSearchView = ({
                   </IconButtonTooltip>
                 )}
               </AnimatePresence>
-              <AnimatePresence>
-                {(currentState.text.length > 0 ||
-                  currentState.filters.length > 0) && (
-                  <IconButtonTooltip key="clear-search" label="Clear search">
-                    <Button
-                      aria-label="Clear search"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        clearSearch();
-                      }}
-                      onMouseDown={(event) => {
-                        event.preventDefault();
-                      }}
-                      size="icon-xs"
-                      type="button"
-                      variant="ghost"
-                      render={
-                        <m.button
-                          initial={{ opacity: 0, scale: 0.9 }}
-                          animate={{ opacity: 1, scale: 1 }}
-                          exit={{ opacity: 0, scale: 0.9 }}
-                          transition={{ duration: 0.15 }}
-                        />
-                      }
-                    >
-                      <Icon icon={Cancel01Icon} />
-                    </Button>
-                  </IconButtonTooltip>
-                )}
-              </AnimatePresence>
             </LazyMotion>
+            <div className="relative grid size-6 shrink-0 place-items-center">
+              {!hasSearch && !isDropdownOpen && (
+                <ShortcutHint
+                  className="pointer-events-none absolute inset-y-0 end-1 hidden @sm:inline-flex"
+                  shortcutId="focus-search"
+                />
+              )}
+              {hasSearch && (
+                <IconButtonTooltip label="Clear search">
+                  <Button
+                    aria-label="Clear search"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      clearSearch();
+                    }}
+                    onMouseDown={(event) => {
+                      event.preventDefault();
+                    }}
+                    size="icon-xs"
+                    type="button"
+                    variant="ghost"
+                  >
+                    <Icon icon={Cancel01Icon} />
+                  </Button>
+                </IconButtonTooltip>
+              )}
+            </div>
             <IconButtonTooltip label="Run search">
               <Button
                 aria-label="Run search"
@@ -513,6 +494,7 @@ export const MessageListSearchView = ({
                   popupSurfaceClassName,
                   "absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-xl p-2"
                 )}
+                data-blocking-overlay=""
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >
@@ -563,16 +545,14 @@ export const MessageListSearchView = ({
                 </div>
                 <Calendar
                   mode="single"
-                  month={
-                    parseDateFilterValue(activeDateFilter.value) ??
-                    calendarFallbackMonth
-                  }
+                  key={`${activeDateFilterIndex}:${calendarMonth.getTime()}`}
+                  defaultMonth={calendarMonth}
                   onSelect={(date) => {
                     if (date) {
                       selectDateFilterValue(date);
                     }
                   }}
-                  selected={parseDateFilterValue(activeDateFilter.value)}
+                  selected={selectedDate}
                 />
               </div>
             )}

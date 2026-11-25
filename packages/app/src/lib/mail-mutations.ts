@@ -12,8 +12,8 @@ type Intent = {
   mailboxId: string;
   targets: string[];
   coalesceKey?: string;
-  apply: () => void;
-  execute: () => Promise<() => void>;
+  apply?: () => void;
+  execute: () => Promise<(() => void) | undefined>;
   started: boolean;
   resolve: () => void;
   reject: (error: unknown) => void;
@@ -76,7 +76,7 @@ const createCoordinator = (client: QueryClient) => {
           }
         }
         for (const intent of state.get()) {
-          intent.apply();
+          intent.apply?.();
         }
       });
     } finally {

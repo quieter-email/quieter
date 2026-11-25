@@ -43,6 +43,7 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   {
     items: [
       { id: "show-keyboard-shortcuts" },
+      { id: "show-command-palette" },
       { id: "compose" },
       { id: "focus-search" },
       { context: "Compose", id: "compose-send" },
@@ -51,13 +52,16 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      { id: "go-important", label: "Important" },
       { id: "go-inbox", label: "Inbox" },
+      { id: "go-done", label: "Done" },
+      { id: "go-later", label: "Later" },
       { id: "go-sent", label: "Sent" },
+      { id: "go-scheduled", label: "Scheduled" },
       { id: "go-drafts", label: "Drafts" },
       { id: "go-unread", label: "Unread" },
       { id: "go-spam", label: "Spam" },
       { id: "go-trash", label: "Trash" },
-      { id: "go-chat", label: "Chat" },
     ],
     title: "Go to",
   },
@@ -75,6 +79,8 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      { id: "detail-next-conversation" },
+      { id: "detail-previous-conversation" },
       { id: "detail-reply" },
       { id: "detail-reply-all" },
       { id: "detail-forward" },
@@ -84,6 +90,11 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
   },
   {
     items: [
+      {
+        context: "List and detail, returns to Inbox from Done",
+        id: "list-done",
+      },
+      { context: "List and detail", id: "list-important" },
       { context: "List and detail", id: "list-trash" },
       { context: "List and detail", id: "list-spam" },
       { context: "List and detail", id: "list-mark-read" },
@@ -141,7 +152,9 @@ const ShortcutKeys = ({ shortcut }: { shortcut: KeyboardShortcut }) => (
 const ShortcutRow = ({ item }: { item: ShortcutViewItem }) => {
   const shortcut = getShortcutById(item.id);
   const context =
-    item.context ?? (shortcut.status === "coming-soon" ? "Later" : null);
+    item.context ??
+    shortcut.description ??
+    (shortcut.status === "coming-soon" ? "Coming soon" : null);
 
   return (
     <div className="grid min-h-10 grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-4 sm:px-6">

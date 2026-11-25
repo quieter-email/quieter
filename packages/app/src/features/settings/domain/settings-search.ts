@@ -29,6 +29,15 @@ export const SETTINGS_SEARCH_ENTRIES: readonly SettingsSearchEntry[] = [
     title: "Start of week",
   },
   {
+    description: "Preferences / Sending",
+    id: "undo-send",
+    keywords: "undo send unsend recall delay hold cancel mistake sending",
+    scope: "personal",
+    section: "undo-send",
+    tab: "overview",
+    title: "Undo Send",
+  },
+  {
     description: "Profile and account security",
     id: "account",
     keywords: "name email password passkey sign out delete account",

@@ -8,7 +8,10 @@ import { webReleasePlanSchema } from "@quieter/env/deployment";
 import { z } from "zod";
 
 import type { createAppDatabase } from "./database";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import {
   appOrigin,
   deploymentEnvironment,
@@ -34,7 +37,7 @@ class WebTanStackStart extends sst.cloudflare.TanStackStart {
   // eslint-disable-next-line class-methods-use-this -- overrides an SST instance hook
   protected override buildPlan(outputPath: $util.Output<string>) {
     return outputPath.apply(async (directory) => {
-      const workerDirectory = ".cloudflare/output/v0/workers/default";
+      const workerDirectory = ".cloudflare/output/v1/workers/default";
       const config = z
         .object({ manifest: z.object({ mainModule: z.string().min(1) }) })
         .parse(
@@ -171,6 +174,7 @@ export const createWeb = (
                   path.join(directory, paths.assets)
                 ),
             },
+            build: cloudflareWorkerBuild,
             compatibility: {
               date: COMPATIBILITY_DATE,
               flags: ["nodejs_compat"],
@@ -243,6 +247,7 @@ export const createWeb = (
     path: webSitePath,
     transform: {
       server(args) {
+        args.build = cloudflareWorkerBuild;
         args.compatibility = {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],

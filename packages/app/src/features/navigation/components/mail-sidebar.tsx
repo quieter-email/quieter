@@ -14,6 +14,7 @@ import {
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
+import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sidebar-label-nav";
@@ -35,13 +36,14 @@ import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 
 type MailSidebarProps = {
-  userId?: string;
+  userId: string;
   allInboxesActive?: boolean;
   embedded?: boolean;
   groups: {
     id: string;
     kind: "division" | "organization" | "unassigned";
     mailboxes: {
+      accessMode: "private" | "shared" | null;
       capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;
@@ -89,7 +91,7 @@ let hasPlayedSidebarEntrance = false;
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
-  userId = "preview",
+  userId,
   animateEntrance,
   embedded,
   groups,
@@ -196,8 +198,6 @@ const SidebarInboxSection = ({
             index={2}
           >
             <SidebarMailboxNavItem
-              // oxlint-disable-next-line shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
-              className="justify-start gap-3 px-3 text-left"
               mailboxSearch={{
                 mailboxId: selectedMailboxId,
                 workspace: "calendar",
@@ -207,7 +207,6 @@ const SidebarInboxSection = ({
               onMouseEnter={preloadCalendar}
               onPointerDown={preloadCalendar}
               replace={false}
-              size="sm"
               type="button"
               variant="ghost"
             >
@@ -233,15 +232,12 @@ const SidebarInboxSection = ({
             index={10}
           >
             <nav aria-label="Mail tools" className="flex flex-col">
-              <p className="mb-1 px-2 text-caption font-medium text-muted-fg">
+              <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
                 Tools
               </p>
               <SidebarMailboxNavItem
                 active={isSnippetMailbox}
                 aria-current={isSnippetMailbox ? "page" : undefined}
-                // oxlint-disable shadcn/no-restyle -- The sidebar row uses its existing animated active styling.
-                className="justify-start gap-3 px-3 text-left"
-                // oxlint-enable shadcn/no-restyle
                 mailboxSearch={{
                   mailbox: "snippets",
                   mailboxId: selectedMailboxId,
@@ -254,7 +250,6 @@ const SidebarInboxSection = ({
                 onFocus={() => void loadSnippetWorkspace()}
                 onMouseEnter={() => void loadSnippetWorkspace()}
                 onPointerDown={() => void loadSnippetWorkspace()}
-                size="sm"
                 type="button"
                 variant="ghost"
               >
@@ -265,8 +260,6 @@ const SidebarInboxSection = ({
                 <SidebarMailboxNavItem
                   active={selectedView === "rules"}
                   aria-current={selectedView === "rules" ? "page" : undefined}
-                  // oxlint-disable-next-line shadcn/no-restyle -- Matches the existing sidebar navigation row.
-                  className="justify-start gap-3 px-3 text-left"
                   mailboxSearch={{
                     mailbox: "inbox",
                     mailboxId: selectedMailboxId,
@@ -276,7 +269,6 @@ const SidebarInboxSection = ({
                     workspace: null,
                   }}
                   onClick={onRequestClose}
-                  size="sm"
                   type="button"
                   variant="ghost"
                 >
@@ -329,7 +321,7 @@ const SidebarFooter = ({
 }: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => (
   <SidebarEntrance
     animateEntrance={animateEntrance}
-    className="mt-auto p-2"
+    className="mt-auto p-1"
     index={9}
   >
     <SidebarFooterLinks onRequestClose={onRequestClose} />
@@ -360,6 +352,7 @@ const SidebarContent = ({
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
+  const { excludedIds } = useUnifiedInboxPreferences(userId);
   const handleSelectMailboxId = (mailboxId: string) => {
     onSelectMailboxId(mailboxId);
     onRequestClose?.();
@@ -371,7 +364,7 @@ const SidebarContent = ({
   };
 
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 flex-col p-6">
+    <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-6">
       <SidebarEntrance
         animateEntrance={animateEntrance}
         className="flex min-w-0 items-start gap-2 rounded-md px-1"
@@ -393,6 +386,7 @@ const SidebarContent = ({
           reconnectingMailboxId={reconnectingMailboxId}
           selectedMailboxId={selectedMailboxId}
           side={switcherSide}
+          unifiedInboxExcludedIds={excludedIds}
         />
 
         {onRequestClose && (

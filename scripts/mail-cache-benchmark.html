@@ -5,9 +5,10 @@
   synthetic IndexedDB data only.
 </p>
 <script type="module">
-  import { createMailCache as before } from "./before.ts";
   import { createMailCache as after } from "benchmark-current";
   import { openDB } from "idb";
+
+  import { createMailCache as before } from "./before.ts";
 
   window.runMailCacheBenchmark = async (
     fixtures = [

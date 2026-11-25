@@ -8,7 +8,7 @@ import {
 } from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, exists, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, exists, isNull, lte, or, sql } from "drizzle-orm";
 
 import { LOCAL_MAIL_BUCKET } from "../local-storage";
 import { deleteRawMailObject, writeRawMailObject } from "./raw-object";
@@ -42,7 +42,10 @@ export const storeRawMailObject = async (
   return object;
 };
 
-export const cleanupMailObjects = async (now = new Date()) => {
+export const cleanupMailObjects = async (
+  now = new Date(),
+  { parkReferenced = false } = {}
+) => {
   const objects = await db
     .select()
     .from(mailObjectCleanup)
@@ -51,9 +54,10 @@ export const cleanupMailObjects = async (now = new Date()) => {
     .limit(25);
   const results = await Promise.allSettled(
     objects.map(async (object) => {
+      const retryAt = new Date(now.getTime() + OBJECT_RECHECK_MS);
       const [claimed] = await db
         .update(mailObjectCleanup)
-        .set({ notBefore: new Date(now.getTime() + OBJECT_RECHECK_MS) })
+        .set({ notBefore: retryAt })
         .where(
           and(
             eq(mailObjectCleanup.id, object.id),
@@ -154,6 +158,17 @@ export const cleanupMailObjects = async (now = new Date()) => {
         await db
           .delete(mailObjectCleanup)
           .where(eq(mailObjectCleanup.id, object.id));
+      } else if (parkReferenced) {
+        // A concurrent reference release moves the deadline forward and wins this update.
+        await db
+          .update(mailObjectCleanup)
+          .set({ notBefore: sql`'infinity'::timestamp` })
+          .where(
+            and(
+              eq(mailObjectCleanup.id, object.id),
+              eq(mailObjectCleanup.notBefore, retryAt)
+            )
+          );
       }
     })
   );

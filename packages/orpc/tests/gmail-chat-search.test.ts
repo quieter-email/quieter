@@ -1,3 +1,4 @@
+import * as gmail from "@quieter/gmail";
 import {
   afterEach,
   beforeEach,
@@ -10,6 +11,7 @@ import { z } from "zod";
 
 import type { captureMailboxMessageMemory } from "../src/ai-memory-capture";
 import {
+  getMailboxOverviewForUser,
   modifyMailBatchForUser,
   modifyMailForUser,
   searchGmailForUser,
@@ -19,11 +21,19 @@ import type {
   markGmailMailboxNeedsReconnect,
 } from "../src/gmail-mailbox-access";
 import type { learnAiMemoryFromMailAction } from "../src/mail/feedback";
+import type { supersedePendingMailPlacement } from "../src/mail/placement";
+import type {
+  countVisibleMailSnoozes,
+  filterMailSnoozeVisibility,
+} from "../src/snooze/queries";
 
 const fixtures = vi.hoisted(() => ({
+  countVisible: vi.fn<typeof countVisibleMailSnoozes>(),
   getMailbox: vi.fn<typeof getAuthorizedGmailMailbox>(),
   queueMemory: vi.fn<() => Promise<void>>(),
   refresh: vi.fn<() => Promise<string>>(),
+  supersede: vi.fn<typeof supersedePendingMailPlacement>(),
+  visible: vi.fn<typeof filterMailSnoozeVisibility>(),
 }));
 
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
@@ -38,6 +48,13 @@ vi.mock(import("../src/ai-memory-capture"), () => ({
 }));
 vi.mock(import("../src/mail/feedback"), () => ({
   learnAiMemoryFromMailAction: vi.fn<typeof learnAiMemoryFromMailAction>(),
+}));
+vi.mock(import("../src/mail/placement"), () => ({
+  supersedePendingMailPlacement: fixtures.supersede,
+}));
+vi.mock(import("../src/snooze/queries"), () => ({
+  countVisibleMailSnoozes: fixtures.countVisible,
+  filterMailSnoozeVisibility: fixtures.visible,
 }));
 
 const mailbox = {
@@ -66,6 +83,7 @@ describe("Gmail chat search and batch actions", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 
@@ -406,5 +424,236 @@ describe("Gmail chat search and batch actions", () => {
     expect(searches[2]?.has("labelIds")).toBeFalsy();
     expect(searches[2]?.get("q")).toBe(query);
     expect(searches[2]?.get("pageToken")).toBe(first.nextPageToken);
+  });
+
+  test.each(["done", "later"] as const)(
+    "continues native %s search after Snooze visibility removes a page",
+    async (category) => {
+      const first = {
+        id: "first-message",
+        labelIds: [],
+        threadId: "first-thread",
+        threadInboxIncomingMessageIds: ["first-reply"],
+        threadLabelIds: ["INBOX"],
+      };
+      const visible = {
+        id: "visible-message",
+        labelIds: [],
+        threadId: "visible-thread",
+        threadLabelIds: [],
+      };
+      const list = vi
+        .spyOn(gmail, "listMessagesForAgent")
+        .mockResolvedValueOnce({
+          messages: [first],
+          nextPageToken: "next-native-page",
+        })
+        .mockResolvedValueOnce({
+          messages: [visible],
+          nextPageToken: "remaining-native-page",
+        });
+      fixtures.countVisible.mockResolvedValue(1);
+      fixtures.visible.mockResolvedValue(new Set([visible.threadId]));
+
+      const result = await searchGmailForUser({
+        ...mailbox,
+        category,
+        maxResults: 1,
+        query: "subject:latency",
+      });
+
+      expect(result).toMatchObject({
+        messages: [{ id: visible.id }],
+        nextPageToken: "remaining-native-page",
+      });
+      expect(list).toHaveBeenCalledWith(
+        "fixture-token",
+        expect.objectContaining({
+          mailbox: category,
+          pageToken: "next-native-page",
+          query: "subject:latency",
+        })
+      );
+      expect(fixtures.visible).toHaveBeenCalledWith({
+        category,
+        mailboxId: mailbox.mailboxId,
+        messages: [first],
+        threadIds: [first.threadId],
+        userId: mailbox.userId,
+      });
+    }
+  );
+
+  test("keeps mailbox-wide search unrestricted by Snooze visibility", async () => {
+    const messages = [
+      { id: "scheduled", threadId: "scheduled-thread" },
+      { id: "done", threadId: "done-thread" },
+    ];
+    const list = vi
+      .spyOn(gmail, "listMessagesForAgent")
+      .mockResolvedValue({ messages });
+    fixtures.visible.mockRejectedValue(new Error("Folder filter called."));
+
+    const result = await searchGmailForUser({
+      ...mailbox,
+      category: "done",
+      maxResults: 10,
+      query: "subject:latency",
+      scope: "all_mail",
+    });
+
+    expect(result).toMatchObject({ messages });
+    expect(list).toHaveBeenCalledWith(
+      "fixture-token",
+      expect.objectContaining({ mailbox: undefined })
+    );
+  });
+
+  test.each(["done", "later"] as const)(
+    "bounds %s visibility page scans instead of scanning the entire mailbox",
+    async (category) => {
+      const list = vi
+        .spyOn(gmail, "listMessagesForAgent")
+        .mockImplementation(async (_token, options) => {
+          const next = Number(options?.pageToken ?? "0") + 1;
+          return await Promise.resolve({
+            messages: [
+              { id: `msg-${next}`, labelIds: [], threadId: `thread-${next}` },
+            ],
+            nextPageToken: String(next),
+          });
+        });
+      fixtures.countVisible.mockResolvedValue(1);
+      fixtures.visible.mockResolvedValue(new Set());
+
+      const result = await searchGmailForUser({
+        ...mailbox,
+        category,
+        maxResults: 1,
+        query: "subject:invoice",
+      });
+
+      expect(list).toHaveBeenCalledTimes(5);
+      expect(result).toMatchObject({
+        messages: [],
+        nextPageToken: "5",
+        status: "success",
+      });
+    }
+  );
+
+  test("short-circuits Later search without scanning Gmail when no visible snoozes exist", async () => {
+    const list = vi.spyOn(gmail, "listMessagesForAgent");
+    fixtures.countVisible.mockResolvedValue(0);
+
+    const result = await searchGmailForUser({
+      ...mailbox,
+      category: "later",
+      maxResults: 10,
+      query: "subject:invoice",
+    });
+
+    expect(list).not.toHaveBeenCalled();
+    expect(result).toMatchObject({
+      messages: [],
+      nextPageToken: undefined,
+      resultSizeEstimate: 0,
+      status: "success",
+    });
+  });
+
+  test("computes Later overview count from visible snoozes instead of counting all Gmail mail", async () => {
+    const profile = vi.spyOn(gmail, "getGmailProfile").mockResolvedValue({
+      emailAddress: "test@example.test",
+      historyId: "42",
+      messagesTotal: 500,
+      threadsTotal: 250,
+    });
+    const countSpy = vi.spyOn(gmail, "getGmailMessageCount");
+    fixtures.countVisible.mockResolvedValue(3);
+
+    const overview = await getMailboxOverviewForUser({
+      ...mailbox,
+      category: "later",
+    });
+
+    expect(profile).toHaveBeenCalledOnce();
+    expect(countSpy).not.toHaveBeenCalled();
+    expect(fixtures.countVisible).toHaveBeenCalledWith({
+      mailboxId: mailbox.mailboxId,
+      userId: mailbox.userId,
+    });
+    expect(overview).toMatchObject({
+      category: "later",
+      categoryMessages: 3,
+      emailAddress: "test@example.test",
+      status: "success",
+      totalMessages: 500,
+      totalThreads: 250,
+    });
+  });
+
+  test("supersedes pending placements and live snoozes on trash and untrash actions", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn<typeof fetch>().mockResolvedValue(
+        Response.json({
+          id: "target-thread",
+          messages: [{ id: "m1", labelIds: ["TRASH"] }],
+        })
+      )
+    );
+
+    await modifyMailForUser({
+      ...mailbox,
+      action: "trash",
+      id: "target-thread",
+      target: "thread",
+    });
+
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        retireSnoozes: false,
+        threadIds: ["target-thread"],
+      })
+    );
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        retireSnoozes: true,
+        threadIds: ["target-thread"],
+      })
+    );
+
+    fixtures.supersede.mockClear();
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn<typeof fetch>()
+        .mockResolvedValue(Response.json({ id: "m1", labelIds: ["INBOX"] }))
+    );
+
+    await modifyMailBatchForUser({
+      ...mailbox,
+      action: "untrash",
+      ids: ["m1", "m2"],
+      target: "message",
+    });
+
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        messageIds: ["m1", "m2"],
+        retireSnoozes: false,
+      })
+    );
+    expect(fixtures.supersede).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mailboxId: mailbox.mailboxId,
+        messageIds: ["m1"],
+        retireSnoozes: true,
+      })
+    );
   });
 });

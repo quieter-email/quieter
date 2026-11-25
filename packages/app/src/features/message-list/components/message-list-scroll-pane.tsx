@@ -10,7 +10,10 @@ import type { useMessageListSelection } from "@quieter/app/features/message-list
 import { useThreadVerificationCodes } from "@quieter/app/features/verification-codes/use-thread-verification-codes";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
-import { attachThreadPreloader } from "@quieter/app/lib/mail-cache-lifecycle";
+import {
+  attachThreadPreloader,
+  THREAD_PRELOAD_LIMIT,
+} from "@quieter/app/lib/mail-cache-lifecycle";
 import type { ThreadPreloadCandidate } from "@quieter/app/lib/mail-cache-lifecycle";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
@@ -22,11 +25,18 @@ import {
   useVirtualizer,
 } from "@tanstack/react-virtual";
 import type { VirtualItem, Virtualizer } from "@tanstack/react-virtual";
-import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 68;
 const MESSAGE_ROW_GAP_PX = 0;
 const MESSAGE_LIST_OVERSCAN = 12;
+const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
 const MESSAGE_LIST_SKELETON_ROW_IDS = [
   "message-list-skeleton-1",
   "message-list-skeleton-2",
@@ -43,6 +53,7 @@ type MessageListScrollPaneProps = {
   gmailLabelsByMailboxId?: ReadonlyMap<string, MailboxLabel[]>;
   list: MessageListProps;
   onKeyboardOpenMessage?: () => void;
+  onThreadSnooze: (thread: ThreadListEntry) => void;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
 };
@@ -84,13 +95,23 @@ const loadMoreIfNeeded = ({
   isPending: boolean;
   onLoadMore: () => void;
 }) => {
-  if (!element || !hasNextPage || isFetchingNextPage || isPending || isError) {
+  if (
+    !element ||
+    element.clientHeight <= 0 ||
+    !hasNextPage ||
+    isFetchingNextPage ||
+    isPending ||
+    isError
+  ) {
     return;
   }
 
   const distanceToBottom =
     element.scrollHeight - (element.scrollTop + element.clientHeight);
-  if (distanceToBottom <= Math.max(element.clientHeight, 400)) {
+  if (
+    distanceToBottom <=
+    Math.max(element.clientHeight * MESSAGE_LIST_PREFETCH_VIEWPORTS, 400)
+  ) {
     onLoadMore();
   }
 };
@@ -140,6 +161,7 @@ export const MessageListScrollPane = ({
   gmailLabelsByMailboxId,
   list,
   onKeyboardOpenMessage,
+  onThreadSnooze,
   selection,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
@@ -303,6 +325,12 @@ export const MessageListScrollPane = ({
   const measuredWidthRef = useRef(0);
   const pendingLayoutRef = useRef<{ animation: Animation | null } | null>(null);
   const pendingAnchorRef = useRef<MessageListScrollAnchor | null>(null);
+  const lastScrollAnchorRef = useRef<MessageListScrollAnchor | null>(null);
+  const threadOrderKey = useMemo(
+    () => threadedMessages.map((thread) => thread.threadId).join("\u0000"),
+    [threadedMessages]
+  );
+  const previousThreadOrderRef = useRef<string | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
   const pendingFocusRef = useRef<{
     threadId: string;
@@ -344,6 +372,63 @@ export const MessageListScrollPane = ({
     },
     overscan: MESSAGE_LIST_OVERSCAN,
   });
+  useLayoutEffect(() => {
+    const element = selection.scrollRef.current;
+    const previousOrder = previousThreadOrderRef.current;
+    previousThreadOrderRef.current = threadOrderKey;
+    if (
+      !element ||
+      previousOrder === null ||
+      previousOrder === threadOrderKey ||
+      element.scrollTop <= 1 ||
+      pendingAnchorRef.current
+    ) {
+      return;
+    }
+    const anchor = lastScrollAnchorRef.current;
+    if (!anchor) {
+      return;
+    }
+    const nextIndex = threadedMessages.findIndex(
+      (thread) => thread.threadId === anchor.key
+    );
+    if (nextIndex === -1) {
+      lastScrollAnchorRef.current = getScrollAnchor(
+        element,
+        messageVirtualizer
+      );
+      return;
+    }
+    if (nextIndex === anchor.index) {
+      return;
+    }
+    const offset = messageVirtualizer.getOffsetForIndex(nextIndex, "start");
+    if (!offset) {
+      return;
+    }
+    const nextTop =
+      offset[0] +
+      Number(getComputedStyle(element).paddingTop.replace("px", "")) +
+      Math.min(anchor.offsetWithinRow, rowHeightEstimateRef.current - 1);
+    if (Math.abs(element.scrollTop - nextTop) > 1) {
+      element.scrollTop = nextTop;
+    }
+    lastScrollAnchorRef.current = { ...anchor, index: nextIndex };
+  }, [
+    messageVirtualizer,
+    selection.scrollRef,
+    threadOrderKey,
+    threadedMessages,
+  ]);
+  useLayoutEffect(() => {
+    const element = selection.scrollRef.current;
+    if (element && element.scrollTop > 1) {
+      lastScrollAnchorRef.current = getScrollAnchor(
+        element,
+        messageVirtualizer
+      );
+    }
+  }, [messageVirtualizer, selection.scrollRef]);
   const updateRowMeasurements = useCallback(
     function updateRowMeasurements(force = false): boolean {
       const element = selection.scrollRef.current;
@@ -449,26 +534,45 @@ export const MessageListScrollPane = ({
   }, [messageVirtualizer, selection.scrollRef, updateRowMeasurements]);
 
   const virtualItems = messageVirtualizer.getVirtualItems();
-  useLayoutEffect(() => {
+  useEffect(() => {
     const element = selection.scrollRef.current;
+    const { range } = messageVirtualizer;
     const candidates: ThreadPreloadCandidate[] = [];
     if (
       element &&
+      range &&
       element.clientWidth > 0 &&
-      element.clientHeight > 0 &&
-      !list.isError
+      element.clientHeight > 0
     ) {
       const top = messageVirtualizer.scrollOffset ?? element.scrollTop;
-      for (const item of virtualItems) {
-        if (item.end <= top || item.start >= top + element.clientHeight) {
-          continue;
+      let first = range.startIndex;
+      const limit = first + THREAD_PRELOAD_LIMIT;
+      for (
+        let viewport = 0;
+        viewport <= MESSAGE_LIST_PREFETCH_VIEWPORTS;
+        viewport += 1
+      ) {
+        const end =
+          viewport === 0
+            ? range.endIndex
+            : (messageVirtualizer.getVirtualItemForOffset(
+                top + element.clientHeight * (viewport + 1) - 1
+              )?.index ?? range.endIndex);
+        const next = Math.min(end + 1, limit);
+        const threads = threadedMessages
+          .slice(first, next)
+          .toSorted(
+            (left, right) =>
+              Number(right.unreadCount > 0) - Number(left.unreadCount > 0) ||
+              Number(right.isImportant) - Number(left.isImportant)
+          );
+        for (const thread of threads) {
+          const candidate = candidateForThread(thread);
+          if (candidate) {
+            candidates.push(candidate);
+          }
         }
-        const thread = threadedMessages[item.index];
-        const candidate =
-          thread === undefined ? undefined : candidateForThread(thread);
-        if (candidate) {
-          candidates.push(candidate);
-        }
+        first = next;
       }
     }
     preloaderRef.current?.update(candidates);
@@ -478,11 +582,8 @@ export const MessageListScrollPane = ({
     threadedMessages,
     list
   );
-  const hasMountedPrefetchRef = useRef(false);
-
   useLayoutEffect((): (() => void) | undefined => {
     if (
-      hasMountedPrefetchRef.current ||
       !list.hasNextPage ||
       list.isError ||
       list.isFetchingNextPage ||
@@ -491,7 +592,6 @@ export const MessageListScrollPane = ({
       return undefined;
     }
 
-    hasMountedPrefetchRef.current = true;
     loadMoreIfNeeded({
       element: selection.scrollRef.current,
       hasNextPage: list.hasNextPage,
@@ -631,6 +731,13 @@ export const MessageListScrollPane = ({
         }
       }}
       onScroll={() => {
+        const element = selection.scrollRef.current;
+        if (element) {
+          lastScrollAnchorRef.current =
+            element.scrollTop <= 1
+              ? null
+              : getScrollAnchor(element, messageVirtualizer);
+        }
         if (selection.isProgrammaticScrollToTopRef.current) {
           return;
         }
@@ -647,15 +754,7 @@ export const MessageListScrollPane = ({
     >
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
-      {list.isError && (
-        <p className="px-2 py-8 text-body text-destructive">
-          {list.error instanceof Error
-            ? list.error.message
-            : "Could not load messages."}
-        </p>
-      )}
-
-      {!list.isError && threadedMessages.length > 0 && (
+      {threadedMessages.length > 0 && (
         <ul
           className="relative"
           style={{
@@ -720,6 +819,7 @@ export const MessageListScrollPane = ({
                 onOpenDraft={handleOpenDraft}
                 onKeyboardOpen={onKeyboardOpenMessage}
                 onThreadPress={selection.handleThreadPress}
+                onThreadSnooze={onThreadSnooze}
                 onThreadSelectionPress={selection.handleThreadSelectionPress}
                 pendingActions={context?.pendingActions ?? list.pendingActions}
                 staggerIndex={staggerIndex}
@@ -736,6 +836,14 @@ export const MessageListScrollPane = ({
         </ul>
       )}
 
+      {list.isError && (
+        <p className="px-2 py-8 text-body text-destructive">
+          {list.error instanceof Error
+            ? list.error.message
+            : "Could not load messages."}
+        </p>
+      )}
+
       {!isLoadingEmptyMessages &&
         !list.isError &&
         threadedMessages.length === 0 && (
@@ -746,7 +854,7 @@ export const MessageListScrollPane = ({
 
       {!list.isError && threadedMessages.length > 0 && (
         <p className="px-2 py-5 text-center text-caption text-muted-fg">
-          {list.isFetchingNextPage || list.hasNextPage ? (
+          {list.isFetchingNextPage || list.hasNextPage || list.isRefreshing ? (
             <Icon
               animation="spin"
               tone="muted"

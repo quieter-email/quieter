@@ -294,8 +294,11 @@ describe("canonical mail boundaries", () => {
     test("a passive read keeps authorized hydration and skips all open activity", async () => {
       const result = await queriesMailOperations.getThread({
         context,
-        input: { mailboxId, threadId: canonicalMessage.threadId },
-        recordActivity: false,
+        input: {
+          mailboxId,
+          prefetch: true,
+          threadId: canonicalMessage.threadId,
+        },
       });
       expect(result.messages[0]).toMatchObject({
         ...canonicalMessage,

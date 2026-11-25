@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AlarmClockIcon,
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   Flag01Icon,
   Delete01Icon,
@@ -26,9 +28,14 @@ import {
   messageUnsubscribeLabels,
   openUnsubscribeUrl,
 } from "@quieter/app/features/message-thread/components/message-unsubscribe";
+import {
+  MessageReminderSubmenu,
+  useMessageReminderMenu,
+} from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -47,18 +54,27 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
   mailboxId: string;
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
   mailbox: MailboxCategory;
+  reminderMenu?: ReturnType<typeof useMessageReminderMenu>;
+  snoozeEntry?: { action: MailSnoozeAction; onOpen: () => void };
   threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
 };
 
-type MessageActionsDropdownProps = MessageActionsSharedProps;
+type MessageActionsDropdownProps = Omit<
+  MessageActionsSharedProps,
+  "reminderMenu"
+> & {
+  reminderMessage: Parameters<typeof useMessageReminderMenu>[1];
+};
 
 type MessageActionsContextMenuProps = PropsWithChildren<
   MessageActionsSharedProps & {
@@ -93,7 +109,13 @@ type MenuLabels = {
   targets: readonly MessageLabelsTarget[];
 };
 
-type MenuEntry = MenuAction | MenuLabels | MenuSeparator;
+type MenuReminder = {
+  type: "reminder";
+  id: string;
+  menu: NonNullable<MessageActionsSharedProps["reminderMenu"]>;
+};
+
+type MenuEntry = MenuAction | MenuLabels | MenuReminder | MenuSeparator;
 
 const renderLabelsEntry = (entry: MenuLabels) => (
   <MessageLabelsSubmenu
@@ -116,6 +138,10 @@ const renderDropdownEntry = (entry: MenuEntry) => {
     return renderLabelsEntry(entry);
   }
 
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
+  }
+
   return (
     <DropdownMenuItem
       disabled={entry.disabled}
@@ -136,6 +162,10 @@ const renderContextEntry = (entry: MenuEntry) => {
 
   if (entry.type === "labels") {
     return renderLabelsEntry(entry);
+  }
+
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
   }
 
   return (
@@ -275,6 +305,9 @@ const createFolderEntries = (
 ): MenuEntry[] => {
   const entries: MenuEntry[] = [];
   const hasInbox = props.threadLabelIds.includes("INBOX");
+  const hasSnooze =
+    props.message.snooze !== undefined &&
+    isMailSnoozeLiveStatus(props.message.snooze.status);
   const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
     props.mailbox
   );
@@ -299,7 +332,47 @@ const createFolderEntries = (
         ? "Return to Inbox for everyone"
         : "Return to Inbox",
       onAction: () => {
+        if (hasSnooze) {
+          void props.actions.onApplySnooze?.(props.message.threadId, {
+            kind: "return-now",
+          });
+          return;
+        }
         void props.actions.onReturnToInbox?.(props.message.threadId);
+      },
+      type: "item",
+    });
+  }
+  const { snoozeEntry } = props;
+  if (canChangePlacement && snoozeEntry && props.actions.onApplySnooze) {
+    entries.push({
+      disabled: isBusy,
+      icon: AlarmClockIcon,
+      id: "snooze",
+      label: `${snoozeEntry.action === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: snoozeEntry.onOpen,
+      type: "item",
+    });
+  }
+  if (
+    canChangePlacement &&
+    hasSnooze &&
+    props.message.snooze?.status !== "returning" &&
+    props.actions.onApplySnooze
+  ) {
+    const keepInDone =
+      props.message.snooze?.status === "active" &&
+      !hasInbox &&
+      (props.message.threadInboxIncomingMessageIds?.length ?? 0) === 0;
+    entries.push({
+      disabled: isBusy,
+      icon: CancelCircleIcon,
+      id: "cancel-snooze",
+      label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: () => {
+        void props.actions.onApplySnooze?.(props.message.threadId, {
+          kind: "cancel",
+        });
       },
       type: "item",
     });
@@ -404,6 +477,13 @@ const createMessageActionEntries = ({
   if (labelsEntry !== null) {
     entries.push(labelsEntry);
   }
+  if (props.reminderMenu) {
+    entries.push({
+      id: "reminder",
+      menu: props.reminderMenu,
+      type: "reminder",
+    });
+  }
   if (unsubscribeTarget !== null) {
     entries.push(createUnsubscribeEntry(props, isBusy, unsubscribeTarget));
   }
@@ -440,8 +520,15 @@ const getMessageActionEntries = (
   };
 };
 
-export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
-  const { entries, isBusy } = getMessageActionEntries(props);
+export const MessageActionsDropdown = ({
+  reminderMessage,
+  ...props
+}: MessageActionsDropdownProps) => {
+  const reminderMenu = useMessageReminderMenu(props.mailboxId, reminderMessage);
+  const { entries, isBusy } = getMessageActionEntries({
+    ...props,
+    reminderMenu,
+  });
   if (entries.length === 0) {
     return null;
   }

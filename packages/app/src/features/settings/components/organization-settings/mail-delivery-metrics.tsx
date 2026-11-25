@@ -79,7 +79,7 @@ export const MailDeliveryMetrics = ({
   return (
     <div className="flex flex-col gap-4">
       <Surface padding="none">
-        <div className="p-0.5">
+        <div className="p-2">
           <Surface chrome="inset" variant="detail">
             <dl className="grid grid-cols-2 gap-x-4 gap-y-5 @lg:grid-cols-4">
               {stats.map((stat) => (
@@ -101,7 +101,7 @@ export const MailDeliveryMetrics = ({
                       <TooltipContent>{stat.hint}</TooltipContent>
                     </Tooltip>
                   </dt>
-                  <dd className="text-title-lg text-fg tabular-nums">
+                  <dd className="text-metric text-fg tabular-nums">
                     {stat.value.toLocaleString()}
                   </dd>
                 </div>
@@ -111,7 +111,7 @@ export const MailDeliveryMetrics = ({
         </div>
 
         <div className="flex flex-col gap-4">
-          <div className="px-0.5">
+          <div className="px-2">
             <Surface chrome="inset" variant="detail">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
                 <h2 className="text-body-sm text-fg">Daily activity</h2>

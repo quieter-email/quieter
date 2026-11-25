@@ -110,8 +110,10 @@ export const SettingsCard = ({
       {
         "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
-        "rounded-md bg-detail": variant === "detail",
-        "rounded-section bg-section": variant !== "detail",
+        "rounded-md bg-detail outline -outline-offset-1 outline-detail-edge/30":
+          variant === "detail",
+        "rounded-section bg-section outline -outline-offset-1 outline-section-edge/30":
+          variant !== "detail",
       },
       className
     )}
@@ -246,7 +248,7 @@ export const SettingsRowLayout = ({
     })}
   >
     {icon !== undefined && icon !== null ? (
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-muted text-muted-fg squircle [&_svg]:size-4">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg squircle [&_svg]:size-4">
         {icon}
       </div>
     ) : null}

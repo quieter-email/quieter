@@ -109,10 +109,6 @@ export const AppProviders = ({ children }: PropsWithChildren) => {
           preventDefault: true,
           stopPropagation: true,
         },
-        hotkeySequence: {
-          preventDefault: true,
-          stopPropagation: true,
-        },
       }}
     >
       <SessionQueryProvider

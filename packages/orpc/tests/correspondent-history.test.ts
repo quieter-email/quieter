@@ -660,8 +660,11 @@ describe("correspondent history access and continuation", () => {
     ]);
     expect(mocks.thread).toHaveBeenCalledExactlyOnceWith({
       context,
-      input: { mailboxId: selection.mailboxId, threadId: "thread-a" },
-      recordActivity: false,
+      input: {
+        mailboxId: selection.mailboxId,
+        prefetch: true,
+        threadId: "thread-a",
+      },
     });
   });
 
@@ -777,8 +780,11 @@ describe("correspondent history access and continuation", () => {
     });
     expect(mocks.thread).toHaveBeenCalledWith({
       context,
-      input: { mailboxId: selection.mailboxId, threadId: source.threadId },
-      recordActivity: false,
+      input: {
+        mailboxId: selection.mailboxId,
+        prefetch: true,
+        threadId: source.threadId,
+      },
     });
   });
 

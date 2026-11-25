@@ -1,4 +1,4 @@
-import { cloudflareTest } from "@cloudflare/vitest-pool-workers";
+import { cloudflareTest } from "@cloudflare/vitest-plugin";
 import { defineConfig } from "vite-plus";
 
 export default defineConfig({
@@ -18,6 +18,7 @@ export default defineConfig({
           LINEAR_CLIENT_SECRET: "linear-client-secret",
           OPENROUTER_API_KEY: "openrouter-key",
           POLAR_ACCESS_TOKEN: "polar-access-token",
+          QUIETER_GMAIL_EVENTS_ENABLED: "false",
           SST_RESOURCE_GmailLiveSyncTokenSecret: JSON.stringify({
             value: "live-sync-secret",
           }),
@@ -25,12 +26,16 @@ export default defineConfig({
         r2Buckets: { LocalMailStorage: "quieter-local-mail" },
         serviceBindings: {
           GmailProcessingWorker: () => new Response(null, { status: 503 }),
+          MAIL_MAINTENANCE: () => new Response(null, { status: 503 }),
         },
       },
       wrangler: { configPath: "./wrangler.types.jsonc" },
     }),
   ],
   test: {
+    // Vitest 5.1 defaults fsModuleCache to true, causing @cloudflare/vitest-plugin
+    // to inline all warm modules into one WebSocket frame past workerd's 32 MiB cap.
+    fsModuleCache: false,
     include: ["tests/**/*.test.ts"],
   },
 });

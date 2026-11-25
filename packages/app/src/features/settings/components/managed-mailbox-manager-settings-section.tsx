@@ -78,13 +78,16 @@ export const ManagedMailboxManagerSettingsSection = ({
 
   if (managedMailboxQuery.data === undefined) {
     return (
-      <SettingsCard
-        className={cn(
-          settingsSurfaceVariants({ variant: "body" }),
-          "text-body text-destructive"
-        )}
-      >
-        {managedMailboxQuery.error?.message ?? "Could not load inbox settings."}
+      <SettingsCard>
+        <div
+          className={cn(
+            settingsSurfaceVariants({ variant: "body" }),
+            "text-body text-destructive"
+          )}
+        >
+          {managedMailboxQuery.error?.message ??
+            "Could not load inbox settings."}
+        </div>
       </SettingsCard>
     );
   }

@@ -119,9 +119,10 @@ export const SettingsBreadcrumbs = () => {
       } else {
         const view = settingsTeamSection(organizationView);
         const item = TEAM_SETTINGS_NAV.find((entry) => entry.view === view);
+        const sectionLabel = item?.title ?? "General";
         crumbs.push({
           id: "team-section",
-          label: item?.title ?? "General",
+          label: sectionLabel,
           search: { ...teamSearch, organizationView: view },
         });
         let subsection = "";
@@ -140,7 +141,7 @@ export const SettingsBreadcrumbs = () => {
         } else if (view === "domains" && domainId !== "") {
           subsection = domain?.domain.domain ?? "Domain";
         }
-        if (subsection) {
+        if (subsection && subsection !== sectionLabel) {
           crumbs.push({
             id: "team-subsection",
             label: subsection,

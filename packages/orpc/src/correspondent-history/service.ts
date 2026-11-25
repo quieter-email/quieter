@@ -79,8 +79,7 @@ const loadHistoryThread = async ({
   try {
     return await queriesMailOperations.getThread({
       context,
-      input: { mailboxId, threadId },
-      recordActivity: false,
+      input: { mailboxId, prefetch: true, threadId },
     });
   } finally {
     await assertHistoryAccess({ context, mailboxId });

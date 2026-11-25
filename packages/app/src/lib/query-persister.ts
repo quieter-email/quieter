@@ -439,6 +439,7 @@ export const shouldPersistQueryKey = (queryKey: readonly unknown[]) => {
     queryKey[1].length > 0 &&
     typeof queryKey[2] === "string" &&
     queryKey[2] !== "drafts" &&
+    queryKey[2] !== "later" &&
     queryKey[3] === ""
   );
 };

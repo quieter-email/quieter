@@ -1,0 +1,42 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "f517be8f-e4aa-41c0-97eb-960615fa1bad",
+  "prevIds": ["9931adf7-e7c5-4a9e-b845-03f0027c3e18"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailMessageWork",
+        "liveArrival"
+      ],
+      "writes": [
+        "s|col|public.gmailMessageWork.liveArrival",
+        "n|col|public.gmailMessageWork.liveArrival",
+        "e|col|public.gmailMessageWork.liveArrival"
+      ],
+      "reads": ["n|tbl|public.gmailMessageWork", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailMessageWork",
+        "name": "liveArrival",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

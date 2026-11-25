@@ -1,19 +1,7 @@
 "use client";
 
-import {
-  buildComposeDraftFromMessageAction,
-  findLinkedDraftForMessage,
-  hasDistinctReplyAllRecipients,
-} from "@quieter/app/features/compose/domain/compose-actions";
-import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
-import {
-  omitDisabledHotkeys,
-  shouldIgnoreAppShortcut,
-} from "@quieter/app/features/hotkeys/domain/hotkey-guards";
-import type {
-  MailboxActions,
-  MailboxPendingActions,
-} from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import { findLinkedDraftForMessage } from "@quieter/app/features/compose/domain/compose-actions";
+import type { MailboxPendingActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { ApiSourceAction } from "@quieter/app/features/message-thread/components/message-inspector-panel";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -23,7 +11,7 @@ import {
   isMessageUnread,
   MAILBOX_LABELS,
 } from "@quieter/app/lib/mail";
-import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type { MessageListItem } from "@quieter/app/lib/mail";
 import {
   mergeMessagePreservingLoadedDetails,
   upsertMessageInThreadData,
@@ -38,7 +26,6 @@ import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { toast } from "@quieter/ui/toast";
-import { useHotkeys } from "@tanstack/react-hotkeys";
 import {
   useMutation,
   useQueries,
@@ -81,21 +68,6 @@ const resolveThreadSubject = (
   }
 
   return "(No subject)";
-};
-
-const runHotkeyThreadAction = async (
-  action: () => void | Promise<void>,
-  successMessage: string
-) => {
-  try {
-    await action();
-    toast.success(successMessage);
-  } catch (error) {
-    toastError(error, {
-      boundary: "message-actions",
-      fallback: "Could not update message.",
-    });
-  }
 };
 
 export const useMessageViewData = ({
@@ -245,8 +217,29 @@ export const useMessageViewData = ({
   const messagesMissingLoadedBody =
     getMessagesMissingLoadedBody(visibleMessages);
   const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
+  const openedPrefetchedThread =
+    mailboxProvider !== "api" && threadData?.prefetched === true;
+  const hasCompletePrefetchedThread =
+    threadData?.prefetched === true &&
+    !shouldRefreshThreadContent(threadData, {
+      id: message.id,
+      includeDrafts: includeDraftsInThreadCount,
+      threadMessageCount: message.threadMessageCount,
+    });
   const isBodyRefreshPending =
-    isThreadPending || isThreadFetching || hasMissingLoadedBody;
+    isThreadPending ||
+    (isThreadFetching && !hasCompletePrefetchedThread) ||
+    hasMissingLoadedBody;
+  useEffect(() => {
+    if (openedPrefetchedThread) {
+      void Promise.allSettled([
+        queryClient.query({
+          ...getThreadWithDetailsOptions(mailboxId, message.threadId),
+          staleTime: 0,
+        }),
+      ]);
+    }
+  }, [mailboxId, message.threadId, openedPrefetchedThread, queryClient]);
   const subject = resolveThreadSubject(
     visibleMessages,
     threadData?.subject,
@@ -345,167 +338,6 @@ export const useMessageViewData = ({
     verificationCodes,
     visibleMessages,
   };
-};
-
-export const useMessageViewHotkeys = ({
-  activeMailbox,
-  canComposeFromMailbox,
-  currentUserEmail,
-  hotkeyLinkedDraftMessage,
-  hotkeyMessage,
-  isActionPending,
-  mailboxActions,
-  mailboxProvider,
-  onBackToList,
-  onComposeDraftRequested,
-}: {
-  activeMailbox: MailboxCategory;
-  canComposeFromMailbox: boolean;
-  currentUserEmail?: string | null;
-  hotkeyLinkedDraftMessage: MessageListItem | undefined;
-  hotkeyMessage: MessageListItem;
-  isActionPending: boolean;
-  mailboxActions: MailboxActions;
-  mailboxProvider: MessageViewProps["mailboxProvider"];
-  onBackToList?: () => void;
-  onComposeDraftRequested?: (draft: ComposeDraftState) => void;
-}) => {
-  const requestComposeAction = (action: "reply" | "reply-all" | "forward") => {
-    if (!canComposeFromMailbox || onComposeDraftRequested === undefined) {
-      return;
-    }
-
-    onComposeDraftRequested(
-      buildComposeDraftFromMessageAction({
-        action,
-        currentUserEmail,
-        existingDraftMessage: hotkeyLinkedDraftMessage,
-        message: hotkeyMessage,
-      })
-    );
-  };
-  useHotkeys(
-    omitDisabledHotkeys([
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          requestComposeAction("reply");
-        },
-        hotkey: "R",
-        options: {
-          enabled:
-            canComposeFromMailbox &&
-            onComposeDraftRequested !== undefined &&
-            activeMailbox !== "drafts",
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          requestComposeAction("reply-all");
-        },
-        hotkey: "A",
-        options: {
-          enabled:
-            onComposeDraftRequested !== undefined &&
-            canComposeFromMailbox &&
-            activeMailbox !== "drafts" &&
-            hasDistinctReplyAllRecipients(hotkeyMessage, currentUserEmail),
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          requestComposeAction("forward");
-        },
-        hotkey: "F",
-        options: {
-          enabled:
-            canComposeFromMailbox &&
-            onComposeDraftRequested !== undefined &&
-            activeMailbox !== "drafts",
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          void runHotkeyThreadAction(async () => {
-            await mailboxActions.moveThreadToTrash(hotkeyMessage.threadId);
-            onBackToList?.();
-          }, "Conversation moved to Trash.");
-        },
-        hotkey: "Shift+3",
-        options: {
-          enabled:
-            !isActionPending &&
-            activeMailbox !== "drafts" &&
-            activeMailbox !== "trash",
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          void runHotkeyThreadAction(async () => {
-            await mailboxActions.markThreadAsSpam(hotkeyMessage.threadId);
-            onBackToList?.();
-          }, "Conversation marked as Spam.");
-        },
-        hotkey: "Shift+1",
-        options: {
-          enabled:
-            !isActionPending &&
-            mailboxProvider === "gmail" &&
-            activeMailbox !== "drafts" &&
-            activeMailbox === "inbox",
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          void runHotkeyThreadAction(async () => {
-            await mailboxActions.markThreadAsRead(hotkeyMessage.threadId);
-          }, "Conversation marked as Read.");
-        },
-        hotkey: "Shift+I",
-        options: {
-          enabled:
-            !isActionPending &&
-            mailboxActions.canMarkRead &&
-            activeMailbox !== "drafts",
-        },
-      },
-      {
-        callback: (event) => {
-          if (shouldIgnoreAppShortcut(event)) {
-            return;
-          }
-          void runHotkeyThreadAction(async () => {
-            await mailboxActions.markThreadAsUnread(hotkeyMessage.threadId);
-          }, "Conversation marked as Unread.");
-        },
-        hotkey: "Shift+U",
-        options: {
-          enabled:
-            !isActionPending &&
-            mailboxActions.canMarkRead &&
-            activeMailbox !== "drafts",
-        },
-      },
-    ]),
-    { ignoreInputs: true }
-  );
 };
 
 export const useMessageViewFocus = ({

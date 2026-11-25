@@ -47,7 +47,7 @@ Use the guide's role-based radius ladder and derived inner contours. Do not calc
 
 Keep the established corner shaping on every painted layer. A radio dot or switch thumb remains a circle even inside a shaped control.
 
-For a full-width nested layer, the visual relation is outer radius minus the real edge distance. Count border, margin, and padding that move the painted edge. Use the shared derived radius. Do not use a random `rounded-3xl`, `rounded-full`, or per-corner patch to approximate it.
+Only a full-width layer that sits 2px inside its parent and shares its corners, such as a header tray, an inset Detail summary, or a row's selection layer, derives its radius from that parent: outer radius minus the real edge distance. Count border, margin, and padding that move the painted edge, and use the shared derived radius. Everything else nested in a panel or Section takes the radius of its own role, even when that does not equal the outer radius minus its padding. Header controls keep their 14px toolbar shape and mail rows are 14px, both smaller than the 17px Section corner. Do not use a random `rounded-3xl`, `rounded-full`, or per-corner patch to approximate either relation.
 
 The current code includes larger radius steps for deliberate larger shells. Their availability does not justify using them on ordinary settings groups. Switch tracks, slider dots, avatars that are truly circular, and compact status dots retain their intended round shape.
 

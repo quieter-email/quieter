@@ -74,7 +74,7 @@ export const SaveSnippetDialog = ({
               name to insert it.
             </DialogDescription>
           </DialogHeader>
-          <DialogBody spacing="4">
+          <DialogBody spacing="3">
             <SnippetFields
               bodyText={bodyText}
               name={name}

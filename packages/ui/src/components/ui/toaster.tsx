@@ -12,7 +12,9 @@ import { useLayoutEffect, useRef, useState } from "react";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { buttonVariants } from "./button";
 import { Icon } from "./icon";
+import { popupSurfaceClassName } from "./popup-surface";
 import { DEFAULT_TOAST_TIMEOUT, toastManager } from "./toast";
 
 const ToastIcon = ({ type }: { type: string | undefined }) => {
@@ -81,7 +83,8 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
   return (
     <Toast.Root
       className={cn(
-        "absolute right-0 bottom-0 left-auto z-[calc(1000-var(--toast-index))] mr-0 h-(--height) w-full origin-bottom transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] rounded-xl border border-transparent bg-section text-popover-fg shadow-lg select-none [--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] [transition:transform_0.35s_cubic-bezier(0.22,1,0.36,1),opacity_0.25s_ease,height_0.15s_ease,scale_0.25s_cubic-bezier(0.22,1,0.36,1)] squircle after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-[''] data-ending-style:opacity-0 data-expanded:h-(--toast-height) data-expanded:transform-[translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))] data-limited:opacity-0 data-starting-style:scale-90 data-starting-style:opacity-0 data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] motion-reduce:transition-none motion-reduce:data-starting-style:scale-100 [&[data-ending-style]:not([data-swipe-direction])]:scale-90 motion-reduce:[&[data-ending-style]:not([data-swipe-direction])]:scale-100",
+        popupSurfaceClassName,
+        "absolute right-0 bottom-0 left-auto z-[calc(1000-var(--toast-index))] mr-0 h-(--height) w-full origin-bottom transform-[translateX(var(--toast-swipe-movement-x))_translateY(calc(var(--toast-swipe-movement-y)-(var(--toast-index)*var(--peek))-(var(--shrink)*var(--height))))_scale(var(--scale))] rounded-xl select-none [--gap:0.75rem] [--height:var(--toast-frontmost-height,var(--toast-height))] [--offset-y:calc(var(--toast-offset-y)*-1+calc(var(--toast-index)*var(--gap)*-1)+var(--toast-swipe-movement-y))] [--peek:0.75rem] [--scale:calc(max(0,1-(var(--toast-index)*0.1)))] [--shrink:calc(1-var(--scale))] [transition:transform_0.35s_cubic-bezier(0.22,1,0.36,1),opacity_0.25s_ease,height_0.15s_ease,scale_0.25s_cubic-bezier(0.22,1,0.36,1)] squircle after:absolute after:top-full after:left-0 after:h-[calc(var(--gap)+1px)] after:w-full after:content-[''] data-ending-style:opacity-0 data-expanded:h-(--toast-height) data-expanded:transform-[translateX(var(--toast-swipe-movement-x))_translateY(var(--offset-y))] data-limited:opacity-0 data-starting-style:scale-90 data-starting-style:opacity-0 data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-expanded:data-ending-style:data-[swipe-direction=down]:transform-[translateY(calc(var(--toast-swipe-movement-y)+150%))] data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=left]:transform-[translateX(calc(var(--toast-swipe-movement-x)-150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-expanded:data-ending-style:data-[swipe-direction=right]:transform-[translateX(calc(var(--toast-swipe-movement-x)+150%))_translateY(var(--offset-y))] data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] data-expanded:data-ending-style:data-[swipe-direction=up]:transform-[translateY(calc(var(--toast-swipe-movement-y)-150%))] motion-reduce:transition-none motion-reduce:data-starting-style:scale-100 [&[data-ending-style]:not([data-swipe-direction])]:scale-90 motion-reduce:[&[data-ending-style]:not([data-swipe-direction])]:scale-100",
         {
           "toast-shake-even": shakeGeneration > 0 && shakeGeneration % 2 === 0,
           "toast-shake-odd": shakeGeneration > 0 && shakeGeneration % 2 === 1,
@@ -91,7 +94,11 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
     >
       <Toast.Content className="flex items-start gap-3 overflow-hidden p-4 transition-opacity duration-250 ease-[cubic-bezier(0.22,1,0.36,1)] data-behind:opacity-0 data-expanded:opacity-100">
         <ToastIcon type={item.type} />
-        <div className="grid min-w-0 flex-1 gap-1 pr-6">
+        <div
+          className={cn("grid min-w-0 flex-1 gap-1", {
+            "pr-6": item.actionProps === undefined,
+          })}
+        >
           {item.title !== null &&
           item.title !== undefined &&
           item.title !== "" ? (
@@ -103,6 +110,17 @@ const ToastItem = ({ toast: item }: { toast: Toast.Root.ToastObject }) => {
             <Toast.Description className="text-body text-muted-fg" />
           ) : null}
         </div>
+        {item.actionProps === undefined ? null : (
+          // The negative block margin keeps the action inside the title line;
+          // the end margin clears the absolutely positioned dismiss button.
+          <Toast.Action
+            className={cn(
+              buttonVariants({ size: "sm", variant: "secondary" }),
+              "-my-1 mr-7"
+            )}
+            disabled={item.actionProps.disabled}
+          />
+        )}
         <Toast.Close
           aria-label="Dismiss"
           className="absolute top-3 right-3 flex size-7 items-center justify-center rounded-md text-muted-fg transition-transform duration-100 ease-out squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active motion-reduce:transition-none motion-reduce:active:scale-100"

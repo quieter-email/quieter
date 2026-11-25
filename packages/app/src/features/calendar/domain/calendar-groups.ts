@@ -51,6 +51,19 @@ export const getCalendarGroups = ({
   });
 };
 
+export const getVisibleCalendars = ({
+  groups,
+  hiddenCalendarKeys,
+}: {
+  groups: CalendarGroup[];
+  hiddenCalendarKeys: string[];
+}): CalendarSummary[] =>
+  groups
+    .filter((group) =>
+      group.keys.some((key) => !hiddenCalendarKeys.includes(key))
+    )
+    .map((group) => group.calendar);
+
 export const toggleCalendarGroupVisibility = ({
   calendar,
   groups,

@@ -158,7 +158,7 @@ export const MailboxActionsReview = ({
                         </p>
                         {grant.argumentTemplate ? (
                           <details className="text-caption text-muted-fg">
-                            <summary className="cursor-pointer">
+                            <summary className="cursor-default">
                               Exact changes
                             </summary>
                             <p className="mt-2">
@@ -196,7 +196,7 @@ export const MailboxActionsReview = ({
         ))}
         <div className={settingsSurfaceVariants({ variant: "body" })}>
           <details className="text-body-sm text-muted-fg">
-            <summary className="cursor-pointer">Reviewed instructions</summary>
+            <summary className="cursor-default">Reviewed instructions</summary>
             <p className="mt-2 whitespace-pre-wrap text-fg">
               {specification.instructions}
             </p>

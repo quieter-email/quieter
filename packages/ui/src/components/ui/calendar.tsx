@@ -32,7 +32,24 @@ const CalendarChevron = ({ className, orientation = "left" }: ChevronProps) => (
   />
 );
 
-export type CalendarProps = ComponentProps<typeof DayPicker>;
+const calendarNavButtonVariants = cva(
+  "absolute top-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  {
+    compoundVariants: [
+      { button: "previous", className: "left-0", navPlacement: "around" },
+      { button: "previous", className: "right-8", navPlacement: "end" },
+    ],
+    variants: {
+      button: { next: "right-0", previous: null },
+      navPlacement: { around: null, end: null },
+    },
+  }
+);
+
+export type CalendarProps = ComponentProps<typeof DayPicker> & {
+  highlightedRange?: { from: Date; to: Date };
+  navPlacement?: "around" | "end";
+};
 
 export const Calendar = ({
   animate = false,
@@ -41,7 +58,11 @@ export const Calendar = ({
   components,
   fixedWeeks = true,
   formatters,
+  highlightedRange,
+  modifiers,
+  modifiersClassNames,
   navLayout = "around",
+  navPlacement = "around",
   showOutsideDays = true,
   ...props
 }: CalendarProps) => {
@@ -53,11 +74,11 @@ export const Calendar = ({
       classNames={{
         ...defaultClassNames,
         button_next: cn(
-          "absolute top-0.5 right-0 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+          calendarNavButtonVariants({ button: "next", navPlacement }),
           defaultClassNames.button_next
         ),
         button_previous: cn(
-          "absolute top-0.5 left-0 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+          calendarNavButtonVariants({ button: "previous", navPlacement }),
           defaultClassNames.button_previous
         ),
         caption_label: cn(
@@ -83,7 +104,11 @@ export const Calendar = ({
           defaultClassNames.month
         ),
         month_caption: cn(
-          "flex h-8 items-center justify-center px-8",
+          "flex h-8 items-center",
+          {
+            "justify-center px-8": navPlacement === "around",
+            "ps-2 pe-16": navPlacement === "end",
+          },
           defaultClassNames.month_caption
         ),
         month_grid: cn("w-full border-collapse", defaultClassNames.month_grid),
@@ -119,6 +144,24 @@ export const Calendar = ({
         ...components,
       }}
       fixedWeeks={fixedWeeks}
+      modifiers={
+        highlightedRange
+          ? {
+              ...modifiers,
+              highlightedRange,
+              highlightedRangeEnd: highlightedRange.to,
+              highlightedRangeStart: highlightedRange.from,
+            }
+          : modifiers
+      }
+      modifiersClassNames={{
+        // The band bleeds into the grid gap so highlighted days read as one continuous row.
+        highlightedRange:
+          "relative isolate before:absolute before:inset-y-0 before:-inset-x-px before:-z-10 before:bg-muted",
+        highlightedRangeEnd: "before:end-0 before:rounded-e-md",
+        highlightedRangeStart: "before:start-0 before:rounded-s-md",
+        ...modifiersClassNames,
+      }}
       formatters={{
         formatWeekdayName: (date) => format(date, "EEEEE"),
         ...formatters,

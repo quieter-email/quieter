@@ -9,7 +9,7 @@ import {
   anchoredTriggerClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverPortal = PopoverPrimitive.Portal;
@@ -28,10 +28,11 @@ export const PopoverContent = ({
   align = "center",
   alignOffset = 0,
   children,
+  chrome = "default",
   className,
   collisionPadding,
   side = "bottom",
-  sideOffset = 8,
+  sideOffset = popupSideOffset,
   size = "default",
   scrollable = false,
   ...props
@@ -40,6 +41,8 @@ export const PopoverContent = ({
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
     "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
   > & {
+    /** `bare` holds a child that owns its popup surface, such as CommandMenu. */
+    chrome?: "bare" | "default";
     size?: "default" | "sm";
     scrollable?: boolean;
   }) => (
@@ -55,14 +58,18 @@ export const PopoverContent = ({
       <PopoverPrimitive.Popup
         className={cn(
           anchoredPopupMotionClassName,
-          popupSurfaceClassName,
-          "z-50 max-w-sm min-w-52 rounded-xl p-4",
+          "z-50 rounded-xl",
           {
+            [`${popupSurfaceClassName} max-w-sm min-w-52 p-4`]:
+              chrome === "default",
+            "flex max-h-(--available-height) flex-col outline-none":
+              chrome === "bare",
             "max-h-(--available-height) overflow-y-auto": scrollable,
             "w-80 max-w-(--available-width)": size === "sm",
           },
           className
         )}
+        data-popover-popup=""
         {...props}
       >
         {children}

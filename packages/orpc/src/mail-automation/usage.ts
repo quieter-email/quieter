@@ -1,4 +1,4 @@
-import { chatModelSchema } from "@quieter/ai/chat-models";
+import { recordedChatModelSchema } from "@quieter/ai/chat-models";
 import { AUTO_LABEL_MODEL } from "@quieter/ai/classify-gmail-message";
 import { reportAiUsage } from "@quieter/billing";
 import { db } from "@quieter/database/client";
@@ -18,7 +18,7 @@ export const reportAutoLabelUsage = async (event: {
   usageReportedAt: Date | null;
   userId: string;
 }) => {
-  const model = chatModelSchema
+  const model = recordedChatModelSchema
     .or(z.literal(AUTO_LABEL_MODEL))
     .safeParse(event.model);
   if (

@@ -300,59 +300,58 @@ export const CalendarEventEditor = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <fieldset
-          className="min-w-0 space-y-0.5 px-0.5 pb-0.5"
-          disabled={pending}
-        >
+      <div className="mb-2 min-h-0 flex-1 scroll-fade-y overflow-y-auto">
+        <fieldset className="min-w-0 space-y-2 px-2" disabled={pending}>
           {state.problem ? (
-            <p className="text-body-sm text-destructive" role="alert">
+            <p className="px-4 py-2 text-body-sm text-destructive" role="alert">
               {state.problem}
             </p>
           ) : null}
           {state.conflict ? (
-            <div className="space-y-3 rounded-md border border-border p-3">
-              <Button
-                onClick={() => {
-                  void reviewLatest();
-                }}
-                pending={state.reviewing}
-                size="sm"
-                variant="secondary"
-              >
-                Review latest event
-              </Button>
-              {state.reviewed ? (
-                <div className="space-y-2 text-body-sm">
-                  <p className="font-medium">{state.reviewed.title}</p>
-                  <p className="text-muted-fg">
-                    {state.reviewed.description || "No description"}
-                  </p>
-                  <p className="text-muted-fg">
-                    {state.reviewed.time.kind === "all-day"
-                      ? state.reviewed.time.startDate
-                      : new Date(state.reviewed.time.start).toLocaleString(
-                          undefined,
-                          { timeZone: form.timeZone }
-                        )}
-                  </p>
-                  <Button
-                    onClick={() => {
-                      store.setState((current) => ({
-                        ...current,
-                        baseEvent: current.reviewed ?? current.baseEvent,
-                        conflict: false,
-                        problem: "",
-                        reviewed: null,
-                      }));
-                    }}
-                    size="sm"
-                  >
-                    Keep my draft and use this version
-                  </Button>
-                </div>
-              ) : null}
-            </div>
+            <Surface variant="section">
+              <div className="space-y-3">
+                <Button
+                  onClick={() => {
+                    void reviewLatest();
+                  }}
+                  pending={state.reviewing}
+                  size="sm"
+                  variant="secondary"
+                >
+                  Review latest event
+                </Button>
+                {state.reviewed ? (
+                  <div className="space-y-2 text-body-sm">
+                    <p className="font-medium">{state.reviewed.title}</p>
+                    <p className="text-muted-fg">
+                      {state.reviewed.description || "No description"}
+                    </p>
+                    <p className="text-muted-fg">
+                      {state.reviewed.time.kind === "all-day"
+                        ? state.reviewed.time.startDate
+                        : new Date(state.reviewed.time.start).toLocaleString(
+                            undefined,
+                            { timeZone: form.timeZone }
+                          )}
+                    </p>
+                    <Button
+                      onClick={() => {
+                        store.setState((current) => ({
+                          ...current,
+                          baseEvent: current.reviewed ?? current.baseEvent,
+                          conflict: false,
+                          problem: "",
+                          reviewed: null,
+                        }));
+                      }}
+                      size="sm"
+                    >
+                      Keep my draft and use this version
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </Surface>
           ) : null}
           <Surface className="@container" variant="section">
             <div className="flex flex-col gap-4">
@@ -421,7 +420,7 @@ export const CalendarEventEditor = ({
               ) : null}
               <div className="space-y-1">
                 <label
-                  className="flex cursor-pointer items-center gap-2 py-1 text-body-sm"
+                  className="flex cursor-default items-center gap-2 py-1 text-body-sm"
                   htmlFor="calendar-event-all-day"
                 >
                   <Checkbox
@@ -948,7 +947,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button

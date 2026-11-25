@@ -11,6 +11,7 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
+import { waitUntil } from "cloudflare:workers";
 
 import { getRequestRateLimit } from "#/lib/abuse-protection.server";
 import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
@@ -43,6 +44,7 @@ const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/internal/scheduled-send",
+  "/api/internal/mail-snooze",
   "/api/desktop/session",
   "/api/openapi",
   MCP_API_PATH,
@@ -68,7 +70,10 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 const databaseMiddleware = createMiddleware().server(
-  async ({ next }) => await withRequestDatabaseClient(async () => await next())
+  async ({ next }) =>
+    await withRequestDatabaseClient(async () => await next(), {
+      defer: waitUntil,
+    })
 );
 
 let databaseHealthyUntil = 0;

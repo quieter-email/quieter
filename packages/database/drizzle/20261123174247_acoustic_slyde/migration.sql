@@ -1,0 +1,4 @@
+-- quieter:no-transaction
+CREATE INDEX CONCURRENTLY "gmail_captured_message_pending_body_idx" ON "gmailCapturedMessage" ((coalesce("bodyBackfillAfter", '-infinity'::timestamp)),"mailboxId","messageId") WHERE "deletedAt" is null and "bodyObject" is null and "snapshot" is not null;--> statement-breakpoint
+CREATE INDEX CONCURRENTLY "gmail_captured_message_body_text_idx" ON "gmailCapturedMessage" USING gin ((coalesce(coalesce("bodySearchText", "snapshot"->>'bodyText'), '')) gin_trgm_ops) WHERE "deletedAt" is null;--> statement-breakpoint
+CREATE INDEX CONCURRENTLY "gmail_captured_message_body_search_idx" ON "gmailCapturedMessage" USING gin ((coalesce(case when "bodySearchDocument" is null then gmail_capture_search_full("snapshot") else ("bodySearchDocument")[1] end, ''::tsvector))) WHERE "deletedAt" is null;

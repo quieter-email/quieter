@@ -29,6 +29,7 @@ import { assertCanUseAi } from "../ai-access";
 import {
   AI_MEMORY_LEARNING_PROMPT_MAX_LENGTH,
   exportPersonalAiMemory,
+  forgetAiMemories,
   forgetAiMemory,
   getPersonalAiMemoryScopeConfig,
   listPersonalAiMemory,
@@ -44,6 +45,7 @@ import {
   listMailboxMemoryBootstraps,
   retryMailboxMemoryBootstrap,
 } from "../ai-memory-capture";
+import { AI_MEMORY_BULK_DELETE_LIMIT } from "../ai-memory-contract";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   replySuggestionInputSchema,
@@ -140,6 +142,26 @@ export const aiRouter = {
   exportMemory: protectedProcedure.handler(
     async ({ context }) => await exportPersonalAiMemory(context.userId)
   ),
+
+  forgetMemories: protectedProcedure
+    .input(
+      z.object({
+        memoryIds: z
+          .array(z.string().trim().min(1).max(200))
+          .min(1)
+          .max(AI_MEMORY_BULK_DELETE_LIMIT),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      try {
+        return await forgetAiMemories({
+          memoryIds: input.memoryIds,
+          userId: context.userId,
+        });
+      } catch (error) {
+        throw toUserMemoryError(error);
+      }
+    }),
 
   forgetMemory: protectedProcedure
     .input(z.object({ memoryId: z.string().trim().min(1) }))

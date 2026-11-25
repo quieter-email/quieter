@@ -12,6 +12,7 @@ import {
 } from "./menu-chrome";
 import { menuFocusProps } from "./menu-focus";
 import { anchoredTriggerClassName } from "./overlay-chrome";
+import { popupSideOffset } from "./popup-surface";
 
 export const ContextMenu = ({
   onItemHighlighted,
@@ -46,7 +47,7 @@ export const ContextMenuContent = ({
   alignOffset = 0,
   className,
   side = "bottom",
-  sideOffset = 6,
+  sideOffset = popupSideOffset,
   ...props
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Popup> &
   Pick<

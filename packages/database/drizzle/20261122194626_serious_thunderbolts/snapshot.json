@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "ab1180b5-7ea9-4f6e-bf9d-80fda9e59b02",
+  "prevIds": ["09bbfc58-72d3-44c1-a886-b07d2e6dc69e"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "user", "undoSendEnabled"],
+      "writes": [
+        "s|col|public.user.undoSendEnabled",
+        "n|col|public.user.undoSendEnabled",
+        "e|col|public.user.undoSendEnabled"
+      ],
+      "reads": ["n|tbl|public.user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "user",
+        "name": "undoSendEnabled",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

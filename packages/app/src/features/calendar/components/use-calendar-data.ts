@@ -29,7 +29,10 @@ import {
   getCalendarEventKey,
   getCalendarRefKey,
 } from "../domain/calendar-event-form";
-import { getCalendarGroups } from "../domain/calendar-groups";
+import {
+  getCalendarGroups,
+  getVisibleCalendars,
+} from "../domain/calendar-groups";
 import { createCalendarEventDisplay } from "../domain/calendar-mutation";
 import type { CalendarMutation } from "../domain/calendar-mutation";
 import {
@@ -126,12 +129,7 @@ export const useCalendarData = ({
     [calendarGroups]
   );
   const visibleCalendars = useMemo(
-    () =>
-      calendarGroups
-        .filter((group) =>
-          group.keys.some((key) => !hiddenCalendarKeys.includes(key))
-        )
-        .map((group) => group.calendar),
+    () => getVisibleCalendars({ groups: calendarGroups, hiddenCalendarKeys }),
     [calendarGroups, hiddenCalendarKeys]
   );
   const monthRanges = useMemo(

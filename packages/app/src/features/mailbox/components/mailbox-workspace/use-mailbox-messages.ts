@@ -12,13 +12,14 @@ import {
   refreshLoadedMessagesPages,
   syncMessages,
 } from "@quieter/app/lib/mail/inbox-query/index";
+import { getProvisionalMessagesData } from "@quieter/app/lib/mail/inbox-query/provisional";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { isMailboxScopeRepairRequiredError } from "@quieter/app/lib/orpc-errors";
 import type { RouterOutputs } from "@quieter/orpc";
 import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 type UseMailboxMessagesOptions = {
   activeMailbox: MailboxCategory;
@@ -136,6 +137,7 @@ export const useMailboxMessages = ({
   selectedMailboxId,
 }: UseMailboxMessagesOptions) => {
   const [isManualRefreshing, setIsManualRefreshing] = useState(false);
+  const isFetchingNextPageRef = useRef(false);
   const normalizedQuery = searchQuery.trim();
   const ownsLiveSync =
     !!selectedMailboxId &&
@@ -144,6 +146,16 @@ export const useMailboxMessages = ({
     activeMailbox !== "drafts" &&
     normalizedQuery.length === 0 &&
     mailboxProvider !== "api";
+  const provisionalData = useMemo(
+    () =>
+      getProvisionalMessagesData(
+        queryClient,
+        selectedMailboxId ?? "",
+        activeMailbox,
+        normalizedQuery
+      ),
+    [activeMailbox, normalizedQuery, queryClient, selectedMailboxId]
+  );
   const {
     data: messagesData,
     error: messagesError,
@@ -152,20 +164,27 @@ export const useMailboxMessages = ({
     isError,
     isFetchingNextPage,
     isPending,
+    isPlaceholderData,
     isRefetching,
-  } = useInfiniteQuery(
-    messagesQueryOptions(
+  } = useInfiniteQuery({
+    ...messagesQueryOptions(
       selectedMailboxId ?? "",
       activeMailbox,
       normalizedQuery,
       !!selectedMailboxId,
       ownsLiveSync
-    )
-  );
+    ),
+    ...(provisionalData === undefined
+      ? {}
+      : { placeholderData: provisionalData }),
+  });
   const messages = messagesData?.pages ?? EMPTY_MESSAGE_PAGES;
   const hasLoadedMessages = hasLoadedMessagePages(messagesData);
   const isLiveSyncEnabled =
-    ownsLiveSync && hasLoadedMessages && !isManualRefreshing;
+    ownsLiveSync &&
+    hasLoadedMessages &&
+    !isManualRefreshing &&
+    !isPlaceholderData;
   const { error: syncError, isFetching: isSyncFetching } = useQuery(
     liveSyncQueryOptions(
       queryClient,
@@ -272,16 +291,30 @@ export const useMailboxMessages = ({
 
   const isRefreshing =
     isManualRefreshing ||
+    isPlaceholderData ||
     isSyncFetching ||
     (isRefetching && !isFetchingNextPage);
   const isLoadingEmptyMessages = !hasLoadedMessages && isPending;
 
   const loadMoreMessages = useCallback(() => {
-    if (!hasNextPage || isFetchingNextPage || isPending || isError) {
+    if (
+      isFetchingNextPageRef.current ||
+      !hasNextPage ||
+      isFetchingNextPage ||
+      isPending ||
+      isError
+    ) {
       return;
     }
 
-    void fetchNextPage();
+    isFetchingNextPageRef.current = true;
+    void (async () => {
+      try {
+        await fetchNextPage();
+      } finally {
+        isFetchingNextPageRef.current = false;
+      }
+    })();
   }, [fetchNextPage, hasNextPage, isError, isFetchingNextPage, isPending]);
 
   const listState = useMemo(

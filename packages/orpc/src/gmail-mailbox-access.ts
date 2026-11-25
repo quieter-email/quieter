@@ -1,5 +1,6 @@
 import { ORPCError } from "@orpc/server";
-import { db } from "@quieter/database/client";
+import { db, withRequestDatabaseClient } from "@quieter/database/client";
+import type { DatabaseClient } from "@quieter/database/client";
 import { gmailCredential, mailbox } from "@quieter/database/schema";
 import { requireServerEnv, serverEnv } from "@quieter/env/server";
 import { isGmailServiceError } from "@quieter/gmail";
@@ -155,7 +156,10 @@ const getGmailRepairRequiredError = (record: {
     status: 409,
   });
 
-const gmailTokenRefreshes = new Map<string, Promise<string>>();
+const gmailTokenRefreshes = new WeakMap<
+  DatabaseClient,
+  Map<string, Promise<string>>
+>();
 
 const performGmailAccessTokenRefresh = async (record: {
   emailAddress: string;
@@ -266,23 +270,23 @@ const performGmailAccessTokenRefresh = async (record: {
 
 const refreshGmailAccessToken = async (
   record: Parameters<typeof performGmailAccessTokenRefresh>[0]
-) => {
-  const existingRefresh = gmailTokenRefreshes.get(record.id);
-  if (existingRefresh !== undefined) {
-    return await existingRefresh;
-  }
-
-  const refreshPromise = (async () =>
-    await performGmailAccessTokenRefresh(record))();
-  gmailTokenRefreshes.set(record.id, refreshPromise);
-  try {
-    return await refreshPromise;
-  } finally {
-    if (gmailTokenRefreshes.get(record.id) === refreshPromise) {
-      gmailTokenRefreshes.delete(record.id);
+) =>
+  await withRequestDatabaseClient(async (client) => {
+    const refreshes =
+      gmailTokenRefreshes.get(client) ?? new Map<string, Promise<string>>();
+    gmailTokenRefreshes.set(client, refreshes);
+    const existingRefresh = refreshes.get(record.id);
+    if (existingRefresh !== undefined) {
+      return await existingRefresh;
     }
-  }
-};
+    const refresh = performGmailAccessTokenRefresh(record);
+    refreshes.set(record.id, refresh);
+    try {
+      return await refresh;
+    } finally {
+      refreshes.delete(record.id);
+    }
+  });
 
 const getOwnedGmailCredential = async (mailboxId: string, userId: string) => {
   const [record] = await db

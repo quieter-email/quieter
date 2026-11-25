@@ -12,7 +12,9 @@ import { Icon } from "./icon";
 import { CheckIcon } from "./icons";
 import { Input } from "./input";
 import { InputAddon, InputGroup } from "./input-group";
+import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
+import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 import { selectTriggerVariants } from "./select";
 
 export type TimePickerProps = Pick<
@@ -114,16 +116,17 @@ export const TimePicker = ({
           align="start"
           className="isolate z-50"
           collisionPadding={8}
-          sideOffset={4}
+          sideOffset={popupSideOffset}
         >
           <ComboboxPrimitive.Popup
             aria-label={ariaLabel ?? "Choose time"}
             className={cn(
               anchoredPopupMotionClassName,
-              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl border border-transparent bg-section text-popover-fg shadow-md"
+              popupSurfaceClassName,
+              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
             )}
           >
-            <div className="shrink-0 border-b border-border p-2">
+            <div className="shrink-0 border-b border-fg/10 p-2">
               <InputGroup>
                 <InputAddon
                   aria-hidden
@@ -141,18 +144,18 @@ export const TimePicker = ({
                 />
               </InputGroup>
             </div>
-            <ComboboxPrimitive.Empty className="text-body-sm text-muted-fg">
-              <p className="px-3 py-4">Enter a valid time.</p>
+            <ComboboxPrimitive.Empty>
+              <p className={menuEmptyClassName}>Enter a valid time.</p>
             </ComboboxPrimitive.Empty>
             <ComboboxPrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
               {(option: TimeOption) => (
                 <ComboboxPrimitive.Item
-                  className="relative flex min-h-8 cursor-default items-center gap-2 rounded-md py-1.5 pr-8 pl-2 text-body-sm text-fg tabular-nums select-none data-highlighted:bg-muted"
+                  className={cn(menuItemClassName, "pr-8 tabular-nums")}
                   key={option.value}
                   value={option.value}
                 >
                   {option.label}
-                  <ComboboxPrimitive.ItemIndicator className="absolute right-2 flex size-4 items-center justify-center text-primary">
+                  <ComboboxPrimitive.ItemIndicator className="absolute right-2.5 flex size-4 items-center justify-center text-primary">
                     <CheckIcon className="size-4" />
                   </ComboboxPrimitive.ItemIndicator>
                 </ComboboxPrimitive.Item>

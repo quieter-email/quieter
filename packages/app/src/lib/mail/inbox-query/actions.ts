@@ -13,6 +13,7 @@ import {
   getMailCommandUpdater,
   applyThreadLabelChangesLocally,
   mergeMessagePreservingLoadedDetails,
+  removeMessagesFromQueryData,
   removeMessagesFromThreadData,
   updateMessageInThreadData,
   updateMessagesInThreadData,
@@ -30,6 +31,7 @@ import {
   applyResolvedThreadMetadataToCaches,
   findMessageInCachedMailboxQueries,
   findMessagesInCachedMailboxQueries,
+  getCachedMessagesQueries,
   persistQueryKeys,
   removeMessagesFromCachedMailboxQueries,
 } from "@quieter/app/lib/mail/inbox-query/query-cache";
@@ -38,6 +40,10 @@ import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-k
 import { getGmailUnreadCountsQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailSnoozeApplyInput,
+  MailSnoozeCommand,
+} from "@quieter/mail/snooze";
 import type { QueryClient } from "@tanstack/react-query";
 
 type MessageActionArgs = {
@@ -47,6 +53,79 @@ type MessageActionArgs = {
   searchQuery: string | null | undefined;
   messageId: string;
   signal?: AbortSignal;
+};
+
+export const applySnoozeInMailbox = async (
+  queryClient: QueryClient,
+  mailboxId: string,
+  targets: MailSnoozeApplyInput["targets"],
+  command: MailSnoozeCommand,
+  requestId: string = crypto.randomUUID()
+) => {
+  let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
+  // Snoozed conversations leave the Inbox; Later membership needs the
+  // server-assigned schedule, so it is left to the refetch below.
+  const leaveInbox = (threadIds: Set<string>) => {
+    for (const cachedQuery of getCachedMessagesQueries(
+      queryClient,
+      mailboxId
+    )) {
+      if (cachedQuery.mailbox !== "inbox") {
+        continue;
+      }
+      const nextData = removeMessagesFromQueryData(
+        cachedQuery.data,
+        (message) => threadIds.has(message.threadId)
+      );
+      if (nextData !== cachedQuery.data) {
+        queryClient.setQueryData(cachedQuery.queryKey, nextData);
+      }
+    }
+  };
+  try {
+    await runMailMutation(queryClient, {
+      apply:
+        command.kind === "snooze"
+          ? () => {
+              leaveInbox(new Set(targets.map((target) => target.threadId)));
+            }
+          : undefined,
+      execute: async () => {
+        result = await rpc.mail.applySnooze({
+          command,
+          mailboxId,
+          requestId,
+          targets,
+        });
+        const applied = new Set(
+          command.kind === "snooze"
+            ? result.targets
+                .filter((target) => target.status === "applied")
+                .map((target) => target.threadId)
+            : []
+        );
+        return () => {
+          leaveInbox(applied);
+        };
+      },
+      mailboxId,
+      targets: targets.map((target) => target.threadId),
+    });
+  } finally {
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
+      queryClient.invalidateQueries({
+        queryKey: getMailboxThreadQueriesKey(mailboxId),
+      }),
+      queryClient.invalidateQueries({
+        queryKey: getGmailUnreadCountsQueryKey(),
+      }),
+    ]);
+  }
+  if (!result) {
+    throw new Error("The conversation update did not complete.");
+  }
+  return result;
 };
 
 export const applyBulkChangesInMailbox = async (

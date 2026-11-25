@@ -1,0 +1,42 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "8ea46f28-a28f-422d-a767-9bb3148bb2fa",
+  "prevIds": ["ab1180b5-7ea9-4f6e-bf9d-80fda9e59b02"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailWatchState",
+        "schedulerRepairAt"
+      ],
+      "writes": [
+        "s|col|public.gmailWatchState.schedulerRepairAt",
+        "n|col|public.gmailWatchState.schedulerRepairAt",
+        "e|col|public.gmailWatchState.schedulerRepairAt"
+      ],
+      "reads": ["n|tbl|public.gmailWatchState", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailWatchState",
+        "name": "schedulerRepairAt",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

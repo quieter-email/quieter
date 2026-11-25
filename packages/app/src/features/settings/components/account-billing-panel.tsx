@@ -108,7 +108,7 @@ const AccountUsageSettings = ({
       <Fieldset bare disabled={updateMutation.isPending}>
         <SettingsCard>
           <SettingsInsetRows>
-            <SettingsInsetRow className="justify-between gap-6">
+            <SettingsInsetRow className="justify-between">
               <SettingsRowText
                 title={
                   <label htmlFor="account-overage-toggle">Allow overage</label>

@@ -10,6 +10,7 @@ import type {
 } from "@quieter/app/lib/mail";
 import {
   applyBulkChangesInMailbox,
+  applySnoozeInMailbox,
   updateMessageInMailbox,
   updateThreadInMailbox,
   deleteDraftInMailbox,
@@ -19,7 +20,14 @@ import { findMessagesInCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
 import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
 import type { MailCommand } from "@quieter/mail/data-plane";
+import type { MailSnoozeCommand, MailSnoozeState } from "@quieter/mail/snooze";
 import type { QueryClient } from "@tanstack/react-query";
+
+import { settleMailSnoozeRequest } from "../domain/mail-snooze";
+import type {
+  MailSnoozeAttempt,
+  PendingMailSnoozeRequest,
+} from "../domain/mail-snooze";
 
 type LabelChangeSet = {
   addLabelIds?: string[];
@@ -291,6 +299,114 @@ export const createMailboxActionHandlers = ({
     await setPlacement([{ messages, threadId }], placement);
   };
 
+  const applySnooze = async (
+    targets: {
+      threadId: string;
+      messages: MessageListItem[];
+      snooze?: MailSnoozeState;
+      expectedVersion?: number | null;
+    }[],
+    command: MailSnoozeCommand,
+    attempt: MailSnoozeAttempt = new Map()
+  ) => {
+    const mailbox = queryClient
+      .getQueryData(mailboxesQueryOptions().queryKey)
+      ?.groups.flatMap((group) => group.mailboxes)
+      .find((candidate) => candidate.id === mailboxId);
+    if (mailbox?.capabilities.canSetPlacement !== true) {
+      throw new ORPCError("FORBIDDEN", {
+        message: "You cannot change placement in this inbox.",
+      });
+    }
+    if (targets.some((target) => isThreadActionPending(target.threadId))) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "A selected conversation is still being updated. Wait for it to finish.",
+      });
+    }
+    if (targets.length === 0) {
+      return;
+    }
+    const threadIds = targets.map((target) => target.threadId);
+    let pending: PendingMailSnoozeRequest[] = [
+      {
+        openThreadIds: new Set(threadIds),
+        requestId: crypto.randomUUID(),
+        targets: targets.map((target) => {
+          const states = [
+            target.snooze,
+            ...target.messages.map((message) => message.snooze),
+          ].filter((state): state is MailSnoozeState => state !== undefined);
+          const state = states
+            .toSorted((left, right) => right.version - left.version)
+            .at(0);
+          return {
+            expectedVersion:
+              target.expectedVersion === undefined
+                ? (state?.version ?? null)
+                : target.expectedVersion,
+            messageIds:
+              command.kind === "snooze"
+                ? getUniqueIds(
+                    target.messages.flatMap((message) => [
+                      message.id,
+                      ...(message.threadInboxIncomingMessageIds ?? []),
+                    ])
+                  )
+                : [],
+            threadId: target.threadId,
+          };
+        }),
+      },
+    ];
+    const resume = async () => {
+      setThreadActionsPending(threadIds, true);
+      let failure: Error | undefined;
+      try {
+        const remaining: PendingMailSnoozeRequest[] = [];
+        for (const request of pending) {
+          try {
+            const settled = settleMailSnoozeRequest(
+              request,
+              await applySnoozeInMailbox(
+                queryClient,
+                mailboxId,
+                request.targets,
+                command,
+                request.requestId
+              )
+            );
+            remaining.push(...settled.pending);
+            if (settled.failure) {
+              failure ??= new ORPCError("CONFLICT", {
+                message:
+                  settled.failure.message ??
+                  "Some conversations could not be updated. Refresh before trying again.",
+              });
+            }
+          } catch (error) {
+            // The response may be lost after the server accepted the request.
+            remaining.push(request);
+            failure ??=
+              error instanceof Error
+                ? error
+                : new Error("Mailbox action failed.", { cause: error });
+          }
+        }
+        pending = remaining;
+        await refreshSearchResultsIfNeeded();
+      } finally {
+        setThreadActionsPending(threadIds, false);
+      }
+      if (failure) {
+        throw failure;
+      }
+      attempt.delete(mailboxId);
+    };
+    attempt.set(mailboxId, resume);
+    await resume();
+  };
+
   const deleteDraft = async (message: MessageListItem) => {
     const { draftId } = message;
     if (!draftId) {
@@ -341,6 +457,42 @@ export const createMailboxActionHandlers = ({
   };
 
   return {
+    applyThreadSnooze: async (
+      threadId: string,
+      command: MailSnoozeCommand,
+      expectedVersion?: number | null,
+      attempt?: MailSnoozeAttempt
+    ) => {
+      const thread = queryClient.getQueryData<ThreadMessagesResult>(
+        getThreadQueryKey(mailboxId, threadId)
+      );
+      await applySnooze(
+        [
+          {
+            expectedVersion,
+            messages: [
+              ...(thread?.messages ?? []),
+              ...findMessagesInCachedMailboxQueries(
+                queryClient,
+                mailboxId,
+                (message) => message.threadId === threadId
+              ),
+            ],
+            snooze: thread?.snooze,
+            threadId,
+          },
+        ],
+        command,
+        attempt
+      );
+    },
+    applyThreadsSnooze: async (
+      threads: ThreadListEntry[],
+      command: MailSnoozeCommand,
+      attempt?: MailSnoozeAttempt
+    ) => {
+      await applySnooze(threads, command, attempt);
+    },
     get canMarkRead() {
       return (
         queryClient

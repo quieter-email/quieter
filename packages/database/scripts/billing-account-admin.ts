@@ -8,6 +8,7 @@ import type {
   billingEntitlementOverride,
   organization,
 } from "../src/schema.ts";
+import { inspectAiMemoryUsage } from "./billing-ai-memory-report.ts";
 import {
   assertMigrationExecutionAllowed,
   getMigrationDatabaseUrl,
@@ -40,12 +41,18 @@ if (!userId || userId.length > 200 || /\s/u.test(userId)) {
   throw new Error("An exact --user-id is required.");
 }
 if (
-  !["inspect", "grant-unlimited", "write-off-deferred"].includes(values.action)
+  ![
+    "inspect",
+    "inspect-ai-memory-usage",
+    "grant-unlimited",
+    "write-off-deferred",
+  ].includes(values.action)
 ) {
   throw new Error(
-    "Action must be inspect, grant-unlimited, or write-off-deferred."
+    "Action must be inspect, inspect-ai-memory-usage, grant-unlimited, or write-off-deferred."
   );
 }
+const inspectingAiMemory = values.action === "inspect-ai-memory-usage";
 const writingOff = values.action === "write-off-deferred";
 const eventId = values["event-id"]?.trim();
 if (
@@ -57,6 +64,9 @@ if (
 }
 if (values.action === "grant-unlimited" && eventId !== undefined) {
   throw new Error("Grant does not accept --event-id.");
+}
+if (inspectingAiMemory && eventId !== undefined) {
+  throw new Error("AI memory usage inspection does not accept --event-id.");
 }
 const granting = values.action === "grant-unlimited";
 const expiresAt = values["expires-at"] ? new Date(values["expires-at"]) : null;
@@ -100,12 +110,16 @@ const runUrl =
     : "local-development";
 const sql = postgres(databaseUrl, {
   max: 1,
+  ...(inspectingAiMemory && { onnotice: false }),
   prepare: false,
 });
 try {
   const result = await sql.begin(
     granting || writingOff ? "" : "read only",
     async (transaction) => {
+      if (inspectingAiMemory) {
+        return await inspectAiMemoryUsage(transaction, userId);
+      }
       const users =
         granting || writingOff
           ? await transaction`SELECT id FROM "user" WHERE id = ${userId} FOR UPDATE`

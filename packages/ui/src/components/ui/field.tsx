@@ -25,7 +25,7 @@ const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
   variants: {
     chrome: {
       composer:
-        "min-w-0 flex-1 rounded-xl border border-transparent bg-detail shadow-none read-only:bg-detail focus-visible:bg-control-hover focus-visible:ring-0 focus-visible:outline-none",
+        "min-w-0 flex-1 rounded-xl border border-transparent bg-detail text-ellipsis shadow-none read-only:bg-detail focus-visible:bg-control-hover focus-visible:ring-0 focus-visible:outline-none",
       default:
         "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,

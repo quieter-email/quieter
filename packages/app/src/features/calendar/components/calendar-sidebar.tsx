@@ -8,6 +8,7 @@ import {
   MoreHorizontalIcon,
 } from "@hugeicons/core-free-icons";
 import { SidebarFooterLinks } from "@quieter/app/features/navigation/components/sidebar-footer-links";
+import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import type { CalendarAccount, CalendarSummary } from "@quieter/calendar";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -67,8 +68,10 @@ type CalendarSidebarProps = {
   calendars: CalendarSummary[];
   canCreate: boolean;
   canConnectMicrosoft: boolean;
+  collapsed: boolean;
   date: string;
   hiddenCalendarKeys: string[];
+  highlightedDates?: { end: string; start: string };
   isConfigured: boolean;
   isMobileOpen: boolean;
   onConnect: (target: CalendarConnectionTarget) => void;
@@ -197,6 +200,7 @@ const CalendarSidebarContent = ({
   close,
   date,
   hiddenCalendarKeys,
+  highlightedDates,
   isConfigured,
   onConnect,
   onCreate,
@@ -206,7 +210,10 @@ const CalendarSidebarContent = ({
   pendingCalendarColorKey,
   pendingConnection,
   preview,
-}: Omit<CalendarSidebarProps, "isMobileOpen" | "onMobileOpenChange"> & {
+}: Omit<
+  CalendarSidebarProps,
+  "collapsed" | "isMobileOpen" | "onMobileOpenChange"
+> & {
   close?: () => void;
 }) => {
   const selectedDate = new Date(`${date}T12:00:00`);
@@ -225,10 +232,9 @@ const CalendarSidebarContent = ({
     value: color,
   }));
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-5 p-4">
-      <div className="flex items-center gap-2">
-        <Button
-          fullWidth
+    <div className="flex min-h-0 flex-1 flex-col gap-5 px-4 py-6">
+      <div className="-my-px flex items-center justify-between px-1">
+        <SidebarNavItem
           nativeButton={false}
           onClick={close}
           render={
@@ -240,15 +246,10 @@ const CalendarSidebarContent = ({
           }
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
           role="link"
-          variant="ghost"
         >
-          <Icon
-            aria-hidden
-            className="absolute start-3"
-            icon={ArrowLeft01Icon}
-          />
-          Back to Mail
-        </Button>
+          <Icon aria-hidden icon={ArrowLeft01Icon} />
+          Back to mail
+        </SidebarNavItem>
         {close ? (
           <IconButtonTooltip label="Close calendar sidebar">
             <Button
@@ -262,21 +263,40 @@ const CalendarSidebarContent = ({
           </IconButtonTooltip>
         ) : null}
       </div>
-      <Button
-        disabled={!canCreate}
-        fullWidth
-        onClick={() => {
-          onCreate();
-          close?.();
-        }}
-      >
-        New event
-      </Button>
+      <div className="px-1">
+        <Button
+          // oxlint-disable-next-line shadcn/no-restyle -- Matches the left-aligned Compose action in the mail sidebar.
+          className="w-full justify-start px-4"
+          disabled={!canCreate}
+          onClick={() => {
+            onCreate();
+            close?.();
+          }}
+        >
+          <Icon aria-hidden icon={Add01Icon} />
+          New event
+        </Button>
+      </div>
       <div className="-mx-2 min-h-0 flex-1 space-y-6 overflow-y-auto">
         <Calendar
           className="mx-auto"
+          formatters={{
+            formatWeekdayName: (weekday) =>
+              weekday
+                .toLocaleDateString(undefined, { weekday: "short" })
+                .slice(0, 2),
+          }}
+          highlightedRange={
+            highlightedDates
+              ? {
+                  from: new Date(`${highlightedDates.start}T12:00:00`),
+                  to: new Date(`${highlightedDates.end}T12:00:00`),
+                }
+              : undefined
+          }
           mode="single"
           month={selectedDate}
+          navPlacement="end"
           onMonthChange={(month) => {
             onDateChange(
               `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, "0")}-01`
@@ -292,7 +312,7 @@ const CalendarSidebarContent = ({
           }}
           selected={selectedDate}
         />
-        <div className="space-y-2 px-2">
+        <div className="space-y-2 px-3">
           <Popover>
             <PopoverTrigger
               render={<Button fullWidth size="sm" variant="secondary" />}
@@ -404,7 +424,7 @@ const CalendarSidebarContent = ({
                           }
                           presets={colorPresets}
                         >
-                          <label className="flex min-w-0 flex-1 cursor-pointer items-center gap-2.5 text-body-sm">
+                          <label className="flex min-w-0 flex-1 cursor-default items-center gap-2 text-body-sm">
                             <Checkbox
                               aria-label={`Show ${calendar.name}`}
                               checked={
@@ -487,7 +507,7 @@ const CalendarSidebarContent = ({
           )}
         </div>
       </div>
-      <div className="mx-4 mb-4">
+      <div className="p-1">
         <SidebarFooterLinks onRequestClose={close} />
       </div>
     </div>
@@ -495,11 +515,13 @@ const CalendarSidebarContent = ({
 };
 
 export const CalendarSidebar = ({
+  collapsed,
   isMobileOpen,
   onMobileOpenChange,
   ...props
 }: CalendarSidebarProps) => (
   <WorkspaceSidebar
+    collapsed={collapsed}
     isMobileOpen={isMobileOpen}
     label="Calendar sidebar"
     onMobileOpenChange={onMobileOpenChange}

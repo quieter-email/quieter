@@ -1,0 +1,4 @@
+-- quieter:no-transaction
+CREATE INDEX CONCURRENTLY "gmail_message_work_pending_mailbox_idx" ON "gmailMessageWork" ("mailboxId","source","dueAt","priorityAt") WHERE "completedAt" is null or "lastError" is not null or ("triggerActions" is true and "actionsCompletedAt" is null);--> statement-breakpoint
+CREATE INDEX CONCURRENTLY "gmail_message_work_finished_idx" ON "gmailMessageWork" ("updatedAt") WHERE "completedAt" is not null and "lastError" is null and ("triggerActions" is false or "actionsCompletedAt" is not null);--> statement-breakpoint
+CREATE INDEX CONCURRENTLY "gmail_watch_state_scheduler_repair_at_idx" ON "gmailWatchState" (coalesce("schedulerRepairAt", '-infinity'::timestamp),"mailboxId");
