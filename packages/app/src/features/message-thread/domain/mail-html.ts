@@ -2,7 +2,7 @@ import { parseImageSourceSet } from "@quieter/mail/source-set";
 import DOMPurify from "dompurify";
 import type { Config } from "dompurify";
 
-import { sanitizeMailCss } from "./mail-css";
+import { normalizeMailMedia, sanitizeMailCss } from "./mail-css";
 
 const TRACKING_PIXEL_SIZE = new Set(["0", "1"]);
 const TEXT_URL_REGEX = /\bhttps?:\/\/[^\s<>"']+/giu;
@@ -532,6 +532,13 @@ const applyDocumentPolicy = (document: Document, policy: MailImagePolicy) => {
       const name = attribute.name.toLowerCase();
       if (BLOCKED_RESOURCE_ATTRIBUTES.has(name) || name.startsWith("on")) {
         element.removeAttribute(attribute.name);
+        continue;
+      }
+      if (
+        name === "media" &&
+        (element.tagName === "STYLE" || element.tagName === "SOURCE")
+      ) {
+        element.setAttribute(name, normalizeMailMedia(attribute.value));
         continue;
       }
       if (name === "style") {
