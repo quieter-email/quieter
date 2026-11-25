@@ -156,7 +156,10 @@ export const useMailboxSelection = ({
     isEmptyPreviewPersona
   );
   const { data: queriedMailboxesData, isPending: isMailboxesPending } =
-    useQuery(mailboxesQueryOptions(!isSandboxMode));
+    useQuery({
+      ...mailboxesQueryOptions(!isSandboxMode),
+      refetchOnMount: true,
+    });
   const selectionQueryKey = getMailboxSelectionQueryKey({
     isDemoMode,
     isEmptyPreviewPersona,
