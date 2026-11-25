@@ -1,8 +1,8 @@
 import { ArrowDown01Icon, SparklesIcon } from "@hugeicons/core-free-icons";
-import { chatModels } from "@quieter/ai/chat-models";
 import type { ChatModel } from "@quieter/ai/chat-models";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { Button } from "@quieter/ui/button";
+import { CommandMenu } from "@quieter/ui/command-menu";
 import { Icon } from "@quieter/ui/icon";
 import { CheckIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
@@ -12,9 +12,20 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@quieter/ui/popover";
-import { useState } from "react";
+import { useId, useState } from "react";
+import type { KeyboardEvent } from "react";
 
-import { getChatModelOptions } from "../domain/chat-model-options";
+import {
+  getChatModelItems,
+  getSelectedChatModel,
+} from "../domain/chat-model-options";
+
+export const CurrentChatModelMark = () => (
+  <span className="flex shrink-0">
+    <CheckIcon className="size-3.5" />
+    <span className="sr-only">Current model</span>
+  </span>
+);
 
 export const ChatModelPicker = ({
   disabled,
@@ -27,16 +38,57 @@ export const ChatModelPicker = ({
 }) => {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const { autoMatches, groups } = getChatModelOptions(search);
-  const options = groups.flatMap((group) => group.options);
-  const selectedModel = chatModels.find(
-    (option) =>
-      option.value === model ||
-      option.versions.some((version) => version === model)
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  const listId = useId();
+  const items = getChatModelItems(search);
+  const activeIndex = Math.max(
+    0,
+    items.findIndex(({ id }) => id === highlightedId)
   );
-  const selectModel = (value: ChatModel | "auto") => {
-    onModelChange(value);
-    setOpen(false);
+  const selectedModel = getSelectedChatModel(model);
+  const currentModel = selectedModel?.value ?? "auto";
+
+  const selectModel = (index: number) => {
+    const item = items[index];
+    if (item !== undefined) {
+      onModelChange(item.model);
+      setOpen(false);
+    }
+  };
+
+  const highlightModel = (index: number) => {
+    setHighlightedId(items[index]?.id ?? null);
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    // Safari can clear isComposing before the IME confirmation key event.
+    // oxlint-disable-next-line typescript/no-deprecated
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      return;
+    }
+    if (event.key === "Enter" && !event.shiftKey) {
+      event.preventDefault();
+      selectModel(activeIndex);
+      return;
+    }
+    if (
+      (event.key === "ArrowUp" || event.key === "ArrowDown") &&
+      !event.shiftKey &&
+      !event.altKey &&
+      !event.ctrlKey &&
+      !event.metaKey
+    ) {
+      event.preventDefault();
+      if (items.length > 0) {
+        const nextIndex =
+          (activeIndex + (event.key === "ArrowDown" ? 1 : -1) + items.length) %
+          items.length;
+        highlightModel(nextIndex);
+        document
+          .querySelector(`#${CSS.escape(`${listId}-${nextIndex}`)}`)
+          ?.scrollIntoView({ block: "nearest" });
+      }
+    }
   };
 
   return (
@@ -45,6 +97,7 @@ export const ChatModelPicker = ({
         setOpen(nextOpen);
         if (nextOpen) {
           setSearch("");
+          setHighlightedId(null);
         }
       }}
       open={open}
@@ -66,75 +119,57 @@ export const ChatModelPicker = ({
       </PopoverTrigger>
       <PopoverContent
         align="start"
-        className="flex max-h-(--available-height) flex-col"
+        chrome="bare"
         collisionPadding={16}
         data-assistant-panel
         side="top"
-        size="sm"
       >
         <PopoverTitle className="sr-only">Choose model</PopoverTitle>
-        <Input
-          aria-label="Search models"
-          onChange={(event) => {
-            setSearch(event.target.value);
-          }}
-          onKeyDown={(event) => {
-            if (event.key !== "Enter" || event.nativeEvent.isComposing) {
-              return;
-            }
-            event.preventDefault();
-            const firstMatch = options.at(0);
-            if (autoMatches) {
-              selectModel("auto");
-            } else if (firstMatch) {
-              selectModel(firstMatch.value);
-            }
-          }}
-          placeholder="Search models or labs…"
-          size="sm"
-          type="search"
-          value={search}
+        <CommandMenu
+          activeIndex={activeIndex}
+          id={listId}
+          items={items.map((item) => ({
+            ...item,
+            icon:
+              item.lab === undefined ? (
+                <Icon icon={SparklesIcon} />
+              ) : (
+                <ModelLabLogo lab={item.lab} />
+              ),
+            shortcut:
+              item.model === currentModel ? (
+                <CurrentChatModelMark />
+              ) : undefined,
+          }))}
+          label="Models"
+          onHighlight={highlightModel}
+          onSelect={selectModel}
+          search={
+            <Input
+              aria-activedescendant={
+                items.length > 0 ? `${listId}-${activeIndex}` : undefined
+              }
+              aria-autocomplete="list"
+              aria-controls={listId}
+              aria-expanded={open}
+              aria-label="Search models"
+              autoComplete="off"
+              chrome="command"
+              onChange={(event) => {
+                setSearch(event.target.value);
+                setHighlightedId(null);
+              }}
+              onKeyDown={handleSearchKeyDown}
+              placeholder="Search models or labs…"
+              // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Input renders an input with an external model listbox.
+              role="combobox"
+              size="sm"
+              value={search}
+            />
+          }
+          selectionHint="select"
+          status={items.length === 0 ? "No matching models." : undefined}
         />
-        <div className="mt-2 flex max-h-96 min-h-0 flex-col gap-0.5 overflow-y-auto overscroll-contain empty:hidden">
-          {autoMatches ? (
-            <Button
-              aria-pressed={model === "auto"}
-              className="w-full justify-start"
-              onClick={() => {
-                selectModel("auto");
-              }}
-              size="compact"
-              variant="option"
-            >
-              <Icon aria-hidden icon={SparklesIcon} />
-              <span className="min-w-0 truncate">Auto</span>
-              {model === "auto" ? <CheckIcon className="ms-auto" /> : null}
-            </Button>
-          ) : null}
-          {options.map((option) => (
-            <Button
-              aria-pressed={selectedModel === option}
-              className="w-full justify-start"
-              key={option.value}
-              onClick={() => {
-                selectModel(option.value);
-              }}
-              size="compact"
-              variant="option"
-            >
-              <ModelLabLogo lab={option.group} />
-              <span className="min-w-0 truncate">{option.label}</span>
-              {selectedModel === option ? (
-                <CheckIcon className="ms-auto" />
-              ) : null}
-            </Button>
-          ))}
-          {options.length === 0 && !autoMatches ? (
-            <output className="py-3 text-caption text-muted-fg">
-              No matching models.
-            </output>
-          ) : null}
-        </div>
       </PopoverContent>
     </Popover>
   );

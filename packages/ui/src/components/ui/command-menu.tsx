@@ -1,8 +1,10 @@
 "use client";
 
+import { Search01Icon } from "@hugeicons/core-free-icons";
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { Icon } from "./icon";
 import { Kbd } from "./kbd";
 import {
   menuEmptyClassName,
@@ -30,6 +32,7 @@ export const CommandMenu = ({
   label = "Insert or format",
   onHighlight,
   onSelect,
+  search,
   selectionHint = "insert",
   status,
 }: {
@@ -40,6 +43,7 @@ export const CommandMenu = ({
   label?: string;
   onHighlight: (index: number) => void;
   onSelect: (index: number) => void;
+  search?: ReactNode;
   selectionHint?: "insert" | "select";
   status?: string;
 }) => {
@@ -66,11 +70,18 @@ export const CommandMenu = ({
         chrome === "popup" ? popupSurfaceClassName : undefined,
         {
           "w-full": chrome === "dialog",
-          "z-50 w-72 max-w-[calc(100vw-2rem)] rounded-xl": chrome === "popup",
+          "z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col rounded-xl":
+            chrome === "popup",
         }
       )}
       data-blocking-overlay={chrome === "popup" ? "" : undefined}
     >
+      {search === undefined ? null : (
+        <div className="flex shrink-0 items-center gap-2 border-b border-fg/10 px-3.5">
+          <Icon aria-hidden icon={Search01Icon} tone="muted" />
+          {search}
+        </div>
+      )}
       <div
         aria-label={label}
         className={cn("overflow-y-auto", {
