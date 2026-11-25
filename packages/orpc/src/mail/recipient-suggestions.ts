@@ -22,7 +22,7 @@ const readRecentGmailAddresses = async (mailboxId: string) => {
     .select({
       headers: sql<
         CapturedMailSnapshot["headers"]
-      >`${gmailCapturedMessage.snapshot}->'headers'`,
+      >`coalesce(jsonb_path_query_array(${gmailCapturedMessage.snapshot}->'headers', '$[*] ? (@.name like_regex "^(from|to|cc)$" flag "i")'), '[]'::jsonb)`,
       sent: sql<boolean>`(${gmailLabels}) ? 'SENT'`,
     })
     .from(gmailCapturedMessage)
