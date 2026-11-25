@@ -4,14 +4,14 @@ import { Toggle as TogglePrimitive } from "@base-ui/react/toggle";
 import { ToggleGroup as ToggleGroupPrimitive } from "@base-ui/react/toggle-group";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import { domMax, LazyMotion } from "motion/react";
+import { domMax, LazyMotion, m } from "motion/react";
 import { createContext, use, useId } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
 import { SelectionIndicator } from "./selection-indicator";
 
-const ToggleSelectionContext = createContext<string | null>(null);
+const ToggleSelectionContext = createContext<string | undefined>(undefined);
 
 const toggleGroupVariants = cva(
   "inline-flex items-center gap-1 rounded-lg border border-border bg-bg shadow-sm squircle",
@@ -59,12 +59,15 @@ export const ToggleGroup = ({
   VariantProps<typeof toggleGroupVariants>) => {
   const id = useId();
   return (
-    <ToggleSelectionContext value={multiple ? null : id}>
-      <ToggleGroupPrimitive
-        className={cn(toggleGroupVariants({ size, variant }), className)}
-        {...props}
-        multiple={multiple}
-      />
+    <ToggleSelectionContext value={multiple ? undefined : id}>
+      <LazyMotion features={domMax}>
+        <ToggleGroupPrimitive
+          className={cn(toggleGroupVariants({ size, variant }), className)}
+          render={multiple ? undefined : <m.div layout layoutRoot />}
+          {...props}
+          multiple={multiple}
+        />
+      </LazyMotion>
     </ToggleSelectionContext>
   );
 };
@@ -76,27 +79,22 @@ export const Toggle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof TogglePrimitive> &
   VariantProps<typeof toggleVariants>) => {
-  const id = useId();
-  const selectionId = use(ToggleSelectionContext) ?? id;
+  const selectionId = use(ToggleSelectionContext);
   return (
-    <LazyMotion features={domMax}>
-      <TogglePrimitive
-        className={cn(toggleVariants({ size, variant }), className)}
-        {...props}
-        render={(toggleProps, state) => (
-          <button {...toggleProps} type="button">
-            {state.pressed && (
-              <SelectionIndicator
-                layoutId={selectionId}
-                variant={
-                  variant === "pill" ? "primary" : (variant ?? "default")
-                }
-              />
-            )}
-            {toggleProps.children}
-          </button>
-        )}
-      />
-    </LazyMotion>
+    <TogglePrimitive
+      className={cn(toggleVariants({ size, variant }), className)}
+      {...props}
+      render={(toggleProps, state) => (
+        <button {...toggleProps} type="button">
+          {state.pressed && (
+            <SelectionIndicator
+              layoutId={selectionId}
+              variant={variant === "pill" ? "primary" : (variant ?? "default")}
+            />
+          )}
+          {toggleProps.children}
+        </button>
+      )}
+    />
   );
 };

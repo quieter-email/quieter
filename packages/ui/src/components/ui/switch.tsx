@@ -54,6 +54,7 @@ export const Switch = ({
   <LazyMotion features={domMax}>
     <SwitchSizeContext value={size}>
       <SwitchPrimitive.Root
+        render={<m.span layout layoutRoot />}
         {...props}
         aria-busy={pending || undefined}
         className={cn(switchVariants({ size }), className)}
