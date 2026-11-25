@@ -28,6 +28,10 @@ import {
   messageUnsubscribeLabels,
   openUnsubscribeUrl,
 } from "@quieter/app/features/message-thread/components/message-unsubscribe";
+import {
+  MessageReminderSubmenu,
+  useMessageReminderMenu,
+} from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
@@ -58,13 +62,19 @@ type MessageActionsSharedProps = {
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
   mailbox: MailboxCategory;
+  reminderMenu?: ReturnType<typeof useMessageReminderMenu>;
   snoozeEntry?: { action: MailSnoozeAction; onOpen: () => void };
   threadLabelIds: readonly string[];
   isUnread?: boolean;
   isPending?: boolean;
 };
 
-type MessageActionsDropdownProps = MessageActionsSharedProps;
+type MessageActionsDropdownProps = Omit<
+  MessageActionsSharedProps,
+  "reminderMenu"
+> & {
+  reminderMessage: Parameters<typeof useMessageReminderMenu>[1];
+};
 
 type MessageActionsContextMenuProps = PropsWithChildren<
   MessageActionsSharedProps & {
@@ -99,7 +109,13 @@ type MenuLabels = {
   targets: readonly MessageLabelsTarget[];
 };
 
-type MenuEntry = MenuAction | MenuLabels | MenuSeparator;
+type MenuReminder = {
+  type: "reminder";
+  id: string;
+  menu: NonNullable<MessageActionsSharedProps["reminderMenu"]>;
+};
+
+type MenuEntry = MenuAction | MenuLabels | MenuReminder | MenuSeparator;
 
 const renderLabelsEntry = (entry: MenuLabels) => (
   <MessageLabelsSubmenu
@@ -122,6 +138,10 @@ const renderDropdownEntry = (entry: MenuEntry) => {
     return renderLabelsEntry(entry);
   }
 
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
+  }
+
   return (
     <DropdownMenuItem
       disabled={entry.disabled}
@@ -142,6 +162,10 @@ const renderContextEntry = (entry: MenuEntry) => {
 
   if (entry.type === "labels") {
     return renderLabelsEntry(entry);
+  }
+
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
   }
 
   return (
@@ -453,6 +477,13 @@ const createMessageActionEntries = ({
   if (labelsEntry !== null) {
     entries.push(labelsEntry);
   }
+  if (props.reminderMenu) {
+    entries.push({
+      id: "reminder",
+      menu: props.reminderMenu,
+      type: "reminder",
+    });
+  }
   if (unsubscribeTarget !== null) {
     entries.push(createUnsubscribeEntry(props, isBusy, unsubscribeTarget));
   }
@@ -489,8 +520,15 @@ const getMessageActionEntries = (
   };
 };
 
-export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
-  const { entries, isBusy } = getMessageActionEntries(props);
+export const MessageActionsDropdown = ({
+  reminderMessage,
+  ...props
+}: MessageActionsDropdownProps) => {
+  const reminderMenu = useMessageReminderMenu(props.mailboxId, reminderMessage);
+  const { entries, isBusy } = getMessageActionEntries({
+    ...props,
+    reminderMenu,
+  });
   if (entries.length === 0) {
     return null;
   }

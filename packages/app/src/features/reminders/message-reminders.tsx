@@ -20,6 +20,9 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuSeparator,
+  DropdownMenuSubmenu,
+  DropdownMenuSubmenuContent,
+  DropdownMenuSubmenuTrigger,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
@@ -30,6 +33,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { use } from "react";
 
 import { useQuickReminder } from "./quick-reminder";
+import type { QuickReminderPreset } from "./quick-reminder";
 import { ReminderSnoozeMenu } from "./reminder-actions";
 import { useReminderMutation, cacheReminder } from "./reminder-mutations";
 import {
@@ -63,15 +67,15 @@ const ExistingMessageReminder = ({
     <DropdownMenu>
       <IconButtonTooltip label={`Reminder set for ${date}`}>
         <DropdownMenuTrigger
-          appearance="row-strong"
+          appearance="row"
           aria-label={`Reminder set for ${date}`}
           disabled={mutation.isPending}
         >
-          <Icon icon={Clock01Icon} />
-          <span className="text-caption">{date}</span>
+          <Icon icon={Clock01Icon} size={14} />
+          <span>{date}</span>
         </DropdownMenuTrigger>
       </IconButtonTooltip>
-      <DropdownMenuContent align="end">
+      <DropdownMenuContent align="start">
         <ReminderSnoozeMenu
           demo={demo}
           onCustom={() => {
@@ -107,54 +111,92 @@ const ExistingMessageReminder = ({
   );
 };
 
-export const MessageReminderQuickAction = ({
+const useThreadReminder = (mailboxId: string, threadId: string | null) => {
+  const demo =
+    isGmailSandboxMailboxId(mailboxId) || isManagedSandboxMailboxId(mailboxId);
+  const reminders = useReminderList(
+    threadId === null ? "" : mailboxId,
+    "active",
+    demo
+  );
+  return {
+    demo,
+    existing: reminders.data?.items.find(
+      (item) =>
+        item.status === "active" &&
+        item.target.kind === "thread" &&
+        item.target.threadId === threadId
+    ),
+    isPending: reminders.isPending,
+  };
+};
+
+export const MessageReminderStatus = ({
   mailboxId,
   message,
 }: MessageReminderProps) => {
-  const sidebar = use(AssistantSidebarContext);
-  const demo =
-    isGmailSandboxMailboxId(mailboxId) || isManagedSandboxMailboxId(mailboxId);
-  const reminders = useReminderList(mailboxId, "active", demo);
-  const quick = useQuickReminder({ mailboxId, message });
-  const existing = reminders.data?.items.find(
-    (item) =>
-      item.status === "active" &&
-      item.target.kind === "thread" &&
-      item.target.threadId === message.threadId
+  const { demo, existing } = useThreadReminder(mailboxId, message.threadId);
+  return existing ? (
+    <ExistingMessageReminder demo={demo} reminder={existing} />
+  ) : null;
+};
+
+// The submenu unmounts with its menu, so its owner keeps the retry attempts.
+export const useMessageReminderMenu = (
+  mailboxId: string,
+  message: MessageReminderProps["message"] | null
+) => {
+  const { existing, isPending } = useThreadReminder(
+    mailboxId,
+    message?.threadId ?? null
   );
-  if (existing) {
-    return <ExistingMessageReminder demo={demo} reminder={existing} />;
+  const quick = useQuickReminder({ mailboxId, message });
+  if (message === null || existing) {
+    return null;
   }
+  return {
+    disabled: quick.isPending || isPending,
+    mailboxId,
+    message,
+    onPreset: (preset: QuickReminderPreset) => {
+      quick.mutate(preset);
+    },
+  };
+};
+
+export const MessageReminderSubmenu = ({
+  disabled,
+  mailboxId,
+  message,
+  onPreset,
+}: NonNullable<ReturnType<typeof useMessageReminderMenu>>) => {
+  const sidebar = use(AssistantSidebarContext);
   return (
-    <DropdownMenu>
-      <IconButtonTooltip label="Remind me">
-        <DropdownMenuTrigger
-          appearance="icon"
-          chrome="toolbar"
-          aria-label="Remind me"
-          disabled={quick.isPending || reminders.isPending}
-        >
-          <Icon icon={Clock01Icon} />
-        </DropdownMenuTrigger>
-      </IconButtonTooltip>
-      <DropdownMenuContent align="end">
+    <DropdownMenuSubmenu>
+      <DropdownMenuSubmenuTrigger disabled={disabled}>
+        <span className="flex min-w-0 items-center gap-2">
+          <Icon aria-hidden icon={Clock01Icon} />
+          <span className="truncate">Remind me</span>
+        </span>
+      </DropdownMenuSubmenuTrigger>
+      <DropdownMenuSubmenuContent>
         <DropdownMenuItem
           onSelect={() => {
-            quick.mutate("tomorrow");
+            onPreset("tomorrow");
           }}
         >
           Tomorrow morning
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
-            quick.mutate("week");
+            onPreset("week");
           }}
         >
           Next week
         </DropdownMenuItem>
         <DropdownMenuItem
           onSelect={() => {
-            quick.mutate("reply");
+            onPreset("reply");
           }}
         >
           If no reply in a week
@@ -177,8 +219,8 @@ export const MessageReminderQuickAction = ({
             Choose date or condition...
           </DropdownMenuItem>
         ) : null}
-      </DropdownMenuContent>
-    </DropdownMenu>
+      </DropdownMenuSubmenuContent>
+    </DropdownMenuSubmenu>
   );
 };
 
