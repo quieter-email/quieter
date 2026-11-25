@@ -44,7 +44,7 @@ export const CommandMenu = ({
   onHighlight: (index: number) => void;
   onSelect: (index: number) => void;
   search?: ReactNode;
-  selectionHint?: "insert" | "select";
+  selectionHint?: "insert" | "select" | false;
   status?: string;
 }) => {
   const sections: {
@@ -61,6 +61,8 @@ export const CommandMenu = ({
   }
 
   const isDialog = chrome === "dialog";
+  const footerStatus = items.length > 0 ? status : undefined;
+  const showFooter = selectionHint !== false || Boolean(footerStatus);
   const selectionLabel = selectionHint === "insert" ? "Insert" : "Select";
 
   return (
@@ -194,15 +196,15 @@ export const CommandMenu = ({
           })
         )}
       </div>
-      {isDialog ? (
+      {showFooter && isDialog ? (
         <div
           className={cn(
             "flex items-center justify-between gap-4 border-t border-fg/10 bg-section/60 px-4 py-2.5 text-micro text-muted-fg",
-            { "max-sm:hidden": !(status && items.length > 0) }
+            { "max-sm:hidden": !footerStatus }
           )}
         >
-          {status && items.length > 0 ? (
-            <output className="min-w-0 truncate">{status}</output>
+          {footerStatus ? (
+            <output className="min-w-0 truncate">{footerStatus}</output>
           ) : (
             <span className="flex items-center gap-4">
               <span className="flex items-center gap-1.5">
@@ -218,19 +220,24 @@ export const CommandMenu = ({
               </span>
             </span>
           )}
-          <span className="flex shrink-0 items-center gap-1.5 max-sm:hidden">
-            <Kbd size="sm">Esc</Kbd>
-            Close
-          </span>
+          {selectionHint === false ? null : (
+            <span className="flex shrink-0 items-center gap-1.5 max-sm:hidden">
+              <Kbd size="sm">Esc</Kbd>
+              Close
+            </span>
+          )}
         </div>
-      ) : (
+      ) : null}
+      {showFooter && !isDialog ? (
         <div className="border-t border-fg/10 px-3 py-2 text-micro text-muted-fg">
-          {status && items.length > 0 ? (
-            <output className="block">{status}</output>
+          {footerStatus ? (
+            <output className="block">{footerStatus}</output>
           ) : null}
-          <p>↑↓ to browse, Enter to {selectionHint}, Esc to dismiss</p>
+          {selectionHint === false ? null : (
+            <p>↑↓ to browse, Enter to {selectionHint}, Esc to dismiss</p>
+          )}
         </div>
-      )}
+      ) : null}
     </div>
   );
 };

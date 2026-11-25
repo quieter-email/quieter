@@ -461,7 +461,7 @@ export const ChatComposer = ({
                 label={command?.kind === "model" ? "Models" : "Chat commands"}
                 onHighlight={highlightCommand}
                 onSelect={selectCommand}
-                selectionHint="select"
+                selectionHint={command?.kind === "model" ? false : "select"}
                 status={commandStatus}
               />
             </div>

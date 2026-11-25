@@ -167,7 +167,7 @@ export const ChatModelPicker = ({
               value={search}
             />
           }
-          selectionHint="select"
+          selectionHint={false}
           status={items.length === 0 ? "No matching models." : undefined}
         />
       </PopoverContent>
