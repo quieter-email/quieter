@@ -39,6 +39,10 @@ export const assistantCapabilitySchema = z.enum([
 
 export const workspaceViewSchema = z.enum([
   "inbox",
+  "all-inboxes",
+  "done",
+  "later",
+  "scheduled",
   "important",
   "unread",
   "spam",
@@ -54,7 +58,6 @@ export const workspaceViewSchema = z.enum([
 export const navigableWorkspaceViewSchema = workspaceViewSchema.exclude([
   "compose",
   "calendar",
-  "rules",
 ]);
 
 const optionalText = z.string().trim().max(10_000).optional();
@@ -185,6 +188,51 @@ export const navigateCalendarInputSchema = z
   );
 export const navigateCalendarOutputSchema = workspaceResultSchema;
 
+export const workspacePanelSchema = z.enum([
+  "mail-search",
+  "command-palette",
+  "keyboard-shortcuts",
+  "reminders",
+  "new-calendar-event",
+  "snooze",
+]);
+export type WorkspacePanel = z.infer<typeof workspacePanelSchema>;
+
+const visualSettingsTabSchema = z.enum([
+  "overview",
+  "appearance",
+  "ai",
+  "reading",
+  "shortcuts",
+  "privacy",
+  "account",
+  "billing",
+  "organization",
+  "mailboxes",
+  "connectors",
+]);
+
+export const openPanelInputSchema = z
+  .object({
+    panel: z.enum([...workspacePanelSchema.options, "settings"]),
+    tab: visualSettingsTabSchema.optional(),
+    threadId: optionalIdentifier,
+  })
+  .strict()
+  .refine(
+    ({ panel, tab, threadId }) =>
+      (panel === "snooze" ? threadId !== undefined : threadId === undefined) &&
+      (panel === "settings" || tab === undefined),
+    "Snooze needs a threadId. Only Settings takes a tab."
+  );
+
+export const openPanelOutputSchema = z
+  .object({
+    generation: z.number().int().positive(),
+    status: z.enum(["opened", "opening"]),
+  })
+  .strict();
+
 const composeFieldsSchema = foregroundComposeDraftSchema.pick({
   bcc: true,
   bodyText: true,
@@ -205,6 +253,7 @@ export const openComposeOutputSchema = z
 export const openInlineComposeInputSchema = z
   .object({
     action: z.enum(["reply", "reply-all", "forward"]),
+    bodyText: optionalText,
     messageId: z.string().trim().min(1).max(256),
     threadId: z.string().trim().min(1).max(256),
   })
@@ -582,6 +631,12 @@ export const foregroundToolRegistry = {
     location: "client",
     risk: "workspace" as const,
   },
+  open_panel: {
+    capability: "navigate",
+    label: "Open app panel",
+    location: "client",
+    risk: "workspace" as const,
+  },
   save_compose_draft: {
     capability: "save_draft",
     label: "Save draft",
@@ -602,6 +657,7 @@ export const foregroundClientToolNames = [
   "navigate_calendar",
   "open_compose",
   "open_inline_compose",
+  "open_panel",
   "edit_compose",
 ] as const;
 
@@ -628,7 +684,7 @@ export const createForegroundClientTools = (): ToolSet => ({
   }),
   navigate: tool({
     description:
-      "Open Mail and optionally navigate to a mailbox route destination. Pass an empty object to restore the retained Mail selection. This preserves Calendar's independent state and does not change mail.",
+      "Open Mail and show a view, a conversation, or search results for query. Pass an empty object to restore the retained Mail selection. This preserves Calendar's independent state and does not change mail.",
     inputSchema: navigateInputSchema,
     outputSchema: navigateOutputSchema,
   }),
@@ -646,9 +702,15 @@ export const createForegroundClientTools = (): ToolSet => ({
   }),
   open_inline_compose: tool({
     description:
-      "Open an inline reply, reply-all or forward in a known conversation. Read the thread first and use its threadId and the source messageId. The composer derives recipients, subject, quoted content, attachments and reply metadata from that message. Read the workspace and use edit_compose to write the authored message. An existing visible draft must be closed by the user first. This never saves or sends mail.",
+      "Open an inline reply, reply-all or forward in a known conversation. Read the thread first and use its threadId and the source messageId. The composer derives recipients, subject, quoted content, attachments and reply metadata from that message. Pass bodyText to fill in the authored message as the composer opens. If a saved draft already exists for the message, omit bodyText to open it for review. Read and edit it only when the user asks to change that draft. This never saves or sends mail.",
     inputSchema: openInlineComposeInputSchema,
     outputSchema: openInlineComposeOutputSchema,
+  }),
+  open_panel: tool({
+    description:
+      "Show an existing app control so the user can interact with it. Mail search opens the search field, reminders opens the reminders sidebar, new-calendar-event opens the unsaved event editor, and snooze opens the scheduling dialog for the visible conversation. For snooze, pass the threadId of the intended conversation from get_workspace or mail tools. Command palette and keyboard shortcuts show app controls. Settings navigates to the selected tab after this chat response, so use it as the final tool call. Opening a panel does not submit a form or change a setting.",
+    inputSchema: openPanelInputSchema,
+    outputSchema: openPanelOutputSchema,
   }),
 });
 

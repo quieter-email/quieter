@@ -410,22 +410,25 @@ const CalendarWorkspaceContent = ({
   useLayoutEffect(
     () =>
       agentWorkspace?.registerCalendar({
-        navigate: async (input) => {
+        navigate: async (input, signal) => {
           if (input.connectionId && input.calendarId) {
             revealCalendar({
               calendarId: input.calendarId,
               connectionId: input.connectionId,
             });
           }
-          await setRoute({
-            calendarConnectionId: input.connectionId,
-            calendarDate: input.date,
-            calendarEventId: input.eventId,
-            calendarId: input.calendarId,
-            calendarTimeZone: input.timeZone,
-            calendarView: input.view,
-            workspace: "calendar",
-          });
+          await setRoute(
+            {
+              calendarConnectionId: input.connectionId,
+              calendarDate: input.date,
+              calendarEventId: input.eventId,
+              calendarId: input.calendarId,
+              calendarTimeZone: input.timeZone,
+              calendarView: input.view,
+              workspace: "calendar",
+            },
+            { signal }
+          );
         },
         read: () => bridgeState.current,
       }),
@@ -512,7 +515,7 @@ const CalendarWorkspaceContent = ({
         { message: "Choose a calendar you can add events to.", status: 403 },
         { boundary: "calendar" }
       );
-      return;
+      return false;
     }
     try {
       const start = allDay
@@ -559,6 +562,7 @@ const CalendarWorkspaceContent = ({
           time,
         },
       }));
+      return true;
     } catch (error) {
       toastError(
         {
@@ -570,8 +574,26 @@ const CalendarWorkspaceContent = ({
         },
         { boundary: "calendar" }
       );
+      return false;
     }
   };
+  const openEventEditor = useEffectEvent(() => {
+    if (store.get().editor) {
+      throw new Error("An event is already open in the editor.");
+    }
+    if (!createEvent({ allDay: false, date, minute: 540 })) {
+      throw new Error("Choose a calendar you can add events to.");
+    }
+  });
+  useLayoutEffect(
+    () =>
+      data.isLoading
+        ? undefined
+        : agentWorkspace?.registerPanel("new-calendar-event", () => {
+            openEventEditor();
+          }),
+    [agentWorkspace, data.isLoading]
+  );
   const connect = async (target: CalendarConnectionTarget) => {
     if (store.get().pendingConnection) {
       return;
@@ -1627,7 +1649,9 @@ const CalendarWorkspaceContent = ({
                   );
                 }
               }}
-              onSlotCreate={createEvent}
+              onSlotCreate={(slot) => {
+                createEvent(slot);
+              }}
               onEmptyClick={closeEvent}
               selectedDate={date}
               timeZoneLabel={timeZoneLabel}

@@ -19,6 +19,8 @@ import {
   editComposeOutputSchema,
   getWorkspaceOutputSchema,
   openComposeInputSchema,
+  openPanelInputSchema,
+  openPanelOutputSchema,
   openComposeOutputSchema,
   openInlineComposeInputSchema,
   openInlineComposeOutputSchema,
@@ -272,6 +274,13 @@ const operations: Record<
     failed: "Couldn't open a conversation draft",
     pending: "Preparing your conversation draft…",
     subject: "Conversation draft",
+  },
+  open_panel: {
+    category: "workspace",
+    complete: "Opened a panel",
+    failed: "Couldn't open the panel",
+    pending: "Opening a panel…",
+    subject: "Panel",
   },
   read_gmail_attachment: {
     category: "mail",
@@ -765,6 +774,28 @@ const describeActivity = (
         activity.context = event
           ? [event.title, formatActivityTime(event.time)]
           : [];
+      }
+      break;
+    }
+    case "open_panel": {
+      const command = openPanelInputSchema.safeParse(part.input);
+      const result = openPanelOutputSchema.safeParse(part.output);
+      if (result.success && command.success) {
+        const label = {
+          "command-palette": "Command palette",
+          "keyboard-shortcuts": "Keyboard shortcuts",
+          "mail-search": "Mail search",
+          "new-calendar-event": "New event",
+          reminders: "Reminders",
+          settings: "Settings",
+          snooze: "Snooze",
+        }[command.data.panel];
+        activity.phase = "complete";
+        activity.title =
+          result.data.status === "opening"
+            ? "Opening Settings"
+            : operation.complete;
+        activity.context = [label];
       }
       break;
     }

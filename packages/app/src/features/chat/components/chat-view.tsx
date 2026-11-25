@@ -13,6 +13,8 @@ import {
   resolveConnectorWriteReview,
   foregroundSnapshotSchema,
   isForegroundClientToolName,
+  openPanelInputSchema,
+  openPanelOutputSchema,
   isCalendarWriteToolName,
   calendarWriteInputSchemas,
   resolveCalendarWriteReview,
@@ -47,6 +49,7 @@ import { reminderSchema } from "@quieter/mail/reminders";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
 import type { TokenFieldHandle } from "@quieter/ui/token-field";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
 import type { UIMessage } from "ai";
@@ -96,6 +99,7 @@ const ChatSession = ({
     throw new Error("The assistant needs a mail workspace.");
   }
   const queryClient = useQueryClient();
+  const router = useRouter();
   const billing = useQuery(userBillingQueryOptions());
   const [historyInitialized, setHistoryInitialized] = useState(
     () => props.chatId === null
@@ -451,6 +455,60 @@ const ChatSession = ({
         isError ||
         interrupted ||
         (pending !== true && !needsForegroundContinuation(messages));
+      const lastTool = message.parts.findLast(isToolUIPart);
+      const visualTool = message.parts.findLast(
+        (part) =>
+          isToolUIPart(part) &&
+          part.state === "output-available" &&
+          [
+            "tool-navigate",
+            "tool-navigate_calendar",
+            "tool-open_compose",
+            "tool-open_inline_compose",
+            "tool-edit_compose",
+            "tool-open_panel",
+          ].includes(part.type)
+      );
+      const panel =
+        visualTool?.type === "tool-open_panel" && "input" in visualTool
+          ? openPanelInputSchema.safeParse(visualTool.input).data
+          : undefined;
+      const finished =
+        terminal &&
+        currentRun &&
+        !isError &&
+        !isAbort &&
+        !interrupted &&
+        !isDisconnect;
+      const settingsRequested =
+        finished &&
+        panel?.panel === "settings" &&
+        lastTool === visualTool &&
+        lastTool?.state === "output-available" &&
+        openPanelOutputSchema.safeParse(lastTool.output).data?.generation ===
+          foreground.generation;
+      const queueHasItems =
+        (queues.get().get(activeQueueKey)?.items.length ?? 0) > 0;
+      const opensSettings =
+        settingsRequested && !queueHasItems && input.trim() === "";
+      if (settingsRequested && !opensSettings) {
+        toastError(
+          {
+            message: "Finish your chat messages before opening Settings.",
+            status: 409,
+          },
+          { boundary: "assistant-settings" }
+        );
+      }
+      if (
+        finished &&
+        visualTool !== undefined &&
+        (visualTool.type !== "tool-open_panel" ||
+          panel?.panel === "new-calendar-event" ||
+          panel?.panel === "snooze")
+      ) {
+        latestRef.current.props.onRevealWorkspace?.();
+      }
       if (terminal) {
         updateChatQueue(
           queues,
@@ -480,7 +538,28 @@ const ChatSession = ({
       });
       void queryClient.invalidateQueries({ queryKey: USER_BILLING_QUERY_KEY });
       if (terminal) {
-        if (edit !== null) {
+        if (opensSettings) {
+          // Settings has its own route. Let the chat finish persisting its
+          // response, then retain the conversation in the return location.
+          const from = new URL(
+            router.state.location.href,
+            window.location.origin
+          );
+          from.searchParams.set("chatId", edit?.chatId ?? threadId);
+          void (async () => {
+            try {
+              await router.navigate({
+                search: {
+                  from: `${from.pathname}${from.search}`,
+                  tab: panel.tab ?? "overview",
+                },
+                to: "/settings",
+              });
+            } catch (error) {
+              toastError(error, { boundary: "assistant-settings" });
+            }
+          })();
+        } else if (edit !== null) {
           void openEditedChat(edit, chat.setMessages);
         } else if (!isError && !interrupted && props.chatId === null) {
           void synchronizeHistory();

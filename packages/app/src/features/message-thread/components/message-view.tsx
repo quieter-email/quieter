@@ -23,7 +23,6 @@ import {
   findLinkedDraftForMessage,
   hasDistinctReplyAllRecipients,
 } from "@quieter/app/features/compose/domain/compose-actions";
-import { textToComposeBodyHtml } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { MessageLabels } from "@quieter/app/features/message-labels/components/message-labels";
@@ -225,11 +224,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const suggestReply = useMutation(orpc.ai.suggestReply.mutationOptions());
   const requestSuggestedReply = () => {
     const composeRevision = composeRevisionRef.current;
-    const draft = buildComposeDraftFromMessageAction({
-      action: "reply",
-      currentUserEmail,
-      message: hotkeyMessage,
-    });
     suggestReply.mutate(
       {
         mailboxId,
@@ -269,10 +263,13 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             return;
           }
           openInlineCompose({
-            ...draft,
+            ...buildComposeDraftFromMessageAction({
+              action: "reply",
+              authoredBodyText: suggestion.bodyText,
+              currentUserEmail,
+              message: hotkeyMessage,
+            }),
             assistantUnsaved: true,
-            bodyHtml: `${textToComposeBodyHtml(suggestion.bodyText)}${draft.bodyHtml}`,
-            bodyText: `${suggestion.bodyText}\n\n${draft.bodyText}`,
           });
         },
       }
@@ -375,6 +372,29 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     placementIcon: returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon,
     placementLabel,
   });
+  const openSnooze = () => {
+    if (snoozeAction !== null) {
+      setSnoozeDialog({ action: snoozeAction, open: true, snooze });
+    }
+  };
+  const openAssistantSnooze = useEffectEvent(() => {
+    if (snoozeAction === null || isActionPending || isBodyRefreshPending) {
+      throw new Error("Snooze is unavailable for this conversation.");
+    }
+    openSnooze();
+  });
+  useLayoutEffect(() => {
+    if (
+      !agentWorkspace ||
+      agentWorkspace.mailboxId !== mailboxId ||
+      isBodyRefreshPending
+    ) {
+      return undefined;
+    }
+    return agentWorkspace.registerPanel(`snooze:${message.threadId}`, () => {
+      openAssistantSnooze();
+    });
+  }, [agentWorkspace, isBodyRefreshPending, mailboxId, message.threadId]);
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {
       if (inlineDraft) {
@@ -393,16 +413,25 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           "This message is not available for a reply or forward."
         );
       }
+      const existingDraftMessage =
+        input.action === "forward"
+          ? null
+          : findLinkedDraftForMessage(threadMessages, source);
+      if (input.bodyText !== undefined && existingDraftMessage) {
+        throw new Error(
+          "This message already has a saved draft. Open the draft without supplying a reply body to review it."
+        );
+      }
       const draft = buildComposeDraftFromMessageAction({
         action: input.action,
+        authoredBodyText: input.bodyText,
         currentUserEmail,
-        existingDraftMessage:
-          input.action === "forward"
-            ? null
-            : findLinkedDraftForMessage(threadMessages, source),
+        existingDraftMessage,
         message: source,
       });
-      openInlineCompose({ ...draft, assistantUnsaved: true });
+      openInlineCompose(
+        existingDraftMessage ? draft : { ...draft, assistantUnsaved: true }
+      );
       return draft;
     }
   );
@@ -550,13 +579,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                       ? undefined
                       : {
                           action: snoozeAction,
-                          onOpen: () => {
-                            setSnoozeDialog({
-                              action: snoozeAction,
-                              open: true,
-                              snooze,
-                            });
-                          },
+                          onOpen: openSnooze,
                         }
                   }
                   threadLabelIds={threadLabelIds}

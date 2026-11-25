@@ -3,7 +3,14 @@
 import { KeyboardIcon } from "@hugeicons/core-free-icons";
 import { useCreateStore } from "@tanstack/react-store";
 import type { Store } from "@tanstack/react-store";
-import { createContext, use, useId, useLayoutEffect, useMemo } from "react";
+import {
+  createContext,
+  use,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import type { PropsWithChildren } from "react";
 
 import type { AppCommand } from "../domain/app-commands";
@@ -14,6 +21,8 @@ export type AppCommandRegistry = {
   findCommand: (sourceId: string, commandId: string) => AppCommand | undefined;
   getContextLabel: () => string | undefined;
   getEntries: () => readonly (readonly [string, readonly AppCommand[]])[];
+  requestOpen: () => void;
+  registerOpen: (open: () => void) => () => void;
   setOpen: (open: boolean) => void;
   setSource: (
     sourceId: string,
@@ -24,6 +33,8 @@ export type AppCommandRegistry = {
 };
 
 const CommandPaletteContext = createContext<AppCommandRegistry | null>(null);
+
+export const useCommandPalette = () => use(CommandPaletteContext);
 
 /**
  * `contextLabel` names the conversation or selection the commands act on. The
@@ -87,6 +98,7 @@ export const CommandPaletteProvider = ({
     >(),
     open: false,
   });
+  const openPalette = useRef<(() => void) | undefined>(undefined);
   const registry = useMemo<AppCommandRegistry>(() => {
     const notify = () => {
       versionStore.setState((current) => current + 1);
@@ -111,6 +123,20 @@ export const CommandPaletteProvider = ({
         [...stateStore.get().entries].map(
           ([sourceId, entry]) => [sourceId, entry.commands] as const
         ),
+      registerOpen: (open) => {
+        openPalette.current = open;
+        return () => {
+          if (openPalette.current === open) {
+            openPalette.current = undefined;
+          }
+        };
+      },
+      requestOpen: () => {
+        if (!openPalette.current) {
+          throw new Error("The command palette is unavailable.");
+        }
+        openPalette.current();
+      },
       setOpen: (nextOpen) => {
         stateStore.get().open = nextOpen;
         if (nextOpen) {

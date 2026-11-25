@@ -42,10 +42,12 @@ const createWorkspace = ({
     navigateCalendar,
     openCompose,
     openInlineCompose,
+    openPanel: vi.fn<WorkspaceBridge["openPanel"]>(),
     read,
     registerCalendar: () => () => {},
     registerCompose: () => () => {},
     registerInlineCompose: () => () => {},
+    registerPanel: () => () => {},
     waitForCalendar: () => {
       throw new Error("The calendar was not registered.");
     },
