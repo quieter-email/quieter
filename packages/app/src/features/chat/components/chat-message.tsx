@@ -186,7 +186,7 @@ const UserMessage = ({
                     onKeyDown={handleEditKeyDown}
                     type="submit"
                   >
-                    Send in new chat
+                    Submit
                   </Button>
                 </ActionFooter>
               </div>
