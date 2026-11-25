@@ -14,10 +14,11 @@ import {
 } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { ChatView } from "@quieter/app/features/chat/components/chat-view";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
-import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
+import { ComposeWorkspaceHeader } from "@quieter/app/features/compose/components/compose-workspace-header";
 import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { syncUnlinkedBrowserDrafts } from "@quieter/app/features/compose/domain/draft-recovery";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { FirstRunManagedMailSetup } from "@quieter/app/features/mailbox/components/mailbox-workspace/first-run-managed-mail-setup";
@@ -40,12 +41,21 @@ import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/comp
 import type { ReminderOpenRequest } from "@quieter/app/features/reminders/reminders-panel";
 import { userBillingQueryOptions } from "@quieter/app/features/settings/domain/billing";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
+import { authClient } from "@quieter/app/lib/auth";
 import { chatQueryOptions } from "@quieter/app/lib/chat-query";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { WorkspaceDock } from "@quieter/ui/workspace-dock";
@@ -55,6 +65,7 @@ import {
   workspaceGutterClassName,
   workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
+import { captureException } from "@sentry/react";
 import { useQueryClient } from "@tanstack/react-query";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
@@ -166,11 +177,9 @@ const ComposeWorkspaceLoading = ({
   onClose: () => void;
 }) => (
   <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
-    <MailSubviewHeader
-      className="px-4 pt-4 sm:px-6 sm:pt-6"
+    <ComposeWorkspaceHeader
       closeAction={{ label: "Close composer", onClick: onClose }}
       onOpenSidebar={onOpenSidebar}
-      title="New message"
     />
     <output
       aria-label="Loading composer"
@@ -485,6 +494,9 @@ const MailboxWorkspaceContentInner = ({
   const isScheduledMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox === "scheduled",
   });
+  const isDraftsMailbox = inboxRouteApi.useSearch({
+    select: (search) => search.mailbox === "drafts",
+  });
   const allInboxesActive = selectedView === "all-inboxes";
   const mailViewActive =
     !isComposeMailbox &&
@@ -519,6 +531,63 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
   const queryClient = useQueryClient();
+  const sessionId = authClient.useSession().data?.session.id;
+  const [interruptedCompose, setInterruptedCompose] = useState<{
+    drafts: ComposeDraftState[];
+    mailboxId: string;
+    sessionId: string;
+  }>();
+  const canSyncBrowserDrafts =
+    isDraftsMailbox &&
+    !isDemoMode &&
+    !isManagedDemoMode &&
+    senderMailboxes.some(({ id }) => id === selectedMailboxId);
+  useEffect((): (() => void) | undefined => {
+    if (!canSyncBrowserDrafts || !sessionId || !selectedMailboxId) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { pending, synced } = await syncUnlinkedBrowserDrafts(
+          { mailboxId: selectedMailboxId, userId },
+          draftRecoveryJournal.session(userId, sessionId),
+          controller.signal
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        setInterruptedCompose({
+          drafts: pending,
+          mailboxId: selectedMailboxId,
+          sessionId,
+        });
+        if (synced) {
+          await refreshCachedMailboxQueries(
+            queryClient,
+            selectedMailboxId,
+            "drafts"
+          );
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          captureException(new Error("Could not sync an older browser draft"), {
+            tags: { boundary: "compose-draft-sync" },
+          });
+        }
+      }
+    })();
+    return () => {
+      controller.abort();
+    };
+  }, [canSyncBrowserDrafts, queryClient, selectedMailboxId, sessionId, userId]);
+  const interruptedDrafts =
+    canSyncBrowserDrafts &&
+    interruptedCompose &&
+    interruptedCompose.mailboxId === selectedMailboxId &&
+    interruptedCompose.sessionId === sessionId
+      ? interruptedCompose.drafts
+      : [];
   const assistantAvailable =
     Boolean(selectedMailboxId) && selectedMailboxProvider !== "api";
   useEffect(() => {
@@ -1004,6 +1073,32 @@ const MailboxWorkspaceContentInner = ({
         })}
       >
         <MailboxMessagesPanel
+          headerAddon={
+            interruptedDrafts.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button size="sm" variant="toolbar" />}
+                >
+                  Resume interrupted compose
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {interruptedDrafts.map((draft) => (
+                    <DropdownMenuItem
+                      key={draft.recoveryRevision ?? draft.recoveryEditorId}
+                      onSelect={() => {
+                        onComposeDraftRequested(draft);
+                      }}
+                    >
+                      {draft.sendUncertain === true
+                        ? "Check delivery"
+                        : "Resume"}
+                      {` ${draft.subject.trim() || draft.recipients.to.trim() || "message"}`}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : undefined
+          }
           mailLayout={mailLayout}
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
@@ -1245,17 +1340,6 @@ const MailboxWorkspaceContentInner = ({
               </Activity>
               <Activity mode={calendarActive ? "hidden" : "visible"}>
                 <div className="relative min-h-0 flex-1">{mailboxContent}</div>
-                {!allInboxesActive &&
-                !isComposeMailbox &&
-                !isDemoMode &&
-                !isManagedDemoMode &&
-                selectedMailboxId !== null ? (
-                  <DraftRecoveryNotice
-                    userId={userId}
-                    mailboxId={selectedMailboxId}
-                    onResume={onComposeDraftRequested}
-                  />
-                ) : null}
               </Activity>
             </WorkspaceDock>
           </div>

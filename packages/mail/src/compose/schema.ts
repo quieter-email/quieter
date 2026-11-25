@@ -176,6 +176,7 @@ export type ComposeDraftSeededBy = z.infer<typeof composeDraftSeededBySchema>;
 export type ComposeDraftAnchor = z.infer<typeof composeDraftAnchorSchema>;
 
 export const QUIETER_DRAFT_HEADER_NAMES = {
+  recipients: "X-Quieter-Draft-Recipients",
   seededBy: "X-Quieter-Seeded-By",
   sourceMessageHeaderId: "X-Quieter-Source-Message-Header-Id",
   sourceMessageId: "X-Quieter-Source-Message-Id",
@@ -304,6 +305,31 @@ export const composeDraftInputSchema = z.object({
   senderName: composeSenderNameSchema.optional(),
   subject: z.string(),
   updatedAt: z.number(),
+});
+
+export const composeDraftRecipientFieldsSchema = z.object({
+  bcc: z.string(),
+  cc: z.string(),
+  to: z.string(),
+});
+
+export type ComposeDraftRecipients = z.infer<
+  typeof composeDraftRecipientFieldsSchema
+>;
+
+export const hasUnfinishedDraftRecipients = (
+  recipients: ComposeDraftRecipients
+): boolean =>
+  Object.values(recipients).some(
+    (value) =>
+      value.trim() !== "" &&
+      (/[;,]\s*$/u.test(value) ||
+        splitMailAddressList(value).length === 0 ||
+        findInvalidMailAddresses(value).length > 0)
+  );
+
+export const composeSaveDraftInputSchema = composeDraftInputSchema.extend({
+  recipients: composeDraftRecipientFieldsSchema,
 });
 
 export const composeMessageInputSchema = composeDraftInputSchema.superRefine(

@@ -1216,6 +1216,24 @@ describe("compose controller", () => {
     });
 
     it("retains held recovery admitted after sender cleanup completes but before commit", async () => {
+      const session = draftRecoveryJournal.session("user", boundary.sessionId);
+      let admission: Promise<void> | undefined;
+      let admitOnCleanup = false;
+      vi.spyOn(draftRecoveryJournal, "session").mockReturnValue({
+        ...session,
+        list: async (scope) => {
+          const records = await session.list(scope);
+          if (admitOnCleanup) {
+            admitOnCleanup = false;
+            queueMicrotask(() => {
+              queueMicrotask(() => {
+                admission = readCompose().applyHeldReceipt(receiptFor());
+              });
+            });
+          }
+          return records;
+        },
+      });
       await mount({
         ...initial(),
         assistantUnsaved: false,
@@ -1229,25 +1247,7 @@ describe("compose controller", () => {
         throw new Error("The sender switch was not prepared.");
       }
       const receipt = receiptFor();
-      const invalidate = client.invalidateQueries.bind(client);
-      let admission: Promise<void> | undefined;
-      let admitOnCleanup = true;
-      vi.spyOn(client, "invalidateQueries").mockImplementation(
-        async (filters, options) => {
-          await invalidate(filters, options);
-          if (
-            admitOnCleanup &&
-            filters?.queryKey?.[0] === "local-draft-recovery"
-          ) {
-            admitOnCleanup = false;
-            queueMicrotask(() => {
-              queueMicrotask(() => {
-                admission = readCompose().applyHeldReceipt(receipt);
-              });
-            });
-          }
-        }
-      );
+      admitOnCleanup = true;
       const commit = vi.fn<() => void>();
       await act(async () => {
         await expect(
