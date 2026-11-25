@@ -21,6 +21,7 @@ import type { DragDropEventHandlers } from "@dnd-kit/react";
 import {
   ArrowDown01Icon,
   ArrowRight01Icon,
+  InboxIcon,
   Loading03Icon,
   Mail01Icon,
   Settings01Icon,
@@ -41,6 +42,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useRef, useState } from "react";
@@ -77,8 +79,7 @@ export type MailboxSwitcherOrder = {
 };
 
 type MailboxSummaryProps = {
-  action?: ReactNode;
-  className?: string;
+  label: string;
   mailbox: MailboxSwitcherMailbox;
 };
 
@@ -168,7 +169,7 @@ const switcherCollision: CollisionDetector = ({ droppable, dragOperation }) => {
   const rect = element.getBoundingClientRect();
   const { x, y } = dragOperation.position.current;
   const panel = element
-    .closest("[data-mailbox-switcher-list]")
+    .closest("[data-mailbox-switcher-panel]")
     ?.getBoundingClientRect();
   if (
     !panel ||
@@ -334,12 +335,14 @@ const MailboxMenuItem = ({
   action,
   children,
   isActive,
+  label,
   onSelect,
   handleRef,
 }: {
   action?: ReactNode;
   children: ReactNode;
   isActive: boolean;
+  label: string;
   onSelect: () => void;
   handleRef: Ref<HTMLButtonElement>;
 }) => (
@@ -365,6 +368,8 @@ const MailboxMenuItem = ({
       // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
       className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent data-highlighted:bg-transparent"
       data-mailbox-switcher-navigation-item
+      // Typeahead would otherwise match the decorative initial first.
+      label={label}
       onSelect={(event) => {
         if (!event.defaultPrevented) {
           onSelect();
@@ -413,25 +418,16 @@ const MailboxInboxStatus = ({
   );
 };
 
-const MailboxSummary = ({
-  action,
-  className,
-  mailbox,
-}: MailboxSummaryProps) => {
-  const trimmedDisplayName = mailbox.displayName?.trim();
-  const displayName =
-    trimmedDisplayName === undefined || trimmedDisplayName === ""
-      ? null
-      : trimmedDisplayName;
+const MailboxSummary = ({ label, mailbox }: MailboxSummaryProps) => {
+  const [initial = "?"] = label;
   return (
-    <div
-      className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}
-    >
+    <div className="flex w-full min-w-0 items-center gap-2.5">
+      <div aria-hidden className="shrink-0">
+        <SenderAvatar fallbackLabel={initial.toUpperCase()} size="xs" />
+      </div>
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body/5 text-fg">
-          {displayName ?? mailbox.emailAddress}
-        </p>
-        {displayName !== null && (
+        <p className="truncate text-body/5 text-fg">{label}</p>
+        {label !== mailbox.emailAddress && (
           <p className="truncate text-caption/4 text-muted-fg">
             {mailbox.emailAddress}
           </p>
@@ -442,7 +438,6 @@ const MailboxSummary = ({
           {mailbox.accessMode === "private" ? "Private" : "Shared"}
         </span>
       )}
-      {action}
       <MailboxInboxStatus mailbox={mailbox} />
     </div>
   );
@@ -488,7 +483,7 @@ const MailboxTeam = ({
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
               // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
-              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left hover:bg-transparent active:scale-100"
+              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2.5 px-2.5 py-1 text-left hover:bg-transparent active:scale-100"
               data-mailbox-switcher-navigation-item
               onSelect={(event) => {
                 if (!event.defaultPrevented) {
@@ -498,7 +493,7 @@ const MailboxTeam = ({
             >
               <m.span
                 animate={{ rotate: closed ? 0 : 90 }}
-                className="flex size-3 shrink-0 items-center justify-center text-muted-fg"
+                className="flex h-3 w-7 shrink-0 items-center justify-center text-muted-fg"
                 initial={false}
                 transition={{
                   duration: reducedMotion === true ? 0 : 0.2,
@@ -572,7 +567,7 @@ const MailboxTeam = ({
           opacity: { duration: reducedMotion === true ? 0 : 0.16 },
         }}
       >
-        <div className="space-y-1 pt-1">{children}</div>
+        <div className="space-y-1 pt-1 pb-2">{children}</div>
       </m.div>
     </section>
   );
@@ -907,7 +902,7 @@ export const MailboxSwitcherDropdown = ({
         onKeyDownCapture={handleEscapeCapture}
         align="start"
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
-        className="w-[min(20rem,calc(100vw-2rem))] p-1"
+        className="flex max-h-[min(28rem,var(--available-height))] w-[min(22rem,calc(100vw-2rem))] flex-col"
         side={side}
       >
         <DragDropProvider<SwitcherDragData>
@@ -929,34 +924,36 @@ export const MailboxSwitcherDropdown = ({
           }}
         >
           <div
-            className="flex max-h-96 flex-col gap-1 overflow-y-auto p-1"
-            data-mailbox-switcher-list
+            className="relative flex min-h-0 flex-col"
+            data-mailbox-switcher-panel
             onKeyDown={handleArrowNavigation}
-            ref={listRef}
-            // oxlint-disable-next-line shadcn/no-inline-styles -- Freeze measured panel height while dragging to keep the popover anchored.
-            style={{ minHeight: dragPanelHeight }}
           >
             {groups.length > 0 ? (
               <>
                 {onSelectAllInboxes &&
                 mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
                   <>
-                    <DropdownMenuItem
-                      nativeButton
-                      render={<Button variant="ghost" />}
-                      aria-current={allInboxesActive ? "page" : undefined}
-                      className="w-full justify-start"
-                      data-mailbox-switcher-navigation-item
-                      onSelect={onSelectAllInboxes}
-                    >
-                      <Icon aria-hidden icon={Mail01Icon} />
-                      All inboxes
-                    </DropdownMenuItem>
-                    <DropdownMenuSeparator className="shrink-0" />
+                    <div className="shrink-0 p-1">
+                      <DropdownMenuItem
+                        nativeButton
+                        render={<Button focusRing="inset" variant="ghost" />}
+                        aria-current={allInboxesActive ? "page" : undefined}
+                        // oxlint-disable-next-line shadcn/no-restyle -- Shares the mailbox rows' leading and label columns.
+                        className="h-auto min-h-10 w-full justify-start gap-2.5 px-2.5 py-1 text-left"
+                        data-mailbox-switcher-navigation-item
+                        onSelect={onSelectAllInboxes}
+                      >
+                        <span className="flex w-7 shrink-0 justify-center">
+                          <Icon aria-hidden icon={InboxIcon} />
+                        </span>
+                        All inboxes
+                      </DropdownMenuItem>
+                    </div>
+                    <DropdownMenuSeparator className="-mx-1 my-0 shrink-0" />
                   </>
                 ) : null}
                 {(mailboxes.length >= 8 || isFiltering) && (
-                  <div className="sticky top-0 z-10 bg-popover">
+                  <div className="shrink-0 px-1 pt-2 pb-1">
                     <Input
                       aria-label="Search mailboxes"
                       onChange={(event) => {
@@ -968,145 +965,165 @@ export const MailboxSwitcherDropdown = ({
                     />
                   </div>
                 )}
-                {(isFiltering ? filteredGroups : groups).map(
-                  (group, groupIndex) => {
-                    const isCollapsed =
-                      !isFiltering && collapsedGroupIds.has(group.id);
-                    const canReorderMailboxes =
-                      !isFiltering && group.mailboxes.length > 1;
+                <div
+                  className="flex min-h-12 scroll-py-1 flex-col gap-1 overflow-y-auto overscroll-contain p-1"
+                  ref={listRef}
+                  // oxlint-disable-next-line shadcn/no-inline-styles -- Freeze measured list height while dragging to keep the popover anchored.
+                  style={{ minHeight: dragPanelHeight }}
+                >
+                  {(isFiltering ? filteredGroups : groups).map(
+                    (group, groupIndex) => {
+                      const isCollapsed =
+                        !isFiltering && collapsedGroupIds.has(group.id);
+                      const canReorderMailboxes =
+                        !isFiltering && group.mailboxes.length > 1;
 
-                    return (
-                      <MailboxTeam
-                        collapsed={isCollapsed}
-                        disabled={!canReorderGroups}
-                        embedded={embedded}
-                        group={group}
-                        index={groupIndex}
-                        key={group.id}
-                        onRestored={() => {
-                          setDragPanelHeight(undefined);
-                        }}
-                        onToggle={toggleGroup}
-                        sortingTeams={draggingTeam}
-                      >
-                        {group.mailboxes.length > 0 ? (
-                          group.mailboxes.map((mailbox, mailboxIndex) => {
-                            const isActive =
-                              !allInboxesActive &&
-                              mailbox.id === selectedMailboxId;
-                            const needsReconnect =
-                              mailbox.connectionStatus === "needs_reconnect";
-                            const isReconnecting =
-                              reconnectingMailboxId === mailbox.id;
+                      return (
+                        <MailboxTeam
+                          collapsed={isCollapsed}
+                          disabled={!canReorderGroups}
+                          embedded={embedded}
+                          group={group}
+                          index={groupIndex}
+                          key={group.id}
+                          onRestored={() => {
+                            setDragPanelHeight(undefined);
+                          }}
+                          onToggle={toggleGroup}
+                          sortingTeams={draggingTeam}
+                        >
+                          {group.mailboxes.length > 0 ? (
+                            group.mailboxes.map((mailbox, mailboxIndex) => {
+                              const label =
+                                mailbox.displayName?.trim() ||
+                                mailbox.emailAddress;
+                              const isActive =
+                                !allInboxesActive &&
+                                mailbox.id === selectedMailboxId;
+                              const needsReconnect =
+                                mailbox.connectionStatus === "needs_reconnect";
+                              const isReconnecting =
+                                reconnectingMailboxId === mailbox.id;
 
-                            return (
-                              <ReorderRow
-                                disabled={
-                                  !canReorderMailboxes ||
-                                  isCollapsed ||
-                                  draggingTeam
-                                }
-                                data={{
-                                  groupId: group.id,
-                                  index: mailboxIndex,
-                                  label:
-                                    mailbox.displayName ?? mailbox.emailAddress,
-                                  mailboxId: mailbox.id,
-                                }}
-                                key={mailbox.id}
-                              >
-                                {(handleRef) => (
-                                  <MailboxMenuItem
-                                    handleRef={handleRef}
-                                    action={
-                                      needsReconnect ? (
-                                        <Button
-                                          aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                          data-mailbox-switcher-navigation-action
-                                          disabled={isReconnecting}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            onReconnectMailbox(mailbox);
-                                          }}
-                                          size="xs"
-                                          variant="destructive"
-                                        >
-                                          <Icon
-                                            aria-hidden
-                                            size={14}
-                                            animation={
-                                              isReconnecting
-                                                ? "spin"
-                                                : undefined
-                                            }
-                                            icon={
-                                              isReconnecting
-                                                ? Loading03Icon
-                                                : Mail01Icon
-                                            }
-                                          />
-                                          Reconnect
-                                        </Button>
-                                      ) : undefined
-                                    }
-                                    isActive={isActive}
-                                    onSelect={() => {
-                                      onSelectMailboxId(mailbox.id);
-                                    }}
-                                  >
-                                    <MailboxSummary
-                                      className="w-full"
-                                      mailbox={mailbox}
-                                    />
-                                  </MailboxMenuItem>
-                                )}
-                              </ReorderRow>
-                            );
-                          })
-                        ) : (
-                          <p className="px-2 py-1 text-body text-muted-fg">
-                            No Mailbox
-                          </p>
-                        )}
-                      </MailboxTeam>
-                    );
-                  }
-                )}
+                              return (
+                                <ReorderRow
+                                  disabled={
+                                    !canReorderMailboxes ||
+                                    isCollapsed ||
+                                    draggingTeam
+                                  }
+                                  data={{
+                                    groupId: group.id,
+                                    index: mailboxIndex,
+                                    label,
+                                    mailboxId: mailbox.id,
+                                  }}
+                                  key={mailbox.id}
+                                >
+                                  {(handleRef) => (
+                                    <MailboxMenuItem
+                                      handleRef={handleRef}
+                                      label={label}
+                                      action={
+                                        needsReconnect ? (
+                                          <Button
+                                            aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                            data-mailbox-switcher-navigation-action
+                                            disabled={isReconnecting}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              onReconnectMailbox(mailbox);
+                                            }}
+                                            size="xs"
+                                            variant="destructive"
+                                          >
+                                            <Icon
+                                              aria-hidden
+                                              size={14}
+                                              animation={
+                                                isReconnecting
+                                                  ? "spin"
+                                                  : undefined
+                                              }
+                                              icon={
+                                                isReconnecting
+                                                  ? Loading03Icon
+                                                  : Mail01Icon
+                                              }
+                                            />
+                                            Reconnect
+                                          </Button>
+                                        ) : undefined
+                                      }
+                                      isActive={isActive}
+                                      onSelect={() => {
+                                        onSelectMailboxId(mailbox.id);
+                                      }}
+                                    >
+                                      <MailboxSummary
+                                        label={label}
+                                        mailbox={mailbox}
+                                      />
+                                    </MailboxMenuItem>
+                                  )}
+                                </ReorderRow>
+                              );
+                            })
+                          ) : (
+                            <p className="py-1 pr-2.5 pl-12 text-body-sm text-muted-fg">
+                              No Mailbox
+                            </p>
+                          )}
+                        </MailboxTeam>
+                      );
+                    }
+                  )}
+                  {isFiltering && filteredGroups.length === 0 && (
+                    <p className="px-2.5 py-3 text-body-sm text-muted-fg">
+                      No matching mailboxes
+                    </p>
+                  )}
+                </div>
                 <p className="sr-only" id="mailbox-order-help">
                   Alt + Up or Down to reorder the focused team or mailbox.
                 </p>
-                {isFiltering && filteredGroups.length === 0 && (
-                  <p className="px-2 py-3 text-body-sm text-muted-fg">
-                    No matching mailboxes
-                  </p>
-                )}
                 <output aria-live="polite" className="sr-only">
                   {orderAnnouncement}
                 </output>
                 {!embedded && (
-                  <div className="mt-1">
-                    <DropdownMenuItem
-                      nativeButton
-                      render={
-                        <LinkButton
-                          search={{
-                            from: "/",
-                            mailboxId: "",
-                            tab: "mailboxes",
-                          }}
-                          size="sm"
-                          to="/settings"
-                          variant="ghost"
-                        />
-                      }
-                      // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
-                      className="h-auto min-h-7 w-full justify-between px-2.5 py-1 squircle"
-                      data-mailbox-switcher-navigation-item
-                    >
-                      Manage mailboxes
-                      <Icon aria-hidden icon={Settings01Icon} />
-                    </DropdownMenuItem>
-                  </div>
+                  <>
+                    <DropdownMenuSeparator className="-mx-1 my-0 shrink-0" />
+                    <div className="shrink-0 px-1 pt-1">
+                      <DropdownMenuItem
+                        nativeButton
+                        render={
+                          <LinkButton
+                            focusRing="inset"
+                            search={{
+                              from: "/",
+                              mailboxId: "",
+                              tab: "mailboxes",
+                            }}
+                            size="sm"
+                            to="/settings"
+                            variant="ghost"
+                          />
+                        }
+                        // oxlint-disable-next-line shadcn/no-restyle -- Shares the mailbox rows' leading and label columns.
+                        className="h-auto min-h-8 w-full justify-start gap-2.5 px-2.5 py-1 squircle"
+                        data-mailbox-switcher-navigation-item
+                      >
+                        <span className="flex w-7 shrink-0 justify-center">
+                          <Icon
+                            aria-hidden
+                            icon={Settings01Icon}
+                            tone="muted"
+                          />
+                        </span>
+                        Manage mailboxes
+                      </DropdownMenuItem>
+                    </div>
+                  </>
                 )}
               </>
             ) : (
@@ -1130,16 +1147,18 @@ export const MailboxSwitcherDropdown = ({
                   return mailbox ? (
                     <div
                       aria-hidden
-                      className="flex min-h-12 items-center px-2.5 py-2"
+                      className="flex min-h-12 items-center border border-transparent px-2.5 py-2"
                     >
-                      <MailboxSummary className="w-full" mailbox={mailbox} />
+                      <MailboxSummary label={data.label} mailbox={mailbox} />
                     </div>
                   ) : (
                     <div
                       aria-hidden
-                      className="flex min-h-7 items-center gap-2 px-2 py-1 text-caption text-muted-fg"
+                      className="flex min-h-7 items-center gap-2.5 border border-transparent px-2.5 py-1 text-caption text-muted-fg"
                     >
-                      <Icon size={12} icon={ArrowRight01Icon} />
+                      <span className="flex w-7 shrink-0 justify-center">
+                        <Icon size={12} icon={ArrowRight01Icon} />
+                      </span>
                       <span className="min-w-0 truncate">{group?.name}</span>
                     </div>
                   );
