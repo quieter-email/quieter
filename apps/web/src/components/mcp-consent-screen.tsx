@@ -103,7 +103,7 @@ export const McpConsentScreen = () => {
       </Surface>
       <p className="mt-4 text-caption text-muted-fg">
         quieter has not verified this app. You will be sent to{" "}
-        <span className="font-medium break-all text-fg">
+        <span className="font-medium wrap-anywhere text-fg">
           {consent.destination}
         </span>
         . Only continue if you started this.

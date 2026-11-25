@@ -21,7 +21,7 @@ To send mail, show the final sender, recipients, subject, message, and attachmen
 
 An explicit deletion of a small, exact selection can proceed directly. Resolve ambiguous targets before deleting. Inferred deletions, deletions with ten or more messages, and collection-level deletions require approval. The MCP client asks the user in the conversation and supplies their decision. Quieter binds the approval token to the client, account, and action payload.
 
-Provider linking, passkeys, payment, and account security actions that require browser interaction return a link for the user to open. Regular product actions run through MCP with the account's existing permissions.
+Provider linking, passkeys, payment, and account security actions that require browser interaction return a link for the user to open. Create and rotate team keys from the team settings link so disconnecting an OAuth client ends its delegated access. Regular product actions run through MCP with the account's existing permissions.
 
 ## Connect a transactional automation
 
@@ -29,4 +29,6 @@ For an existing automation, configure the same endpoint with `Authorization: Bea
 
 ## Verify locally
 
-Start Quieter with the normal local development setup and apply migrations to a disposable development database. Use the local web origin with `/api/mcp` for the MCP URL and set `BETTER_AUTH_URL` to the matching origin. Check that an unauthenticated call returns a browser sign-in challenge. After signing in and granting access, open a test mailbox, request a send preview, and disconnect the client in Account Settings. A subsequent request with the old access token should return HTTP 401.
+Start Quieter with the normal local development setup and apply migrations to a disposable development database. Use the local web origin with `/api/mcp` for the MCP URL and set `BETTER_AUTH_URL` to the matching origin. The server uses its existing `BETTER_AUTH_SECRET` to sign the authorization request and action previews. Check that an unauthenticated call returns a browser sign-in challenge. After signing in and granting access, open a test mailbox, request a send preview, and disconnect the client in Account Settings. A subsequent request with the old access token should return HTTP 401.
+
+For deployment, apply the additive OAuth migration through the protected migration workflow before starting the updated Worker.
