@@ -29,9 +29,11 @@ import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useRouter } from "@tanstack/react-router";
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 type MailboxMessagesPanelProps = {
   detailOnly?: boolean;
+  headerAddon?: ReactNode;
   mailLayout: MailLayout;
   activeMailbox: MailboxCategory;
   currentUserEmail: string | null;
@@ -53,6 +55,7 @@ type MailboxMessagesPanelProps = {
 
 export const MailboxMessagesPanel = ({
   detailOnly = false,
+  headerAddon,
   mailLayout,
   activeMailbox,
   currentUserEmail,
@@ -269,6 +272,7 @@ export const MailboxMessagesPanel = ({
           layout="cell"
         >
           <MessageList
+            headerAddon={headerAddon}
             listNotices={
               mailboxProvider === "api" ? null : (
                 <ReminderDueStrip

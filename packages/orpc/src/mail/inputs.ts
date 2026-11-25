@@ -1,7 +1,7 @@
 import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import {
-  composeDraftInputSchema,
   composeMessageInputSchema,
+  composeSaveDraftInputSchema,
   composeSendDraftInputSchema,
 } from "@quieter/mail/compose/schema";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
@@ -233,7 +233,7 @@ export const mailInputSchemas = {
     threadId: z.string(),
   }),
   saveDraft: z.object({
-    draft: composeDraftInputSchema,
+    draft: composeSaveDraftInputSchema,
     mailboxId: z.string().trim().min(1),
   }),
   sendDraft: z.object({

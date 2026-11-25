@@ -13,7 +13,7 @@ import {
   organizationMailSendIdempotency,
 } from "@quieter/database/schema";
 import { buildMimeMessage } from "@quieter/mail/compose/mime";
-import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import type { composeSaveDraftInputSchema } from "@quieter/mail/compose/schema";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import {
   parseRawMailAttachments,
@@ -36,9 +36,12 @@ import {
 } from "./raw-object";
 import { storeRawMailObject } from "./raw-object-lifecycle";
 
-type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
+type ComposeDraftInput = z.infer<typeof composeSaveDraftInputSchema>;
 
-const hashManagedDraftContent = async (raw: Uint8Array) => {
+const hashManagedDraftContent = async (
+  raw: Uint8Array,
+  recipients: ComposeDraftInput["recipients"]
+) => {
   const message = await parseRawMailMessage(raw);
   const attachments = await parseRawMailAttachments(raw);
   return hashRequest({
@@ -49,10 +52,8 @@ const hashManagedDraftContent = async (raw: Uint8Array) => {
       inline: attachment.inline,
       mimeType: attachment.mimeType,
     })),
-    bcc: message.bcc,
     bodyHtml: message.bodyHtml,
     bodyText: message.bodyText,
-    cc: message.cc,
     from: message.from,
     headers: message.headers.filter(
       (header) =>
@@ -73,10 +74,10 @@ const hashManagedDraftContent = async (raw: Uint8Array) => {
         ].includes(header.name.toLowerCase())
     ),
     inReplyTo: message.inReplyTo,
+    recipients,
     references: message.references,
     replyTo: message.replyTo,
     subject: message.subject,
-    to: message.to,
   });
 };
 
@@ -179,7 +180,7 @@ const assertPrivateDraftContext = async (
 };
 
 export const saveManagedDraft = async (input: {
-  draft: z.infer<typeof composeDraftInputSchema>;
+  draft: ComposeDraftInput;
   privateContext?: boolean;
   mailboxId: string;
   userId: string;
@@ -293,9 +294,17 @@ export const saveManagedDraft = async (input: {
       draft.baseRevision === undefined &&
       threadId === existing.threadId
     ) {
-      const requestedHash = await hashManagedDraftContent(raw);
+      const requestedHash = await hashManagedDraftContent(
+        raw,
+        draft.recipients
+      );
       const storedHash = await hashManagedDraftContent(
-        await readRawMailObject(existing)
+        await readRawMailObject(existing),
+        {
+          bcc: existing.bcc ?? "",
+          cc: existing.cc ?? "",
+          to: existing.to ?? "",
+        }
       );
       if (requestedHash === storedHash) {
         return await db.transaction(async (tx) => {

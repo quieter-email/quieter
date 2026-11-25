@@ -42,7 +42,6 @@ import {
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
-import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import {
   appEaseOut,
   appMotionDuration,
@@ -133,6 +132,7 @@ import {
 } from "react";
 
 import { ComposeRecipientField } from "./compose-recipient-field";
+import { ComposeWorkspaceHeader } from "./compose-workspace-header";
 import { HeldSendNotice } from "./held-send-notice";
 import type { RestoreUndoneDraft } from "./held-send-toast";
 import { useRecipientSuggestionScope } from "./use-recipient-suggestions";
@@ -786,8 +786,7 @@ const ReadyComposeSurface = ({
   return (
     <>
       {isInline ? null : (
-        <MailSubviewHeader
-          className="px-4 pt-4 sm:px-6 sm:pt-6"
+        <ComposeWorkspaceHeader
           closeAction={{
             disabled:
               !state.open ||
@@ -800,7 +799,11 @@ const ReadyComposeSurface = ({
             },
           }}
           onOpenSidebar={onOpenSidebar}
-          title="New message"
+          saveStatus={
+            persistDrafts && state.draft.assistantUnsaved !== true
+              ? state.draft.saveStatus
+              : undefined
+          }
         />
       )}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the form only blocks implicit submission from its own fields; it never becomes a keyboard target. */}
@@ -1663,6 +1666,9 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     props.persistDrafts !== false &&
     demoMode !== true &&
     managedDemoMode !== true &&
+    (!!initialDraft?.draftId ||
+      !!initialDraft?.draftAnchor ||
+      !!initialDraft?.replyContext) &&
     initialDraft?.recoveryEditorId === undefined;
   const needsLoading = needsRemoteLoading || needsRecoveryLoading;
   const seedRef = useRef(initialDraft ?? createEmptyComposeDraft());
@@ -1739,7 +1745,10 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
           ...seed,
           ...saved,
           draftAnchor: saved.draftAnchor ?? null,
-          errorMessage: null,
+          errorMessage:
+            "recipientsUnavailable" in saved && saved.recipientsUnavailable
+              ? "The addresses could not be restored. Re-enter them before sending."
+              : null,
           lastSavedAt: saved.lastSavedAt,
           messageId: saved.messageId ?? undefined,
           saveStatus: "saved",
@@ -1811,11 +1820,9 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     return (
       <>
         {props.variant === "inline" ? null : (
-          <MailSubviewHeader
-            className="px-4 pt-4 sm:px-6 sm:pt-6"
+          <ComposeWorkspaceHeader
             closeAction={{ label: "Close composer", onClick: props.onClose }}
             onOpenSidebar={props.onOpenSidebar}
-            title="New message"
           />
         )}
         <output className="flex flex-col items-center justify-center gap-3 p-6">

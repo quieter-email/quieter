@@ -17,6 +17,11 @@ import {
   listGmailMessageIds,
 } from "@quieter/gmail";
 import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import {
+  findInvalidMailAddresses,
+  getMailAddressKey,
+  splitMailAddressList,
+} from "@quieter/mail/compose/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import type { MessageListItem } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
@@ -196,8 +201,20 @@ const buildMailMemoryEvidence = async ({
   const sender = listMemoryCorrespondents(
     message.from ?? (isSent || isDraft ? selected.emailAddress : undefined)
   ).join(", ");
-  const recipients = listMemoryCorrespondents(
-    [message.to, message.cc, message.bcc].join(", ")
+  const recipientFields = [message.to, message.cc, message.bcc];
+  const recipients = (
+    isDraft
+      ? [
+          ...new Set(
+            recipientFields.flatMap((field) => {
+              const invalid = new Set(findInvalidMailAddresses(field));
+              return splitMailAddressList(field)
+                .filter((entry) => !invalid.has(entry))
+                .map(getMailAddressKey);
+            })
+          ),
+        ]
+      : listMemoryCorrespondents(recipientFields.join(", "))
   ).join(", ");
   let observationKind = "received_message";
   let authorship = "third_party";

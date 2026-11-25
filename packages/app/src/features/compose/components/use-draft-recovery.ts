@@ -3,20 +3,17 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { authClient } from "@quieter/app/lib/auth";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import { toastError } from "@quieter/app/lib/error-toast";
-import type { QueryClient } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useRef, useState } from "react";
 
 export const useDraftRecovery = ({
   mailboxId,
   enabled,
   getDraft,
-  queryClient,
   subscribe,
 }: {
   mailboxId: string | null;
   enabled: boolean;
   getDraft: () => ComposeDraftState;
-  queryClient: QueryClient;
   subscribe: (onChange: () => void) => { unsubscribe: () => void };
 }) => {
   const session = authClient.useSession().data;
@@ -32,27 +29,20 @@ export const useDraftRecovery = ({
   );
   const editorId = useRef(crypto.randomUUID());
   const completed = useRef(false);
+  const checkpointed = useRef(false);
+  const retainingHeldEdits = useRef(false);
   const warned = useRef(false);
 
   useEffect((): (() => void) | undefined => {
     if (!enabled || mailboxId === null || userId === undefined) {
       return undefined;
     }
-    const unregister = recovery.registerEditor({
+    return recovery.registerEditor({
       editorId: editorId.current,
       mailboxId,
       userId,
     });
-    void queryClient.invalidateQueries({
-      queryKey: ["local-draft-recovery", userId, mailboxId],
-    });
-    return () => {
-      unregister();
-      void queryClient.invalidateQueries({
-        queryKey: ["local-draft-recovery", userId, mailboxId],
-      });
-    };
-  }, [enabled, mailboxId, queryClient, recovery, userId]);
+  }, [enabled, mailboxId, recovery, userId]);
 
   const reportCheckpointError = (error: unknown) => {
     if (!warned.current) {
@@ -75,6 +65,15 @@ export const useDraftRecovery = ({
       return;
     }
     const draft = getDraft();
+    if (
+      !retainingHeldEdits.current &&
+      draft.assistantUnsaved !== true &&
+      draft.sendUncertain !== true &&
+      draft.saveStatus !== "sending"
+    ) {
+      return;
+    }
+    checkpointed.current = true;
     void (async () => {
       try {
         if (hasComposeDraftContent(draft) || !!draft.draftId) {
@@ -128,42 +127,53 @@ export const useDraftRecovery = ({
     };
   }, [enabled, subscribe]);
 
+  const removeCheckpoints = async (
+    draft: ComposeDraftState,
+    isCurrent?: () => boolean
+  ) => {
+    if (mailboxId === null || userId === undefined) {
+      return;
+    }
+    try {
+      const records = await recovery.list({ mailboxId, userId });
+      if (isCurrent?.() === false) {
+        return;
+      }
+      for (const record of records) {
+        if (
+          (record.localId === draft.localId &&
+            record.editorId === editorId.current) ||
+          (record.localId === (draft.recoveryLocalId ?? draft.localId) &&
+            record.editorId === draft.recoveryEditorId &&
+            record.revision === draft.recoveryRevision)
+        ) {
+          await recovery.remove(record);
+          if (isCurrent?.() === false) {
+            return;
+          }
+        }
+      }
+    } catch (error) {
+      toastError(error, { boundary: "compose-recovery-cleanup" });
+    }
+  };
+
   return {
     checkpoint,
     complete: async (draft: ComposeDraftState, isCurrent?: () => boolean) => {
       if (isCurrent === undefined) {
         completed.current = true;
       }
-      if (mailboxId === null || userId === undefined) {
-        return;
+      await removeCheckpoints(draft, isCurrent);
+      if (isCurrent?.() === true) {
+        completed.current = true;
       }
-      try {
-        const records = await recovery.list({ mailboxId, userId });
-        if (isCurrent?.() === false) {
-          return;
-        }
-        for (const record of records) {
-          if (
-            (record.localId === draft.localId &&
-              record.editorId === editorId.current) ||
-            (record.localId === (draft.recoveryLocalId ?? draft.localId) &&
-              record.editorId === draft.recoveryEditorId &&
-              record.revision === draft.recoveryRevision)
-          ) {
-            await recovery.remove(record);
-            if (isCurrent?.() === false) {
-              return;
-            }
-          }
-        }
-        await queryClient.invalidateQueries({
-          queryKey: ["local-draft-recovery", userId, mailboxId],
-        });
-        if (isCurrent?.() === true) {
-          completed.current = true;
-        }
-      } catch (error) {
-        toastError(error, { boundary: "compose-recovery-cleanup" });
+    },
+    markSaved: async (draft: ComposeDraftState, isCurrent: () => boolean) => {
+      if (checkpointed.current || draft.recoveryEditorId !== undefined) {
+        checkpointed.current = false;
+        retainingHeldEdits.current = false;
+        await removeCheckpoints(draft, isCurrent);
       }
     },
     preserveCopy: async (
@@ -204,12 +214,10 @@ export const useDraftRecovery = ({
       if (!persisted) {
         throw new Error("This browser could not keep your newer draft edits.");
       }
-      await queryClient.invalidateQueries({
-        queryKey: ["local-draft-recovery", userId, mailboxId],
-      });
     },
     retainHeldDraft: () => {
       completed.current = false;
+      retainingHeldEdits.current = true;
       checkpoint();
     },
   };

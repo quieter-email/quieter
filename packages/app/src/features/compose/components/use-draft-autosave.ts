@@ -63,11 +63,19 @@ export const useDraftAutosave = ({
       }, 1500);
     };
     const subscription = observe(changed);
+    const flushWhenHidden = () => {
+      if (document.visibilityState === "hidden") {
+        clearTimeout(timer);
+        void flush();
+      }
+    };
     changed();
+    document.addEventListener("visibilitychange", flushWhenHidden);
     window.addEventListener("online", changed);
     return () => {
       disposed = true;
       clearTimeout(timer);
+      document.removeEventListener("visibilitychange", flushWhenHidden);
       window.removeEventListener("online", changed);
       subscription.unsubscribe();
     };
