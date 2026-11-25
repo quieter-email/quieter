@@ -1946,6 +1946,143 @@ export const mailPlacementOperation = pgTable(
   ]
 );
 
+export const mailSnooze = pgTable(
+  "mailSnooze",
+  {
+    actorUserId: text("actorUserId").references(() => user.id, {
+      onDelete: "set null",
+    }),
+    attempts: integer("attempts").notNull().default(0),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    hiddenMessageIds: jsonb("hiddenMessageIds").$type<string[]>().notNull(),
+    hideOperationId: text("hideOperationId").references(
+      () => mailPlacementOperation.id,
+      { onDelete: "set null" }
+    ),
+    hideRequestId: text("hideRequestId").notNull(),
+    id: text("id").primaryKey(),
+    knownIncomingMessageIds: jsonb("knownIncomingMessageIds")
+      .$type<string[]>()
+      .notNull(),
+    leaseToken: text("leaseToken"),
+    leaseUntil: timestamp("leaseUntil", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    nextWakeAt: timestamp("nextWakeAt", { withTimezone: true }),
+    returnAt: timestamp("returnAt", { withTimezone: true }).notNull(),
+    returnOperationId: text("returnOperationId").references(
+      () => mailPlacementOperation.id,
+      { onDelete: "set null" }
+    ),
+    returnRequestId: text("returnRequestId"),
+    status: text("status")
+      .$type<
+        | "preparing"
+        | "active"
+        | "returning"
+        | "returned"
+        | "cancelled"
+        | "superseded"
+        | "suspended"
+        | "failed"
+        | "uncertain"
+      >()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    timeZone: text("timeZone").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+    version: integer("version").notNull(),
+  },
+  (table) => [
+    unique("mail_snooze_mailbox_thread_unique").on(
+      table.mailboxId,
+      table.threadId
+    ),
+    index("mail_snooze_next_wake_idx")
+      .on(table.nextWakeAt)
+      .where(sql`${table.nextWakeAt} is not null`),
+    index("mail_snooze_mailbox_status_return_idx").on(
+      table.mailboxId,
+      table.status,
+      table.returnAt,
+      table.id
+    ),
+    check("mail_snooze_version_check", sql`${table.version} >= 0`),
+    check("mail_snooze_attempts_check", sql`${table.attempts} >= 0`),
+    check(
+      "mail_snooze_lease_pair_check",
+      sql`(${table.leaseToken} is null) = (${table.leaseUntil} is null)`
+    ),
+    check(
+      "mail_snooze_status_check",
+      sql`${table.status} in ('preparing', 'active', 'returning', 'returned', 'cancelled', 'superseded', 'suspended', 'failed', 'uncertain')`
+    ),
+  ]
+);
+
+export const mailSnoozeOperation = pgTable(
+  "mailSnoozeOperation",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    code: text("code"),
+    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
+    expectedVersion: integer("expectedVersion"),
+    id: text("id").primaryKey(),
+    kind: text("kind")
+      .$type<"snooze" | "reschedule" | "cancel" | "return-now">()
+      .notNull(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    message: text("message"),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    resultingVersion: integer("resultingVersion"),
+    snoozeId: text("snoozeId").references(() => mailSnooze.id, {
+      onDelete: "set null",
+    }),
+    status: text("status")
+      .$type<"pending" | "applied" | "failed" | "uncertain" | "superseded">()
+      .notNull(),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    unique("mail_snooze_operation_request_unique").on(
+      table.actorUserId,
+      table.mailboxId,
+      table.requestId,
+      table.threadId
+    ),
+    index("mail_snooze_operation_mailbox_idx").on(table.mailboxId),
+    index("mail_snooze_operation_snooze_status_idx").on(
+      table.snoozeId,
+      table.status
+    ),
+    check(
+      "mail_snooze_operation_expected_version_check",
+      sql`${table.expectedVersion} is null or ${table.expectedVersion} >= 0`
+    ),
+    check(
+      "mail_snooze_operation_resulting_version_check",
+      sql`${table.resultingVersion} is null or ${table.resultingVersion} >= 0`
+    ),
+    check(
+      "mail_snooze_operation_kind_check",
+      sql`${table.kind} in ('snooze', 'reschedule', 'cancel', 'return-now')`
+    ),
+    check(
+      "mail_snooze_operation_status_check",
+      sql`${table.status} in ('pending', 'applied', 'failed', 'uncertain', 'superseded')`
+    ),
+  ]
+);
+
 export const mailboxAutomationSettings = pgTable("mailboxAutomationSettings", {
   autoLabelEnabled: boolean("autoLabelEnabled").notNull().default(false),
   createdAt: timestamp("createdAt").notNull(),
@@ -4363,6 +4500,8 @@ export const tables = {
   mailMessageImportance,
   mailPlacementOperation,
   mailSnippet,
+  mailSnooze,
+  mailSnoozeOperation,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,

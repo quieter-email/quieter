@@ -66,5 +66,6 @@ export default withSentryReporting({
 } satisfies ExportedHandler<Env>);
 
 export { MailLiveUser } from "./mail-live-user";
+export { MailSnooze } from "./mail-snooze";
 export { ReminderMailbox } from "./reminder-mailbox";
 export { ScheduledSend } from "./scheduled-send";

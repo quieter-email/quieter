@@ -15,6 +15,7 @@ import {
 } from "./worker-utils";
 
 export { MailLiveUser } from "./mail-live-user";
+export { MailSnooze } from "./mail-snooze";
 export { ReminderMailbox } from "./reminder-mailbox";
 export { ScheduledSend } from "./scheduled-send";
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
@@ -133,6 +134,19 @@ export default {
         );
       } catch (error) {
         return requestErrorResponse(error, "local-scheduled-send");
+      }
+    }
+    if (url.pathname === "/__dev/snooze") {
+      try {
+        const { reconcileMailSnoozes } =
+          await import("@quieter/orpc/snooze/repair");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await reconcileMailSnoozes({ limit: 4 })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-mail-snooze");
       }
     }
     if (url.pathname === "/__dev/maintenance") {

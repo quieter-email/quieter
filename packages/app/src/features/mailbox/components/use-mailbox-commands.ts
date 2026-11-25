@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   Calendar03Icon,
   CheckmarkCircle02Icon,
   Clock01Icon,
@@ -30,6 +31,7 @@ const mailboxDestinations = [
   { icon: Flag01Icon, mailbox: "important", shortcutId: "go-important" },
   { icon: InboxIcon, mailbox: "inbox", shortcutId: "go-inbox" },
   { icon: CheckmarkCircle02Icon, mailbox: "done", shortcutId: "go-done" },
+  { icon: AlarmClockIcon, mailbox: "later", shortcutId: "go-later" },
   { icon: Mail01Icon, mailbox: "unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, mailbox: "sent", shortcutId: "go-sent" },
   { icon: Clock01Icon, mailbox: "scheduled", shortcutId: "go-scheduled" },

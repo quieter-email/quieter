@@ -40,6 +40,7 @@ type CachedMessagesQuery = {
 const isMailboxCategory = (value: unknown): value is MailboxCategory =>
   value === "inbox" ||
   value === "done" ||
+  value === "later" ||
   value === "important" ||
   value === "unread" ||
   value === "spam" ||
@@ -228,6 +229,8 @@ const reconcileMessageInCachedMailboxQuery = (
     (cachedQuery.searchQuery !== null &&
       cachedQuery.searchQuery !== undefined &&
       cachedQuery.searchQuery !== "") ||
+    ((cachedQuery.mailbox === "done" || cachedQuery.mailbox === "later") &&
+      isMessageInMailbox(nextMessage, "later")) ||
     !isMessageInMailbox(nextMessage, cachedQuery.mailbox)
   ) {
     return cachedQuery.data;

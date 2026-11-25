@@ -30,6 +30,7 @@ import {
 } from "@quieter/orpc/reminders/runtime";
 import { reconcileScheduledSends } from "@quieter/orpc/scheduled-send/repair";
 import { processPendingSemanticIndexes } from "@quieter/orpc/semantic-index";
+import { reconcileMailSnoozes } from "@quieter/orpc/snooze/repair";
 import { cleanupMailboxVerificationCodes } from "@quieter/orpc/verification-codes";
 import { DurableObject } from "cloudflare:workers";
 
@@ -218,6 +219,7 @@ export default withSentryReporting({
             ? reportPendingReminderSuggestionUsage({ provider: "gmail" })
             : undefined,
           reconcileScheduledSends({ limit: 20 }),
+          reconcileMailSnoozes({ limit: 20 }),
         ]);
         const failed = results.find((result) => result.status === "rejected");
         if (failed !== undefined) {

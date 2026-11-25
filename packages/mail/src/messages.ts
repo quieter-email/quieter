@@ -1,6 +1,8 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
 import type { OtpToken } from "./otp-token";
+import { isMailSnoozeLiveStatus } from "./snooze";
+import type { MailSnoozeState } from "./snooze";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
@@ -28,6 +30,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  snooze?: MailSnoozeState;
   otpToken?: OtpToken;
   isImportant?: boolean;
   threadIsImportant?: boolean;
@@ -35,6 +38,7 @@ export type MessageListItem = {
   id: string;
   threadId: string;
   threadLabelIds?: string[];
+  threadInboxIncomingMessageIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   threadAttachmentNames?: string[];
@@ -109,6 +113,7 @@ export type ListMessagesPageResult = {
 };
 
 export type ThreadMessagesResult = {
+  snooze?: MailSnoozeState;
   threadId: string;
   snippet?: string;
   subject?: string;
@@ -201,10 +206,20 @@ export const isMessageInMailbox = (
     labelIds?: string[];
     isImportant?: boolean;
     threadIsImportant?: boolean;
+    snooze?: MailSnoozeState;
   },
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "later") {
+    return (
+      message.snooze !== undefined &&
+      isMailSnoozeLiveStatus(message.snooze.status) &&
+      labelIds?.some((label) =>
+        ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      ) !== true
+    );
+  }
   if (mailbox === "done") {
     return (
       labelIds !== undefined &&

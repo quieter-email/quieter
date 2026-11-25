@@ -44,6 +44,7 @@ const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/internal/scheduled-send",
+  "/api/internal/mail-snooze",
   "/api/desktop/session",
   "/api/openapi",
   MCP_API_PATH,

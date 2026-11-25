@@ -813,6 +813,15 @@ const useMailboxWorkspaceHotkeys = ({
     { enabled, ignoreInputs: true }
   );
   useHotkey(
+    ["G", "L"],
+    (event) => {
+      if (!shouldIgnoreAppShortcut(event)) {
+        selectMailboxFromHotkey("later");
+      }
+    },
+    { enabled, ignoreInputs: true }
+  );
+  useHotkey(
     ["G", "C"],
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {

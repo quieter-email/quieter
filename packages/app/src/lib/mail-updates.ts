@@ -391,6 +391,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
                     key[0] === "messages" &&
                     key[1] === mailboxId &&
                     key[2] !== "drafts" &&
+                    // Later refreshes its list without reconciling open threads.
+                    key[2] !== "later" &&
                     key[3] === "" &&
                     key.at(-1) === "live-sync",
                   type: "active",

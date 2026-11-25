@@ -19,6 +19,7 @@ import { sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
+import { handleMailSnoozeWake } from "./mail-snooze-wake";
 import { handleReminderWake } from "./reminder-wake";
 import { retryMailBroadcast } from "./retry-mail-broadcast";
 import { handleScheduledSendWake } from "./scheduled-send-wake";
@@ -66,6 +67,9 @@ export const broadcastMailUpdate = async (
 
 export const handleMailUpdates = async (request: Request, env: Env) => {
   const url = new URL(request.url);
+  if (url.pathname === "/mail/snooze/wake") {
+    return await handleMailSnoozeWake(request, env);
+  }
   if (url.pathname === "/mail/scheduled-send/wake") {
     return await handleScheduledSendWake(request, env);
   }

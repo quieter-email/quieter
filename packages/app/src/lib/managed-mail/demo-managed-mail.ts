@@ -1,8 +1,12 @@
 import {
   createDemoActions,
   createDemoComposeActions,
+  reconcileDemoSnoozes,
 } from "@quieter/app/lib/demo-mail/actions";
-import type { DemoMessageStore } from "@quieter/app/lib/demo-mail/actions";
+import type {
+  DemoSnoozeSchedule,
+  DemoSnoozeStore,
+} from "@quieter/app/lib/demo-mail/actions";
 import { createDemoMessage as createMessage } from "@quieter/app/lib/demo-mail/fixtures";
 import {
   getDemoMailThread,
@@ -16,6 +20,7 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
+import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type {
@@ -29,7 +34,6 @@ const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAILBOX_NAME = "Managed demo";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";
 const DEMO_MANAGED_MAIL_STATE_VERSION = 4;
-const MANAGED_DEMO_THREAD_QUERY_VERSION = 4;
 
 const DEMO_MANAGED_LABEL_IDS = {
   billing: "demo-managed-label-billing",
@@ -41,6 +45,7 @@ const DEMO_MANAGED_LABEL_ID_SET = new Set<string>(
 );
 
 type ManagedDemoMailState = {
+  snoozes?: Partial<Record<string, DemoSnoozeSchedule>>;
   labels: ManagedDemoLabel[];
   messages: MessageListItem[];
   version: number;
@@ -279,11 +284,7 @@ const invalidateManagedDemoMail = async (queryClient: QueryClient) => {
       refetchType: "all",
     }),
     queryClient.invalidateQueries({
-      queryKey: [
-        "message-thread",
-        MANAGED_DEMO_THREAD_QUERY_VERSION,
-        DEMO_MANAGED_MAILBOX_ID,
-      ],
+      queryKey: getMailboxThreadQueriesKey(DEMO_MANAGED_MAILBOX_ID),
       refetchType: "all",
     }),
     queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
@@ -427,11 +428,21 @@ export const getManagedDemoMessageInspector = (
   };
 };
 
-const store: DemoMessageStore = {
+const store: DemoSnoozeStore = {
+  mailboxId: DEMO_MANAGED_MAILBOX_ID,
   updateMessages: (update) => {
     updateDemoState((state) => ({
       ...state,
-      messages: update(state.messages),
+      ...reconcileDemoSnoozes({
+        messages: update(state.messages),
+        snoozes: state.snoozes ?? {},
+      }),
+    }));
+  },
+  updateSnoozes: (update) => {
+    updateDemoState((state) => ({
+      ...state,
+      ...update({ messages: state.messages, snoozes: state.snoozes ?? {} }),
     }));
   },
 };

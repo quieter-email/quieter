@@ -9,6 +9,7 @@ import {
   getGmailProfile,
   getMailboxSyncDelta,
   getGmailMessageThreadAssociations,
+  getGmailConversationListRows,
   getGmailCaptureMetadata,
   getThreadWithDetails,
   mutateGmailMessage,
@@ -167,11 +168,11 @@ describe(getMailboxSyncDelta, () => {
     }
   });
 
-  test("retains complete attachment names when a changed message is not the one with attachments", async () => {
+  test("retains complete thread metadata when a changed unread message has an Inbox sibling", async () => {
     const originalFetch = globalThis.fetch;
     const changedMessage = {
       id: "latest",
-      labelIds: ["INBOX"],
+      labelIds: ["UNREAD"],
       threadId: "conversation",
     };
     setFetch(async (input, init) => {
@@ -204,6 +205,11 @@ describe(getMailboxSyncDelta, () => {
                   id: "conversation",
                   messages: [
                     changedMessage,
+                    {
+                      id: "new-inbox-reply",
+                      labelIds: ["INBOX"],
+                      threadId: "conversation",
+                    },
                     {
                       id: "earlier",
                       labelIds: ["SENT"],
@@ -245,14 +251,21 @@ describe(getMailboxSyncDelta, () => {
     });
     try {
       const delta = await getMailboxSyncDelta("access-token", {
-        mailbox: "inbox",
+        mailbox: "unread",
         startHistoryId: "10",
       });
       const [updated] = delta.updatedMessages;
       expect(updated?.threadAttachmentNames).toContain("invoice.pdf");
       expect(updated?.threadAttachmentNames).not.toContain("unfinished.txt");
       expect(updated?.threadAttachmentCount).toBe(1);
-      expect(updated?.threadMessageCount).toBe(2);
+      expect(updated?.threadMessageCount).toBe(3);
+      expect(updated?.threadInboxIncomingMessageIds).toContain(
+        "new-inbox-reply"
+      );
+      expect(updated?.threadInboxIncomingMessageIds).not.toContain("latest");
+      expect(updated?.threadLabelIds).toContain("INBOX");
+      expect(updated?.threadLabelIds).toContain("SENT");
+      expect(updated?.labelIds).not.toContain("INBOX");
       expect(updated?.attachments).toBeUndefined();
     } finally {
       setFetch(originalFetch);
@@ -829,4 +842,164 @@ describe("Done conversation pagination", () => {
       }
     }
   );
+});
+
+describe("Later canonical source projection", () => {
+  test("hydrates pending Inbox mail with the same complete thread projection as native search", async () => {
+    const originalFetch = globalThis.fetch;
+    const thread = {
+      historyId: "42",
+      id: "billing-thread",
+      messages: [
+        {
+          id: "handled",
+          internalDate: "1",
+          labelIds: [],
+          threadId: "billing-thread",
+        },
+        {
+          id: "incoming",
+          internalDate: "2",
+          labelIds: ["INBOX", "UNREAD", "custom"],
+          payload: {
+            headers: [{ name: "Subject", value: "Invoice review" }],
+            parts: [
+              {
+                body: { attachmentId: "invoice", size: 12 },
+                filename: "invoice.pdf",
+                mimeType: "application/pdf",
+              },
+            ],
+          },
+          threadId: "billing-thread",
+        },
+        {
+          id: "sent",
+          internalDate: "3",
+          labelIds: ["SENT"],
+          payload: {
+            parts: [
+              {
+                body: { attachmentId: "receipt", size: 14 },
+                filename: "receipt.pdf",
+                mimeType: "application/pdf",
+              },
+            ],
+          },
+          threadId: "billing-thread",
+        },
+        {
+          id: "draft",
+          internalDate: "4",
+          labelIds: ["DRAFT"],
+          threadId: "billing-thread",
+        },
+      ],
+    };
+    setFetch(async (input) => {
+      const url = new URL(getRequestUrl(input));
+      if (url.pathname.endsWith("/threads")) {
+        return await resolveJson({ threads: [{ id: thread.id }] });
+      }
+      return await resolveResponse(
+        new Response(
+          createIdentifiedBatchResponse("later", [
+            { body: thread, contentId: "thread-0" },
+          ]),
+          {
+            headers: { "Content-Type": "multipart/mixed; boundary=later" },
+          }
+        )
+      );
+    });
+    try {
+      const explicit = await getGmailConversationListRows("token", [thread.id]);
+      const searched = await listMessagesWithDetails("token", {
+        mailbox: "later",
+        query: "invoice",
+      });
+      for (const page of [explicit, searched]) {
+        const message = page.messages.find((item) => item.id === "incoming");
+        expect(message).toMatchObject({
+          id: "incoming",
+          isUnread: true,
+          threadAttachmentCount: 2,
+          threadMessageCount: 3,
+        });
+        expect(message?.threadInboxIncomingMessageIds).toContain("incoming");
+        expect(message?.threadAttachmentNames).toContain("invoice.pdf");
+        expect(message?.threadAttachmentNames).toContain("receipt.pdf");
+      }
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
+
+  test("keeps native search acquisition and supplies Inbox sibling state to the server visibility owner", async () => {
+    const originalFetch = globalThis.fetch;
+    let inboxIncoming = true;
+    const message = {
+      id: "handled",
+      internalDate: "1",
+      labelIds: [],
+      threadId: "thread",
+    };
+    setFetch(async (input, init) => {
+      const url = new URL(getRequestUrl(input));
+      if (url.pathname.endsWith("/messages")) {
+        const query = url.searchParams.get("q") ?? "";
+        return await resolveJson({
+          messages: query.includes("from:billing@example.test")
+            ? [{ id: message.id, threadId: message.threadId }]
+            : [],
+        });
+      }
+      const body = getRequestBody(init?.body);
+      const isThread = body.includes("/threads/thread");
+      return await resolveResponse(
+        new Response(
+          createIdentifiedBatchResponse("later", [
+            {
+              body: isThread
+                ? {
+                    historyId: "42",
+                    id: "thread",
+                    messages: [
+                      message,
+                      {
+                        id: "reply",
+                        labelIds: inboxIncoming ? ["INBOX"] : ["INBOX", "SENT"],
+                        threadId: "thread",
+                      },
+                    ],
+                  }
+                : message,
+              contentId: isThread ? "thread-0" : "message-0",
+            },
+          ]),
+          { headers: { "Content-Type": "multipart/mixed; boundary=later" } }
+        )
+      );
+    });
+    try {
+      const result = await listMessagesForAgent("token", {
+        mailbox: "later",
+        query: "from:billing@example.test",
+      });
+      const handled = result.messages.find((item) => item.id === "handled");
+      expect(handled?.threadLabelIds).toContain("INBOX");
+      expect(handled?.threadInboxIncomingMessageIds).toContain("reply");
+      inboxIncoming = false;
+      const sentOnlyInbox = await getGmailConversationListRows("token", [
+        "thread",
+      ]);
+      const incoming = sentOnlyInbox.messages.find(
+        (item) => item.id === "handled"
+      );
+      expect(incoming?.threadLabelIds).toContain("INBOX");
+      expect(incoming?.threadInboxIncomingMessageIds).not.toContain("reply");
+    } finally {
+      Reflect.set(globalThis, "fetch", originalFetch);
+    }
+  });
 });

@@ -242,6 +242,7 @@ export const createGmailResources = (
           mailLiveUser,
           updates.reminders,
           updates.scheduledSends,
+          updates.snoozes,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
@@ -262,7 +263,8 @@ export const createGmailResources = (
                 (bindings ?? []).map((binding) =>
                   binding.name === "MailLiveUser" ||
                   binding.name === "ReminderMailbox" ||
-                  binding.name === "ScheduledSend"
+                  binding.name === "ScheduledSend" ||
+                  binding.name === "MailSnooze"
                     ? { ...binding, scriptName }
                     : binding
                 )

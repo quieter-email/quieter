@@ -30,6 +30,7 @@ import type { getMailAutomationAiBudgetStatus } from "../src/mail-automation/ai-
 import { MAIL_AUTOMATION_AI_PAUSED_MESSAGE } from "../src/mail-automation/ai-budget";
 import type { loadMailAutoLabelHistory } from "../src/mail-automation/history";
 import type { processGmailMailCapture } from "../src/mail-capture";
+import type { handleSnoozeInbound } from "../src/snooze/service";
 import type {
   listPendingMailboxVerificationCodeMessageIds,
   processMailVerificationCode,
@@ -280,6 +281,9 @@ vi.mock(import("@quieter/env/server"), async (importOriginal) => {
 });
 vi.mock(import("../src/mail-capture"), () => ({
   processGmailMailCapture: fixtures.capture,
+}));
+vi.mock(import("../src/snooze/service"), () => ({
+  handleSnoozeInbound: vi.fn<typeof handleSnoozeInbound>().mockResolvedValue(),
 }));
 vi.mock(import("../src/gmail-mailbox-access"), () => ({
   runAuthorizedGmailMailbox: async <T>(

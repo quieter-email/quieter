@@ -158,7 +158,8 @@ export const getProvisionalMessagesData = (
   category: MailboxCategory,
   searchQuery?: string | null
 ): MessagesQueryData | undefined => {
-  if (category === "drafts") {
+  // Later order and membership depend on the server's schedules.
+  if (category === "drafts" || category === "later") {
     return undefined;
   }
   const normalizedSearch = searchQuery?.trim() ?? "";
@@ -167,11 +168,31 @@ export const getProvisionalMessagesData = (
       ? null
       : parseStructuredSearchQuery(normalizedSearch);
   const messagesById = new Map<string, MessageListItem>();
+  const cachedQueries = getCachedMessagesQueries(queryClient, mailboxId);
+  // Done hides a whole conversation while any of it is in Inbox or snoozed.
+  const excludedThreadIds = new Set(
+    category === "done"
+      ? cachedQueries.flatMap((cachedQuery) =>
+          (cachedQuery.data?.pages ?? []).flatMap((page) =>
+            page.messages.flatMap((message) =>
+              isMessageInMailbox(message, "inbox") ||
+              message.threadLabelIds?.includes(MAILBOX_LABELS.inbox) === true ||
+              isMessageInMailbox(message, "later")
+                ? [message.threadId]
+                : []
+            )
+          )
+        )
+      : []
+  );
 
-  for (const cachedQuery of getCachedMessagesQueries(queryClient, mailboxId)) {
+  for (const cachedQuery of cachedQueries) {
     for (const page of cachedQuery.data?.pages ?? []) {
       for (const message of page.messages) {
-        if (!messageIsInCategory(message, category)) {
+        if (
+          excludedThreadIds.has(message.threadId) ||
+          !messageIsInCategory(message, category)
+        ) {
           continue;
         }
         if (search !== null && messageMatchesSearch(message, search) !== true) {

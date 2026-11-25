@@ -1,5 +1,6 @@
 import type { db } from "@quieter/database/client";
 import { user } from "@quieter/database/schema";
+import { mailSnoozeApplySchema } from "@quieter/mail/snooze";
 import { eq } from "drizzle-orm";
 
 import { getMailCaptureStatus } from "../mail-capture";
@@ -15,6 +16,7 @@ import {
   getHeldSend,
   undoHeldSend,
 } from "../scheduled-send/service";
+import { applyMailSnooze } from "../snooze/service";
 import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
@@ -73,6 +75,9 @@ export const mailRouter = {
       trackedByGmail: ({ command }) => command.kind !== "set-placement",
     })
   ),
+  applySnooze: protectedProcedure
+    .input(mailSnoozeApplySchema)
+    .handler(withMailUpdate(applyMailSnooze)),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
     .handler(

@@ -53,6 +53,7 @@ type MessageListScrollPaneProps = {
   gmailLabelsByMailboxId?: ReadonlyMap<string, MailboxLabel[]>;
   list: MessageListProps;
   onKeyboardOpenMessage?: () => void;
+  onThreadSnooze: (thread: ThreadListEntry) => void;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
 };
@@ -160,6 +161,7 @@ export const MessageListScrollPane = ({
   gmailLabelsByMailboxId,
   list,
   onKeyboardOpenMessage,
+  onThreadSnooze,
   selection,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
@@ -817,6 +819,7 @@ export const MessageListScrollPane = ({
                 onOpenDraft={handleOpenDraft}
                 onKeyboardOpen={onKeyboardOpenMessage}
                 onThreadPress={selection.handleThreadPress}
+                onThreadSnooze={onThreadSnooze}
                 onThreadSelectionPress={selection.handleThreadSelectionPress}
                 pendingActions={context?.pendingActions ?? list.pendingActions}
                 staggerIndex={staggerIndex}

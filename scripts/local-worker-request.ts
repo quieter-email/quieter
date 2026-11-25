@@ -15,10 +15,11 @@ if (
     "actions",
     "reminders",
     "scheduled-send",
+    "snooze",
   ].includes(action)
 ) {
   throw new Error(
-    "Use dev:trigger health, maintenance, mail-recovery, mail-dispatch, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, reminders, or scheduled-send."
+    "Use dev:trigger health, maintenance, mail-recovery, mail-dispatch, importance, memory, semantic-index <user-id> <mailbox-id> <memory|chat|mail>, actions, reminders, scheduled-send, or snooze."
   );
 }
 const workerOrigin = new URL(

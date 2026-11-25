@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   CheckmarkCircle02Icon,
   Delete01Icon,
   Delete02Icon,
@@ -38,6 +39,12 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
     id: "done",
     label: "Done",
     shortcutId: "go-done",
+  },
+  {
+    icon: AlarmClockIcon,
+    id: "later",
+    label: "Later",
+    shortcutId: "go-later",
   },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },

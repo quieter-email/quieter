@@ -133,6 +133,7 @@
       { "name": "MailLiveUser", "class_name": "MailLiveUser" },
       { "name": "ReminderMailbox", "class_name": "ReminderMailbox" },
       { "name": "ScheduledSend", "class_name": "ScheduledSend" },
+      { "name": "MailSnooze", "class_name": "MailSnooze" },
       {
         "name": "GmailLiveSyncMailboxV2",
         "class_name": "GmailLiveSyncMailboxV2",
@@ -157,6 +158,7 @@
     { "tag": "reminders-v1", "new_sqlite_classes": ["ReminderMailbox"] },
     { "tag": "scheduled-send-v1", "new_sqlite_classes": ["ScheduledSend"] },
     { "tag": "gmail-quota-v1", "new_sqlite_classes": ["GmailProjectQuota"] },
+    { "tag": "mail-snooze-v1", "new_sqlite_classes": ["MailSnooze"] },
   ],
   "observability": {
     "enabled": true,
