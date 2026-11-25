@@ -1,13 +1,14 @@
 "use client";
 
 import {
-  ArrowRight01Icon,
+  ArrowDown01Icon,
   Cancel01Icon,
   Tag01Icon,
+  Tick01Icon,
 } from "@hugeicons/core-free-icons";
-import type { IconSvgElement } from "@hugeicons/react";
-import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
+import { mailboxLabelPillToneByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import type { searchFilterOptions } from "@quieter/app/features/message-search/components/message-list-search-filter-options";
+import { isFixedValueFilter } from "@quieter/app/features/message-search/components/message-list-search/message-list-search-utils";
 import { normalizeLabelSelectionKey } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type {
   SearchFilterChip,
@@ -18,11 +19,23 @@ import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
+import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { Pill } from "@quieter/ui/pill";
 import { popupSurfaceClassName } from "@quieter/ui/popup-surface";
-import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
-import { createPortal } from "react-dom";
+import { Text } from "@quieter/ui/text";
+import {
+  AnimatePresence,
+  LazyMotion,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
+import { useId, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
+
+type SearchFilterSelectionState = "exclude" | "include";
+
+const searchOptionGridClassName = "grid grid-cols-1 gap-0.5 @xs:grid-cols-2";
 
 const createSearchFilterSections = (
   options: typeof searchFilterOptions
@@ -56,9 +69,10 @@ const createSearchFilterSections = (
 const getSearchFilterOptionState = (
   filters: readonly SearchFilterChip[],
   optionFilter: SearchFilterChip
-) => {
+): SearchFilterSelectionState | null => {
   const filter = filters.find(
     (candidateFilter) =>
+      candidateFilter.value.trim().length > 0 &&
       candidateFilter.type === optionFilter.type &&
       (optionFilter.value.length === 0 ||
         candidateFilter.value === optionFilter.value)
@@ -66,552 +80,332 @@ const getSearchFilterOptionState = (
   if (filter === undefined) {
     return null;
   }
-  return filter.negated === true ? "exclude" : "include";
+  return isFixedValueFilter(optionFilter) && filter.negated === true
+    ? "exclude"
+    : "include";
 };
 
-const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
-  <p className="px-2.5 pb-1 text-caption text-muted-fg">{children}</p>
+const SearchDropdownOption = ({
+  children,
+  hint,
+  leading,
+  onClick,
+  pressed,
+  selectionState,
+}: {
+  children: ReactNode;
+  hint?: string;
+  leading?: ReactNode;
+  onClick: () => void;
+  pressed?: boolean | "mixed";
+  selectionState: SearchFilterSelectionState | null;
+}) => (
+  <Button
+    aria-pressed={pressed}
+    className="min-w-0"
+    data-search-option=""
+    focusRing="inset"
+    onClick={onClick}
+    size="sm"
+    title={hint}
+    variant="option"
+  >
+    {leading}
+    <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left">
+      {selectionState === "exclude" && <span>Not</span>}
+      {children}
+    </span>
+    {selectionState === "include" && (
+      <>
+        <Icon aria-hidden icon={Tick01Icon} />
+        {pressed === undefined && <span className="sr-only">applied</span>}
+      </>
+    )}
+  </Button>
 );
 
-const SearchDropdownRow = ({
-  active = false,
-  className,
-  customColor,
-  highlighted = false,
-  hint,
-  icon,
-  label,
-  onClick,
-}: {
-  active?: boolean;
-  className?: string;
-  customColor?: string;
-  highlighted?: boolean;
-  hint?: string;
-  icon: IconSvgElement;
-  label: string;
-  onClick: () => void;
-}) => {
-  const rowStyle: CSSProperties & { "--selected-color": string | undefined } = {
-    "--selected-color": customColor,
-  };
-  return (
-    <button
-      className={cn(
-        "relative flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:z-10 focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
-        className,
-        {
-          "bg-control-hover": highlighted && !className && !customColor,
-          "bg-detail": active && !highlighted && !className && !customColor,
-          "outline-1 -outline-offset-1 outline-ring":
-            highlighted && !!(className || customColor),
-          "q-custom-color-surface": !!customColor,
-          "ring-1 ring-ring ring-inset":
-            active && !highlighted && !!(className || customColor),
-        }
-      )}
-      data-search-highlighted={highlighted || undefined}
-      onClick={onClick}
-      style={rowStyle}
-      type="button"
-    >
-      <Icon
-        aria-hidden
-        size={14}
-        tone="muted"
-
-        icon={icon}
-      />
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
-    </button>
-  );
-};
-
-type LabelsSubmenuLayout = {
-  coneHeight: number;
-  coneOriginY: number;
-  left: number;
-  top: number;
-};
-
-const initialLabelsSubmenuLayout: LabelsSubmenuLayout = {
-  coneHeight: 224,
-  coneOriginY: 16,
-  left: 0,
-  top: 0,
-};
-
-export const MessageListSearchDropdown = ({
-  draftSearchState,
-  filterOptions,
-  highlightedItemKey,
-  isOpen,
-  isLoadingLabels,
-  labelsErrorMessage,
-  onDismiss,
-  onSelectFilter,
-  onToggleLabel,
-  userLabels,
-}: {
+type MessageListSearchDropdownProps = {
   draftSearchState: StructuredSearchState;
   filterOptions: typeof searchFilterOptions;
-  highlightedItemKey: string | null;
+  id: string;
   isOpen: boolean;
   isLoadingLabels: boolean;
   labelsErrorMessage: string | null;
   onDismiss: () => void;
+  onRunSearch: () => void;
   onSelectFilter: (filter: SearchFilterChip) => void;
   onToggleLabel: (labelName: string) => void;
   userLabels: readonly MailboxLabel[];
-}) => {
-  const searchFilterSections = createSearchFilterSections(filterOptions);
-  const [isLabelsSubmenuOpen, setIsLabelsSubmenuOpen] = useState(false);
-  const [labelsLayout, setLabelsLayout] = useState<LabelsSubmenuLayout>(
-    initialLabelsSubmenuLayout
-  );
-  const closeLabelsSubmenuTimeoutRef = useRef<ReturnType<
-    typeof setTimeout
-  > | null>(null);
+};
+
+const SearchDropdownPanel = ({
+  draftSearchState,
+  filterOptions,
+  id,
+  isLoadingLabels,
+  labelsErrorMessage,
+  onDismiss,
+  onRunSearch,
+  onSelectFilter,
+  onToggleLabel,
+  userLabels,
+}: Omit<MessageListSearchDropdownProps, "isOpen">) => {
+  const titleId = useId();
+  const labelsId = useId();
+  const [isLabelsOpen, setIsLabelsOpen] = useState(false);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const labelsInlineRef = useRef<HTMLDivElement>(null);
-  const labelsSubmenuRef = useRef<HTMLDivElement>(null);
-  const labelsTriggerRef = useRef<HTMLButtonElement>(null);
-  const selectedUserLabelStates = new Map<string, "exclude" | "include">();
+  const labelsSectionRef = useRef<HTMLDivElement>(null);
+  const selectedLabelStates = new Map<string, SearchFilterSelectionState>();
   for (const filter of draftSearchState.filters) {
     if (filter.type === "label") {
-      selectedUserLabelStates.set(
+      selectedLabelStates.set(
         normalizeLabelSelectionKey(filter.value),
         filter.negated === true ? "exclude" : "include"
       );
     }
   }
-  const isLabelHighlighted = highlightedItemKey?.startsWith("label:") ?? false;
-  const showLabelsSubmenu = isLabelsSubmenuOpen || isLabelHighlighted;
+  const reducedMotion = useReducedMotion();
+  const enter = { opacity: 1, scale: 1, transformOrigin: "top", y: 0 };
+  const exit =
+    reducedMotion === true
+      ? { opacity: 0 }
+      : { opacity: 0, scale: 0.97, transformOrigin: "top", y: -4 };
 
-  const closeLabelsSubmenu = () => {
-    setIsLabelsSubmenuOpen(false);
-  };
-
-  const cancelCloseLabelsSubmenu = () => {
-    if (!closeLabelsSubmenuTimeoutRef.current) {
-      return;
-    }
-
-    clearTimeout(closeLabelsSubmenuTimeoutRef.current);
-    closeLabelsSubmenuTimeoutRef.current = null;
-  };
-
-  const scheduleCloseLabelsSubmenu = () => {
-    cancelCloseLabelsSubmenu();
-    closeLabelsSubmenuTimeoutRef.current = setTimeout(() => {
-      closeLabelsSubmenu();
-      closeLabelsSubmenuTimeoutRef.current = null;
-    }, 80);
-  };
-
-  useEffect(() => cancelCloseLabelsSubmenu, []);
-
-  useLayoutEffect((): (() => void) | undefined => {
-    if (!isOpen) {
-      return undefined;
-    }
-
+  useLayoutEffect(() => {
     const container = scrollContainerRef.current;
-    const isDesktop = window.matchMedia("(min-width: 1024px)").matches;
-    const revealHighlightedRow = () => {
-      const highlightedRow = container?.querySelector<HTMLElement>(
-        "[data-search-highlighted]"
-      );
-      const target =
-        isDesktop &&
-        (isLabelHighlighted || (showLabelsSubmenu && !highlightedItemKey))
-          ? labelsTriggerRef.current
-          : (highlightedRow ??
-            (!isDesktop && showLabelsSubmenu
-              ? (labelsInlineRef.current?.querySelector<HTMLElement>(
-                  "button"
-                ) ?? labelsInlineRef.current)
-              : null));
-      if (container && target) {
-        const containerRect = container.getBoundingClientRect();
-        const targetRect = target.getBoundingClientRect();
-        if (targetRect.top < containerRect.top) {
-          container.scrollTop += targetRect.top - containerRect.top;
-        } else if (targetRect.bottom > containerRect.bottom) {
-          container.scrollTop += targetRect.bottom - containerRect.bottom;
-        }
-      }
-    };
-    revealHighlightedRow();
-
-    if (isLabelHighlighted && isDesktop) {
-      const submenu = labelsSubmenuRef.current;
-      const row = submenu?.querySelector<HTMLElement>(
-        "[data-search-highlighted]"
-      );
-      if (submenu && row) {
-        const submenuRect = submenu.getBoundingClientRect();
-        const rowRect = row.getBoundingClientRect();
-        if (rowRect.top < submenuRect.top) {
-          submenu.scrollTop += rowRect.top - submenuRect.top;
-        } else if (rowRect.bottom > submenuRect.bottom) {
-          submenu.scrollTop += rowRect.bottom - submenuRect.bottom;
-        }
-      }
+    const labelsSection = labelsSectionRef.current;
+    if (isLabelsOpen && container && labelsSection) {
+      container.scrollTop = labelsSection.offsetTop;
     }
-    const inlineViewport = labelsInlineRef.current?.parentElement;
-    if (!isDesktop && inlineViewport) {
-      const observer = new ResizeObserver(revealHighlightedRow);
-      observer.observe(inlineViewport);
-      return () => {
-        observer.disconnect();
-      };
-    }
-    return undefined;
-  }, [highlightedItemKey, isLabelHighlighted, isOpen, showLabelsSubmenu]);
+  }, [isLabelsOpen]);
 
-  useLayoutEffect((): (() => void) | undefined => {
-    if (!isOpen || !showLabelsSubmenu) {
-      return undefined;
-    }
-
-    const submenu = labelsSubmenuRef.current;
-    const trigger = labelsTriggerRef.current;
-    if (!submenu || !trigger) {
-      return undefined;
-    }
-
-    const updateLayout = () => {
-      if (!window.matchMedia("(min-width: 1024px)").matches) {
-        return;
-      }
-      const triggerRect = trigger.getBoundingClientRect();
-      const submenuWidth = submenu.offsetWidth;
-      const submenuHeight = submenu.offsetHeight;
-      const viewportGap = 8;
-      const top = Math.max(
-        viewportGap,
-        Math.min(
-          triggerRect.top,
-          window.innerHeight - submenuHeight - viewportGap
-        )
-      );
-      setLabelsLayout({
-        coneHeight: submenuHeight,
-        coneOriginY: Math.max(
-          0,
-          Math.min(
-            submenuHeight,
-            triggerRect.top + triggerRect.height / 2 - top
-          )
-        ),
-        left: Math.max(
-          viewportGap,
-          Math.min(
-            triggerRect.right + viewportGap,
-            window.innerWidth - submenuWidth - viewportGap
-          )
-        ),
-        top,
-      });
-    };
-    updateLayout();
-    window.addEventListener("scroll", updateLayout, true);
-    window.addEventListener("resize", updateLayout);
-    const observer = new ResizeObserver(updateLayout);
-    observer.observe(submenu);
-    return () => {
-      window.removeEventListener("scroll", updateLayout, true);
-      window.removeEventListener("resize", updateLayout);
-      observer.disconnect();
-    };
-  }, [isOpen, showLabelsSubmenu, highlightedItemKey]);
-
-  let labelsContent: ReactNode;
+  let labelsStatus: ReactNode = null;
   if (labelsErrorMessage) {
-    labelsContent = (
-      <div className="px-2.5 py-2 text-body-sm text-fg">
+    labelsStatus = (
+      <Text className="mx-2.5 my-1" role="alert" size="sm" tone="destructive">
         {labelsErrorMessage}
-      </div>
+      </Text>
     );
   } else if (isLoadingLabels) {
-    labelsContent = (
-      <div className="px-2.5 py-2 text-body-sm text-muted-fg">
+    labelsStatus = (
+      <output className="block px-2.5 py-1 text-body-sm text-muted-fg">
         Loading labels…
-      </div>
+      </output>
     );
-  } else if (userLabels.length > 0) {
-    labelsContent = (
-      <div className="flex flex-col gap-0.5">
-        {userLabels.map((label) => {
-          const selectionState =
-            selectedUserLabelStates.get(normalizeLabelSelectionKey(label.id)) ??
-            selectedUserLabelStates.get(normalizeLabelSelectionKey(label.name));
-          return (
-            <SearchDropdownRow
-              active={selectionState !== undefined}
-              customColor={
-                label.color?.startsWith("#") === true ? label.color : undefined
-              }
-              className={
-                mailboxLabelSearchPillSurfaceClassNameByColor[
-                  label.color ?? "gray"
-                ]
-              }
-              highlighted={
-                highlightedItemKey ===
-                `label:${normalizeLabelSelectionKey(label.name)}`
-              }
-              icon={Tag01Icon}
-              key={label.id}
-              label={
-                selectionState === "exclude" ? `Not ${label.name}` : label.name
-              }
-              onClick={() => {
-                onToggleLabel(label.name);
-              }}
-            />
-          );
-        })}
-      </div>
-    );
-  } else {
-    labelsContent = (
-      <div className="px-2.5 py-2 text-body-sm text-muted-fg">
+  } else if (userLabels.length === 0) {
+    labelsStatus = (
+      <Text className="mx-2.5 my-1" size="sm" tone="muted">
         No custom labels.
-      </div>
+      </Text>
     );
   }
 
-  const labelsSubmenu =
-    showLabelsSubmenu &&
-    typeof document !== "undefined" &&
-    createPortal(
-      <div
-        className="pointer-events-none fixed z-50 hidden lg:block"
-        data-search-dropdown-content
-        style={{
-          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
-          height: labelsLayout.coneHeight,
-          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
-          left: labelsLayout.left - 8,
-          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
-          top: labelsLayout.top,
-          // oxlint-disable-next-line shadcn/no-inline-styles -- Dropdown rect is measured from the anchor element.
-          width: 296,
-        }}
-      >
-        <svg
-          aria-hidden
-          className="pointer-events-none absolute top-0 left-0"
-          height={labelsLayout.coneHeight}
-          viewBox={`0 0 8 ${labelsLayout.coneHeight}`}
-          width="8"
-        >
-          <polygon
-            className="pointer-events-auto"
-            fill="transparent"
-            onPointerEnter={(event) => {
-              if (event.pointerType === "mouse") {
-                cancelCloseLabelsSubmenu();
-              }
-            }}
-            onPointerLeave={(event) => {
-              if (event.pointerType === "mouse") {
-                scheduleCloseLabelsSubmenu();
-              }
-            }}
-            points={`0 ${labelsLayout.coneOriginY} 8 0 8 ${labelsLayout.coneHeight}`}
-          />
-        </svg>
-        <div
-          aria-label="Labels"
-          className={cn(
-            popupSurfaceClassName,
-            "pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl p-1"
-          )}
-          onPointerEnter={(event) => {
-            if (event.pointerType === "mouse") {
-              cancelCloseLabelsSubmenu();
-            }
-          }}
-          onPointerLeave={(event) => {
-            if (event.pointerType === "mouse") {
-              scheduleCloseLabelsSubmenu();
-            }
-          }}
-          ref={labelsSubmenuRef}
-        >
-          {labelsContent}
-        </div>
-      </div>,
-      document.body
-    );
-
   return (
-    <LazyMotion features={domAnimation}>
-      <AnimatePresence initial={false}>
-        {isOpen && (
-          <m.div
-            animate={{ opacity: 1, scale: 1, transformOrigin: "top", y: 0 }}
-            exit={{
-              opacity: 0,
-              scale: 0.95,
-              transformOrigin: "top",
-              y: -10,
-            }}
-            initial={{
-              opacity: 0,
-              scale: 0.95,
-              transformOrigin: "top",
-              y: -10,
-            }}
-            transition={{ duration: 0.1, ease: "easeOut" }}
-            aria-label="Search filters"
-            className={cn(
-              popupSurfaceClassName,
-              "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-56 flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-72"
-            )}
-            data-blocking-overlay=""
-            data-search-dropdown-content
-            onMouseDown={(event) => {
-              event.preventDefault();
-            }}
+    <m.section
+      animate={enter}
+      aria-labelledby={titleId}
+      className={cn(
+        popupSurfaceClassName,
+        "absolute inset-x-0 top-8 z-30 mt-2 flex max-h-[min(26rem,calc(100dvh-5rem))] flex-col overflow-hidden rounded-xl p-1 @md:max-w-sm"
+      )}
+      data-blocking-overlay=""
+      data-search-dropdown-content
+      exit={exit}
+      id={id}
+      initial={exit}
+      onMouseDown={(event) => {
+        event.preventDefault();
+      }}
+      transition={{ duration: 0.1, ease: "easeOut" }}
+      onKeyDown={(event) => {
+        if (event.key !== "ArrowDown" && event.key !== "ArrowUp") {
+          return;
+        }
+        const options = [
+          ...event.currentTarget.querySelectorAll<HTMLButtonElement>(
+            "[data-search-option]"
+          ),
+        ];
+        const current =
+          event.target instanceof HTMLButtonElement
+            ? options.indexOf(event.target)
+            : -1;
+        const offset = event.key === "ArrowDown" ? 1 : -1;
+        const next =
+          current === -1 && offset === -1
+            ? options.length - 1
+            : (current + offset + options.length) % options.length;
+        event.preventDefault();
+        options[next]?.focus();
+      }}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 pb-1 pl-2.5">
+        <Text as="h2" id={titleId} size="sm" weight="medium">
+          Filters
+        </Text>
+        <IconButtonTooltip label="Close filters">
+          <Button
+            aria-label="Close filters"
+            onClick={onDismiss}
+            focusRing="inset"
+            size="icon-sm"
+            variant="ghost"
           >
-            <div
-              className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
-              ref={scrollContainerRef}
-            >
-              <div className="flex flex-col gap-3">
-                {searchFilterSections.map((section) => (
-                  <div className="flex flex-col gap-1" key={section.label}>
-                    <SearchDropdownSectionLabel>
-                      {section.label}
-                    </SearchDropdownSectionLabel>
+            <Icon aria-hidden icon={Cancel01Icon} />
+          </Button>
+        </IconButtonTooltip>
+      </div>
+
+      <div
+        className="@container relative min-h-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-contain"
+        ref={scrollContainerRef}
+      >
+        <div className="flex flex-col gap-1.5">
+          {createSearchFilterSections(filterOptions).map(
+            (section) =>
+              section.options.length > 0 && (
+                <fieldset className="min-w-0" key={section.label}>
+                  <legend className="px-2.5 pb-0.5 text-caption text-muted-fg">
+                    {section.label}
+                  </legend>
+                  <div className={searchOptionGridClassName}>
                     {section.options.map((option) => {
                       const selectionState = getSearchFilterOptionState(
                         draftSearchState.filters,
                         option.filter
                       );
+                      const itemKey = `filter:${option.filter.type}:${option.filter.value}`;
+                      const pressed =
+                        selectionState === "exclude"
+                          ? "mixed"
+                          : selectionState === "include";
                       return (
-                        <SearchDropdownRow
-                          active={selectionState !== null}
-                          highlighted={
-                            highlightedItemKey ===
-                            `filter:${option.filter.type}:${option.filter.value}`
-                          }
-                          hint={
-                            selectionState === "exclude"
-                              ? `-${option.hint}`
-                              : option.hint
-                          }
-                          icon={option.icon}
-                          key={`${option.filter.type}:${option.filter.value}`}
-                          label={
-                            selectionState === "exclude"
-                              ? `Not ${option.label}`
-                              : option.label
-                          }
+                        <SearchDropdownOption
+                          hint={option.hint}
+                          key={itemKey}
+                          leading={<Icon aria-hidden icon={option.icon} />}
                           onClick={() => {
                             onSelectFilter(option.filter);
                           }}
-                        />
+                          // Editable filters add another value instead of toggling.
+                          pressed={
+                            isFixedValueFilter(option.filter)
+                              ? pressed
+                              : undefined
+                          }
+                          selectionState={selectionState}
+                        >
+                          <span className="min-w-0 truncate">
+                            {option.label}
+                          </span>
+                        </SearchDropdownOption>
                       );
                     })}
                   </div>
-                ))}
+                </fieldset>
+              )
+          )}
 
-                <div className="flex flex-col gap-1">
-                  <SearchDropdownSectionLabel>More</SearchDropdownSectionLabel>
-                  <div
-                    className="relative"
-                    onPointerEnter={(event) => {
-                      if (event.pointerType !== "mouse") {
-                        return;
-                      }
-                      cancelCloseLabelsSubmenu();
-                      setIsLabelsSubmenuOpen(true);
-                    }}
-                    onPointerLeave={(event) => {
-                      if (event.pointerType === "mouse") {
-                        scheduleCloseLabelsSubmenu();
-                      }
-                    }}
+          <div className="flex flex-col gap-0.5" ref={labelsSectionRef}>
+            <Button
+              aria-controls={isLabelsOpen ? labelsId : undefined}
+              aria-expanded={isLabelsOpen}
+              data-search-option=""
+              focusRing="inset"
+              onClick={() => {
+                setIsLabelsOpen(!isLabelsOpen);
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <Icon aria-hidden icon={Tag01Icon} />
+              <span className="min-w-0 flex-1 truncate text-left">Labels</span>
+              {selectedLabelStates.size > 0 && (
+                <span>{selectedLabelStates.size}</span>
+              )}
+              <Icon
+                aria-hidden
+                className={cn({ "rotate-180": isLabelsOpen })}
+                icon={ArrowDown01Icon}
+              />
+            </Button>
+
+            {isLabelsOpen && (
+              <div id={labelsId}>
+                {labelsStatus}
+                {userLabels.length > 0 && (
+                  <fieldset
+                    aria-label="Labels"
+                    className={cn(searchOptionGridClassName, "min-w-0")}
                   >
-                    <button
-                      aria-expanded={showLabelsSubmenu}
-                      aria-haspopup="true"
-                      className={cn(
-                        "relative z-50 flex h-8 max-h-8 min-h-8 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
-                        {
-                          "bg-control-hover": isLabelHighlighted,
-                          "bg-detail":
-                            selectedUserLabelStates.size > 0 &&
-                            !isLabelHighlighted,
-                        }
-                      )}
-                      onClick={() => {
-                        setIsLabelsSubmenuOpen((open) => !open);
-                      }}
-                      ref={labelsTriggerRef}
-                      type="button"
-                    >
-                      <Icon
-                        aria-hidden
-                        size={14}
-                        tone="muted"
-
-                        icon={Tag01Icon}
-                      />
-                      <span className="min-w-0 flex-1 truncate">Labels</span>
-                      <Icon
-                        aria-hidden
-                        className={cn("", {
-                          "rotate-90 lg:rotate-0": showLabelsSubmenu,
-                        })}
-                        size={14}
-                        tone="muted"
-                        icon={ArrowRight01Icon}
-                      />
-                    </button>
-
-                    <AnimatePresence initial={false}>
-                      {showLabelsSubmenu && (
-                        <m.div
-                          animate={{ gridTemplateRows: "1fr", opacity: 1 }}
-                          className="grid lg:hidden"
-                          exit={{ gridTemplateRows: "0fr", opacity: 0 }}
-                          initial={{ gridTemplateRows: "0fr", opacity: 0 }}
-                          transition={{ duration: 0.16, ease: "easeOut" }}
+                    {userLabels.map((label) => {
+                      const selectionState =
+                        selectedLabelStates.get(
+                          normalizeLabelSelectionKey(label.id)
+                        ) ??
+                        selectedLabelStates.get(
+                          normalizeLabelSelectionKey(label.name)
+                        ) ??
+                        null;
+                      return (
+                        <SearchDropdownOption
+                          key={label.id}
+                          onClick={() => {
+                            onToggleLabel(label.name);
+                          }}
+                          pressed={
+                            selectionState === "exclude"
+                              ? "mixed"
+                              : selectionState === "include"
+                          }
+                          selectionState={selectionState}
                         >
-                          <div className="min-h-0 overflow-hidden">
-                            <div
-                              aria-label="Labels"
-                              className="mt-1 rounded-md bg-detail p-1"
-                              ref={labelsInlineRef}
-                            >
-                              {labelsContent}
-                            </div>
-                          </div>
-                        </m.div>
-                      )}
-                    </AnimatePresence>
-                    {labelsSubmenu}
-                  </div>
-                </div>
+                          <Pill
+                            className="min-w-0 shrink"
+                            customColor={
+                              label.color?.startsWith("#") === true
+                                ? label.color
+                                : undefined
+                            }
+                            size="xs"
+                            title={label.name}
+                            tone={
+                              mailboxLabelPillToneByColor[label.color ?? "gray"]
+                            }
+                          >
+                            <span className="truncate">{label.name}</span>
+                          </Pill>
+                        </SearchDropdownOption>
+                      );
+                    })}
+                  </fieldset>
+                )}
               </div>
-            </div>
-
-            <ActionFooter className="mt-1 shrink-0 lg:hidden">
-              <Button onClick={onDismiss} size="sm" type="button">
-                <Icon aria-hidden size={14} icon={Cancel01Icon} />
-                Close search
-              </Button>
-            </ActionFooter>
-          </m.div>
-        )}
-      </AnimatePresence>
-    </LazyMotion>
+            )}
+          </div>
+        </div>
+      </div>
+      <ActionFooter className="mt-1 shrink-0">
+        <Button
+          data-search-option=""
+          onClick={onRunSearch}
+          size="sm"
+          type="button"
+        >
+          Search
+        </Button>
+      </ActionFooter>
+    </m.section>
   );
 };
+
+export const MessageListSearchDropdown = ({
+  isOpen,
+  ...panelProps
+}: MessageListSearchDropdownProps) => (
+  <LazyMotion features={domAnimation}>
+    <AnimatePresence initial={false}>
+      {isOpen && <SearchDropdownPanel {...panelProps} />}
+    </AnimatePresence>
+  </LazyMotion>
+);

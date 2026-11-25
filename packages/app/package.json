@@ -118,7 +118,6 @@
     "./features/message-labels/domain/sidebar-label-visibility": "./src/features/message-labels/domain/sidebar-label-visibility.ts",
     "./features/message-list/components/message-list": "./src/features/message-list/components/message-list.tsx",
     "./features/message-list/components/message-list-header": "./src/features/message-list/components/message-list-header.tsx",
-    "./features/message-list/components/message-list-header-surfaces": "./src/features/message-list/components/message-list-header-surfaces.ts",
     "./features/message-list/components/message-list-scroll-pane": "./src/features/message-list/components/message-list-scroll-pane.tsx",
     "./features/message-list/components/message-list-selection-toolbar": "./src/features/message-list/components/message-list-selection-toolbar.tsx",
     "./features/message-list/components/message-list-types": "./src/features/message-list/components/message-list-types.ts",
