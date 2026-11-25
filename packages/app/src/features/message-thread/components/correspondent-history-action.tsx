@@ -44,7 +44,7 @@ import { Surface } from "@quieter/ui/surface";
 import { Tabs, TabsList, TabsPanel, TabsTab } from "@quieter/ui/tabs";
 import { Text } from "@quieter/ui/text";
 import { WorkspaceHeader } from "@quieter/ui/workspace-section";
-import { useId } from "react";
+import { useId, useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 import { useReminderClock } from "../../reminders/reminder-query";
@@ -595,6 +595,7 @@ const CorrespondentHistoryOwner = ({
 }) => {
   const triggerId = useId();
   const initialFocusId = useId();
+  const focusAfterSelection = useRef(false);
   const mailboxEmail = props.mailboxEmail?.trim().toLowerCase();
   const messages = props.messages.filter(
     (message) => message.threadId === props.threadId
@@ -622,6 +623,15 @@ const CorrespondentHistoryOwner = ({
     (choice) => choice.email === selected?.scope.correspondentEmail
   );
   const editingMemory = selected?.editingMemory;
+  const hasSelection = selected !== null;
+  useLayoutEffect(() => {
+    if (hasSelection && focusAfterSelection.current) {
+      focusAfterSelection.current = false;
+      document
+        .querySelector<HTMLElement>(`#${CSS.escape(initialFocusId)}`)
+        ?.focus({ preventScroll: true });
+    }
+  }, [hasSelection, initialFocusId]);
   let title = "Choose a person";
   if (person) {
     title = `Correspondent history, ${person.name ?? person.email}`;
@@ -653,7 +663,6 @@ const CorrespondentHistoryOwner = ({
         </DialogTrigger>
       </IconButtonTooltip>
       <DialogContent
-        className="min-h-80"
         finalFocus={() =>
           history.consumeFocusHandoff()
             ? false
@@ -799,6 +808,7 @@ const CorrespondentHistoryOwner = ({
                         className="w-full"
                         id={index === 0 ? initialFocusId : undefined}
                         onClick={() => {
+                          focusAfterSelection.current = true;
                           history.selectCorrespondent(choice.email);
                         }}
                         size="auto"
