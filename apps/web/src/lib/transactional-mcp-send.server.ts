@@ -63,10 +63,13 @@ const sendEmailInputSchema = z.object({
       "Sender address on a domain verified for this team, for example `Acme <hello@acme.com>`."
     ),
   headers: z
-    .record(z.string(), z.string())
+    .union([
+      z.record(z.string(), z.string()),
+      z.array(z.object({ name: z.string(), value: z.string() })),
+    ])
     .optional()
     .describe(
-      "Extra email headers as name and value pairs. Use List-ID to identify a topic and List-Unsubscribe for your recipient-specific unsubscribe URL in angle brackets. Structural headers such as From, To, and Subject are not allowed."
+      "Extra email headers as a map or ordered list. Use List-ID to identify a topic and List-Unsubscribe for your recipient-specific unsubscribe URL in angle brackets. Structural headers such as From, To, and Subject are not allowed."
     ),
   html: z
     .string()
@@ -91,6 +94,7 @@ const sendEmailInputSchema = z.object({
     .boolean()
     .optional()
     .describe("Enable open tracking for this message."),
+  otpToken: otpTokenSchema.optional(),
   replyTo: addressListSchema.optional().describe("Reply-to addresses."),
   subject: z.string().min(1).describe("Message subject."),
   tags: z
@@ -206,18 +210,8 @@ export const registerTransactionalMailSendTool = (
       inputSchema: sendEmailInputSchema
         .extend({
           authorization: mcpAuthorizationSchema.optional(),
-          headers: z
-            .union([
-              z.record(z.string(), z.string()),
-              z.array(z.object({ name: z.string(), value: z.string() })),
-            ])
-            .optional()
-            .describe(
-              "Custom headers as a map or an ordered list. Structural headers such as From, To, and Subject are disallowed."
-            ),
           idempotencyKey: sendEmailInputSchema.shape.idempotencyKey.unwrap(),
           organizationId: transactionalOrganizationIdSchema,
-          otpToken: otpTokenSchema.optional(),
         })
         .strict(),
       title: "Send transactional email",

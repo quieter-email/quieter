@@ -15,7 +15,7 @@ export const getMcpLoginForRequest = async (
     new Headers(request.headers)
   );
   return {
-    continueTo: resumeMcpAuthorization(
+    continueTo: await resumeMcpAuthorization(
       authorizationRequest,
       session?.session ?? null
     ),

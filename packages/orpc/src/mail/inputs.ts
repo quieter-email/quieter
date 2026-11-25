@@ -192,10 +192,17 @@ export const mailInputSchemas = {
   }),
   listThreads: z.object({
     category: mailCategorySchema,
+    correspondentEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.email())
+      .optional(),
     mailboxId: z.string().trim().min(1),
     maxResults: z.number().int().positive().max(100).optional(),
     pageToken: z.string().optional(),
     query: z.string().optional(),
+    scope: z.literal("all_mail").optional(),
   }),
   markMessageAsRead: z.object({
     mailboxId: z.string().trim().min(1),

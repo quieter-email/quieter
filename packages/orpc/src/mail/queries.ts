@@ -194,19 +194,23 @@ const gmailReplayFallback: MailboxSyncDelta = {
 };
 
 const projectSnoozableGmailRows = async (input: {
-  category: MailInputs["listThreads"]["category"];
+  category?: MailInputs["listThreads"]["category"];
   context: MailRequestContext;
   mailboxId: string;
   messages: MessageListItem[];
 }) => {
   const { category, context, mailboxId } = input;
+  const hydrated = await hydrateGmailMessageMetadata(
+    mailboxId,
+    input.messages,
+    context.resHeaders
+  );
+  if (category === undefined) {
+    return hydrated;
+  }
   const messages = await attachMailSnoozeStates({
     mailboxId,
-    messages: await hydrateGmailMessageMetadata(
-      mailboxId,
-      input.messages,
-      context.resHeaders
-    ),
+    messages: hydrated,
     userId: context.userId,
   });
   const visible = await filterMailSnoozeVisibility({
@@ -703,7 +707,19 @@ export const queriesMailOperations = {
     context: MailRequestContext;
     input: MailInputs["listThreads"];
   }) => {
+    // Kept out of the zod schema: refined object schemas break .omit() callers
+    // such as the chat mail tools, and this funnel sees every caller anyway.
+    if (input.correspondentEmail !== undefined && input.scope !== "all_mail") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Correspondent history requires all mail.",
+      });
+    }
     if (isOrganizationApiMailboxId(input.mailboxId)) {
+      if (input.scope === "all_mail") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "All mail history is unavailable for this mailbox.",
+        });
+      }
       return await listOrganizationApiMailMessages({
         ...input,
         userId: context.userId,
@@ -715,7 +731,8 @@ export const queriesMailOperations = {
       mailboxId: input.mailboxId,
       userId: context.userId,
     });
-    if (input.category === "later" && !input.query?.trim()) {
+    const category = input.scope === "all_mail" ? undefined : input.category;
+    if (category === "later" && !input.query?.trim()) {
       return await listLaterMessages({
         ...input,
         contentRevision: selectedMailbox.contentRevision,
@@ -733,13 +750,16 @@ export const queriesMailOperations = {
           pageToken,
           userId: context.userId,
         });
+        if (category === undefined) {
+          return page;
+        }
         const messages = await attachMailSnoozeStates({
           mailboxId: input.mailboxId,
           messages: page.messages,
           userId: context.userId,
         });
         const visible = await filterMailSnoozeVisibility({
-          category: input.category,
+          category,
           mailboxId: input.mailboxId,
           threadIds: messages.map((message) => message.threadId),
           userId: context.userId,
@@ -759,7 +779,7 @@ export const queriesMailOperations = {
       }
     }
 
-    if (input.category === "important") {
+    if (category === "important") {
       const searchExpression = parseCapturedImportanceSearch(input.query);
       const pending: MailSearchExpression[] = searchExpression
         ? [searchExpression]
@@ -812,7 +832,7 @@ export const queriesMailOperations = {
         }),
       };
     }
-    if (input.category === "later") {
+    if (category === "later") {
       const visibleSnoozeCount = await countVisibleMailSnoozes({
         mailboxId: input.mailboxId,
         userId: context.userId,
@@ -830,7 +850,7 @@ export const queriesMailOperations = {
         context,
         input.mailboxId,
         async (accessToken, signal) =>
-          input.category === "drafts"
+          category === "drafts"
             ? await listDraftsWithDetails(accessToken, {
                 maxResults: input.maxResults,
                 pageToken: currentPageToken,
@@ -838,7 +858,9 @@ export const queriesMailOperations = {
                 signal,
               })
             : await listMessagesWithDetails(accessToken, {
-                mailbox: input.category,
+                correspondentEmail: input.correspondentEmail,
+                excludeProtected: input.scope === "all_mail" ? true : undefined,
+                mailbox: category,
                 maxResults: input.maxResults,
                 pageToken: currentPageToken,
                 query: input.query?.trim() || undefined,
@@ -846,13 +868,14 @@ export const queriesMailOperations = {
               })
       );
       const messages = await projectSnoozableGmailRows({
-        category: input.category,
+        category,
         context,
         mailboxId: input.mailboxId,
         messages: page.messages,
       });
       pagesScanned += 1;
       if (
+        category === undefined ||
         messages.length > 0 ||
         page.nextPageToken === undefined ||
         pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
@@ -860,7 +883,7 @@ export const queriesMailOperations = {
         return {
           ...page,
           changeVersion:
-            input.category === "later"
+            category === "later"
               ? undefined
               : String(selectedMailbox.mailChangeVersion),
           historyId: page.historyId

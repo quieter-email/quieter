@@ -68,8 +68,10 @@ export const createMailReadChatTools = (input: {
         status: "success",
       };
     },
-    inputSchema: mailInputSchemas.listThreads.omit({ mailboxId: true }).extend({
-      category: mailInputSchemas.listThreads.shape.category.optional(),
-    }),
+    inputSchema: mailInputSchemas.listThreads
+      .omit({ correspondentEmail: true, mailboxId: true, scope: true })
+      .extend({
+        category: mailInputSchemas.listThreads.shape.category.optional(),
+      }),
   }),
 });

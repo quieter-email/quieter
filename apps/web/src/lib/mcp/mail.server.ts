@@ -78,7 +78,8 @@ export const prepareMailInput = (
     });
   }
 
-  const { attachments, inlineImages } = parsed.data;
+  const attachments = parsed.data.attachments.map(decodeAttachment);
+  const inlineImages = parsed.data.inlineImages.map(decodeAttachment);
   const preview = {
     ...input,
     [field]: {
@@ -96,8 +97,8 @@ export const prepareMailInput = (
       ...input,
       [field]: {
         ...parsed.data,
-        attachments: attachments.map(decodeAttachment),
-        inlineImages: inlineImages.map(decodeAttachment),
+        attachments,
+        inlineImages,
         localId,
         updatedAt: parsed.data.updatedAt ?? Date.now(),
       },

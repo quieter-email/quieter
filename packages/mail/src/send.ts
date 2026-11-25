@@ -19,6 +19,8 @@ export const MAX_SEND_ATTACHMENT_METADATA_LENGTH = 998;
 
 const HEADER_NAME_PATTERN = /^[!#$%&'*+\-.^_`|~0-9A-Za-z]+$/u;
 const BASE64_PATTERN = /^[A-Za-z0-9+/]*={0,2}$/u;
+// Nodemailer folds at 76 columns and can extend through an unbroken segment.
+const MAX_UNFOLDABLE_HEADER_SEGMENT_LENGTH = 998 - 76;
 const STRUCTURAL_HEADER_NAMES = new Set([
   "bcc",
   "cc",
@@ -218,14 +220,15 @@ export const sendMessageInputSchema = z
     }
   )
   .superRefine((input, ctx) => {
-    const otpHeaders = (
-      Array.isArray(input.headers)
-        ? input.headers
-        : Object.entries(input.headers ?? {}).map(([name, value]) => ({
-            name,
-            value,
-          }))
-    ).filter(({ name }) => name.toLowerCase() === "otp-token");
+    const headers = Array.isArray(input.headers)
+      ? input.headers
+      : Object.entries(input.headers ?? {}).map(([name, value]) => ({
+          name,
+          value,
+        }));
+    const otpHeaders = headers.filter(
+      ({ name }) => name.toLowerCase() === "otp-token"
+    );
     if (otpHeaders.length > 1 || (input.otpToken && otpHeaders.length > 0)) {
       ctx.addIssue({
         code: "custom",
@@ -244,14 +247,32 @@ export const sendMessageInputSchema = z
     const otpValue = validOtp.success
       ? serializeOtpToken(validOtp.data)
       : otpHeaders[0]?.value;
-    // Nodemailer folds at 76 columns but extends through an unbroken segment.
-    // Reserve that prefix so every physical line stays within RFC 5322's 998 columns.
-    if (otpValue?.split(/[\t ]/u).some((part) => part.length > 998 - 76)) {
+    if (
+      otpValue
+        ?.split(/[\t ]/u)
+        .some((part) => part.length > MAX_UNFOLDABLE_HEADER_SEGMENT_LENGTH)
+    ) {
       ctx.addIssue({
         code: "custom",
         message:
           "OTP-Token contains a value too long for an email header line.",
         path: [input.otpToken ? "otpToken" : "headers"],
+      });
+    }
+    if (
+      headers.some(
+        ({ name, value }) =>
+          name.toLowerCase() === "list-unsubscribe" &&
+          value
+            .split(/[\t ]/u)
+            .some((part) => part.length > MAX_UNFOLDABLE_HEADER_SEGMENT_LENGTH)
+      )
+    ) {
+      ctx.addIssue({
+        code: "custom",
+        message:
+          "List-Unsubscribe contains a URL too long for an email header line.",
+        path: ["headers"],
       });
     }
     const addressFields = [

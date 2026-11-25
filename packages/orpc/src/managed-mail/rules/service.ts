@@ -128,14 +128,13 @@ const assertRuleDefinition = async (
   };
 };
 
-const toRuleResponse = <T extends { actions: unknown; labelIds: string[] }>(
-  record: T
-) => ({
+const toRuleResponse = (record: typeof managedMailRule.$inferSelect) => ({
   ...record,
   actions: getManagedMailboxRuleActions({
     actions: record.actions,
     labelIds: record.labelIds,
   }),
+  conditionGroups: record.conditionGroups ?? [],
 });
 
 export const listManagedRules = async (input: {

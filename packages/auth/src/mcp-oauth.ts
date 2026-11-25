@@ -400,18 +400,28 @@ export const handleMcpOAuthRequest = async (
  * Resumes an authorization request after sign-in. Returns null when the person
  * still has to sign in, including when the client asked for a fresh sign-in.
  */
-export const resumeMcpAuthorization = (
+export const resumeMcpAuthorization = async (
   request: string,
   session: { createdAt: Date } | null
 ) => {
-  const params = new URLSearchParams(decodeAuthorizationRequest(request));
+  const query = decodeAuthorizationRequest(request);
+  if (
+    session === null ||
+    serverEnv.BETTER_AUTH_SECRET === undefined ||
+    !(await verifyOAuthQueryParams(query, serverEnv.BETTER_AUTH_SECRET))
+  ) {
+    return null;
+  }
+  const params = new URLSearchParams(query);
   const issuedAt = Number(params.get("ba_iat"));
   const isFresh =
-    session !== null && new Date(session.createdAt).getTime() >= issuedAt;
+    Number.isFinite(issuedAt) &&
+    issuedAt > 0 &&
+    new Date(session.createdAt).getTime() >= issuedAt;
   const prompts = params.get("prompt")?.split(" ") ?? [];
   const requiresFreshSession =
     prompts.includes("login") || params.has("max_age");
-  if (session === null || (requiresFreshSession && !isFresh)) {
+  if (requiresFreshSession && !isFresh) {
     return null;
   }
   const resumed = new URLSearchParams(

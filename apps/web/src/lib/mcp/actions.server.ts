@@ -104,6 +104,16 @@ export const orpcActions = {
       "Get the Quieter settings URL to connect an app in the browser.",
     ],
   },
+  correspondentHistory: {
+    list: [
+      "read",
+      "List mail, memory, or commitments for a correspondent in a mailbox.",
+    ],
+    openSource: [
+      "read",
+      "Open the source email for a correspondent history result.",
+    ],
+  },
   mail: {
     applyChanges: [
       "mail_change",
