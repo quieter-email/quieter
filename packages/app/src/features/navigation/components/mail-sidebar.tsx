@@ -43,7 +43,7 @@ type MailSidebarProps = {
     id: string;
     kind: "division" | "organization" | "unassigned";
     mailboxes: {
-      accessMode?: "private" | "shared" | null;
+      accessMode: "private" | "shared" | null;
       capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;

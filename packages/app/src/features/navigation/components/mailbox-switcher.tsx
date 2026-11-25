@@ -52,7 +52,7 @@ import type {
 import { createPortal } from "react-dom";
 
 type MailboxSwitcherMailbox = {
-  accessMode?: "private" | "shared" | null;
+  accessMode: "private" | "shared" | null;
   connectionStatus: "connected" | "needs_reconnect";
   displayName: string | null;
   divisionName?: string | null;
@@ -437,11 +437,13 @@ const MailboxSummary = ({
           </p>
         )}
       </div>
-      {mailbox.provider === "managed" && (
-        <span className="shrink-0 text-caption text-muted-fg">
-          {mailbox.accessMode === "private" ? "Private" : "Shared"}
-        </span>
-      )}
+      {mailbox.provider === "managed" &&
+        (mailbox.accessMode === "private" ||
+          mailbox.accessMode === "shared") && (
+          <span className="shrink-0 text-caption text-muted-fg">
+            {mailbox.accessMode === "private" ? "Private" : "Shared"}
+          </span>
+        )}
       {action}
       <MailboxInboxStatus mailbox={mailbox} />
     </div>
