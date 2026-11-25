@@ -14,6 +14,7 @@ import {
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
+import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sidebar-label-nav";
@@ -35,13 +36,14 @@ import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 
 type MailSidebarProps = {
-  userId?: string;
+  userId: string;
   allInboxesActive?: boolean;
   embedded?: boolean;
   groups: {
     id: string;
     kind: "division" | "organization" | "unassigned";
     mailboxes: {
+      accessMode: "private" | "shared" | null;
       capabilities: MailboxCapabilities;
       connectionStatus: "connected" | "needs_reconnect";
       divisionName?: string | null;
@@ -89,7 +91,7 @@ let hasPlayedSidebarEntrance = false;
 
 const SidebarInboxSection = ({
   allInboxesActive = false,
-  userId = "preview",
+  userId,
   animateEntrance,
   embedded,
   groups,
@@ -350,6 +352,7 @@ const SidebarContent = ({
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
+  const { excludedIds } = useUnifiedInboxPreferences(userId);
   const handleSelectMailboxId = (mailboxId: string) => {
     onSelectMailboxId(mailboxId);
     onRequestClose?.();
@@ -383,6 +386,7 @@ const SidebarContent = ({
           reconnectingMailboxId={reconnectingMailboxId}
           selectedMailboxId={selectedMailboxId}
           side={switcherSide}
+          unifiedInboxExcludedIds={excludedIds}
         />
 
         {onRequestClose && (

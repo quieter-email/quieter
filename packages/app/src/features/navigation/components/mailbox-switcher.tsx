@@ -19,6 +19,7 @@ import {
 } from "@dnd-kit/react";
 import type { DragDropEventHandlers } from "@dnd-kit/react";
 import {
+  ArrowDown01Icon,
   ArrowRight01Icon,
   Loading03Icon,
   Mail01Icon,
@@ -34,6 +35,7 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
@@ -50,7 +52,7 @@ import type {
 import { createPortal } from "react-dom";
 
 type MailboxSwitcherMailbox = {
-  accessMode?: "private" | "shared" | null;
+  accessMode: "private" | "shared" | null;
   connectionStatus: "connected" | "needs_reconnect";
   displayName: string | null;
   divisionName?: string | null;
@@ -93,6 +95,7 @@ type MailboxSwitcherDropdownProps = {
   reconnectingMailboxId: string | null;
   selectedMailboxId: string | null;
   side?: "bottom" | "right";
+  unifiedInboxExcludedIds: readonly string[];
 };
 
 const getMailboxSwitcherSummary = (
@@ -103,18 +106,13 @@ const getMailboxSwitcherSummary = (
     mailboxes.find((mailbox) => mailbox.id === selectedMailboxId) ??
     mailboxes[0] ??
     null;
-  const selectedDisplayName = selectedMailbox?.displayName?.trim() ?? null;
+  const selectedDisplayName = selectedMailbox?.displayName?.trim();
   const primaryLabel =
     selectedDisplayName || (selectedMailbox?.emailAddress ?? "no mailbox");
   const secondaryLabel =
-    selectedMailbox === null
-      ? "No team"
-      : [
-          selectedDisplayName ? selectedMailbox.emailAddress : null,
-          selectedMailbox.groupName,
-        ]
-          .filter((value): value is string => value !== null)
-          .join(" / ");
+    (selectedDisplayName
+      ? selectedMailbox?.emailAddress
+      : selectedMailbox?.groupName) ?? "No team";
 
   return { primaryLabel, secondaryLabel, selectedMailbox };
 };
@@ -261,8 +259,13 @@ const getMailboxSwitcherOrder = (
   ),
 });
 
+const hasUnreadMail = (mailbox: MailboxSwitcherMailbox) =>
+  mailbox.connectionStatus === "connected" &&
+  mailbox.provider !== "api" &&
+  mailbox.unreadNonSpamCount > 0;
+
 const formatUnreadCount = (count: number) =>
-  count > 99 ? "99+" : String(Math.max(0, count));
+  count > 99 ? "99+" : String(count);
 
 const ReorderRow = ({
   children,
@@ -341,12 +344,10 @@ const MailboxMenuItem = ({
   handleRef: Ref<HTMLButtonElement>;
 }) => (
   <div
-    className={cn(
-      "group/item flex items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover",
-      {
-        "bg-muted": isActive,
-      }
-    )}
+    className={cn("group/item flex items-center rounded-md squircle", {
+      "bg-selection": isActive,
+      "focus-within:bg-control-hover hover:bg-control-hover": !isActive,
+    })}
   >
     <DropdownMenuItem
       nativeButton
@@ -362,7 +363,7 @@ const MailboxMenuItem = ({
       aria-describedby="mailbox-order-help"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
       // oxlint-disable-next-line shadcn/no-restyle -- Compact full-row mailbox selection and drag surface.
-      className="h-auto min-h-12 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-2 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent"
+      className="h-auto min-h-10 min-w-0 flex-1 touch-pan-y justify-start px-2.5 py-1 text-left hover:bg-transparent active:scale-100 aria-[current=page]:bg-transparent data-highlighted:bg-transparent"
       data-mailbox-switcher-navigation-item
       onSelect={(event) => {
         if (!event.defaultPrevented) {
@@ -388,16 +389,26 @@ const MailboxInboxStatus = ({
   }
 
   if (mailbox.provider === "api") {
-    return <span className="text-caption text-muted-fg">Send only</span>;
+    return (
+      <span className="shrink-0 text-caption text-muted-fg">Send only</span>
+    );
   }
 
-  if (mailbox.unreadNonSpamCount === 0) {
+  const unread = hasUnreadMail(mailbox);
+  if (!unread && mailbox.provider !== "managed") {
     return null;
   }
 
   return (
-    <span className="text-caption text-muted-fg">
-      {formatUnreadCount(mailbox.unreadNonSpamCount)}
+    <span className="min-w-7 shrink-0 text-right text-caption text-fg tabular-nums">
+      {unread && (
+        <>
+          <span aria-hidden>
+            {formatUnreadCount(mailbox.unreadNonSpamCount)}
+          </span>
+          <span className="sr-only">{mailbox.unreadNonSpamCount} unread</span>
+        </>
+      )}
     </span>
   );
 };
@@ -417,7 +428,7 @@ const MailboxSummary = ({
       className={cn("flex min-w-0 items-center gap-2 rounded-md", className)}
     >
       <div className="min-w-0 flex-1">
-        <p className="truncate text-body/5 text-fg">
+        <p className="truncate text-body-sm/4 text-fg">
           {displayName ?? mailbox.emailAddress}
         </p>
         {displayName !== null && (
@@ -426,11 +437,13 @@ const MailboxSummary = ({
           </p>
         )}
       </div>
-      {mailbox.provider === "managed" && (
-        <span className="shrink-0 text-caption text-muted-fg">
-          {mailbox.accessMode === "private" ? "Private" : "Shared"}
-        </span>
-      )}
+      {mailbox.provider === "managed" &&
+        (mailbox.accessMode === "private" ||
+          mailbox.accessMode === "shared") && (
+          <span className="shrink-0 text-caption text-muted-fg">
+            {mailbox.accessMode === "private" ? "Private" : "Shared"}
+          </span>
+        )}
       {action}
       <MailboxInboxStatus mailbox={mailbox} />
     </div>
@@ -468,7 +481,7 @@ const MailboxTeam = ({
         disabled={disabled}
       >
         {(handleRef) => (
-          <div className="group/header flex min-h-7 items-center rounded-md squircle focus-within:bg-control-hover hover:bg-control-hover">
+          <div className="flex min-h-7 items-center">
             <DropdownMenuItem
               closeOnSelect={false}
               nativeButton
@@ -477,7 +490,7 @@ const MailboxTeam = ({
               aria-expanded={!closed}
               aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
               // oxlint-disable-next-line shadcn/no-restyle -- Team header preserves the compact selector hierarchy.
-              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left hover:bg-transparent active:scale-100"
+              className="h-auto min-h-7 min-w-0 flex-1 touch-pan-y justify-start gap-2 px-2 py-1 text-left active:scale-100"
               data-mailbox-switcher-navigation-item
               onSelect={(event) => {
                 if (!event.defaultPrevented) {
@@ -496,16 +509,26 @@ const MailboxTeam = ({
               >
                 <Icon aria-hidden size={12} icon={ArrowRight01Icon} />
               </m.span>
-              <span className="min-w-0 flex-1 truncate text-caption text-muted-fg">
+              <span className="min-w-0 truncate text-caption text-muted-fg">
                 {group.name}
               </span>
+              {collapsed &&
+                !sortingTeams &&
+                group.mailboxes.some(hasUnreadMail) && (
+                  <>
+                    <span
+                      aria-hidden
+                      className="size-1.5 shrink-0 rounded-full bg-primary not-squircle"
+                    />
+                    <span className="sr-only">Unread mail</span>
+                  </>
+                )}
             </DropdownMenuItem>
             {group.kind === "organization" && !embedded && (
               <IconButtonTooltip label={`Open ${group.name} settings`}>
                 <LinkButton
                   aria-label={`Open ${group.name} settings`}
-                  // oxlint-disable-next-line shadcn/no-restyle -- Compact settings action reveals on hover and focus.
-                  className="mr-0.5 size-7 opacity-0 group-focus-within/header:opacity-100 group-hover/header:opacity-100 focus-visible:opacity-100"
+                  className="mr-0.5"
                   data-mailbox-switcher-navigation-action
                   search={{
                     from: "/",
@@ -550,7 +573,7 @@ const MailboxTeam = ({
           opacity: { duration: reducedMotion === true ? 0 : 0.16 },
         }}
       >
-        <div className="space-y-1 pt-1">{children}</div>
+        <div className="space-y-1">{children}</div>
       </m.div>
     </section>
   );
@@ -582,10 +605,19 @@ export const MailboxSwitcherDropdown = ({
   reconnectingMailboxId,
   selectedMailboxId,
   side = "right",
+  unifiedInboxExcludedIds,
 }: MailboxSwitcherDropdownProps) => {
   const mailboxes = groups.flatMap((group) => group.mailboxes);
   const { primaryLabel, secondaryLabel, selectedMailbox } =
     getMailboxSwitcherSummary(mailboxes, selectedMailboxId);
+  const currentLabel = allInboxesActive ? "All inboxes" : primaryLabel;
+  const hasOtherUnread = mailboxes.some(
+    (mailbox) =>
+      hasUnreadMail(mailbox) &&
+      (allInboxesActive
+        ? unifiedInboxExcludedIds.includes(mailbox.id)
+        : mailbox.id !== selectedMailbox?.id)
+  );
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
@@ -834,7 +866,7 @@ export const MailboxSwitcherDropdown = ({
       <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-control-hover">
         <DropdownMenuTrigger
           onKeyDownCapture={handleEscapeCapture}
-          aria-label="Switch mailbox"
+          aria-label={`Switch mailbox, ${currentLabel}${hasOtherUnread ? ", unread mail in other mailboxes" : ""}`}
           render={<Button size="auto" variant="ghost" />}
           nativeButton
           // oxlint-disable-next-line shadcn/no-restyle -- Switcher trigger keeps its nav metrics.
@@ -853,7 +885,7 @@ export const MailboxSwitcherDropdown = ({
               }}
             >
               <p className="truncate text-body-sm/5 font-medium text-fg">
-                {allInboxesActive ? "All inboxes" : primaryLabel}
+                {currentLabel}
               </p>
               <p className="mt-1 truncate text-caption text-muted-fg">
                 {allInboxesActive
@@ -862,6 +894,13 @@ export const MailboxSwitcherDropdown = ({
               </p>
             </m.div>
           </AnimatePresence>
+          {hasOtherUnread && (
+            <span
+              aria-hidden
+              className="size-1.5 shrink-0 rounded-full bg-primary not-squircle"
+            />
+          )}
+          <Icon aria-hidden icon={ArrowDown01Icon} tone="muted" />
         </DropdownMenuTrigger>
       </div>
 
@@ -869,8 +908,9 @@ export const MailboxSwitcherDropdown = ({
         onKeyDownCapture={handleEscapeCapture}
         align="start"
         // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
-        className="w-[min(20rem,calc(100vw-2rem))] p-1"
+        className="w-[min(20rem,calc(100vw-2rem))]"
         side={side}
+        size="compact"
       >
         <DragDropProvider<SwitcherDragData>
           plugins={defaultPreset.plugins.filter(
@@ -902,17 +942,20 @@ export const MailboxSwitcherDropdown = ({
               <>
                 {onSelectAllInboxes &&
                 mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
-                  <DropdownMenuItem
-                    nativeButton
-                    render={<Button variant="ghost" />}
-                    aria-current={allInboxesActive ? "page" : undefined}
-                    className="w-full justify-start"
-                    data-mailbox-switcher-navigation-item
-                    onSelect={onSelectAllInboxes}
-                  >
-                    <Icon aria-hidden icon={Mail01Icon} />
-                    All inboxes
-                  </DropdownMenuItem>
+                  <>
+                    <DropdownMenuItem
+                      nativeButton
+                      render={<Button variant="ghost" />}
+                      aria-current={allInboxesActive ? "page" : undefined}
+                      className="w-full justify-start"
+                      data-mailbox-switcher-navigation-item
+                      onSelect={onSelectAllInboxes}
+                    >
+                      <Icon aria-hidden icon={Mail01Icon} />
+                      All inboxes
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator className="shrink-0" />
+                  </>
                 ) : null}
                 {(mailboxes.length >= 8 || isFiltering) && (
                   <div className="sticky top-0 z-10 bg-popover">
@@ -1043,7 +1086,8 @@ export const MailboxSwitcherDropdown = ({
                   {orderAnnouncement}
                 </output>
                 {!embedded && (
-                  <div className="mt-1">
+                  <>
+                    <DropdownMenuSeparator className="shrink-0" />
                     <DropdownMenuItem
                       nativeButton
                       render={
@@ -1058,14 +1102,13 @@ export const MailboxSwitcherDropdown = ({
                           variant="ghost"
                         />
                       }
-                      // oxlint-disable-next-line shadcn/no-restyle -- Manage row keeps its compact nav metrics.
-                      className="h-auto min-h-7 w-full justify-between px-2.5 py-1 squircle"
+                      className="w-full justify-start"
                       data-mailbox-switcher-navigation-item
                     >
-                      Manage mailboxes
-                      <Icon aria-hidden icon={Settings01Icon} />
+                      <Icon aria-hidden icon={Settings01Icon} tone="muted" />
+                      <span className="text-muted-fg">Mailbox settings</span>
                     </DropdownMenuItem>
-                  </div>
+                  </>
                 )}
               </>
             ) : (
@@ -1089,11 +1132,9 @@ export const MailboxSwitcherDropdown = ({
                   return mailbox ? (
                     <div
                       aria-hidden
-                      className={cn("px-2.5 py-2", {
-                        "pr-10": mailbox.provider !== "api",
-                      })}
+                      className="flex min-h-10 items-center border border-transparent px-2.5 py-1"
                     >
-                      <MailboxSummary mailbox={mailbox} />
+                      <MailboxSummary className="w-full" mailbox={mailbox} />
                     </div>
                   ) : (
                     <div
@@ -1101,7 +1142,7 @@ export const MailboxSwitcherDropdown = ({
                       className="flex min-h-7 items-center gap-2 px-2 py-1 text-caption text-muted-fg"
                     >
                       <Icon size={12} icon={ArrowRight01Icon} />
-                      {group?.name}
+                      <span className="min-w-0 truncate">{group?.name}</span>
                     </div>
                   );
                 }}
