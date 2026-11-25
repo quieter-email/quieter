@@ -566,7 +566,7 @@ export const OnboardingScreen = () => {
     },
     onSuccess: async () => {
       queryClient.clear();
-      await navigate({ to: returnToRef.current ?? "/" });
+      await navigate({ href: returnToRef.current ?? "/" });
     },
   });
   const createMailboxMutation = useMutation({

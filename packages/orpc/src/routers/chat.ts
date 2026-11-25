@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { chatMailContextSchema } from "@quieter/ai/chat-context";
 import { resolveBackgroundModel } from "@quieter/ai/model-config";
 import {
   OPENROUTER_TRANSCRIPTION_MODEL,
@@ -8,18 +9,28 @@ import { reportAiUsage } from "@quieter/billing";
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { db } from "@quieter/database/client";
 import { chat, chatMessage } from "@quieter/database/schema";
+import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
+import {
+  parseJsonEventStream,
+  readUIMessageStream,
+  uiMessageChunkSchema,
+} from "ai";
+import type { UIMessage, UIMessageChunk } from "ai";
 import { and, desc, eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { assertCanUseAi } from "../ai-access";
 import { recordAiGeneratedMailBody } from "../ai-mail-authorship";
 import { loadAiAgentContext, serializeAiAgentContext } from "../ai-memory";
+import { decodeChatStreamError } from "../chat-errors";
 import {
   cancelForegroundExchangeParts,
+  FOREGROUND_LEASE_MS,
   normalizeExpiredChatParts,
   replaceChatParts,
 } from "../chat/continuation";
+import { createAiChatResponse } from "../chat/service";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import { mailboxIdSchema, protectedProcedure } from "./base";
 
@@ -313,6 +324,90 @@ export const chatRouter = {
       return updatedChat;
     }),
 
+  reply: protectedProcedure
+    .input(
+      z.object({
+        category: mailCategorySchema.default("inbox"),
+        chatId: z.uuid(),
+        context: chatMailContextSchema.optional(),
+        mailboxId: mailboxIdSchema,
+        messageId: z.uuid(),
+        prompt: z.string().trim().min(1).max(10_000),
+      })
+    )
+    .handler(async ({ context, input, signal }) => {
+      try {
+        const response = await createAiChatResponse({
+          body: {
+            category: input.category,
+            context: input.context,
+            foreground: {
+              capabilities: [],
+              exchangeId: crypto.randomUUID(),
+              expiresAt: Date.now() + FOREGROUND_LEASE_MS,
+              generation: 1,
+              tabId: input.chatId,
+            },
+            mailboxId: input.mailboxId,
+            message: {
+              id: input.messageId,
+              parts: [{ text: input.prompt, type: "text" }],
+              role: "user",
+            },
+            threadId: input.chatId,
+            trigger: "submit-message",
+          },
+          request: { signal: signal ?? new AbortController().signal },
+          scheduleBackgroundTask: context.scheduleBackgroundTask,
+          toolAccess: "read",
+          userId: context.userId,
+        });
+        if (response.body === null) {
+          throw new Error("Chat returned no reply stream.");
+        }
+        const stream = parseJsonEventStream({
+          schema: uiMessageChunkSchema,
+          stream: response.body,
+        }).pipeThrough(
+          new TransformStream<
+            | { success: true; value: UIMessageChunk }
+            | { success: false; error: unknown },
+            UIMessageChunk
+          >({
+            transform(part, controller) {
+              if (!part.success) {
+                throw part.error;
+              }
+              controller.enqueue(part.value);
+            },
+          })
+        );
+        let reply: UIMessage | undefined;
+        for await (const message of readUIMessageStream({
+          stream,
+          terminateOnError: true,
+        })) {
+          reply = message;
+        }
+        return { chatId: input.chatId, reply };
+      } catch (error) {
+        const decoded =
+          error instanceof Error ? decodeChatStreamError(error) : error;
+        if (
+          decoded instanceof Error &&
+          "status" in decoded &&
+          typeof decoded.status === "number" &&
+          decoded.status >= 400 &&
+          decoded.status < 500
+        ) {
+          throw new ORPCError("CHAT_REQUEST_FAILED", {
+            message: decoded.message,
+            status: decoded.status,
+          });
+        }
+        throw error;
+      }
+    }),
   transcribeAudio: protectedProcedure
     .input(chatAudioTranscriptionSchema)
     .handler(async ({ context, input }) => {

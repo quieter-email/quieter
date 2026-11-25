@@ -167,7 +167,7 @@ Outbound:
 
 - Managed compose and replies send through server-side mail logic.
 - `POST /api/send` authenticates an organization API key, requires the `Quieter-Version: 2026-10` compatibility date, and requires a verified sender domain.
-- `POST /api/mcp` serves the transactional-mail MCP tool `send_email` over Streamable HTTP with the same organization API key, compatibility date, verified-domain, suppression, idempotency, and usage rules as the REST send endpoint. OPTIONS preflight does not require the date. It exposes sending only: no mailbox, content, or settings access.
+- `/api/mcp` serves Quieter over Streamable HTTP. Account OAuth calls use the same mailbox permissions and product procedures as the web app. Team API keys retain access to transactional sends, delivery receipts, and suppression listing. See [Connect an MCP client](mcp.md).
 - `GET /api/messages/{messageId}` and `GET /api/suppressions` use the same date. `GET /api/o/{token}` is unversioned because mail clients cannot send the header.
 - Better Auth email hooks call the same endpoint.
 

@@ -159,6 +159,7 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
     mimeType: z.string().min(1),
+    threadId: z.string().optional(),
   }),
   getComposeSendStatus: z.object({
     mailboxId: z.string().trim().min(1),
@@ -255,6 +256,7 @@ export const mailInputSchemas = {
     targetChangeVersion: mailChangeVersionSchema.optional(),
   }),
   unsubscribeFromMessage: z.object({
+    expectedRequestHash: z.string().optional(),
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
   }),

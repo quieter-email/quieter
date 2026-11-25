@@ -84,7 +84,11 @@ export const assertOwnedGmailMailbox = async (input: {
   userId: string;
 }) => {
   const [gmailMailbox] = await db
-    .select({ id: mailbox.id, organizationId: mailbox.organizationId })
+    .select({
+      emailAddress: mailbox.emailAddress,
+      id: mailbox.id,
+      organizationId: mailbox.organizationId,
+    })
     .from(mailbox)
     .where(
       and(

@@ -195,6 +195,13 @@ export const mailRouter = {
         gmailMessageChanges
       )
     ),
+  previewUnsubscribe: protectedProcedure
+    .input(
+      mailInputSchemas.unsubscribeFromMessage.omit({
+        expectedRequestHash: true,
+      })
+    )
+    .handler(composeMailOperations.previewUnsubscribe),
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
     .handler(withMailUpdate(composeMailOperations.saveDraft)),

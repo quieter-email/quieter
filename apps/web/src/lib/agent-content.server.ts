@@ -147,19 +147,15 @@ mail; suppressed recipients and domain verification are enforced.
   ${API_COMPATIBILITY_DATE} on every request. OpenAPI specification:
   ${siteUrl}/openapi.json (base URL ${siteUrl}, endpoints ${SEND_API_PATH},
   ${MESSAGES_API_PATH}/{messageId}, ${SUPPRESSIONS_API_PATH})
-- MCP server (transactional sending only): ${siteUrl}${MCP_API_PATH} over
-  Streamable HTTP, authenticated with a team API key as
-  "Authorization: Bearer YOUR_API_KEY" and ${API_VERSION_HEADER}
-  ${API_COMPATIBILITY_DATE}. One tool, \`send_email\`, runs the same
-  checks as the REST send endpoint: verified sender domains only, suppressed
-  recipients rejected, idempotency keys honored, team usage charged. Example
-  client entry: {"mcpServers":{"quieter":{"url":"${siteUrl}${MCP_API_PATH}","headers":{"Authorization":"Bearer YOUR_API_KEY","${API_VERSION_HEADER}":"${API_COMPATIBILITY_DATE}"}}}}.
-  Example \`send_email\` arguments: {"from":"you@your-verified-domain.com","to":["customer@example.com"],"subject":"Your receipt","text":"Thanks for your order.","idempotencyKey":"order-1234"}.
-  Limits: 25 MB request payload, 60 requests per minute per IP, verified sender
-  domains, suppression enforcement. The server cannot read mailboxes, mail
-  content, or team settings; delivery status stays on the REST API at
-  GET ${MESSAGES_API_PATH}/{messageId}. A broader management and control MCP is not
-  part of this endpoint.
+- MCP server: ${siteUrl}${MCP_API_PATH} over Streamable HTTP. Connect
+  with Quieter OAuth to use Gmail, managed mailboxes, transactional mail,
+  teams, calendar, settings, and billing. Start with \`quieter_find_actions\`
+  for available actions and their input schemas. The resource
+  \`quieter://guide/workflows\` covers mail links and approvals.
+- Transactional MCP automation can use a team API key on the same endpoint
+  with "Authorization: Bearer YOUR_API_KEY" and ${API_VERSION_HEADER}
+  ${API_COMPATIBILITY_DATE}. Existing \`send_email\` calls work with that
+  credential. Delivery lookup and suppression listing are also available.
 - Developer documentation: coming soon; will be linked here once released.
 - Sitemap of public pages: ${siteUrl}/sitemap.xml
 

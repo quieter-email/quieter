@@ -4252,6 +4252,207 @@ export const apikey = pgTable(
   ]
 );
 
+/** Better Auth OAuth provider models. Field names follow its schema. */
+export const oauthClient = pgTable(
+  "oauthClient",
+  {
+    applicationType: text("applicationType"),
+    backchannelLogoutSessionRequired: boolean(
+      "backchannelLogoutSessionRequired"
+    ),
+    backchannelLogoutUri: text("backchannelLogoutUri"),
+    clientCredentialsScopes: jsonb("clientCredentialsScopes").$type<string[]>(),
+    clientDiscoveryId: text("clientDiscoveryId"),
+    clientId: text("clientId").notNull().unique(),
+    clientSecret: text("clientSecret"),
+    contacts: jsonb("contacts").$type<string[]>(),
+    createdAt: timestamp("createdAt"),
+    disabled: boolean("disabled").default(false),
+    dpopBoundAccessTokens: boolean("dpopBoundAccessTokens").default(false),
+    enableEndSession: boolean("enableEndSession"),
+    grantTypes: jsonb("grantTypes").$type<string[]>(),
+    icon: text("icon"),
+    id: text("id").primaryKey(),
+    jwks: text("jwks"),
+    jwksUri: text("jwksUri"),
+    metadata: jsonb("metadata"),
+    name: text("name"),
+    policy: text("policy"),
+    postLogoutRedirectUris: jsonb("postLogoutRedirectUris").$type<string[]>(),
+    redirectUris: jsonb("redirectUris").$type<string[]>().notNull(),
+    referenceId: text("referenceId"),
+    requirePKCE: boolean("requirePKCE"),
+    responseTypes: jsonb("responseTypes").$type<string[]>(),
+    scopes: jsonb("scopes").$type<string[]>(),
+    skipConsent: boolean("skipConsent"),
+    softwareId: text("softwareId"),
+    softwareStatement: text("softwareStatement"),
+    softwareVersion: text("softwareVersion"),
+    subjectType: text("subjectType"),
+    tokenEndpointAuthMethod: text("tokenEndpointAuthMethod"),
+    tos: text("tos"),
+    updatedAt: timestamp("updatedAt"),
+    uri: text("uri"),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_client_user_id_idx").on(table.userId),
+    index("oauth_client_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const oauthResource = pgTable("oauthResource", {
+  accessTokenTtl: integer("accessTokenTtl"),
+  allowedScopes: jsonb("allowedScopes").$type<string[]>(),
+  createdAt: timestamp("createdAt"),
+  customClaims: jsonb("customClaims"),
+  disabled: boolean("disabled").default(false),
+  dpopBoundAccessTokensRequired: boolean(
+    "dpopBoundAccessTokensRequired"
+  ).default(false),
+  id: text("id").primaryKey(),
+  identifier: text("identifier").notNull().unique(),
+  metadata: jsonb("metadata"),
+  name: text("name").notNull(),
+  policyVersion: integer("policyVersion").default(1),
+  refreshTokenTtl: integer("refreshTokenTtl"),
+  signingAlgorithm: text("signingAlgorithm"),
+  signingKeyId: text("signingKeyId"),
+  updatedAt: timestamp("updatedAt"),
+});
+
+export const oauthClientResource = pgTable(
+  "oauthClientResource",
+  {
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt"),
+    id: text("id").primaryKey(),
+    metadata: jsonb("metadata"),
+    resourceId: text("resourceId")
+      .notNull()
+      .references(() => oauthResource.identifier, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_client_resource_resource_id_idx").on(table.resourceId),
+    unique("oauth_client_resource_client_resource_unique").on(
+      table.clientId,
+      table.resourceId
+    ),
+  ]
+);
+
+export const oauthRefreshToken = pgTable(
+  "oauthRefreshToken",
+  {
+    authTime: timestamp("authTime"),
+    authorizationCodeId: text("authorizationCodeId"),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    confirmation: jsonb("confirmation"),
+    createdAt: timestamp("createdAt").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    id: text("id").primaryKey(),
+    referenceId: text("referenceId"),
+    requestedUserInfoClaims: jsonb("requestedUserInfoClaims").$type<string[]>(),
+    resources: jsonb("resources").$type<string[]>(),
+    revoked: timestamp("revoked"),
+    rotatedAt: timestamp("rotatedAt"),
+    rotationReplayExpiresAt: timestamp("rotationReplayExpiresAt"),
+    rotationReplayResponse: text("rotationReplayResponse"),
+    scopes: jsonb("scopes").$type<string[]>().notNull(),
+    // Offline grants outlive their session. Others stop refreshing without it.
+    sessionId: text("sessionId").references(() => session.id, {
+      onDelete: "set null",
+    }),
+    token: text("token").notNull().unique(),
+    userId: text("userId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_refresh_token_client_user_idx").on(
+      table.clientId,
+      table.userId
+    ),
+    index("oauth_refresh_token_session_id_idx").on(table.sessionId),
+    index("oauth_refresh_token_user_id_idx").on(table.userId),
+    index("oauth_refresh_token_expires_at_idx").on(table.expiresAt),
+    index("oauth_refresh_token_authorization_code_id_idx").on(
+      table.authorizationCodeId
+    ),
+  ]
+);
+
+export const oauthAccessToken = pgTable(
+  "oauthAccessToken",
+  {
+    authorizationCodeId: text("authorizationCodeId"),
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    confirmation: jsonb("confirmation"),
+    createdAt: timestamp("createdAt").notNull(),
+    expiresAt: timestamp("expiresAt").notNull(),
+    id: text("id").primaryKey(),
+    referenceId: text("referenceId"),
+    refreshId: text("refreshId").references(() => oauthRefreshToken.id, {
+      onDelete: "cascade",
+    }),
+    requestedUserInfoClaims: jsonb("requestedUserInfoClaims").$type<string[]>(),
+    resources: jsonb("resources").$type<string[]>(),
+    revoked: timestamp("revoked"),
+    scopes: jsonb("scopes").$type<string[]>().notNull(),
+    // Signing out ends access at once, whichever code path removes the session.
+    sessionId: text("sessionId").references(() => session.id, {
+      onDelete: "cascade",
+    }),
+    token: text("token").notNull().unique(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_access_token_client_user_idx").on(
+      table.clientId,
+      table.userId
+    ),
+    index("oauth_access_token_session_id_idx").on(table.sessionId),
+    index("oauth_access_token_user_id_idx").on(table.userId),
+    index("oauth_access_token_refresh_id_idx").on(table.refreshId),
+    index("oauth_access_token_authorization_code_id_idx").on(
+      table.authorizationCodeId
+    ),
+    index("oauth_access_token_expires_at_idx").on(table.expiresAt),
+  ]
+);
+
+export const oauthConsent = pgTable(
+  "oauthConsent",
+  {
+    clientId: text("clientId")
+      .notNull()
+      .references(() => oauthClient.clientId, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    referenceId: text("referenceId"),
+    requestedUserInfoClaims: jsonb("requestedUserInfoClaims").$type<string[]>(),
+    resources: jsonb("resources").$type<string[]>(),
+    scopes: jsonb("scopes").$type<string[]>().notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+    userId: text("userId").references(() => user.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    index("oauth_consent_client_user_idx").on(table.clientId, table.userId),
+    index("oauth_consent_user_id_idx").on(table.userId),
+  ]
+);
+
+export const oauthClientAssertion = pgTable("oauthClientAssertion", {
+  expiresAt: timestamp("expiresAt").notNull(),
+  id: text("id").primaryKey(),
+});
+
 export const semanticEmbedding = pgTable(
   "semanticEmbedding",
   {
@@ -4527,6 +4728,13 @@ export const tables = {
   managedMailRuleBackfill,
   managedMailRuleRun,
   member,
+  oauthAccessToken,
+  oauthClient,
+  oauthClientAssertion,
+  oauthClientResource,
+  oauthConsent,
+  oauthRefreshToken,
+  oauthResource,
   organization,
   organizationApiMailAttachment,
   organizationApiMailMessage,

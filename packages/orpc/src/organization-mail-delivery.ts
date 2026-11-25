@@ -144,7 +144,10 @@ const mergeDeliveryStatusSql = (statusColumn: unknown) => sql`case
   else ${excludedDeliveryRecipient.status}
 end`;
 
-const resolveOrganizationId = async (providerMessageId: string) => {
+const resolveOrganizationId = async (
+  providerMessageId: string,
+  transactionalOnly = false
+) => {
   const [apiMessage] = await db
     .select({ organizationId: organizationApiMailMessage.organizationId })
     .from(organizationApiMailMessage)
@@ -153,6 +156,10 @@ const resolveOrganizationId = async (providerMessageId: string) => {
 
   if (apiMessage !== undefined) {
     return apiMessage.organizationId;
+  }
+
+  if (transactionalOnly) {
+    return null;
   }
 
   const [managedMessage] = await db
@@ -619,8 +626,12 @@ export const unsuppressOrganizationMailRecipient = async (input: {
 export const getOrganizationMailDelivery = async (input: {
   organizationId: string;
   providerMessageId: string;
+  transactionalOnly?: boolean;
 }) => {
-  const organizationId = await resolveOrganizationId(input.providerMessageId);
+  const organizationId = await resolveOrganizationId(
+    input.providerMessageId,
+    input.transactionalOnly
+  );
   if (organizationId !== input.organizationId) {
     return null;
   }

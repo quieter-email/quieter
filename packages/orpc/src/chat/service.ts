@@ -1056,8 +1056,9 @@ const prepareChatContext = async (input: {
 // streaming in one boundary.
 type ChatResponseInput = {
   body: unknown;
-  request: Request;
+  request: Pick<Request, "signal">;
   scheduleBackgroundTask?: (task: Promise<unknown>) => void;
+  toolAccess?: "read";
   userId: string;
 };
 
@@ -1554,7 +1555,7 @@ const createAiChatResponseInRequest = async (
     userId: input.userId,
   });
 
-  const tools: ToolSet = {
+  const toolCatalog: ToolSet = {
     change_reminder: tool({
       description:
         "Change a personal reminder only as the user requests, using its current version. Snooze creates a fresh occurrence. Complete and cancel stop it. Reactivate resumes a stopped reminder.",
@@ -1739,6 +1740,15 @@ const createAiChatResponseInRequest = async (
       })
     ),
   };
+
+  const tools =
+    input.toolAccess === "read"
+      ? Object.fromEntries(
+          Object.entries(toolCatalog).filter(
+            ([name]) => !MUTATING_CHAT_TOOLS.has(name)
+          )
+        )
+      : toolCatalog;
 
   const unconfirmedWrites = new Set<string>();
   const creationReceipts = new Map<string, unknown>();
