@@ -117,6 +117,10 @@ export const MessageListSearchView = ({
   }
   const hasSearch =
     currentState.text.length > 0 || currentState.filters.length > 0;
+  const selectedDate = activeDateFilter
+    ? parseDateFilterValue(activeDateFilter.value)
+    : undefined;
+  const calendarMonth = selectedDate ?? calendarFallbackMonth;
   const filterTypeOccurrences = new Map<string, number>();
   const removeFilterOnMiddlePointer = (
     event: ReactPointerEvent<HTMLElement>,
@@ -541,17 +545,14 @@ export const MessageListSearchView = ({
                 </div>
                 <Calendar
                   mode="single"
-                  key={activeDateFilterIndex}
-                  defaultMonth={
-                    parseDateFilterValue(activeDateFilter.value) ??
-                    calendarFallbackMonth
-                  }
+                  key={`${activeDateFilterIndex}:${calendarMonth.getTime()}`}
+                  defaultMonth={calendarMonth}
                   onSelect={(date) => {
                     if (date) {
                       selectDateFilterValue(date);
                     }
                   }}
-                  selected={parseDateFilterValue(activeDateFilter.value)}
+                  selected={selectedDate}
                 />
               </div>
             )}

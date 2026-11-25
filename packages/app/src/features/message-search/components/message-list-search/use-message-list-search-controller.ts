@@ -156,11 +156,12 @@ export const useMessageListSearchController = ({
     }));
   };
 
-  const setDatePopoverLeft = (action: SetStateAction<number>) => {
-    setSearchOverlay((current) => ({
-      ...current,
-      datePopoverLeft: resolveStateAction(action, current.datePopoverLeft),
-    }));
+  const setDatePopoverLeft = (left: number) => {
+    setSearchOverlay((current) =>
+      current.datePopoverLeft === left
+        ? current
+        : { ...current, datePopoverLeft: left }
+    );
   };
 
   const setIsDropdownOpen = (action: SetStateAction<boolean>) => {
@@ -456,6 +457,16 @@ export const useMessageListSearchController = ({
     };
   };
 
+  const rebaseActiveDateFilter = (removedIndex: number) => {
+    setActiveDateFilterIndex((currentIndex) => {
+      if (currentIndex === null || currentIndex === removedIndex) {
+        return null;
+      }
+
+      return currentIndex > removedIndex ? currentIndex - 1 : currentIndex;
+    });
+  };
+
   const removeFilterAtIndex = (
     index: number,
     nextFocus?: PendingFocusTarget
@@ -466,17 +477,7 @@ export const useMessageListSearchController = ({
         (_, filterIndex) => filterIndex !== index
       ),
     });
-    setActiveDateFilterIndex((currentIndex) => {
-      if (currentIndex === null) {
-        return null;
-      }
-
-      if (currentIndex === index) {
-        return null;
-      }
-
-      return currentIndex > index ? currentIndex - 1 : currentIndex;
-    });
+    rebaseActiveDateFilter(index);
     pendingFocusRef.current = nextFocus ?? { kind: "text", toEnd: true };
   };
 
@@ -530,13 +531,17 @@ export const useMessageListSearchController = ({
 
   const cycleFilterFromPointer = (index: number, keyboard: boolean) => {
     const filters = cycleSearchFilter(currentState.filters, index);
+    const removed = filters.length < currentState.filters.length;
     const nextState = { ...currentState, filters };
     pendingFocusRef.current = null;
 
-    if (keyboard && filters.length < currentState.filters.length) {
+    if (keyboard && removed) {
       textInputRef.current?.focus();
     }
     if (filters.some((filter) => filter.value.trim().length === 0)) {
+      if (removed) {
+        rebaseActiveDateFilter(index);
+      }
       stageState(nextState);
       return;
     }
