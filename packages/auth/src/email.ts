@@ -91,10 +91,10 @@ export const sendAuthMail = async (input: AuthMailInput) => {
       to: input.to,
     }),
     headers: {
+      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
       accept: "application/json",
       authorization: `Bearer ${apiKey}`,
       "content-type": "application/json",
-      [API_VERSION_HEADER]: API_COMPATIBILITY_DATE,
     },
     method: "POST",
   });

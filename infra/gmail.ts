@@ -1,20 +1,44 @@
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
+import {
+  GMAIL_EXECUTOR_CLASSES,
+  GMAIL_EXECUTOR_SHARDS,
+} from "@quieter/cloudflare/gmail-processing-config";
 
 import type { createAppDatabase } from "./database";
 import { GMAIL_PROCESSING_REGION } from "./gmail-processing-region";
 import type { createMailUpdateResources } from "./mail-updates";
-import { cloudflareWorkerObservability } from "./runtime";
+import {
+  cloudflareWorkerBuild,
+  cloudflareWorkerObservability,
+} from "./runtime";
 import type { DeploymentContext } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
 import type { SecretBindings, SecretResources } from "./types";
 
 const processingSecretNames = [
+  "CONNECTOR_TOKEN_ENCRYPTION_KEY",
+  "GMAIL_BODY_ENCRYPTION_KEY",
+  "GOOGLE_CALENDAR_CLIENT_ID",
+  "GOOGLE_CALENDAR_CLIENT_SECRET",
+  "LINEAR_CLIENT_ID",
+  "LINEAR_CLIENT_SECRET",
+  "NOTION_CLIENT_ID",
+  "NOTION_CLIENT_SECRET",
+  "TODOIST_CLIENT_ID",
+  "TODOIST_CLIENT_SECRET",
+  "CLICKUP_CLIENT_ID",
+  "CLICKUP_CLIENT_SECRET",
+  "MICROSOFT_CLIENT_ID",
+  "MICROSOFT_CLIENT_SECRET",
+  "QUIETER_BACKGROUND_MODEL",
   "GMAIL_TOKEN_ENCRYPTION_KEY",
   "GMAIL_TOKEN_ENCRYPTION_KEY_CURRENT",
   "GOOGLE_GMAIL_CLIENT_ID",
   "GOOGLE_GMAIL_CLIENT_SECRET",
   "OPENROUTER_API_KEY",
   "POLAR_ACCESS_TOKEN",
+  "R2_ACCESS_KEY_ID",
+  "R2_SECRET_ACCESS_KEY",
 ] as const;
 
 export const createGmailResources = (
@@ -29,6 +53,7 @@ export const createGmailResources = (
     "GMAIL_LIVE_SYNC_TOKEN_SECRET"
   );
   let gmailLiveSyncUrl: $util.Input<string> = "";
+  let processingWorker: sst.cloudflare.Worker | undefined;
   let actionWorkers: {
     gmailProcessing: $util.Output<string>;
     gmailRealtime: $util.Output<string>;
@@ -38,6 +63,7 @@ export const createGmailResources = (
   let gmailProcessingQueues: {
     deadLetter: $util.Output<string>;
     pending: $util.Output<string>;
+    executors: $util.Output<string>[];
     fresh: $util.Output<string>;
     catchup: $util.Output<string>;
   } | null = null;
@@ -60,6 +86,19 @@ export const createGmailResources = (
       "GmailFreshExecutor",
       { className: "GmailFreshExecutor" }
     );
+    const gmailProjectQuota = new sst.cloudflare.DurableObject(
+      "GmailProjectQuota",
+      { className: "GmailProjectQuota" }
+    );
+    const gmailMailboxScheduler = new sst.cloudflare.DurableObject(
+      "GmailMailboxScheduler",
+      { className: "GmailMailboxScheduler" }
+    );
+    const executorQueues = GMAIL_EXECUTOR_CLASSES.flatMap((lane) =>
+      GMAIL_EXECUTOR_SHARDS.map(
+        (shard) => new sst.cloudflare.Queue(`GmailMailbox${lane}Queue${shard}`)
+      )
+    );
     // Production already applied v1 (old class) and v2 (delete), so the class
     // returns under a new name in v3.
     const gmailLiveSyncMailbox = new sst.cloudflare.DurableObject(
@@ -75,29 +114,61 @@ export const createGmailResources = (
     const gmailProcessingWorker = new sst.cloudflare.Worker(
       "GmailProcessingWorker",
       {
+        build: {
+          esbuild: {
+            ...cloudflareWorkerBuild.esbuild,
+            conditions: ["workerd", "worker", "module", "node"],
+          },
+        },
         compatibility: {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],
         },
         environment: {
+          GMAIL_BODY_STORAGE_ENABLED: String(
+            context.env.GMAIL_BODY_STORAGE_ENABLED ?? false
+          ),
+          GMAIL_PUBSUB_TOPIC: context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
+          MAIL_UPDATES_URL: updates.url,
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: String(
+            context.env.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE ?? ""
+          ),
+          QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: String(
+            context.env.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE
+          ),
+          QUIETER_GMAIL_EVENTS_ENABLED: String(
+            context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+          ),
+          R2_ACCOUNT_ID: context.env.R2_ACCOUNT_ID ?? "",
+          R2_BUCKET: context.env.R2_BUCKET ?? "",
+          R2_ENDPOINT: context.env.R2_ENDPOINT ?? "",
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/gmail-processing-worker.ts",
         link: [
-          gmailProcessingQueue,
-          gmailFreshProcessingQueue,
-          gmailCatchupProcessingQueue,
           gmailFreshExecutor,
+          gmailMailboxScheduler,
+          gmailProjectQuota,
+          ...executorQueues,
           mailLiveUser,
           appDatabase,
           sentryDsnBinding,
+          requireSecretBinding(secretBindings, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
           ...processingSecretBindings,
         ],
         migrations: [
           { newSqliteClasses: [gmailFreshExecutor.className], tag: "fresh-v1" },
+          {
+            newSqliteClasses: [gmailMailboxScheduler.className],
+            tag: "mailbox-scheduler-v1",
+          },
+          {
+            newSqliteClasses: [gmailProjectQuota.className],
+            tag: "gmail-quota-v1",
+          },
         ],
         placement: { region: GMAIL_PROCESSING_REGION },
         transform: {
@@ -135,9 +206,11 @@ export const createGmailResources = (
       },
       { dependsOn: [gmailProcessingWorker] }
     );
+    processingWorker = gmailProcessingWorker;
     const gmailRealtimeWorker = new sst.cloudflare.Worker(
       "GmailRealtimeWorker",
       {
+        build: cloudflareWorkerBuild,
         compatibility: {
           date: COMPATIBILITY_DATE,
           flags: ["nodejs_compat"],
@@ -154,6 +227,9 @@ export const createGmailResources = (
           ...context.billingEnvironment,
           ...context.releaseEnvironment,
           QUIETER_GMAIL_AI_AUTOMATION_ENABLED: context.mailAutomationAiEnabled,
+          QUIETER_GMAIL_EVENTS_ENABLED: String(
+            context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+          ),
           SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
         },
         handler: "packages/cloudflare/src/worker.ts",
@@ -166,10 +242,10 @@ export const createGmailResources = (
           mailLiveUser,
           updates.reminders,
           updates.scheduledSends,
+          updates.snoozes,
           gmailLiveSyncTokenSecret,
           appDatabase,
           sentryDsnBinding,
-          ...processingSecretBindings,
         ],
         migrations: [
           { newSqliteClasses: ["GmailLiveSyncMailbox"], tag: "v1" },
@@ -187,7 +263,8 @@ export const createGmailResources = (
                 (bindings ?? []).map((binding) =>
                   binding.name === "MailLiveUser" ||
                   binding.name === "ReminderMailbox" ||
-                  binding.name === "ScheduledSend"
+                  binding.name === "ScheduledSend" ||
+                  binding.name === "MailSnooze"
                     ? { ...binding, scriptName }
                     : binding
                 )
@@ -201,35 +278,30 @@ export const createGmailResources = (
       { dependsOn: [gmailProcessingWorker, gmailProcessingPrivateUrls] }
     );
 
-    // oxlint-disable-next-line no-new -- Pulumi registers this consumer with the existing realtime Worker.
-    new cloudflare.QueueConsumer("GmailProcessingConsumer", {
-      accountId: gmailProcessingQueue.nodes.queue.accountId.apply(
-        (accountId) => {
-          if (accountId === undefined) {
-            throw new Error(
-              "Gmail processing queue is missing its account ID."
-            );
-          }
-          return accountId;
-        }
+    for (const [name, queue, worker, legacyConcurrency] of [
+      ["GmailProcessingConsumer", gmailProcessingQueue, gmailRealtimeWorker, 2],
+      [
+        "GmailFreshProcessingConsumer",
+        gmailFreshProcessingQueue,
+        gmailRealtimeWorker,
+        4,
+      ],
+      [
+        "GmailCatchupProcessingConsumer",
+        gmailCatchupProcessingQueue,
+        gmailRealtimeWorker,
+        8,
+      ],
+      ...executorQueues.map(
+        (executorQueue, index) =>
+          [
+            `GmailMailboxExecutorConsumer${index}`,
+            executorQueue,
+            gmailProcessingWorker,
+          ] as const
       ),
-      deadLetterQueue: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
-      queueId: gmailProcessingQueue.id,
-      scriptName: gmailRealtimeWorker.nodes.worker.scriptName,
-      settings: {
-        batchSize: 1,
-        maxConcurrency: 2,
-        maxRetries: 100,
-        maxWaitTimeMs: 0,
-        retryDelay: 60,
-      },
-      type: "worker",
-    });
-    for (const [name, queue, maxConcurrency] of [
-      ["GmailFreshProcessingConsumer", gmailFreshProcessingQueue, 4],
-      ["GmailCatchupProcessingConsumer", gmailCatchupProcessingQueue, 2],
     ] as const) {
-      // oxlint-disable-next-line no-new -- Pulumi registers each independent consumer with the realtime Worker.
+      // oxlint-disable-next-line no-new -- Register a consumer on its existing worker.
       new cloudflare.QueueConsumer(name, {
         accountId: queue.nodes.queue.accountId.apply((accountId) => {
           if (accountId === undefined) {
@@ -241,11 +313,11 @@ export const createGmailResources = (
         }),
         deadLetterQueue: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
         queueId: queue.id,
-        scriptName: gmailRealtimeWorker.nodes.worker.scriptName,
+        scriptName: worker.nodes.worker.scriptName,
         settings: {
           batchSize: 1,
-          maxConcurrency,
-          maxRetries: 100,
+          maxConcurrency: legacyConcurrency,
+          maxRetries: legacyConcurrency === undefined ? 8 : 100,
           maxWaitTimeMs: 0,
           retryDelay: 60,
         },
@@ -255,6 +327,7 @@ export const createGmailResources = (
     gmailProcessingQueues = {
       catchup: gmailCatchupProcessingQueue.nodes.queue.queueName,
       deadLetter: gmailProcessingDeadLetterQueue.nodes.queue.queueName,
+      executors: executorQueues.map((queue) => queue.nodes.queue.queueName),
       fresh: gmailFreshProcessingQueue.nodes.queue.queueName,
       pending: gmailProcessingQueue.nodes.queue.queueName,
     };
@@ -262,41 +335,28 @@ export const createGmailResources = (
     const gmailPubSubMaintenance = new sst.cloudflare.Cron(
       "GmailPubSubMaintenance",
       {
-        schedules: ["*/15 * * * *"],
+        schedules:
+          context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+            ? []
+            : ["* * * * *"],
         worker: {
+          build: cloudflareWorkerBuild,
           compatibility: {
             date: COMPATIBILITY_DATE,
             flags: ["nodejs_compat"],
           },
           environment: {
-            GMAIL_PUBSUB_TOPIC:
-              context.gmailPubSubEnvironment.GMAIL_PUBSUB_TOPIC,
             ...context.billingEnvironment,
             ...context.releaseEnvironment,
-            QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
-              context.mailAutomationAiEnabled,
+            QUIETER_GMAIL_EVENTS_ENABLED: String(
+              context.env.QUIETER_GMAIL_EVENTS_ENABLED === true
+            ),
             SENTRY_ENVIRONMENT: context.sentryEnvironment.SENTRY_ENVIRONMENT,
           },
           handler: "packages/cloudflare/src/gmail-maintenance-worker.ts",
-          link: [
-            appDatabase,
-            gmailFreshProcessingQueue,
-            gmailCatchupProcessingQueue,
-            mailLiveUser,
-            sentryDsnBinding,
-            ...processingSecretBindings,
-          ],
+          link: [appDatabase, gmailProcessingWorker, sentryDsnBinding],
           transform: {
             worker(args) {
-              args.bindings = $util
-                .all([args.bindings, updates.worker.nodes.worker.scriptName])
-                .apply(([bindings, scriptName]) =>
-                  (bindings ?? []).map((binding) =>
-                    binding.name === "MailLiveUser"
-                      ? { ...binding, scriptName }
-                      : binding
-                  )
-                );
               args.limits = { cpuMs: 300_000 };
               args.observability = cloudflareWorkerObservability;
             },
@@ -323,5 +383,6 @@ export const createGmailResources = (
     gmailLiveSyncUrl,
     gmailProcessingQueues,
     gmailPubSubIngressUrl,
+    processingWorker,
   };
 };

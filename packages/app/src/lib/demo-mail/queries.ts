@@ -47,20 +47,38 @@ export const listDemoMail = (
       )
       .map((message) => message.threadId)
   );
-  const inboxThreads = new Set(
+  const inboxIncomingIdsByThread = new Map<string, string[]>();
+  for (const message of messages) {
+    if (
+      isMessageInMailbox(message, "inbox") &&
+      message.labelIds?.some((id) =>
+        ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
+      ) !== true
+    ) {
+      const ids = inboxIncomingIdsByThread.get(message.threadId) ?? [];
+      ids.push(message.id);
+      inboxIncomingIdsByThread.set(message.threadId, ids);
+    }
+  }
+  const inboxThreads = new Set(inboxIncomingIdsByThread.keys());
+  const snoozedThreads = new Set(
     messages
-      .filter((message) => isMessageInMailbox(message, "inbox"))
+      .filter((message) => isMessageInMailbox(message, "later"))
       .map((message) => message.threadId)
   );
   const matching = messages
     .map((message) => ({
       ...message,
+      threadInboxIncomingMessageIds:
+        inboxIncomingIdsByThread.get(message.threadId) ?? [],
       threadIsImportant: importantThreads.has(message.threadId),
     }))
     .filter((message) => {
       if (
         !isMessageInMailbox(message, input.category) ||
-        (input.category === "done" && inboxThreads.has(message.threadId))
+        (input.category === "done" &&
+          (inboxThreads.has(message.threadId) ||
+            snoozedThreads.has(message.threadId)))
       ) {
         return false;
       }
@@ -119,7 +137,9 @@ export const listDemoMail = (
             const flags: Record<string, boolean> = {
               done:
                 isMessageInMailbox(message, "done") &&
-                !inboxThreads.has(message.threadId),
+                !inboxThreads.has(message.threadId) &&
+                !snoozedThreads.has(message.threadId),
+              later: isMessageInMailbox(message, "later"),
               read: !isMessageUnread(message),
               spam: message.labelIds?.includes(MAILBOX_LABELS.spam) ?? false,
               trash: message.labelIds?.includes(MAILBOX_LABELS.trash) ?? false,
@@ -230,11 +250,28 @@ export const getDemoMailThread = (
   const threadLabelIds = [
     ...new Set(thread.flatMap((message) => message.labelIds ?? [])),
   ];
+  const threadInboxIncomingMessageIds = thread
+    .filter(
+      (message) =>
+        isMessageInMailbox(message, "inbox") &&
+        message.labelIds?.some((id) =>
+          ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
+        ) !== true
+    )
+    .map((message) => message.id);
   return {
-    messages: thread
-      .toReversed()
-      .map((message) => ({ ...message, threadIsImportant, threadLabelIds })),
+    messages: thread.toReversed().map((message) => ({
+      ...message,
+      threadInboxIncomingMessageIds,
+      threadIsImportant,
+      threadLabelIds,
+    })),
     snippet: thread[0]?.snippet,
+    snooze: thread
+      .map((message) => message.snooze)
+      .filter((state) => state !== undefined)
+      .toSorted((left, right) => right.version - left.version)
+      .at(0),
     subject: thread[0]?.subject,
     threadId,
   };

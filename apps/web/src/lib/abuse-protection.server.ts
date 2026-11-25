@@ -67,7 +67,9 @@ export const getRequestRateLimit = async (request: Request) => {
   const { pathname } = new URL(request.url);
   if (
     ["GET", "HEAD", "OPTIONS"].includes(request.method) ||
-    pathname === "/api/auth/polar/webhooks"
+    pathname === "/api/auth/polar/webhooks" ||
+    pathname === "/api/internal/mail-snooze" ||
+    pathname === "/api/internal/scheduled-send"
   ) {
     return null;
   }

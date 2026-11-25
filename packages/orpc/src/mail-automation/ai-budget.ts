@@ -100,8 +100,11 @@ export const getMailAutomationAiBudgetStatus = async (input: {
     hasAccount: !!entitlement.account,
     hasUnlimitedAccess: entitlement.hasUnlimitedAccess,
     runtimeEnabled,
-    usage: entitlement.account
-      ? await getBillingCreditUsage(entitlement.account)
-      : undefined,
+    usage:
+      entitlement.hasAccess &&
+      !entitlement.hasUnlimitedAccess &&
+      entitlement.account
+        ? await getBillingCreditUsage(entitlement.account)
+        : undefined,
   });
 };

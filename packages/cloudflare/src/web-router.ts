@@ -136,8 +136,8 @@ export default {
     if (release === null) {
       return new Response("Reload the site to continue.", {
         headers: {
-          "cache-control": "no-store",
           [DEPLOYMENT_RELOAD_HEADER]: "1",
+          "cache-control": "no-store",
         },
         status: 409,
       });

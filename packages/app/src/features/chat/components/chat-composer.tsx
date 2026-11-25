@@ -10,11 +10,15 @@ import {
   StopIcon,
 } from "@hugeicons/core-free-icons";
 import type { ChatModel } from "@quieter/ai/chat-models";
-import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
+import {
+  ChatModelPicker,
+  CurrentChatModelMark,
+} from "@quieter/app/features/chat/components/chat-model-picker";
 import { ModelLabLogo } from "@quieter/app/features/chat/components/model-lab-logo";
 import { getConnectorIcon } from "@quieter/app/lib/connector-icons";
 import { connectorsQueryOptions } from "@quieter/app/lib/connectors-query";
 import { orpc } from "@quieter/app/lib/orpc";
+import { connectorMentionPattern } from "@quieter/orpc/mail-agent/contracts";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { CommandMenu } from "@quieter/ui/command-menu";
@@ -32,11 +36,16 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Text } from "@quieter/ui/text";
-import { Textarea } from "@quieter/ui/textarea";
+import { TokenField } from "@quieter/ui/token-field";
+import type {
+  TokenFieldHandle,
+  TokenFieldToken,
+} from "@quieter/ui/token-field";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode, RefObject, SubmitEvent } from "react";
 
+import { getSelectedChatModel } from "../domain/chat-model-options";
 import {
   getChatSlashCommand,
   getChatSlashItems,
@@ -54,12 +63,13 @@ type ChatComposerProps = {
   contextItems: ChatContextItem[];
   contextPicker: ReactNode;
   disabled?: boolean;
+  sendDisabled?: boolean;
   input: string;
-  inputRef?: RefObject<HTMLTextAreaElement | null>;
+  inputRef: RefObject<TokenFieldHandle | null>;
   mailboxId: string;
   model: ChatModel | "auto";
   onInputChange: (value: string) => void;
-  onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onInputKeyDown: (event: KeyboardEvent<HTMLDivElement>) => void;
   onModelChange: (model: ChatModel | "auto") => void;
   onRemoveContext: (id: string) => void;
   onStop: () => void;
@@ -94,6 +104,7 @@ export const ChatComposer = ({
   contextItems,
   contextPicker,
   disabled = false,
+  sendDisabled = false,
   input,
   inputRef,
   mailboxId,
@@ -116,10 +127,11 @@ export const ChatComposer = ({
   streaming,
   transcribing,
 }: ChatComposerProps) => {
-  const localInputRef = useRef<HTMLTextAreaElement>(null);
-  const textareaRef = inputRef ?? localInputRef;
   const listId = useId();
   const [cursor, setCursor] = useState<CommandCursor | null>(null);
+  const selectionRef = useRef<{ end: number; start: number } | undefined>(
+    undefined
+  );
   const command =
     disabled || cursor === null || cursor.phase === "dismissed"
       ? null
@@ -149,18 +161,44 @@ export const ChatComposer = ({
     } else if (snippets.isError) {
       commandStatus = "Could not load snippets.";
     }
+  } else if (command?.kind === "model" && commands.length === 0) {
+    commandStatus = "No matching models.";
   }
+  const currentModel = getSelectedChatModel(model)?.value ?? "auto";
   const { data: connectorData } = useQuery(connectorsQueryOptions());
-  const connectedAccounts =
+  const connectedAccounts: TokenFieldToken[] =
     connectorData?.connectors.flatMap((connector) =>
       connector.accounts
         .filter((account) => account.status === "connected")
-        .map((account) => ({
-          account,
-          displayName: connector.displayName,
-          icon: getConnectorIcon(connector.provider),
-        }))
+        .map((account) => {
+          const icon = getConnectorIcon(connector.provider);
+          const workspace = account.providerWorkspaceName;
+          const name = account.accountEmail ?? account.displayName ?? "Account";
+          return {
+            iconClassName: cn("size-4", icon.className),
+            iconSrc: icon.src,
+            id: account.id,
+            label: `${connector.displayName}: ${workspace ? `${workspace}, ` : ""}${name}`,
+            match: "literal",
+            text: `@[connection:${account.id}]`,
+          };
+        })
     ) ?? [];
+  const accountsByText = new Map(
+    connectedAccounts.map((account) => [account.text, account])
+  );
+  const tokens = [...connectedAccounts];
+  for (const [mention] of input.matchAll(connectorMentionPattern)) {
+    if (!tokens.some((token) => token.text === mention)) {
+      tokens.push({
+        id: mention,
+        label: "Unavailable account",
+        match: "literal",
+        text: mention,
+        tone: "orange",
+      });
+    }
+  }
   const audioBusy = startingRecording || transcribing;
   const dictationLabel = recordingSupported
     ? "Dictate"
@@ -170,8 +208,9 @@ export const ChatComposer = ({
     submitLabel = "Select command";
   }
 
-  const captureCursor = (target: HTMLTextAreaElement) => {
-    const { selectionStart: start, selectionEnd: end } = target;
+  const captureCursor = (selection: { end: number; start: number }) => {
+    selectionRef.current = selection;
+    const { end, start } = selection;
     setCursor((current) =>
       current?.start === start &&
       current.end === end &&
@@ -193,22 +232,18 @@ export const ChatComposer = ({
       replacement = item.text;
     }
     const position = command.from + replacement.length;
+    inputRef.current?.replaceRange(
+      { end: command.to, start: command.from },
+      replacement
+    );
     setCursor({
       end: position,
       phase: item.kind === "search" ? "focused" : "dismissed",
       start: position,
     });
-    onInputChange(
-      `${input.slice(0, command.from)}${replacement}${input.slice(command.to)}`
-    );
     if (item.kind === "model") {
       onModelChange(item.model);
     }
-    requestAnimationFrame(() => {
-      const target = textareaRef.current;
-      target?.setSelectionRange(position, position);
-      target?.focus();
-    });
   };
 
   const highlightCommand = (index: number) => {
@@ -222,12 +257,7 @@ export const ChatComposer = ({
     }
   };
 
-  const handleInputKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    // Safari can clear isComposing before the IME confirmation key event.
-    // oxlint-disable-next-line typescript/no-deprecated
-    if (event.nativeEvent.isComposing || event.keyCode === 229) {
-      return;
-    }
+  const handleInputKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
     if (menuVisible) {
       if (event.key === "Escape") {
         event.preventDefault();
@@ -269,7 +299,7 @@ export const ChatComposer = ({
 
   return (
     <form
-      className="mt-auto w-full shrink-0 p-0.5"
+      className="mt-auto w-full shrink-0 p-2"
       onSubmit={(event) => {
         if (commandOpen) {
           event.preventDefault();
@@ -304,34 +334,41 @@ export const ChatComposer = ({
               aria-label="Queued messages"
               className="max-h-28 space-y-1 overflow-y-auto overscroll-contain"
             >
-              {queue.items.map((item) => (
-                <li className="flex min-w-0 items-center gap-2" key={item.id}>
-                  <Text
-                    className="min-w-0 flex-1"
-                    id={`queued-message-${item.id}`}
-                    size="sm"
-                    title={item.text}
-                    tone="muted"
-                    truncate
-                  >
-                    {item.text}
-                  </Text>
-                  <IconButtonTooltip label="Remove queued message">
-                    <Button
-                      aria-describedby={`queued-message-${item.id}`}
-                      aria-label="Remove queued message"
-                      onClick={() => {
-                        queue.onRemove(item.id);
-                      }}
-                      size="icon-xs"
-                      type="button"
-                      variant="ghost"
+              {queue.items.map((item) => {
+                const preview = item.text.replaceAll(
+                  connectorMentionPattern,
+                  (mention) =>
+                    accountsByText.get(mention)?.label ?? "Unavailable account"
+                );
+                return (
+                  <li className="flex min-w-0 items-center gap-2" key={item.id}>
+                    <Text
+                      className="min-w-0 flex-1"
+                      id={`queued-message-${item.id}`}
+                      size="sm"
+                      title={preview}
+                      tone="muted"
+                      truncate
                     >
-                      <Icon aria-hidden icon={Cancel01Icon} />
-                    </Button>
-                  </IconButtonTooltip>
-                </li>
-              ))}
+                      {preview}
+                    </Text>
+                    <IconButtonTooltip label="Remove queued message">
+                      <Button
+                        aria-describedby={`queued-message-${item.id}`}
+                        aria-label="Remove queued message"
+                        onClick={() => {
+                          queue.onRemove(item.id);
+                        }}
+                        size="icon-xs"
+                        type="button"
+                        variant="ghost"
+                      >
+                        <Icon aria-hidden icon={Cancel01Icon} />
+                      </Button>
+                    </IconButtonTooltip>
+                  </li>
+                );
+              })}
             </ol>
           </div>
         ) : null}
@@ -356,52 +393,41 @@ export const ChatComposer = ({
             />
           ))}
         </div>
-        <div className="relative flex flex-col">
-          <Textarea
-            aria-activedescendant={
-              menuVisible && commands.length > 0
-                ? `${listId}-${activeIndex}`
-                : undefined
-            }
-            aria-autocomplete="list"
-            aria-controls={menuVisible ? listId : undefined}
-            aria-label="Message"
-            data-assistant-composer
-            disabled={disabled}
-            onBlur={(event) => {
-              const target = event.relatedTarget;
-              if (
-                target !== null &&
-                event.currentTarget.parentElement?.contains(target) === true
-              ) {
-                return;
-              }
+        <div
+          className="relative flex flex-col"
+          data-assistant-composer
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
               setCursor((current) =>
                 current?.phase === "focused"
                   ? { ...current, phase: "blurred" }
                   : current
               );
-            }}
-            onChange={(event) => {
-              const {
-                selectionStart: start,
-                selectionEnd: end,
-                value,
-              } = event.currentTarget;
-              setCursor({ end, phase: "focused", start });
+            }
+          }}
+        >
+          <TokenField
+            aria-activedescendant={
+              menuVisible && commands.length > 0
+                ? `${listId}-${activeIndex}`
+                : undefined
+            }
+            aria-controls={menuVisible ? listId : undefined}
+            aria-label="Message"
+            disabled={disabled}
+            onChange={(value, selection) => {
+              selectionRef.current = selection;
+              setCursor(selection ? { ...selection, phase: "focused" } : null);
               onInputChange(value);
             }}
-            onFocus={(event) => {
-              captureCursor(event.currentTarget);
-            }}
             onKeyDown={handleInputKeyDown}
-            onSelect={(event) => {
-              captureCursor(event.currentTarget);
-            }}
+            onSelect={captureCursor}
             placeholder={queueing ? "Queue a follow-up…" : placeholder}
-            ref={textareaRef}
+            ref={inputRef}
+            size="composer"
+            tokens={tokens}
+            trigger={null}
             value={input}
-            variant="prompt"
           />
           {menuVisible ? (
             <div className="absolute start-0 bottom-full z-50 mb-1">
@@ -409,8 +435,20 @@ export const ChatComposer = ({
                 activeIndex={activeIndex}
                 id={listId}
                 items={commands.map((item) => {
-                  if (item.kind === "model" && item.lab !== undefined) {
-                    return { ...item, icon: <ModelLabLogo lab={item.lab} /> };
+                  if (item.kind === "model") {
+                    return {
+                      ...item,
+                      icon:
+                        item.lab === undefined ? (
+                          <Icon icon={SparklesIcon} />
+                        ) : (
+                          <ModelLabLogo lab={item.lab} />
+                        ),
+                      shortcut:
+                        item.model === currentModel ? (
+                          <CurrentChatModelMark />
+                        ) : undefined,
+                    };
                   }
                   const isSnippet =
                     item.kind === "snippet" ||
@@ -420,10 +458,10 @@ export const ChatComposer = ({
                     icon: <Icon icon={isSnippet ? NoteIcon : SparklesIcon} />,
                   };
                 })}
-                label="Chat commands"
+                label={command?.kind === "model" ? "Models" : "Chat commands"}
                 onHighlight={highlightCommand}
                 onSelect={selectCommand}
-                selectionHint="select"
+                selectionHint={command?.kind === "model" ? false : "select"}
                 status={commandStatus}
               />
             </div>
@@ -457,25 +495,21 @@ export const ChatComposer = ({
                     No connected accounts
                   </p>
                 ) : (
-                  connectedAccounts.map(({ account, displayName, icon }) => (
+                  connectedAccounts.map((account) => (
                     <DropdownMenuItem
                       key={account.id}
                       onSelect={() => {
-                        const start =
-                          textareaRef.current?.selectionStart ?? input.length;
-                        const end =
-                          textareaRef.current?.selectionEnd ?? input.length;
+                        const { end, start } = selectionRef.current ?? {
+                          end: input.length,
+                          start: input.length,
+                        };
                         const prefix = input.slice(0, start);
-                        const suffix = input.slice(end);
                         const spacer =
                           prefix.length > 0 && !/\s$/u.test(prefix) ? " " : "";
-                        const mention = `${spacer}@[connection:${account.id}] `;
-                        onInputChange(`${prefix}${mention}${suffix}`);
                         requestAnimationFrame(() => {
-                          textareaRef.current?.focus();
-                          textareaRef.current?.setSelectionRange(
-                            start + mention.length,
-                            start + mention.length
+                          inputRef.current?.replaceRange(
+                            { end, start },
+                            `${spacer}${account.text} `
                           );
                         });
                       }}
@@ -483,18 +517,10 @@ export const ChatComposer = ({
                       <img
                         alt=""
                         aria-hidden
-                        className={cn("size-4", icon.className)}
-                        src={icon.src}
+                        className={account.iconClassName}
+                        src={account.iconSrc}
                       />
-                      <span className="truncate">
-                        {displayName}:{" "}
-                        {account.providerWorkspaceName
-                          ? `${account.providerWorkspaceName}, `
-                          : ""}
-                        {account.accountEmail ??
-                          account.displayName ??
-                          "Account"}
-                      </span>
+                      <span className="truncate">{account.label}</span>
                     </DropdownMenuItem>
                   ))
                 )}
@@ -544,6 +570,7 @@ export const ChatComposer = ({
                   aria-label={submitLabel}
                   disabled={
                     disabled ||
+                    (sendDisabled && !commandOpen) ||
                     recording ||
                     audioBusy ||
                     !input.trim() ||

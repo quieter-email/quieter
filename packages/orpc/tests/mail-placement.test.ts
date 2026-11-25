@@ -274,6 +274,31 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
         "updatedAt" timestamptz not null,
         unique ("actorUserId", "mailboxId", "requestId", "threadId")
       );
+      create table if not exists "mailSnooze" (
+        id text primary key,
+        "mailboxId" text not null references mailbox(id) on delete cascade,
+        "threadId" text not null,
+        "actorUserId" text,
+        version integer not null,
+        "returnAt" timestamptz not null,
+        "timeZone" text not null,
+        status text not null,
+        "hideRequestId" text not null,
+        "returnRequestId" text,
+        "hideOperationId" text references "mailPlacementOperation"(id) on delete set null,
+        "returnOperationId" text references "mailPlacementOperation"(id) on delete set null,
+        "knownIncomingMessageIds" jsonb not null,
+        "hiddenMessageIds" jsonb not null,
+        "nextWakeAt" timestamptz,
+        "leaseToken" text,
+        "leaseUntil" timestamptz,
+        attempts integer not null default 0,
+        code text,
+        message text,
+        "createdAt" timestamptz not null,
+        "updatedAt" timestamptz not null,
+        unique ("mailboxId", "threadId")
+      );
     `);
   });
 

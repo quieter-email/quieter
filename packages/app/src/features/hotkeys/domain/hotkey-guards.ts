@@ -1,8 +1,3 @@
-import {
-  DEFAULT_SEQUENCE_TIMEOUT,
-  getSequenceManager,
-  matchesKeyboardEvent,
-} from "@tanstack/hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 
 /**
@@ -27,38 +22,22 @@ const editableSelector = [
 const getElementTarget = (target: EventTarget | null) =>
   target instanceof Element ? target : null;
 
-export const isAppShortcutSequenceContinuation = (
-  event: KeyboardEvent,
-  now = Date.now()
-) => {
-  for (const registration of getSequenceManager().registrations.state.values()) {
-    const nextHotkey = registration.sequence[registration.matchedStepCount];
-    if (
-      registration.options.enabled !== false &&
-      registration.matchedStepCount > 0 &&
-      nextHotkey &&
-      now - registration.partialMatchLastKeyTime <=
-        (registration.options.timeout ?? DEFAULT_SEQUENCE_TIMEOUT) &&
-      matchesKeyboardEvent(event, nextHotkey, registration.options.platform)
-    ) {
-      return true;
-    }
-  }
-
-  return false;
-};
-
 const isEditableShortcutTarget = (target: EventTarget | null) => {
   const element = getElementTarget(target);
   return !!element?.closest(editableSelector);
 };
 
-const hasOpenBlockingDialog = () =>
-  !!document.querySelector(
-    "[role='dialog']:not([data-keyboard-shortcuts-dialog]), [data-popup-open]:not([data-keyboard-shortcuts-dialog])"
+export const APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR =
+  "[role='dialog'], [role='alertdialog'], [role='menu'][data-open], [data-popover-popup][data-open], [data-blocking-overlay], [data-popup-open][aria-haspopup], [data-popup-open][role='combobox']";
+
+const hasOpenBlockingOverlay = () =>
+  [
+    ...document.querySelectorAll<HTMLElement>(
+      APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR
+    ),
+  ].some(
+    (overlay) => !Object.hasOwn(overlay.dataset, "keyboardShortcutsDialog")
   );
 
 export const shouldIgnoreAppShortcut = (event: KeyboardEvent) =>
-  isEditableShortcutTarget(event.target) ||
-  hasOpenBlockingDialog() ||
-  isAppShortcutSequenceContinuation(event);
+  isEditableShortcutTarget(event.target) || hasOpenBlockingOverlay();

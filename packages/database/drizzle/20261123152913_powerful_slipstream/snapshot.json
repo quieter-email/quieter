@@ -1,0 +1,171 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "06216284-7e65-4d41-b653-8b9f83a2e143",
+  "prevIds": ["8ea46f28-a28f-422d-a767-9bb3148bb2fa"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailMessageWork",
+        "gmail_message_work_pending_mailbox_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_message_work_pending_mailbox_idx",
+        "n|idx|public.gmail_message_work_pending_mailbox_idx",
+        "e|idx|public.gmail_message_work_pending_mailbox_idx",
+        "n|rel|public.gmail_message_work_pending_mailbox_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailMessageWork",
+        "n|sch|public",
+        "n|col|public.gmailMessageWork.mailboxId",
+        "n|col|public.gmailMessageWork.source",
+        "n|col|public.gmailMessageWork.dueAt",
+        "n|col|public.gmailMessageWork.priorityAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailMessageWork",
+        "gmail_message_work_finished_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_message_work_finished_idx",
+        "n|idx|public.gmail_message_work_finished_idx",
+        "e|idx|public.gmail_message_work_finished_idx",
+        "n|rel|public.gmail_message_work_finished_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailMessageWork",
+        "n|sch|public",
+        "n|col|public.gmailMessageWork.updatedAt"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailWatchState",
+        "gmail_watch_state_scheduler_repair_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_watch_state_scheduler_repair_at_idx",
+        "n|idx|public.gmail_watch_state_scheduler_repair_at_idx",
+        "e|idx|public.gmail_watch_state_scheduler_repair_at_idx",
+        "n|rel|public.gmail_watch_state_scheduler_repair_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailWatchState",
+        "n|sch|public",
+        "n|col|public.gmailWatchState.mailboxId"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailMessageWork",
+        "name": "gmail_message_work_pending_mailbox_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "source",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "dueAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "priorityAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"completedAt\" is null or \"lastError\" is not null or (\"triggerActions\" is true and \"actionsCompletedAt\" is null)",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailMessageWork",
+        "name": "gmail_message_work_finished_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "updatedAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"completedAt\" is not null and \"lastError\" is null and (\"triggerActions\" is false or \"actionsCompletedAt\" is not null)",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailWatchState",
+        "name": "gmail_watch_state_scheduler_repair_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "coalesce(\"schedulerRepairAt\", '-infinity'::timestamp)",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

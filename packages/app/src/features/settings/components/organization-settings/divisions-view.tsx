@@ -153,7 +153,7 @@ const CreateDivisionDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody spacing="4">
+            <DialogBody spacing="3">
               <form.Field name="name">
                 {(field) => (
                   <TextField>
@@ -211,11 +211,7 @@ const CreateDivisionDialog = ({
               <DialogCloseButton disabled={createMutation.isPending}>
                 Cancel
               </DialogCloseButton>
-              <Button
-                disabled={createMutation.isPending}
-                size="sm"
-                type="submit"
-              >
+              <Button disabled={createMutation.isPending} type="submit">
                 {createMutation.isPending ? (
                   <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : (
@@ -315,7 +311,7 @@ const EditDivisionFieldDialog = ({
               await form.handleSubmit();
             }}
           >
-            <DialogBody spacing="4">
+            <DialogBody spacing="3">
               <form.Field name="value">
                 {(formField) => (
                   <TextField>
@@ -357,11 +353,7 @@ const EditDivisionFieldDialog = ({
               <DialogCloseButton disabled={updateMutation.isPending}>
                 Cancel
               </DialogCloseButton>
-              <Button
-                disabled={updateMutation.isPending}
-                size="sm"
-                type="submit"
-              >
+              <Button disabled={updateMutation.isPending} type="submit">
                 {updateMutation.isPending ? (
                   <Icon aria-hidden animation="spin" icon={Loading03Icon} />
                 ) : null}
@@ -441,7 +433,6 @@ const DeleteDivisionDialog = ({
             onClick={() => {
               deleteMutation.mutate({ divisionId: division.id });
             }}
-            size="sm"
             variant="destructive"
           >
             {deleteMutation.isPending ? (
@@ -539,7 +530,7 @@ const DivisionDetailView = ({
                   <label
                     className={cn(
                       settingsSurfaceVariants({ variant: "insetRow" }),
-                      "cursor-pointer gap-3"
+                      "cursor-default gap-3"
                     )}
                     htmlFor={`division-member-${memberRecord.id}`}
                     key={memberRecord.id}

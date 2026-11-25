@@ -1,6 +1,6 @@
 "use client";
 
-import { ConsentProvider, offline } from "@c15t/react";
+import { ConsentProvider, local } from "@c15t/react";
 import { posthog } from "@c15t/scripts/posthog";
 import { ConsentBanner } from "@quieter/app/components/consent/consent-banner";
 import {
@@ -24,7 +24,7 @@ const posthogHost =
   typeof configuredPosthogHost === "string" && configuredPosthogHost !== ""
     ? configuredPosthogHost
     : "https://eu.i.posthog.com";
-const consentMode = offline({
+const consentMode = local({
   policyRules: [
     {
       categories: ["measurement"],

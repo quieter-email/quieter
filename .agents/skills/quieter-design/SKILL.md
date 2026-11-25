@@ -23,7 +23,7 @@ The working code, current theme definitions, latest approved design, and current
 - Keep semantic primary, secondary, foreground, muted, state, focus, and categorical roles. The four surfaces reduce duplicate grays, not the meaning of the palette.
 - Keep compact item titles at the surrounding control text size and normal weight. A semantic heading tag does not require larger type. Follow the guide's compact typography defaults; establish hierarchy with placement, spacing, and tone before increasing size or weight.
 - Separate **layer inset** from **content padding**. A 2px nested shade gap and a 16px or 24px text inset solve different problems. Do not replace one with the other.
-- Use the radius for the element's role. A full-width inset layer follows the outer contour. A small button or pill keeps its control radius. Consistency does not mean one radius everywhere.
+- Use the radius for the element's role. Only a full-width layer 2px inside its parent follows the outer contour. Controls, rows, and other inner elements keep their own radius instead of the outer radius minus the padding. Consistency does not mean one radius everywhere.
 - Group related controls in a Section. Use Detail for controls, selected states, nested summaries, and a few substantial information groups. Lists normally leave unselected rows transparent.
 - Shared props own appearance. App layout owns placement, available width, external gaps, and domain behavior. Do not override a component's padding, fill, type, radius, shadow, or interaction styling at a call site.
 - Keep real content in normal flow. Use measured positioning for calendars, virtualized rows, floating windows, and graphics where the interaction requires it. Never position ordinary text to fake centering.

@@ -50,12 +50,15 @@ describe("approved connector argument mappings", () => {
   test.each(["team", "project", "id", "url", "connectionId", "assignee"])(
     "rejects message bindings in protected arguments (%s)",
     (field) => {
+      const baseTemplate = {
+        team: "approved-team",
+        title: "Task",
+      };
       expect(() =>
         resolveAgentEffectArguments({
           message: { subject: "attacker" },
           template: JSON.stringify({
-            team: "approved-team",
-            title: "Task",
+            ...baseTemplate,
             [field]: "{{message.subject}}",
           }),
           tool,

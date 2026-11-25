@@ -15,7 +15,14 @@ type ToastType =
   | "info"
   | "loading";
 
+export type ToastAction = {
+  disabled?: boolean;
+  label: ReactNode;
+  onClick: () => void;
+};
+
 export type ToastOptions = {
+  action?: ToastAction;
   description?: ReactNode;
   duration?: number;
   id?: string;
@@ -48,6 +55,11 @@ const toAddOptions = (
   title: ReactNode,
   options: ToastOptions = {}
 ) => ({
+  actionProps: options.action && {
+    children: options.action.label,
+    disabled: options.action.disabled,
+    onClick: options.action.onClick,
+  },
   description: options.description,
   id: options.id ?? toastIdFor(type, title, options.description),
   timeout:
@@ -64,6 +76,11 @@ const toUpdateOptions = (options: string | ToastOptions) => {
   }
 
   return {
+    actionProps: options.action && {
+      children: options.action.label,
+      disabled: options.action.disabled,
+      onClick: options.action.onClick,
+    },
     description: options.description,
     timeout: options.duration ?? DEFAULT_TOAST_TIMEOUT,
   };

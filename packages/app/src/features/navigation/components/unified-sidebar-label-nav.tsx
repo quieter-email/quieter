@@ -22,7 +22,6 @@ import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   DropdownMenu,
@@ -130,14 +129,16 @@ export const UnifiedSidebarLabelNav = ({
 
   return (
     <section className="mt-4">
-      <div className="mb-1 flex items-center justify-between px-2">
+      <div className="mb-1 flex items-center justify-between px-3">
         <p className="text-caption font-medium text-muted-fg">Labels</p>
         {mailboxes.length > 0 && (
           <DropdownMenu>
             <IconButtonTooltip label="Labels options">
               <DropdownMenuTrigger
                 aria-label="Labels options"
-                render={<Button size="icon-xs" variant="ghost" />}
+                render={
+                  <Button className="-me-1.25" size="icon-xs" variant="ghost" />
+                }
               >
                 <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
               </DropdownMenuTrigger>
@@ -238,15 +239,7 @@ export const UnifiedSidebarLabelNav = ({
             <SidebarMailboxNavItem
               active={isActive}
               aria-current={isActive ? "page" : undefined}
-              // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
-              className={cn(
-                "min-w-0 justify-start text-left text-caption font-normal squircle",
-                {
-                  "text-fg": isActive,
-                  "text-muted-fg": !isActive,
-                }
-              )}
-              // oxlint-enable shadcn/no-restyle
+              className="min-w-0"
               key={nameKey}
               mailboxSearch={{
                 mailbox: selectedMailbox ?? "inbox",
@@ -257,17 +250,18 @@ export const UnifiedSidebarLabelNav = ({
                 workspace: null,
               }}
               onClick={onRequestClose}
-              size="sm"
               type="button"
               variant="ghost"
             >
-              <ColorSwatch
-                color={
-                  label.color?.startsWith("#") === true
-                    ? label.color
-                    : `var(--q-${label.color ?? "gray"})`
-                }
-              />
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                <ColorSwatch
+                  color={
+                    label.color?.startsWith("#") === true
+                      ? label.color
+                      : `var(--q-${label.color ?? "gray"})`
+                  }
+                />
+              </span>
               <span className="min-w-0 truncate">{label.name}</span>
             </SidebarMailboxNavItem>
           );

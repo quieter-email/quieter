@@ -177,6 +177,7 @@ export const useMailboxNavigationBlocker = ({
 const MAILBOX_ROUTE_CATEGORIES = [
   "inbox",
   "done",
+  "later",
   "important",
   "unread",
   "spam",

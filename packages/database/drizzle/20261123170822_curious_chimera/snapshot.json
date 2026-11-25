@@ -1,0 +1,362 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "5d27b031-0c9d-4e00-b0f4-0961d537d9fa",
+  "prevIds": ["06216284-7e65-4d41-b653-8b9f83a2e143"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "aiMemoryMailboxState",
+        "ai_memory_mailbox_state_automation_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.ai_memory_mailbox_state_automation_due_idx",
+        "n|idx|public.ai_memory_mailbox_state_automation_due_idx",
+        "e|idx|public.ai_memory_mailbox_state_automation_due_idx",
+        "n|rel|public.ai_memory_mailbox_state_automation_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.aiMemoryMailboxState",
+        "n|sch|public",
+        "n|col|public.aiMemoryMailboxState.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "gmailComposeOperation",
+        "gmail_compose_operation_follow_up_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.gmail_compose_operation_follow_up_due_idx",
+        "n|idx|public.gmail_compose_operation_follow_up_due_idx",
+        "e|idx|public.gmail_compose_operation_follow_up_due_idx",
+        "n|rel|public.gmail_compose_operation_follow_up_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.gmailComposeOperation",
+        "n|sch|public",
+        "n|col|public.gmailComposeOperation.updatedAt",
+        "n|col|public.gmailComposeOperation.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailMessageImportance",
+        "mail_importance_automation_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_importance_automation_due_idx",
+        "n|idx|public.mail_importance_automation_due_idx",
+        "e|idx|public.mail_importance_automation_due_idx",
+        "n|rel|public.mail_importance_automation_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailMessageImportance",
+        "n|sch|public",
+        "n|col|public.mailMessageImportance.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailReminderJob",
+        "mail_reminder_job_evaluate_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_reminder_job_evaluate_due_idx",
+        "n|idx|public.mail_reminder_job_evaluate_due_idx",
+        "e|idx|public.mail_reminder_job_evaluate_due_idx",
+        "n|rel|public.mail_reminder_job_evaluate_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailReminderJob",
+        "n|sch|public",
+        "n|col|public.mailReminderJob.reminderId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailReminderSuggestion",
+        "mail_reminder_suggestion_automation_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_reminder_suggestion_automation_due_idx",
+        "n|idx|public.mail_reminder_suggestion_automation_due_idx",
+        "e|idx|public.mail_reminder_suggestion_automation_due_idx",
+        "n|rel|public.mail_reminder_suggestion_automation_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailReminderSuggestion",
+        "n|sch|public",
+        "n|col|public.mailReminderSuggestion.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailboxAgentRun",
+        "mailbox_agent_run_automation_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.mailbox_agent_run_automation_due_idx",
+        "n|idx|public.mailbox_agent_run_automation_due_idx",
+        "e|idx|public.mailbox_agent_run_automation_due_idx",
+        "n|rel|public.mailbox_agent_run_automation_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxAgentRun",
+        "n|sch|public",
+        "n|col|public.mailboxAgentRun.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "userAiContextEvent",
+        "user_ai_context_event_automation_due_idx"
+      ],
+      "writes": [
+        "s|idx|public.user_ai_context_event_automation_due_idx",
+        "n|idx|public.user_ai_context_event_automation_due_idx",
+        "e|idx|public.user_ai_context_event_automation_due_idx",
+        "n|rel|public.user_ai_context_event_automation_due_idx"
+      ],
+      "reads": [
+        "n|tbl|public.userAiContextEvent",
+        "n|sch|public",
+        "n|col|public.userAiContextEvent.mailboxId"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "aiMemoryMailboxState",
+        "name": "ai_memory_mailbox_state_automation_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "(case \"status\"\n        when 'pending' then \"updatedAt\"\n        when 'processing' then \"processingAt\" + 300000 * interval '1 millisecond'\n        else \"updatedAt\" + 300000 * interval '1 millisecond'\n      end)",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"status\" in ('pending', 'processing', 'failed') and \"userId\" is not null",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailComposeOperation",
+        "name": "gmail_compose_operation_follow_up_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "updatedAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"kind\" = 'send' and \"status\" = 'accepted' and \"followUpReminder\" is not null",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailMessageImportance",
+        "name": "mail_importance_automation_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "greatest(\"nextAttemptAt\", \"leaseExpiresAt\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"state\" in ('pending', 'processing', 'paused', 'error')",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailReminderJob",
+        "name": "mail_reminder_job_evaluate_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "greatest(\"availableAt\", \"leaseUntil\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "reminderId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"kind\" = 'evaluate' and \"completedAt\" is null",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailReminderSuggestion",
+        "name": "mail_reminder_suggestion_automation_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "greatest(\"availableAt\", \"leaseUntil\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"status\" = 'pending'",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxAgentRun",
+        "name": "mailbox_agent_run_automation_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "coalesce(\"leaseExpiresAt\", \"createdAt\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "(\"status\" = 'queued' or (\"status\" = 'running' and \"leaseExpiresAt\" is not null))",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "userAiContextEvent",
+        "name": "user_ai_context_event_automation_due_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "greatest(\"updatedAt\", \"processingAt\")",
+            "isExpression": true,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": "\"mergedAt\" is null and \"skippedAt\" is null and \"metadata\"->>'memoryScope' = 'user'",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

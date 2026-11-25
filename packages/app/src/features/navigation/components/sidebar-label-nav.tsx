@@ -23,7 +23,6 @@ import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
-import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -238,15 +237,7 @@ export const SidebarLabelNav = ({
           <SidebarMailboxNavItem
             active={isActive}
             aria-current={isActive ? "page" : undefined}
-            // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom label-row spacing.
-            className={cn(
-              "min-w-0 justify-start text-left text-caption font-normal squircle",
-              {
-                "text-fg": isActive,
-                "text-muted-fg": !isActive,
-              }
-            )}
-            // oxlint-enable shadcn/no-restyle
+            className="min-w-0"
             mailboxSearch={
               embedded
                 ? undefined
@@ -265,11 +256,12 @@ export const SidebarLabelNav = ({
               }
               onRequestClose?.();
             }}
-            size="sm"
             type="button"
             variant="ghost"
           >
-            <ManagedLabelColorDot color={label.color} />
+            <span className="flex size-3.5 shrink-0 items-center justify-center">
+              <ManagedLabelColorDot color={label.color} />
+            </span>
             <span className="min-w-0 truncate">{label.name}</span>
             {mailboxProvider === "managed" ? (
               <span className="ml-auto text-micro text-muted-fg tabular-nums">
@@ -286,7 +278,7 @@ export const SidebarLabelNav = ({
     <section className="mt-4">
       <SidebarEntrance
         animateEntrance={shouldAnimateEntrance}
-        className="mb-1 flex items-center justify-between px-2"
+        className="mb-1 flex items-center justify-between px-3"
         index={8}
       >
         <p className="text-caption font-medium text-muted-fg">{labelTitle}</p>
@@ -323,6 +315,7 @@ export const SidebarLabelNav = ({
                   />
                 )
               }
+              className="-me-1.25"
               role={embedded ? "button" : "link"}
               size="icon-xs"
               type="button"

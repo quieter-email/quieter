@@ -18,7 +18,7 @@ See [OAuth connectors](oauth-connectors.md) for Notion, Todoist, ClickUp, Outloo
 
 ## Install
 
-The web app uses Cloudflare's beta `cf` Vite plugin with `apps/web/cloudflare.config.ts`. The background runtime uses native multi-config `wrangler dev` with `packages/cloudflare/wrangler.local.jsonc` and `wrangler.processing.local.jsonc`, retaining shared `.wrangler/state` persistence. SST remains the deployment authority. The separate `wrangler.types.jsonc` fixture serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. The updated `cf` delegate launcher works on Windows without a patch. Worker tests use isolated Vitest 4 packages until Cloudflare supports Vitest 5.
+The web app uses Cloudflare's beta `cf` Vite plugin with `apps/web/cloudflare.config.ts`. The background runtime uses native multi-config `wrangler dev` with `packages/cloudflare/wrangler.local.jsonc` and `wrangler.processing.local.jsonc`, retaining shared `.wrangler/state` persistence. SST remains the deployment authority. The separate `wrangler.types.jsonc` fixture serves Worker type generation and tests. Type generation explicitly loads the empty `packages/cloudflare/wrangler.types.env` fixture, keeping its output independent of local `.dev.vars` files. Run `vp exec sst install` after dependency installation to generate infrastructure types. The updated `cf` delegate launcher works on Windows without a patch. Worker tests run on Vitest 5 via `@cloudflare/vitest-plugin`.
 
 Dependency installation checks peers strictly and does not auto-install optional integration trees. Declare required peers in the consuming workspace. The Vite peer-version exception maps the pinned Vite+ core alias; update it with Vite+. Run `vp pm audit` when updating dependencies, and upgrade related authentication or Cloudflare packages together.
 
@@ -82,7 +82,9 @@ Local development requires only the values needed by the paths you exercise. Imp
 - Polar: checkout and subscription flows
 - PostHog, Sentry, and logo.dev: optional integrations
 
-Interactive chat selects model families through OpenRouter's [latest aliases](https://openrouter.ai/docs/guides/routing/routers/latest-resolution), so releases update without redeploying. Flash Lite has no dedicated alias and is pinned to the current stable version in `chat-models.ts`; update it when a new release ships. `QuieterChatModel` chooses the Auto family; existing concrete chat identifiers normalize to that family. Explicit family choices stay within that family when a provider is unavailable.
+Interactive chat uses concrete model IDs in `chat-models.ts` so each label matches the version it selects. Check OpenRouter's text and tool-calling endpoints for zero data retention before adding a model to the picker. `QuieterChatModel` chooses the Auto model. Older model IDs and family aliases resolve to their corresponding picker choices. Existing Gemini Flash and Flash Lite chat selections resolve to Gemini 4 Hydrogen. Flash Lite remains the default for background tasks.
+
+If an existing chat or background secret names a retired model, Quieter uses the corresponding default until the secret is updated. Chat requests from older tabs use Auto when they reference a retired model.
 
 ## Running
 
@@ -116,6 +118,7 @@ vp run dev:trigger mail-recovery
 vp run dev:trigger importance
 vp run dev:trigger actions
 vp run dev:trigger reminders
+vp run dev:trigger snooze
 ```
 
 The local gateway handles Gmail notifications, realtime updates, managed-mail fixtures, and manual maintenance. The auxiliary Gmail processor receives complete jobs through the same private service binding as production. Only the gateway exposes a loopback HTTP port. Local maintenance uses manual triggers, not an automatically running cron. The Pub/Sub bridge uses `gcloud auth print-access-token`, pulls one message at a time from its own subscription, extends the acknowledgment deadline during handoff, and acknowledges after the gateway durably queues the notification. The queue handler and processor run independently of that HTTP request. See [Gmail background processing](gmail-processing.md) for retries, recovery, and manual verification.
@@ -125,6 +128,8 @@ Important classification has a manual maintenance trigger. Use `vp run dev:trigg
 Mailbox Actions use `vp run dev:trigger actions` to drain one queued incoming-mail or manual run. Review and activate a mailbox prompt first, then ingest fresh fixture mail. The command uses the same authorization, usage controls, and effect journal as scheduled maintenance. See [Action specifications](action-specifications.md#development-walkthrough) for exact account mentions, private results, draft review, and uncertain-effect recovery.
 
 Reminder maintenance uses `vp run dev:trigger reminders` to process deadline suggestions, condition reviews, and missed clock wakes. The local Worker retains Durable Object alarms and SQLite state in `.wrangler/state`; PostgreSQL stores reminders and their durable jobs in `quieter_dev`. See [Personal mailbox reminders](reminders.md) for scheduling and notification limits.
+
+Mail Snooze uses the same web and background startup. Use `vp run dev:trigger snooze` to reconcile missed wakes through the authenticated local gateway. Both runtimes need the existing development signing secret, and the background callback must reach the web app's configured `BETTER_AUTH_URL`. Restart the background Worker after a binding change. Native alarms persist in `.wrangler/state`; a browser-only preview saves its deadline but does not run an automatic return. See [Mail Snooze](mail-snooze.md) for exact-set recovery, source membership and disposable verification interfaces.
 
 Shared Gmail accounts default to `QUIETER_LOCAL_PROVIDER_MODE=observe` and `QUIETER_LOCAL_GMAIL_WATCH_OWNER=production`. Mail reads and AI results stored in `quieter_dev` work in this mode. Gmail, Calendar and Linear writes are rejected server-side. Auto-label classification is saved without applying labels. Write tests require a dedicated mailbox or a verified ownership handoff, plus the explicit Gmail account allowlist. Never start a competing consumer on the production subscription.
 
@@ -325,7 +330,7 @@ Do not hand-edit:
 
 ## Incoming mail AI verification
 
-Run `vp run mail:benchmark` after local setup to exercise the real Jev code screen, code extractor, and label classifier using synthetic messages. It requires a separate, budget-limited development OpenRouter key and rejects uncapped keys or non-local configuration. It prints correctness, elapsed time, extractor-call counts, and cost without printing message content or codes. An optional model argument supports comparisons, for example `vp run mail:benchmark google/gemini-3.1-flash-lite`.
+Run `vp run mail:benchmark` after local setup to exercise the real decision-model code extractor and label classifier using synthetic messages. It requires a separate, budget-limited development OpenRouter key and rejects uncapped keys or non-local configuration. It prints correctness, elapsed time, extractor-call counts, and cost without printing message content or codes. An optional model argument supports comparisons, for example `vp run mail:benchmark google/gemini-3.1-flash-lite`.
 
 On October 1, 2026, all five synthetic code cases passed for each tested model. Gemini 2.5 Flash Lite had a 651 ms median and 796 ms maximum, compared with 1,009 ms / 1,108 ms for Gemini 3.5 Flash and 1,241 ms / 1,615 ms for Gemini 3.1 Flash Lite. The 2.5 run, including one Jev classification, cost $0.000180. This small sample measures model requests, not mail arrival through Google/SES, message loading, database writes, or browser refresh. A one-second end-to-end target needs measurements in the deployed mail path and cannot be guaranteed by these results.
 

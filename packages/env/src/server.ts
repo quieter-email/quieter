@@ -33,6 +33,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_MIGRATION_URL: runtimeEnv.DATABASE_MIGRATION_URL,
       DATABASE_URL: runtimeEnv.DATABASE_URL,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: runtimeEnv.DOMAIN_CONNECT_PRIVATE_KEY_B64,
+      GMAIL_BODY_ENCRYPTION_KEY: runtimeEnv.GMAIL_BODY_ENCRYPTION_KEY,
+      GMAIL_BODY_STORAGE_ENABLED: runtimeEnv.GMAIL_BODY_STORAGE_ENABLED,
       GMAIL_CREDENTIAL_ROTATION_TOKEN:
         runtimeEnv.GMAIL_CREDENTIAL_ROTATION_TOKEN,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: runtimeEnv.GMAIL_LIVE_SYNC_TOKEN_SECRET,
@@ -54,6 +56,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       LINEAR_CLIENT_ID: runtimeEnv.LINEAR_CLIENT_ID,
       LINEAR_CLIENT_SECRET: runtimeEnv.LINEAR_CLIENT_SECRET,
       MAIL_BUCKET: runtimeEnv.MAIL_BUCKET,
+      MAIL_DISPATCH_URL: runtimeEnv.MAIL_DISPATCH_URL,
       MAIL_RECEIPT_ROLE_ARN: runtimeEnv.MAIL_RECEIPT_ROLE_ARN,
       MAIL_RECEIPT_RULE_SET_NAME: runtimeEnv.MAIL_RECEIPT_RULE_SET_NAME,
       MAIL_RECEIPT_TOPIC_ARN: runtimeEnv.MAIL_RECEIPT_TOPIC_ARN,
@@ -78,6 +81,12 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_DEPLOYMENT_ENV: runtimeEnv.QUIETER_DEPLOYMENT_ENV,
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED:
         runtimeEnv.QUIETER_GMAIL_AI_AUTOMATION_ENABLED,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE,
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE:
+        runtimeEnv.QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE,
+      QUIETER_GMAIL_EVENTS_ENABLED: runtimeEnv.QUIETER_GMAIL_EVENTS_ENABLED,
+      QUIETER_GMAIL_MAILBOX_LANES: runtimeEnv.QUIETER_GMAIL_MAILBOX_LANES,
       QUIETER_LOCAL_BILLING_BYPASS: runtimeEnv.QUIETER_LOCAL_BILLING_BYPASS,
       QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS:
         runtimeEnv.QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS,
@@ -93,6 +102,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: runtimeEnv.QUIETER_LOCAL_WORKER_TOKEN,
       QUIETER_MAIL_API_KEY: runtimeEnv.QUIETER_MAIL_API_KEY,
       QUIETER_MAIL_API_URL: runtimeEnv.QUIETER_MAIL_API_URL,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED:
+        runtimeEnv.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED,
       QUIETER_PREVIEW_PERSONAS_ENABLED:
         runtimeEnv.QUIETER_PREVIEW_PERSONAS_ENABLED,
       R2_ACCESS_KEY_ID: runtimeEnv.R2_ACCESS_KEY_ID,
@@ -135,6 +146,8 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       DATABASE_MIGRATION_URL: optionalUrl,
       DATABASE_URL: optionalUrl,
       DOMAIN_CONNECT_PRIVATE_KEY_B64: optionalString,
+      GMAIL_BODY_ENCRYPTION_KEY: optionalString,
+      GMAIL_BODY_STORAGE_ENABLED: optionalBooleanString,
       GMAIL_CREDENTIAL_ROTATION_TOKEN: optionalString,
       GMAIL_LIVE_SYNC_TOKEN_SECRET: optionalString,
       GMAIL_LIVE_SYNC_URL: webSocketUrl.optional(),
@@ -153,6 +166,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       LINEAR_CLIENT_ID: optionalString,
       LINEAR_CLIENT_SECRET: optionalString,
       MAIL_BUCKET: optionalString,
+      MAIL_DISPATCH_URL: z.url().optional(),
       MAIL_RECEIPT_ROLE_ARN: optionalString,
       MAIL_RECEIPT_RULE_SET_NAME: optionalString,
       MAIL_RECEIPT_TOPIC_ARN: optionalString,
@@ -176,6 +190,20 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_CHAT_MODEL: optionalString,
       QUIETER_DEPLOYMENT_ENV: z.enum(["local", "production"]).default("local"),
       QUIETER_GMAIL_AI_AUTOMATION_ENABLED: optionalBooleanString,
+      QUIETER_GMAIL_BACKGROUND_AI_REQUESTS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(60)
+        .max(1_000_000)
+        .optional(),
+      QUIETER_GMAIL_BACKGROUND_QUOTA_UNITS_PER_MINUTE: z.coerce
+        .number()
+        .int()
+        .min(15_000)
+        .max(100_000_000)
+        .default(600_000),
+      QUIETER_GMAIL_EVENTS_ENABLED: optionalBooleanString,
+      QUIETER_GMAIL_MAILBOX_LANES: optionalBooleanString,
       QUIETER_LOCAL_BILLING_BYPASS: optionalBooleanString,
       QUIETER_LOCAL_CALENDAR_WRITE_ACCOUNTS: optionalString,
       QUIETER_LOCAL_CONNECTOR_WRITE_ACCOUNTS: optionalString,
@@ -191,6 +219,7 @@ export const createServerEnv = (runtimeEnv: RuntimeEnvironment = process.env) =>
       QUIETER_LOCAL_WORKER_TOKEN: z.string().min(32).optional(),
       QUIETER_MAIL_API_KEY: optionalString,
       QUIETER_MAIL_API_URL: optionalHttpUrl,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: optionalBooleanString,
       QUIETER_PREVIEW_PERSONAS_ENABLED: optionalBooleanString,
       R2_ACCESS_KEY_ID: optionalString,
       R2_ACCOUNT_ID: optionalString,

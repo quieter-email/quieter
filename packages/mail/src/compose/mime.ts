@@ -89,7 +89,7 @@ export const buildMimeMessage = async (
   const attachments = await Promise.all(
     files.map(async (attachment) => {
       if (!(attachment.file instanceof Blob)) {
-        throw new Error("An attachment is missing its file content.");
+        throw new TypeError("An attachment is missing its file content.");
       }
       return {
         cid: attachment.contentId,

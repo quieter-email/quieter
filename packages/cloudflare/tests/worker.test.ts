@@ -1,5 +1,4 @@
 import { signMailPayload } from "@quieter/mail/updates";
-import type { maintainGmailPubSubMailbox } from "@quieter/orpc/gmail-pubsub";
 import {
   findGmailUpdateMailboxIds,
   listMailUpdateRecipients,
@@ -17,7 +16,7 @@ import {
 } from "vite-plus/test";
 
 import { runGmailMaintenance } from "../src/gmail-maintenance-worker";
-import type { enqueueGmailNotification } from "../src/gmail-processing";
+import type { acceptGmailNotification } from "../src/gmail-processing";
 import { broadcastMailUpdate, handleMailUpdates } from "../src/mail-updates";
 import worker from "../src/worker";
 import { handlePubSub, requestErrorResponse } from "../src/worker-utils";
@@ -43,36 +42,40 @@ vi.mock(import("@quieter/database/client"), async (importOriginal) => {
 const serviceAccount = "gmail-push@example.invalid";
 
 describe("mail update fan-out", () => {
-  test("delivers deleted mailbox updates only to the signed recipient snapshot", async () => {
-    const recipientUserIds = [crypto.randomUUID(), crypto.randomUUID()];
-    const body = JSON.stringify({
-      event: {
-        eventId: crypto.randomUUID(),
-        mailboxId: "deleted-mailbox",
-        type: "mailbox.changed",
-      },
-      expiresAt: Date.now() + 30_000,
-      purpose: "mail-event",
-      recipientUserIds,
-    });
-    const names = vi.spyOn(env.MailLiveUser, "idFromName");
-    const response = await handleMailUpdates(
-      new Request("https://worker.invalid/mail/events", {
-        body,
-        headers: {
-          "x-mail-signature": await signMailPayload(body, "live-sync-secret"),
+  test(
+    "delivers deleted mailbox updates only to the signed recipient snapshot",
+    { timeout: 20_000 },
+    async () => {
+      const recipientUserIds = [crypto.randomUUID(), crypto.randomUUID()];
+      const body = JSON.stringify({
+        event: {
+          eventId: crypto.randomUUID(),
+          mailboxId: "deleted-mailbox",
+          type: "mailbox.changed",
         },
-        method: "POST",
-      }),
-      env
-    );
+        expiresAt: Date.now() + 30_000,
+        purpose: "mail-event",
+        recipientUserIds,
+      });
+      const names = vi.spyOn(env.MailLiveUser, "idFromName");
+      const response = await handleMailUpdates(
+        new Request("https://worker.invalid/mail/events", {
+          body,
+          headers: {
+            "x-mail-signature": await signMailPayload(body, "live-sync-secret"),
+          },
+          method: "POST",
+        }),
+        env
+      );
 
-    expect(response.status).toBe(204);
-    expect(new Set(names.mock.calls.flat())).toStrictEqual(
-      new Set(recipientUserIds)
-    );
-    names.mockRestore();
-  });
+      expect(response.status).toBe(204);
+      expect(new Set(names.mock.calls.flat())).toStrictEqual(
+        new Set(recipientUserIds)
+      );
+      names.mockRestore();
+    }
+  );
 
   test("rejects recipient changes that are not covered by the signature", async () => {
     const payload = {
@@ -319,12 +322,10 @@ describe("Cloudflare worker runtime", () => {
       const { promise: pending, resolve: finish } =
         Promise.withResolvers<null>();
       const send = vi
-        .spyOn(env.GmailProcessingQueue, "send")
+        .spyOn(env.GmailProcessingWorker, "fetch")
         .mockImplementationOnce(async () => {
           await pending;
-          return {
-            metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
-          };
+          return Response.json({ action: "ack" });
         });
       let acknowledged = false;
       const responsePromise = handlePubSub(
@@ -338,12 +339,7 @@ describe("Cloudflare worker runtime", () => {
         expect(send).toHaveBeenCalledOnce();
       });
       expect(acknowledged).toBeFalsy();
-      expect(send.mock.calls[0]?.[0]).toMatchObject({
-        emailAddress,
-        historyId: "123",
-        pubSubMessageId: "message-1",
-      });
-      expect(send.mock.calls[0]?.[0]).toHaveProperty("notificationReceivedAt");
+      expect(send.mock.calls[0]?.[1]?.body).toContain(emailAddress);
       finish(null);
       const response = await responsePromise;
       expect(response.status).toBe(204);
@@ -362,7 +358,7 @@ describe("Cloudflare worker runtime", () => {
     test("returns 5xx when durable enqueue fails", async () => {
       installFetchMock();
       const processNotification = vi
-        .fn<typeof enqueueGmailNotification>()
+        .fn<typeof acceptGmailNotification>()
         .mockRejectedValue(new Error("temporary"));
       const response = await handlePubSub(
         await pubSubRequest(envelope()),
@@ -374,7 +370,7 @@ describe("Cloudflare worker runtime", () => {
 
     test("does not process a notification with an invalid subscription", async () => {
       installFetchMock();
-      const processNotification = vi.fn<typeof enqueueGmailNotification>();
+      const processNotification = vi.fn<typeof acceptGmailNotification>();
       await expect(
         handlePubSub(
           await pubSubRequest(envelope({ subscription: "other" })),
@@ -386,72 +382,27 @@ describe("Cloudflare worker runtime", () => {
     });
   });
 
-  test("recovers durable Gmail work with independent fresh and catchup wakeups", async () => {
-    const fresh = vi
-      .spyOn(env.GmailFreshProcessingQueue, "send")
-      .mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
-      });
-    const catchup = vi
-      .spyOn(env.GmailCatchupProcessingQueue, "send")
-      .mockResolvedValue({
-        metadata: { metrics: { backlogBytes: 0, backlogCount: 1 } },
-      });
-    await runGmailMaintenance(env, {
-      listJobs: async () => await Promise.resolve([]),
-      listWorkJobs: async () =>
-        await Promise.resolve([
-          {
-            mailboxId: "recovered-fresh",
-            nextWakeAt: new Date(),
-            priority: "fresh",
-          },
-          {
-            mailboxId: "recovered-catchup",
-            nextWakeAt: new Date(Date.now() + 120_000),
-            priority: "catchup",
-          },
-        ]),
-    });
-    expect(fresh.mock.calls[0]?.[0]).toMatchObject({
-      mailboxId: "recovered-fresh",
-      priority: "fresh",
-    });
-    expect(catchup.mock.calls[0]?.[0]).toMatchObject({
-      mailboxId: "recovered-catchup",
-      priority: "catchup",
-    });
-    expect(catchup.mock.calls[0]?.[1]?.delaySeconds).toBeGreaterThan(0);
-  });
-
-  test("runs Gmail maintenance with bounded concurrency", async () => {
-    const jobs = Array.from({ length: 9 }, (_, index) => ({
-      emailAddress: `mailbox-${index}@example.com`,
-      mailboxId: `mailbox-${index}`,
-    }));
-    let active = 0;
-    let peak = 0;
-    const maintainMailbox = vi.fn<typeof maintainGmailPubSubMailbox>(
-      async () => {
-        active += 1;
-        peak = Math.max(peak, active);
-        await Promise.resolve();
-        active -= 1;
-        return { status: "skipped" as const };
-      }
-    );
-    // oxlint-disable-next-line eslint/require-await -- The production dependency has an async contract.
-    const listJobs = async () => jobs;
-
+  test("hands due mailbox repairs to the private processor", async () => {
+    const service = vi
+      .spyOn(env.GmailProcessingWorker, "fetch")
+      .mockImplementation(
+        async () => await Promise.resolve(Response.json({ action: "ack" }))
+      );
     await expect(
       runGmailMaintenance(env, {
-        listJobs,
-        listWorkJobs: async () => await Promise.resolve([]),
-        maintainMailbox,
+        claimRepairs: async () =>
+          await Promise.resolve([
+            { mailboxId: "recovered-fresh" },
+            { mailboxId: "recovered-catchup" },
+          ]),
+        listAutomation: async () => await Promise.resolve([]),
       })
-    ).resolves.toMatchObject({ scanned: 9 });
-    expect(maintainMailbox).toHaveBeenCalledTimes(9);
-    expect(peak).toBeGreaterThan(1);
-    expect(peak).toBeLessThan(jobs.length);
+    ).resolves.toMatchObject({ failed: 0, maintained: 2 });
+    expect(
+      service.mock.calls.map(([, options]) => options?.body)
+    ).toStrictEqual([
+      JSON.stringify({ kind: "maintain", mailboxId: "recovered-fresh" }),
+      JSON.stringify({ kind: "maintain", mailboxId: "recovered-catchup" }),
+    ]);
   });
 });

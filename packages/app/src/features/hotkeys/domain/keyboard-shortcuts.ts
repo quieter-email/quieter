@@ -1,8 +1,8 @@
-import { formatForDisplay } from "@tanstack/react-hotkeys";
+import { formatForDisplay } from "@tanstack/hotkeys";
 import type {
   HotkeySequence,
-  RegisterableHotkey,
-} from "@tanstack/react-hotkeys";
+  RegisterableHotkeyChord,
+} from "@tanstack/hotkeys";
 
 export type KeyboardShortcutCategory =
   | "Global"
@@ -22,7 +22,7 @@ type KeyboardShortcutBase = {
 
 export type KeyboardShortcut =
   | (KeyboardShortcutBase & {
-      keys: readonly RegisterableHotkey[];
+      keys: readonly RegisterableHotkeyChord[];
       sequence?: never;
     })
   | (KeyboardShortcutBase & {
@@ -39,6 +39,15 @@ export const KEYBOARD_SHORTCUT_CATEGORIES = [
 ] as const satisfies readonly KeyboardShortcutCategory[];
 
 export const KEYBOARD_SHORTCUTS = [
+  {
+    category: "Global",
+    description:
+      "Available in Mail and Calendar while typing. Mail search keeps its own shortcut.",
+    id: "show-command-palette",
+    keys: ["Mod+Shift+K"],
+    label: "Show commands",
+    scope: "mailbox",
+  },
   {
     category: "Global",
     id: "show-keyboard-shortcuts",
@@ -104,10 +113,31 @@ export const KEYBOARD_SHORTCUTS = [
   },
   {
     category: "Navigation",
-    id: "go-chat",
-    label: "Go to Chat",
+    id: "go-important",
+    label: "Go to Important",
     scope: "mailbox",
-    sequence: ["G", "H"],
+    sequence: ["G", "M"],
+  },
+  {
+    category: "Navigation",
+    id: "go-done",
+    label: "Go to Done",
+    scope: "mailbox",
+    sequence: ["G", "E"],
+  },
+  {
+    category: "Navigation",
+    id: "go-later",
+    label: "Go to Later",
+    scope: "mailbox",
+    sequence: ["G", "L"],
+  },
+  {
+    category: "Navigation",
+    id: "go-scheduled",
+    label: "Go to Scheduled",
+    scope: "mailbox",
+    sequence: ["G", "C"],
   },
   {
     category: "Message list",
@@ -156,6 +186,20 @@ export const KEYBOARD_SHORTCUTS = [
     id: "list-clear-selection",
     keys: ["Escape"],
     label: "Clear selection",
+    scope: "message-list",
+  },
+  {
+    category: "Message list",
+    id: "list-done",
+    keys: ["E"],
+    label: "Mark Done",
+    scope: "message-list",
+  },
+  {
+    category: "Message list",
+    id: "list-important",
+    keys: ["I"],
+    label: "Toggle important",
     scope: "message-list",
   },
   {
@@ -212,6 +256,34 @@ export const KEYBOARD_SHORTCUTS = [
     id: "detail-forward",
     keys: ["F"],
     label: "Forward",
+    scope: "message-detail",
+  },
+  {
+    category: "Message detail",
+    id: "detail-next-conversation",
+    keys: ["J"],
+    label: "Next conversation",
+    scope: "message-detail",
+  },
+  {
+    category: "Message detail",
+    id: "detail-previous-conversation",
+    keys: ["K"],
+    label: "Previous conversation",
+    scope: "message-detail",
+  },
+  {
+    category: "Message detail",
+    id: "detail-done",
+    keys: ["E"],
+    label: "Mark Done",
+    scope: "message-detail",
+  },
+  {
+    category: "Message detail",
+    id: "detail-important",
+    keys: ["I"],
+    label: "Toggle important",
     scope: "message-detail",
   },
   {

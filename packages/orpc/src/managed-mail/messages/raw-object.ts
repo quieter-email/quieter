@@ -82,11 +82,7 @@ export const getRawMailObjectReference = (
 const getRawMailObjectClient = async (provider: RawMailObjectProvider) =>
   provider === "r2" ? await getR2Client() : await getS3Client();
 
-export const readRawMailObject = async (record: RawMailObjectRecord) => {
-  const object = getRawMailObjectReference(record);
-  if (object === null) {
-    throw new Error("The original message is unavailable.");
-  }
+export const readMailObject = async (object: RawMailObjectReference) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
     assertLocalMailObject(object);
     const stored = await getLocalMailStorage().get(object.key);
@@ -108,9 +104,18 @@ export const readRawMailObject = async (record: RawMailObjectRecord) => {
   return new Uint8Array(await response.Body.transformToByteArray());
 };
 
+export const readRawMailObject = async (record: RawMailObjectRecord) => {
+  const object = getRawMailObjectReference(record);
+  if (object === null) {
+    throw new Error("The original message is unavailable.");
+  }
+  return await readMailObject(object);
+};
+
 export const writeRawMailObject = async (
   object: RawMailObjectReference,
-  raw: Uint8Array
+  raw: Uint8Array,
+  contentType = "message/rfc822"
 ) => {
   if (serverEnv.QUIETER_DEPLOYMENT_ENV === "local") {
     assertLocalMailObject(object);
@@ -123,7 +128,7 @@ export const writeRawMailObject = async (
     new PutObjectCommand({
       Body: raw,
       Bucket: object.bucket,
-      ContentType: "message/rfc822",
+      ContentType: contentType,
       Key: object.key,
     }),
     { abortSignal: AbortSignal.timeout(60_000) }

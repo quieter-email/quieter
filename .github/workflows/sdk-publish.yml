@@ -31,7 +31,7 @@ jobs:
     steps:
       - name: Verify protected main ancestry
         id: revision
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         with:
           script: |
             let sha = context.sha;

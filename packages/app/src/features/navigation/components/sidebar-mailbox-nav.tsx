@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   CheckmarkCircle02Icon,
   Delete01Icon,
   Delete02Icon,
@@ -26,12 +27,33 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   label: string;
   shortcutId?: KeyboardShortcutId;
 }[] = [
-  { icon: Flag01Icon, id: "important", label: "Important" },
+  {
+    icon: Flag01Icon,
+    id: "important",
+    label: "Important",
+    shortcutId: "go-important",
+  },
   { icon: InboxIcon, id: "inbox", label: "Inbox", shortcutId: "go-inbox" },
-  { icon: CheckmarkCircle02Icon, id: "done", label: "Done" },
+  {
+    icon: CheckmarkCircle02Icon,
+    id: "done",
+    label: "Done",
+    shortcutId: "go-done",
+  },
+  {
+    icon: AlarmClockIcon,
+    id: "later",
+    label: "Later",
+    shortcutId: "go-later",
+  },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
-  { icon: Clock01Icon, id: "scheduled", label: "Scheduled" },
+  {
+    icon: Clock01Icon,
+    id: "scheduled",
+    label: "Scheduled",
+    shortcutId: "go-scheduled",
+  },
   { icon: Edit01Icon, id: "drafts", label: "Drafts", shortcutId: "go-drafts" },
   { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },
@@ -79,7 +101,7 @@ export const SidebarMailboxNav = ({
     <nav aria-label="Mailboxes" className="flex flex-col">
       <SidebarEntrance
         animateEntrance={animateEntrance}
-        className="mt-2 mb-1 flex items-center justify-between px-2"
+        className="mt-2 mb-1 flex items-center justify-between px-3"
         index={3}
       >
         <p className="text-caption font-medium text-muted-fg">Mail</p>
@@ -100,9 +122,6 @@ export const SidebarMailboxNav = ({
             <SidebarMailboxNavItem
               active={isActive}
               aria-current={isActive ? "page" : undefined}
-              // oxlint-disable shadcn/no-restyle -- SidebarNavItem owns an animated surface with custom row spacing.
-              className="justify-start gap-3 px-3 text-left"
-              // oxlint-enable shadcn/no-restyle
               mailboxSearch={
                 embedded
                   ? undefined
@@ -125,7 +144,6 @@ export const SidebarMailboxNav = ({
                 }
                 onRequestClose?.();
               }}
-              size="sm"
               type="button"
               variant="ghost"
             >

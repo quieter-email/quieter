@@ -38,7 +38,7 @@
   "devDependencies": {
     "@quieter/config": "workspace:*",
     "@quieter/mail": "workspace:*",
-    "@react-email/render": "^2.1.0",
+    "@react-email/render": "^2.3.1",
     "@types/react": "catalog:",
     "react": "catalog:",
     "typescript": "catalog:",

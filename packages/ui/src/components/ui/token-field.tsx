@@ -1,16 +1,19 @@
 "use client";
 
-import type { ClipboardEvent, KeyboardEvent, Ref } from "react";
-import { useEffect, useId, useRef, useState } from "react";
+import type { ClipboardEvent, KeyboardEvent, Ref, SyntheticEvent } from "react";
+import { useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
+import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
 import { pillVariants } from "./pill";
+import { popupSurfaceClassName } from "./popup-surface";
 import {
   indexEditable,
-  placeCaret,
+  placeSelection,
   readRenderedTokenIds,
   readSelectionRange,
   renderSegments,
+  stripAnchors,
 } from "./token-field-dom";
 import {
   applyTokenFieldToken,
@@ -23,21 +26,31 @@ import type { TokenFieldQuery, TokenFieldToken } from "./token-field-value";
 
 export type { TokenFieldToken } from "./token-field-value";
 
+type TokenFieldSelection = { end: number; start: number };
+
+export type TokenFieldHandle = {
+  focus: () => void;
+  replaceRange: (range: TokenFieldSelection, replacement: string) => void;
+};
+
 type TokenFieldProps = {
+  "aria-activedescendant"?: string;
+  "aria-controls"?: string;
   "aria-label": string;
   className?: string;
   disabled?: boolean;
   emptyMessage?: string;
   onBlur?: () => void;
-  onChange: (value: string) => void;
+  onChange: (value: string, selection?: TokenFieldSelection) => void;
   onKeyDown?: (event: KeyboardEvent<HTMLDivElement>) => void;
+  onSelect?: (selection: TokenFieldSelection) => void;
   placeholder?: string;
-  ref?: Ref<HTMLDivElement>;
-  size?: "default" | "prompt";
+  ref?: Ref<TokenFieldHandle>;
+  size?: "composer" | "default" | "prompt";
   suggestionsLabel?: string;
   suggestionsSide?: "bottom" | "top";
   tokens: TokenFieldToken[];
-  trigger?: string;
+  trigger?: string | null;
   value: string;
 };
 
@@ -45,7 +58,7 @@ const getTokenClassName = (token: TokenFieldToken) =>
   cn(
     pillVariants({ tone: token.tone ?? "purple" }),
     // Tighter than a standalone pill: this one sits inline in a line of text.
-    "mx-px gap-1 px-2 py-0.5 align-middle select-none"
+    "mx-px max-w-full gap-1 px-2 py-0.5 align-middle select-none"
   );
 
 const getTokenSignature = (tokens: TokenFieldToken[]) =>
@@ -53,6 +66,7 @@ const getTokenSignature = (tokens: TokenFieldToken[]) =>
     tokens.map((token) => [
       token.text,
       token.label,
+      token.match,
       token.tone,
       token.iconSrc,
       token.iconClassName,
@@ -96,22 +110,21 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl border border-transparent bg-section p-1 text-popover-fg shadow-md squircle",
+      popupSurfaceClassName,
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl p-1 squircle",
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}
     role="listbox"
   >
     {tokens.length === 0 ? (
-      <p className="px-2.5 py-2 text-body text-muted-fg">{emptyMessage}</p>
+      <p className={menuEmptyClassName}>{emptyMessage}</p>
     ) : (
       tokens.map((token, position) => (
         <button
           aria-selected={position === activeIndex}
-          className={cn(
-            "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-body text-fg squircle",
-            { "bg-muted": position === activeIndex }
-          )}
+          className={cn(menuItemClassName, "w-full")}
+          data-highlighted={position === activeIndex ? "" : undefined}
           id={optionId(position)}
           key={token.id}
           onClick={() => {
@@ -147,9 +160,11 @@ const TokenFieldSuggestions = ({
 
 /**
  * A plain-text field that renders known mentions as inline tokens. The value
- * stays a string, so what the agent receives is exactly what is displayed.
+ * keeps the exact token text alongside ordinary text for storage and sending.
  */
 export const TokenField = ({
+  "aria-activedescendant": activeDescendant,
+  "aria-controls": controls,
   "aria-label": ariaLabel,
   className,
   disabled = false,
@@ -157,6 +172,7 @@ export const TokenField = ({
   onBlur,
   onChange,
   onKeyDown,
+  onSelect,
   placeholder,
   ref,
   size = "default",
@@ -195,8 +211,8 @@ export const TokenField = ({
     }
 
     const isFocused = editable.ownerDocument.activeElement === editable;
-    const caret = isFocused
-      ? readSelectionRange(editable, indexEditable(editable))?.start
+    const selection = isFocused
+      ? readSelectionRange(editable, indexEditable(editable))
       : undefined;
 
     renderSegments({
@@ -207,8 +223,8 @@ export const TokenField = ({
     renderedValueRef.current = value;
     renderedTokensRef.current = tokenSignature;
 
-    if (caret !== undefined) {
-      placeCaret(editable, caret);
+    if (selection !== undefined) {
+      placeSelection(editable, selection.start, selection.end);
     }
   }, [tokenSignature, tokens, value]);
 
@@ -224,12 +240,36 @@ export const TokenField = ({
       root: editable,
       segments: parseTokenFieldSegments(nextValue, tokens),
     });
-    placeCaret(editable, caret);
+    placeSelection(editable, caret);
+    const selection = editable.ownerDocument.getSelection();
+    if (selection?.rangeCount === 1) {
+      const caretRect = selection.getRangeAt(0).getBoundingClientRect();
+      const bounds = editable.getBoundingClientRect();
+      if (caretRect.height > 0) {
+        if (caretRect.bottom > bounds.bottom) {
+          editable.scrollTop += caretRect.bottom - bounds.bottom;
+        } else if (caretRect.top < bounds.top) {
+          editable.scrollTop -= bounds.top - caretRect.top;
+        }
+      }
+    }
     renderedValueRef.current = nextValue;
     renderedTokensRef.current = tokenSignature;
     setQuery(undefined);
-    onChange(nextValue);
+    onChange(nextValue, { end: caret, start: caret });
   };
+
+  useImperativeHandle(ref, () => ({
+    focus: () => editableRef.current?.focus(),
+    replaceRange: ({ end, start }, replacement) => {
+      editableRef.current?.focus();
+      const prefix = value.slice(0, start);
+      commit(
+        `${prefix}${replacement}${value.slice(end)}`,
+        prefix.length + replacement.length
+      );
+    },
+  }));
 
   const selectToken = (token: TokenFieldToken) => {
     if (query === undefined) {
@@ -245,7 +285,7 @@ export const TokenField = ({
   const syncQuery = () => {
     const editable = editableRef.current;
 
-    if (editable === null) {
+    if (editable === null || trigger === null) {
       return;
     }
 
@@ -269,7 +309,8 @@ export const TokenField = ({
 
     const index = indexEditable(editable);
     const nextValue = index.value;
-    const caret = readSelectionRange(editable, index)?.start;
+    const selection = readSelectionRange(editable, index);
+    const caret = selection?.start;
 
     if (
       getSegmentTokenIds(nextValue, tokens) !== readRenderedTokenIds(editable)
@@ -280,20 +321,20 @@ export const TokenField = ({
         segments: parseTokenFieldSegments(nextValue, tokens),
       });
 
-      if (caret !== undefined) {
-        placeCaret(editable, caret);
+      if (selection !== undefined) {
+        placeSelection(editable, selection.start, selection.end);
       }
     }
 
     renderedValueRef.current = nextValue;
     renderedTokensRef.current = tokenSignature;
     setQuery(
-      caret === undefined
+      caret === undefined || trigger === null
         ? undefined
         : getTokenFieldQuery({ caret, tokens, trigger, value: nextValue })
     );
     setActiveIndex(0);
-    onChange(nextValue);
+    onChange(nextValue, selection);
   };
 
   const handleSuggestionKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -367,6 +408,13 @@ export const TokenField = ({
     if (event.nativeEvent.isComposing || event.keyCode === 229) {
       return;
     }
+    if (
+      (event.metaKey || event.ctrlKey) &&
+      ["b", "i", "u"].includes(event.key.toLowerCase())
+    ) {
+      event.preventDefault();
+      return;
+    }
     if (isOpen && handleSuggestionKeyDown(event)) {
       event.preventDefault();
       return;
@@ -391,7 +439,9 @@ export const TokenField = ({
     }
 
     event.preventDefault();
-    const text = event.clipboardData.getData("text/plain");
+    const text = stripAnchors(
+      event.clipboardData.getData("text/plain")
+    ).replaceAll(/\r\n?/gu, "\n");
     const index = indexEditable(editable);
     const range = readSelectionRange(editable, index) ?? {
       end: index.value.length,
@@ -404,23 +454,62 @@ export const TokenField = ({
     );
   };
 
+  const handleCopyOrCut = (event: ClipboardEvent<HTMLDivElement>) => {
+    const root = event.currentTarget;
+    const index = indexEditable(root);
+    const range = readSelectionRange(root, index);
+    if (range === undefined || range.start === range.end) {
+      return;
+    }
+    event.preventDefault();
+    event.clipboardData.setData(
+      "text/plain",
+      index.value.slice(range.start, range.end)
+    );
+    if (event.type === "cut") {
+      commit(
+        index.value.slice(0, range.start) + index.value.slice(range.end),
+        range.start
+      );
+    }
+  };
+
+  const reportSelection = ({
+    currentTarget,
+  }: SyntheticEvent<HTMLDivElement>) => {
+    if (onSelect !== undefined && !composingRef.current) {
+      const range = readSelectionRange(
+        currentTarget,
+        indexEditable(currentTarget)
+      );
+      if (range !== undefined) {
+        onSelect(range);
+      }
+    }
+  };
+
   return (
     <div className="relative">
+      {/* oxlint-disable-next-line jsx-a11y/no-static-element-interactions -- The editor has a textbox or combobox role depending on its suggestion source. */}
       <div
         aria-activedescendant={
           isOpen && suggestions[activeIndex] !== undefined
             ? optionId(activeIndex)
-            : undefined
+            : activeDescendant
         }
         aria-autocomplete="list"
-        aria-controls={isOpen ? listId : undefined}
-        aria-expanded={isOpen}
+        aria-controls={isOpen ? listId : controls}
+        aria-disabled={disabled || undefined}
+        aria-expanded={trigger === null ? undefined : isOpen}
         aria-label={ariaLabel}
+        aria-multiline={trigger === null ? true : undefined}
         className={cn(
           "w-full break-words whitespace-pre-wrap text-fg outline-none",
           "data-[empty=true]:before:pointer-events-none data-[empty=true]:before:text-muted-fg data-[empty=true]:before:content-[attr(data-placeholder)]",
           {
             "cursor-not-allowed opacity-50": disabled,
+            "max-h-40 min-h-16 overflow-y-auto py-2 text-body-sm":
+              size === "composer",
             "max-h-72 min-h-32 overflow-y-auto": size === "prompt",
           },
           className
@@ -440,6 +529,11 @@ export const TokenField = ({
         onCompositionStart={() => {
           composingRef.current = true;
         }}
+        onCopy={handleCopyOrCut}
+        onCut={handleCopyOrCut}
+        onDrop={(event) => {
+          event.preventDefault();
+        }}
         onClick={syncQuery}
         onInput={handleInput}
         onKeyDown={handleKeyDown}
@@ -449,16 +543,10 @@ export const TokenField = ({
           }
         }}
         onPaste={handlePaste}
-        ref={(node) => {
-          editableRef.current = node;
-
-          if (typeof ref === "function") {
-            ref(node);
-          } else if (ref !== null && ref !== undefined) {
-            ref.current = node;
-          }
-        }}
-        role="combobox"
+        onFocus={reportSelection}
+        onSelect={reportSelection}
+        ref={editableRef}
+        role={trigger === null ? "textbox" : "combobox"}
         suppressContentEditableWarning
         tabIndex={disabled ? -1 : 0}
       />

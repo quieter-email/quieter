@@ -192,15 +192,15 @@ export const MailboxDetailSettingsContent = ({
 
       {isManagedNonManager && (
         <SettingsSection title="Mailbox settings">
-          <SettingsCard
-            className={settingsSurfaceVariants({ variant: "body" })}
-          >
-            <p className="text-body text-fg">Manager access required</p>
-            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
-              A mailbox manager can change inbox features, routing, and member
-              access. Your current role still lets you use every mail action
-              included with that role.
-            </p>
+          <SettingsCard>
+            <div className={settingsSurfaceVariants({ variant: "body" })}>
+              <p className="text-body text-fg">Manager access required</p>
+              <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
+                A mailbox manager can change inbox features, routing, and member
+                access. Your current role still lets you use every mail action
+                included with that role.
+              </p>
+            </div>
           </SettingsCard>
         </SettingsSection>
       )}
@@ -255,37 +255,37 @@ export const MailboxDetailSettingsContent = ({
 
       {isApi && (
         <SettingsSection title="Mailbox capabilities">
-          <SettingsCard
-            className={settingsSurfaceVariants({ variant: "body" })}
-          >
-            <p className="text-body text-fg">Send-only mailbox</p>
-            <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
-              This address sends through your team API. Its domain and access
-              are managed in team settings.
-            </p>
-            <Button
-              className="mt-4"
-              onClick={() => {
-                runDetached(async () => {
-                  await navigate({
-                    search: (previous) => ({
-                      ...previous,
-                      mailboxId: "",
-                      organizationId: mailbox.organizationId,
-                      organizationView: "api-keys",
-                      tab: "organization",
-                    }),
-                    to: ".",
+          <SettingsCard>
+            <div className={settingsSurfaceVariants({ variant: "body" })}>
+              <p className="text-body text-fg">Send-only mailbox</p>
+              <p className="mt-1 max-w-2xl text-body/6 text-muted-fg">
+                This address sends through your team API. Its domain and access
+                are managed in team settings.
+              </p>
+              <Button
+                className="mt-4"
+                onClick={() => {
+                  runDetached(async () => {
+                    await navigate({
+                      search: (previous) => ({
+                        ...previous,
+                        mailboxId: "",
+                        organizationId: mailbox.organizationId,
+                        organizationView: "api-keys",
+                        tab: "organization",
+                      }),
+                      to: ".",
+                    });
                   });
-                });
-              }}
-              size="sm"
-              type="button"
-              variant="outline"
-            >
-              Open team settings
-              <Icon aria-hidden icon={ArrowRight01Icon} />
-            </Button>
+                }}
+                size="sm"
+                type="button"
+                variant="outline"
+              >
+                Open team settings
+                <Icon aria-hidden icon={ArrowRight01Icon} />
+              </Button>
+            </div>
           </SettingsCard>
         </SettingsSection>
       )}

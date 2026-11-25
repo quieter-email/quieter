@@ -8,10 +8,23 @@ import { requireSecretResource } from "./secrets";
 import {
   deploymentEnvironment,
   getEnvironmentValue,
+  mailDispatchDomain,
   production,
   stage,
 } from "./stage";
 import type { SecretResources } from "./types";
+
+// postgres.js v4 selects a Workers entry that statically imports the
+// `cloudflare:sockets` runtime built-in. Vite preserves that import in the
+// server bundle, so SST's esbuild pass must leave it external instead of
+// trying to resolve it from node_modules.
+export const cloudflareWorkerBuild: {
+  esbuild: { external: string[] };
+} = {
+  esbuild: {
+    external: ["cloudflare:sockets"],
+  },
+};
 
 export const cloudflareWorkerObservability = {
   enabled: true,
@@ -120,11 +133,17 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
       "POLAR_ACCESS_TOKEN"
     ).value,
     r2Environment: createR2Environment(env, secretResources),
-    releaseEnvironment: actionReleaseEnvironmentSchema.parse({
-      QUIETER_ACTION_PROTOCOL: PERSONAL_ACTION_PROTOCOL,
-      QUIETER_BUILD_ID:
-        createSstCommandEnv().QUIETER_BUILD_ID ?? `local-${stage}`,
-    }),
+    releaseEnvironment: {
+      ...actionReleaseEnvironmentSchema.parse({
+        QUIETER_ACTION_PROTOCOL: PERSONAL_ACTION_PROTOCOL,
+        QUIETER_BUILD_ID:
+          createSstCommandEnv().QUIETER_BUILD_ID ?? `local-${stage}`,
+      }),
+      MAIL_DISPATCH_URL:
+        env.QUIETER_MAIL_DISPATCH_ENABLED === true
+          ? `https://${mailDispatchDomain}/mail/dispatch/event`
+          : "",
+    },
     sentryEnvironment: createSentryEnvironment(secretResources),
   };
 };

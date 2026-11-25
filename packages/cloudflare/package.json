@@ -3,10 +3,11 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./compatibility-date": "./src/compatibility-date.ts"
+    "./compatibility-date": "./src/compatibility-date.ts",
+    "./gmail-processing-config": "./src/gmail-processing-config.ts"
   },
   "scripts": {
-    "dev": "wrangler dev --config wrangler.local.jsonc --config wrangler.processing.local.jsonc --persist-to ../../.wrangler/state",
+    "dev": "wrangler dev --config wrangler.local.jsonc --config wrangler.processing.local.jsonc --config wrangler.maintenance.local.jsonc --persist-to ../../.wrangler/state",
     "cf-typecheck": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false --check",
     "cf-typegen": "wrangler types worker-configuration.d.ts --config wrangler.types.jsonc --env-file wrangler.types.env --strict-vars false",
     "check:compatibility-date": "node scripts/sync-compatibility-date.ts --check",
@@ -23,23 +24,18 @@
     "@quieter/orpc": "workspace:*",
     "@sentry/cloudflare": "catalog:",
     "drizzle-orm": "catalog:",
-    "jose": "6.2.12",
+    "jose": "6.2.18",
     "zod": "catalog:"
   },
   "devDependencies": {
-    "@cloudflare/vitest-pool-workers": "catalog:",
+    "@cloudflare/vitest-plugin": "catalog:",
     "@quieter/config": "workspace:*",
     "@types/node": "catalog:",
-    "@vitest/browser-preview": "4.1.11",
-    "@vitest/runner": "4.1.11",
-    "@vitest/snapshot": "4.1.11",
-    "@vitest/ui": "4.1.11",
-    "@vitest/utils": "4.1.11",
-    "cf": "1.0.0-beta.16",
+    "cf": "1.0.0-rc.2",
     "rolldown": "catalog:",
     "typescript": "catalog:",
     "vite-plus": "catalog:",
-    "vitest": "4.1.11",
+    "vitest": "catalog:",
     "wrangler": "catalog:"
   }
 }

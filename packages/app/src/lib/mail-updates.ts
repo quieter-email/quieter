@@ -1,6 +1,11 @@
 import { demoReminderSession } from "@quieter/app/features/reminders/reminder-query";
 import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
+import { liveMailboxChangeVersions } from "@quieter/app/lib/mail/inbox-query/sync";
+import {
+  getGmailUnreadCountsQueryKey,
+  getMailboxesQueryKey,
+} from "@quieter/app/lib/mailboxes-query";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { appRuntime } from "@quieter/app/runtime";
 import { mailUpdateSchema } from "@quieter/mail/updates";
@@ -30,6 +35,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     string,
     {
       types: Set<MailUpdate["type"]>;
+      version?: string;
       revision?: string;
       threadIds: Set<string> | null;
     }
@@ -181,6 +187,70 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }, 150);
   };
 
+  const createMailboxSummaryRefresher = (queryKey: readonly string[]) => {
+    const filters = { exact: true, queryKey };
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let pendingRefresh: "event" | "recovery" | undefined;
+    let inFlight = false;
+    const schedule = () => {
+      if (
+        inFlight ||
+        disposed ||
+        suspended ||
+        pendingRefresh === undefined ||
+        timer !== undefined
+      ) {
+        return;
+      }
+      const refreshSummary = async () => {
+        inFlight = true;
+        try {
+          if (pendingRefresh === "event") {
+            const preEventFetch = queryClient.getQueryCache().find({
+              ...filters,
+              fetchStatus: "fetching",
+            })?.promise;
+            // A request started before the event can still return the old count.
+            if (preEventFetch !== undefined) {
+              await Promise.allSettled([preEventFetch]);
+            }
+          }
+          if (!disposed && !suspended) {
+            pendingRefresh = undefined;
+            await queryClient.invalidateQueries(filters, {
+              cancelRefetch: false,
+            });
+          }
+        } finally {
+          inFlight = false;
+          schedule();
+        }
+      };
+      timer = setTimeout(() => {
+        timer = undefined;
+        void refreshSummary();
+      }, 150);
+    };
+    return {
+      cancelScheduled: () => {
+        clearTimeout(timer);
+        timer = undefined;
+      },
+      request: (reason: "event" | "recovery") => {
+        if (pendingRefresh !== "event") {
+          pendingRefresh = reason;
+        }
+        schedule();
+      },
+    };
+  };
+  const mailboxListRefresher = createMailboxSummaryRefresher(
+    getMailboxesQueryKey()
+  );
+  const gmailUnreadRefresher = createMailboxSummaryRefresher(
+    getGmailUnreadCountsQueryKey()
+  );
+
   const isRevisionSynced = (mailboxId: string, revision: string) => {
     const queries = queryClient.getQueryCache().findAll({
       predicate: ({ queryKey }) =>
@@ -226,7 +296,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     const changes = new Map(pending);
     pending.clear();
     const syncedRevisions = new Set<string>();
+    const changeVersions = new Map<string, string>();
     for (const [mailboxId, change] of changes) {
+      if (change.version !== undefined && !changes.has("*")) {
+        changeVersions.set(mailboxId, change.version);
+      }
       if (
         change.revision !== undefined &&
         isRevisionSynced(mailboxId, change.revision)
@@ -235,6 +309,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       }
     }
     refreshing = true;
+    liveMailboxChangeVersions.set(queryClient, changeVersions);
     try {
       await queryClient.invalidateQueries(
         {
@@ -291,16 +366,6 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
                 changes.get(mailboxId)?.types.has("reminders.changed") === true
               );
             }
-            if (root === "mailboxes") {
-              return [...changes.values()].some((change) =>
-                change.types.has("mailbox.changed")
-              );
-            }
-            if (root === "gmail-unread-counts") {
-              return [...changes.values()].some((change) =>
-                change.types.has("mailbox.changed")
-              );
-            }
             const mailboxId = String(
               root === "message-thread" ? queryKey[2] : queryKey[1]
             );
@@ -313,11 +378,22 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               return false;
             }
             if (root === "message-thread") {
+              const change = changes.get("*") ?? changes.get(mailboxId);
+              if (
+                change?.threadIds &&
+                !change.threadIds.has(String(queryKey[3]))
+              ) {
+                return false;
+              }
               return (
                 queryClient.getQueryCache().findAll({
                   predicate: ({ queryKey: key }) =>
                     key[0] === "messages" &&
                     key[1] === mailboxId &&
+                    key[2] !== "drafts" &&
+                    // Later refreshes its list without reconciling open threads.
+                    key[2] !== "later" &&
+                    key[3] === "" &&
                     key.at(-1) === "live-sync",
                   type: "active",
                 }).length === 0
@@ -353,9 +429,12 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             ].includes(String(root));
           },
         },
-        { cancelRefetch: false }
+        { cancelRefetch: changeVersions.size > 0 }
       );
     } finally {
+      if (liveMailboxChangeVersions.get(queryClient) === changeVersions) {
+        liveMailboxChangeVersions.delete(queryClient);
+      }
       refreshing = false;
       scheduleRefresh();
     }
@@ -364,11 +443,37 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     mailboxId = "*",
     type: MailUpdate["type"] = "mailbox.changed",
     revision?: string,
-    threadIds?: string[]
+    threadIds?: string[],
+    typedChange?: MailUpdate["change"]
   ) => {
-    if (type === "mailbox.changed") {
+    if (
+      (type === "mailbox.changed" && typedChange === undefined) ||
+      typedChange?.kinds.includes("verification-code.available") === true ||
+      typedChange?.kinds.includes("mailbox.reconcile") === true
+    ) {
       pendingCodeMailboxes.add(mailboxId);
       scheduleCodeRefresh();
+    }
+    if (
+      typedChange?.kinds.every(
+        (kind) => kind === "verification-code.available"
+      ) === true
+    ) {
+      return;
+    }
+    if (type === "mailbox.changed") {
+      const reason = mailboxId === "*" ? "recovery" : "event";
+      if (typedChange === undefined) {
+        mailboxListRefresher.request(reason);
+      }
+      if (
+        typedChange === undefined ||
+        typedChange.kinds.some(
+          (kind) => kind.startsWith("message.") || kind === "mailbox.reconcile"
+        )
+      ) {
+        gmailUnreadRefresher.request(reason);
+      }
     }
     const change = pending.get(mailboxId);
     if (change === undefined) {
@@ -376,6 +481,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         revision,
         threadIds: threadIds === undefined ? null : new Set(threadIds),
         types: new Set([type]),
+        version: typedChange?.version,
       });
     } else {
       if (change.threadIds !== null) {
@@ -388,6 +494,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         }
       }
       if (type === "mailbox.changed") {
+        if (typedChange === undefined) {
+          change.version = undefined;
+        } else if (
+          !change.types.has(type) ||
+          (change.version !== undefined &&
+            BigInt(typedChange.version) > BigInt(change.version))
+        ) {
+          change.version = typedChange.version;
+        }
         change.revision =
           revision !== undefined &&
           (!change.types.has(type) ||
@@ -515,7 +630,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             event.data.mailboxId,
             event.data.type,
             event.data.revision,
-            event.data.threadIds
+            event.data.threadIds,
+            event.data.change
           );
         } catch {
           /* Ignore malformed frames. */
@@ -571,6 +687,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     refreshTimer = undefined;
     clearTimeout(codeRefreshTimer);
     codeRefreshTimer = undefined;
+    mailboxListRefresher.cancelScheduled();
+    gmailUnreadRefresher.cancelScheduled();
     disconnect();
   };
   window.addEventListener("online", resume);
@@ -591,6 +709,8 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     disconnect();
     clearTimeout(refreshTimer);
     clearTimeout(codeRefreshTimer);
+    mailboxListRefresher.cancelScheduled();
+    gmailUnreadRefresher.cancelScheduled();
     clearInterval(recoveryTimer);
     window.removeEventListener("online", resume);
     window.removeEventListener("offline", offline);

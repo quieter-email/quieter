@@ -8,8 +8,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
+import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { appRuntime } from "@quieter/app/runtime";
-import { Button } from "@quieter/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -51,7 +51,7 @@ const SidebarHelpMenu = ({
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="relative rounded-md squircle hover:bg-control-hover">
+      <div className="relative shrink-0 rounded-md squircle hover:bg-control-hover">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             appearance="icon-transparent"
@@ -125,22 +125,16 @@ export const SidebarFooterLinks = ({
   const returnTo = useLocation({ select: (location) => location.href });
   return (
     <div className="flex items-center gap-1">
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-control-hover">
-        <Button
-          aria-label="Settings"
-          // oxlint-disable-next-line shadcn/no-restyle -- Sidebar settings link keeps its row treatment.
-          className="group relative z-10 w-full justify-start bg-transparent hover:bg-transparent active:scale-100"
-          onClick={onRequestClose}
-          nativeButton={false}
-          render={<Link search={{ from: returnTo }} to="/settings" />}
-          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
-          role="link"
-          variant="ghost"
-        >
-          <Icon icon={Settings01Icon} />
-          Settings
-        </Button>
-      </div>
+      <SidebarNavItem
+        onClick={onRequestClose}
+        nativeButton={false}
+        render={<Link search={{ from: returnTo }} to="/settings" />}
+        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
+        role="link"
+      >
+        <Icon icon={Settings01Icon} />
+        Settings
+      </SidebarNavItem>
       <SidebarHelpMenu onRequestClose={onRequestClose} />
     </div>
   );

@@ -44,9 +44,8 @@ import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import { reminderSchema } from "@quieter/mail/reminders";
-import type { RouterOutputs } from "@quieter/orpc";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
-import { Button } from "@quieter/ui/button";
+import type { TokenFieldHandle } from "@quieter/ui/token-field";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
@@ -76,9 +75,9 @@ import { executeWorkspaceTool } from "../domain/workspace-tools";
 import type { ChatViewProps } from "../types";
 import { ChatComposer } from "./chat-composer";
 import { ChatContextPicker } from "./chat-context-picker";
+import { preloadChatMarkdown } from "./chat-message";
 import { ChatTranscript } from "./chat-transcript";
 
-type ChatData = RouterOutputs["chat"]["get"];
 type ChatEdit = {
   chatId: string;
   messageId: string;
@@ -87,13 +86,9 @@ type ChatEdit = {
 };
 
 const ChatSession = ({
-  chatData,
-  canUseAiChat,
   queues,
   ...props
 }: ChatViewProps & {
-  chatData?: ChatData;
-  canUseAiChat: boolean;
   queues: ChatQueueStore;
 }) => {
   const workspace = useAgentWorkspace();
@@ -101,17 +96,34 @@ const ChatSession = ({
     throw new Error("The assistant needs a mail workspace.");
   }
   const queryClient = useQueryClient();
+  const billing = useQuery(userBillingQueryOptions());
+  const [historyInitialized, setHistoryInitialized] = useState(
+    () => props.chatId === null
+  );
+  const history = useQuery({
+    ...chatQueryOptions(props.mailboxId, props.chatId),
+    enabled: props.chatId !== null && !historyInitialized,
+    refetchOnMount: "always",
+  });
+  const canUseAiChat =
+    billing.data !== undefined &&
+    hasOrganizationAiAccess(billing.data, props.mailboxOrganizationId);
+  const canSend = canUseAiChat && historyInitialized;
+  useEffect(() => {
+    void Promise.allSettled([preloadChatMarkdown()]);
+  }, []);
   const userId = authClient.useSession().data?.user.id;
   const activeWorkspace = inboxRouteApi.useSearch({
     select: (search) => search.workspace,
   });
   const [input, setInput] = useState("");
   const [model, setModel] = useState<ChatModel | "auto">("auto");
+  const [newUserMessageId, setNewUserMessageId] = useState<string | null>(null);
   const mailContext = useChatMailContext(
     workspace.mailboxId,
     activeWorkspace === "calendar" ? undefined : props.mailContext
   );
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<TokenFieldHandle>(null);
   const dictation = useChatDictation({
     chatId: props.chatId,
     enabled: canUseAiChat && props.visible !== false,
@@ -270,11 +282,6 @@ const ChatSession = ({
   );
   const chat = useChat({
     id: threadId,
-    messages: cancelForegroundMessages(
-      toCanonicalTranscript(chatData?.messages ?? [], {
-        includeInterruption: true,
-      })
-    ),
     onError: (error) => {
       const foreground = foregroundRef.current;
       if (
@@ -530,6 +537,31 @@ const ChatSession = ({
     throttle: 50,
     transport,
   });
+  const { setMessages } = chat;
+  const {
+    data: savedHistory,
+    fetchStatus: historyFetchStatus,
+    isSuccess,
+  } = history;
+  useLayoutEffect(() => {
+    if (!historyInitialized && isSuccess && historyFetchStatus === "idle") {
+      setMessages(
+        cancelForegroundMessages(
+          toCanonicalTranscript(savedHistory.messages, {
+            includeInterruption: true,
+          })
+        )
+      );
+      // oxlint-disable-next-line react/set-state-in-effect -- Publish readiness after the external chat session has the saved transcript.
+      setHistoryInitialized(true);
+    }
+  }, [
+    historyFetchStatus,
+    historyInitialized,
+    isSuccess,
+    savedHistory,
+    setMessages,
+  ]);
   const chatRef = useRef(chat);
   useLayoutEffect(() => {
     chatRef.current = chat;
@@ -592,6 +624,10 @@ const ChatSession = ({
   }, [queues, threadId, workspace]);
 
   const streaming = chat.status === "streaming" || chat.status === "submitted";
+  const requestPending =
+    !canceling &&
+    (chat.status === "submitted" ||
+      (busy && foregroundActive && chat.status === "ready"));
   const approvals = chat.messages.flatMap((message) =>
     message.parts.flatMap((part) => {
       if (
@@ -731,11 +767,17 @@ const ChatSession = ({
     approvals.length === 0 &&
     canUseAiChat;
   const turnActive = foregroundActive || streaming || approvals.length > 0;
-  const composerDisabled = !canUseAiChat || openingEdit;
+  const accessDenied = billing.data !== undefined && !canUseAiChat;
+  const composerDisabled = accessDenied || openingEdit;
   const audioActive =
     dictation.isRecording || dictation.isStarting || dictation.isTranscribing;
   const submissionBlocked =
-    composerDisabled || audioActive || turnActive || busy || canceling;
+    !canSend ||
+    composerDisabled ||
+    audioActive ||
+    turnActive ||
+    busy ||
+    canceling;
   const queueing = turnActive || busy || canceling || queue.items.length > 0;
   const submit = async (
     resubmit?:
@@ -828,18 +870,22 @@ const ChatSession = ({
         setInput("");
       }
       chat.clearError();
-      if (edit === null) {
-        await chat.sendMessage(
-          resubmit === undefined || resubmit.kind === "queued"
-            ? { text }
-            : { messageId: resubmit.messageId, text }
-        );
-      } else {
+      if (edit !== null) {
         editRef.current = edit;
         setEditSession({ chatId: edit.chatId, opening: false });
         chat.setMessages(edit.originalMessages.slice(0, editIndex));
+      }
+      if (resubmit?.kind === "retry") {
         await chat.sendMessage({
-          id: edit.messageId,
+          messageId: resubmit.messageId,
+          parts: [{ text, type: "text" }],
+          role: "user",
+        });
+      } else {
+        const messageId = edit?.messageId ?? crypto.randomUUID();
+        setNewUserMessageId(messageId);
+        await chat.sendMessage({
+          id: messageId,
           parts: [{ text, type: "text" }],
           role: "user",
         });
@@ -872,7 +918,7 @@ const ChatSession = ({
   };
   const sendOrQueue = (suggestion?: string) => {
     const text = (suggestion ?? input).trim();
-    if (!text || composerDisabled || audioActive) {
+    if (!text || !canSend || composerDisabled || audioActive) {
       return;
     }
     if (!queueing && !workspace.control.state.get().active) {
@@ -925,17 +971,41 @@ const ChatSession = ({
     return undefined;
   }, [queue, submissionBlocked]);
 
+  const historyUnavailable = !historyInitialized && history.isError;
+  const billingUnavailable = billing.data === undefined && billing.isError;
+  let transcriptError = errorMessage;
+  let retry: (() => void) | undefined;
+  if (historyUnavailable) {
+    transcriptError = "Could not load this conversation.";
+    retry = () => {
+      void history.refetch();
+    };
+  } else if (billingUnavailable) {
+    transcriptError = "Could not check assistant access.";
+    retry = () => {
+      void billing.refetch();
+    };
+  } else if (canRetry && lastUserMessage !== undefined) {
+    retry = () => {
+      void submit({
+        kind: "retry",
+        messageId: lastUserMessage.id,
+        text: lastUserText,
+      });
+    };
+  }
+
   return (
     <div
       className="flex min-h-0 flex-1 flex-col"
       data-assistant-loading={streaming || busy || openingEdit ? "" : undefined}
     >
-      {chat.messages.length > 0 || errorMessage !== "" ? (
+      {chat.messages.length > 0 || transcriptError !== "" || requestPending ? (
         <ChatTranscript
           completedAssistantMessageId={completedAssistantMessageId}
           docked={props.docked}
           edit={
-            props.chatId !== null && canUseAiChat
+            props.chatId !== null && canSend
               ? {
                   disabled: submissionBlocked,
                   onSubmit: (messageId, text) => {
@@ -946,27 +1016,19 @@ const ChatSession = ({
           }
           messages={chat.messages}
           isStreaming={streaming}
+          newUserMessageId={newUserMessageId}
+          requestPending={requestPending}
           approvals={approvals}
-          errorMessage={errorMessage}
+          errorMessage={transcriptError}
           onSuggestion={sendOrQueue}
-          onRetry={
-            canRetry && lastUserMessage !== undefined
-              ? () => {
-                  void submit({
-                    kind: "retry",
-                    messageId: lastUserMessage.id,
-                    text: lastUserText,
-                  });
-                }
-              : undefined
-          }
+          onRetry={retry}
         />
       ) : null}
-      {canUseAiChat ? null : (
+      {accessDenied ? (
         <p className="px-4 py-4 text-body-sm text-muted-fg">
           Choose a plan with AI credits in settings to use quieter.
         </p>
-      )}
+      ) : null}
       <ChatComposer
         mailboxId={workspace.mailboxId}
         placeholder={
@@ -990,6 +1052,7 @@ const ChatSession = ({
           dictation.cancel();
         }}
         disabled={composerDisabled}
+        sendDisabled={!canSend}
         streaming={turnActive}
         queueing={queueing}
         queue={{
@@ -1040,46 +1103,11 @@ const ChatSession = ({
 
 export const ChatView = (props: ChatViewProps) => {
   const queues = useCreateStore<ChatQueues>(new Map());
-  const { data: billing, isPending } = useQuery(userBillingQueryOptions());
-  const {
-    data: chatData,
-    isError: isChatError,
-    isPending: isChatPending,
-    refetch: refetchChat,
-  } = useQuery(chatQueryOptions(props.mailboxId, props.chatId));
-  if (isPending || (props.chatId !== null && isChatPending)) {
-    return (
-      <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
-        Loading assistant…
-      </p>
-    );
-  }
-  if (props.chatId !== null && isChatError) {
-    return (
-      <div className="p-4 text-body-sm text-muted-fg">
-        Could not load this conversation.
-        <Button
-          variant="ghost"
-          onClick={() => {
-            void refetchChat();
-          }}
-        >
-          Try again
-        </Button>
-      </div>
-    );
-  }
   return (
     <ChatSession
       key={`${props.mailboxId}:${props.chatId ?? props.draftChatKey}`}
       {...props}
-      chatData={chatData}
       queues={queues}
-      canUseAiChat={
-        !isPending &&
-        !!billing &&
-        hasOrganizationAiAccess(billing, props.mailboxOrganizationId)
-      }
     />
   );
 };

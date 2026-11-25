@@ -18,6 +18,7 @@ import {
 } from "./menu-chrome";
 import { menuFocusProps } from "./menu-focus";
 import { anchoredTriggerClassName } from "./overlay-chrome";
+import { popupSideOffset } from "./popup-surface";
 
 export const DropdownMenu = <Payload = unknown,>({
   onItemHighlighted,
@@ -107,7 +108,7 @@ export const DropdownMenuContent = ({
   anchor,
   className,
   side = "bottom",
-  sideOffset = 6,
+  sideOffset = popupSideOffset,
   size = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof MenuPrimitive.Popup> &
@@ -183,6 +184,7 @@ type DropdownMenuItemProps = Omit<
   "closeOnClick" | "onClick"
 > & {
   closeOnSelect?: boolean;
+  highlight?: "default" | "subtle";
   onSelect?: (event: MouseEvent<HTMLElement>) => void;
   tone?: "default" | "destructive";
 };
@@ -190,6 +192,7 @@ type DropdownMenuItemProps = Omit<
 export const DropdownMenuItem = ({
   className,
   closeOnSelect = true,
+  highlight = "default",
   onSelect,
   tone = "default",
   ...props
@@ -201,7 +204,10 @@ export const DropdownMenuItem = ({
       className={cn(
         menuItemClassName,
         { [menuCompactItemClassName]: size === "compact" },
-        { "text-destructive": tone === "destructive" },
+        {
+          "data-highlighted:bg-fg/8": highlight === "subtle",
+          "text-destructive": tone === "destructive",
+        },
         className
       )}
       closeOnClick={closeOnSelect}
@@ -231,8 +237,12 @@ export const DropdownMenuCheckboxItem = ({
   return (
     <MenuPrimitive.CheckboxItem
       className={cn(
-        "relative flex min-h-7 cursor-default items-center gap-2 rounded-md py-1 pr-2.5 pl-8 text-body-sm text-fg transition-transform duration-100 ease-out select-none squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset active:scale-[0.97] data-disabled:pointer-events-none data-disabled:opacity-50 data-highlighted:bg-muted data-pointer-highlighted:focus-visible:ring-0 data-pointer-highlighted:focus-visible:outline-none motion-reduce:transition-none motion-reduce:active:scale-100",
-        { "min-h-7 gap-1.5 py-1 pr-2 pl-7 text-caption": size === "compact" },
+        menuItemClassName,
+        "pl-8",
+        {
+          [menuCompactItemClassName]: size === "compact",
+          "pl-7": size === "compact",
+        },
         className
       )}
       closeOnClick={closeOnSelect}

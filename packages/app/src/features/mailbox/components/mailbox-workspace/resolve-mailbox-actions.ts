@@ -11,6 +11,8 @@ const noopMailboxAction = async (): Promise<void> => {
 
 const createReadOnlyMailboxActions = (): MailboxActions =>
   ({
+    applyThreadSnooze: noopMailboxAction,
+    applyThreadsSnooze: noopMailboxAction,
     canMarkRead: false,
     canSetImportance: false,
     canSetPlacement: false,

@@ -15,7 +15,6 @@ import type {
   listCapturedImportantMessages,
   processPendingMailImportance,
 } from "../src/mail-importance";
-import { mailInputSchemas } from "../src/mail/inputs";
 import { queriesMailOperations } from "../src/mail/queries";
 import type { getAuthorizedManagedMailbox } from "../src/mailbox/access";
 import type { assertAccessibleMailbox } from "../src/mailbox/service";
@@ -259,13 +258,18 @@ describe("canonical mail boundaries", () => {
     });
 
     test("rejects unsupported and malformed scopes without broadening a mailbox", async () => {
-      expect(
-        mailInputSchemas.listThreads.safeParse({
-          category: "inbox",
-          correspondentEmail: "alex@example.test",
-          mailboxId,
-        }).success
-      ).toBeFalsy();
+      await expect(
+        queriesMailOperations.listThreads({
+          context,
+          input: {
+            category: "inbox",
+            correspondentEmail: "alex@example.test",
+            mailboxId,
+          },
+        })
+      ).rejects.toMatchObject({ code: "BAD_REQUEST" });
+      expect(fixtures.provider).not.toHaveBeenCalled();
+      expect(fixtures.list).not.toHaveBeenCalled();
       await expect(
         queriesMailOperations.listThreads({
           context,
@@ -290,8 +294,11 @@ describe("canonical mail boundaries", () => {
     test("a passive read keeps authorized hydration and skips all open activity", async () => {
       const result = await queriesMailOperations.getThread({
         context,
-        input: { mailboxId, threadId: canonicalMessage.threadId },
-        recordActivity: false,
+        input: {
+          mailboxId,
+          prefetch: true,
+          threadId: canonicalMessage.threadId,
+        },
       });
       expect(result.messages[0]).toMatchObject({
         ...canonicalMessage,

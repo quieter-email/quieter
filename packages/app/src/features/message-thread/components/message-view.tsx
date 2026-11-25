@@ -16,6 +16,7 @@ import {
 import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
+import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import {
   buildComposeDraftFromMessageAction,
   buildComposeDraftFromSavedDraftMessage,
@@ -39,10 +40,9 @@ import { ThreadActionResults } from "@quieter/app/features/message-thread/compon
 import {
   useMessageViewData,
   useMessageViewFocus,
-  useMessageViewHotkeys,
 } from "@quieter/app/features/message-thread/components/use-message-view";
 import {
-  MessageReminderQuickAction,
+  MessageReminderStatus,
   MessageReminderSuggestion,
 } from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -51,6 +51,8 @@ import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
+import type { MailSnoozeState } from "@quieter/mail/snooze";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -69,9 +71,18 @@ import {
   Suspense,
   useEffect,
   useEffectEvent,
+  useLayoutEffect,
   useRef,
   useState,
 } from "react";
+
+import {
+  MailSnoozeDialog,
+  MailSnoozeStatus,
+} from "../../mailbox/components/mail-snooze-dialog";
+import { getMailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+import { useMessageViewHotkeys } from "./use-message-view-hotkeys";
 
 const InlineComposeSurface = lazy(
   async () =>
@@ -100,6 +111,12 @@ type MessageViewContentProps = MessageViewProps &
   };
 
 const MessageViewContent = (props: MessageViewContentProps) => {
+  // Frozen when opened, because the cache can gain the schedule mid-attempt.
+  const [snoozeDialog, setSnoozeDialog] = useState<{
+    action: MailSnoozeAction;
+    open: boolean;
+    snooze?: MailSnoozeState;
+  }>({ action: "snooze", open: false });
   const {
     activeMailbox,
     apiSource,
@@ -165,6 +182,44 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         block: "nearest",
       });
     });
+  };
+  // Undo can finish after the inline composer closed, so the restore callback
+  // reads the latest thread state instead of its closure.
+  const restoreTargetRef = useRef({
+    inlineDraft,
+    mailboxId,
+    mounted: false,
+    openInlineCompose,
+    threadId: message.threadId,
+  });
+  useLayoutEffect(() => {
+    restoreTargetRef.current = {
+      inlineDraft,
+      mailboxId,
+      mounted: true,
+      openInlineCompose,
+      threadId: message.threadId,
+    };
+  });
+  useEffect(
+    () => () => {
+      restoreTargetRef.current.mounted = false;
+    },
+    []
+  );
+  const restoreUndoneSend: RestoreUndoneDraft = (draft, draftMailboxId) => {
+    const target = restoreTargetRef.current;
+    if (
+      !target.mounted ||
+      target.inlineDraft !== null ||
+      target.mailboxId !== draftMailboxId ||
+      (draft.replyContext?.threadId ?? draft.draftAnchor?.sourceThreadId) !==
+        target.threadId
+    ) {
+      return false;
+    }
+    target.openInlineCompose(draft);
+    return true;
   };
   const suggestReply = useMutation(orpc.ai.suggestReply.mutationOptions());
   const requestSuggestedReply = () => {
@@ -242,6 +297,17 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     mailboxActions.canSetPlacement &&
     !["drafts", "sent", "spam", "trash"].includes(activeMailbox);
   const returnThreadToInbox = !threadLabelIds.includes(MAILBOX_LABELS.inbox);
+  const snooze =
+    threadMessages
+      .map((item) => item.snooze)
+      .filter((state) => state !== undefined)
+      .toSorted((left, right) => right.version - left.version)
+      .at(0) ?? message.snooze;
+  const hasSnooze =
+    snooze !== undefined && isMailSnoozeLiveStatus(snooze.status);
+  const snoozeAction = canSetThreadPlacement
+    ? getMailSnoozeAction(snooze, threadMessages)
+    : null;
   const sharedPlacement = mailboxActions.placementScope === "shared";
   const placementLabel = returnThreadToInbox
     ? `Return conversation to Inbox${sharedPlacement ? " for everyone" : ""}`
@@ -259,6 +325,31 @@ const MessageViewContent = (props: MessageViewContentProps) => {
   const importanceLabel = threadIsImportant
     ? "Mark conversation as not important"
     : "Mark conversation as important";
+  const toggleThreadPlacement = canSetThreadPlacement
+    ? () => {
+        if (returnThreadToInbox && hasSnooze) {
+          void threadActions.onApplySnooze?.(message.threadId, {
+            kind: "return-now",
+          });
+          return;
+        }
+        void (
+          returnThreadToInbox
+            ? threadActions.onReturnToInbox
+            : threadActions.onMarkDone
+        )?.(message.threadId);
+      }
+    : undefined;
+  const toggleThreadImportance = canSetThreadImportance
+    ? () => {
+        void threadActions.onSetImportance?.(
+          message.threadId,
+          !threadIsImportant
+        );
+      }
+    : undefined;
+  const canSetReminder =
+    mailboxProvider !== "api" && activeMailbox !== "drafts";
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
   const showReplyAll = hasDistinctReplyAllRecipients(
     hotkeyMessage,
@@ -270,11 +361,18 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
+    importanceIcon: threadIsImportant ? FlagOffIcon : Flag01Icon,
+    importanceLabel,
     isActionPending,
     mailboxActions,
+    mailboxId,
     mailboxProvider,
     onBackToList,
     onComposeDraftRequested: openInlineCompose,
+    onToggleImportance: toggleThreadImportance,
+    onTogglePlacement: toggleThreadPlacement,
+    placementIcon: returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon,
+    placementLabel,
   });
   const openAssistantCompose = useEffectEvent(
     (input: Parameters<InlineComposeBridge["open"]>[0]) => {
@@ -335,6 +433,29 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       tabIndex={-1}
       className="@container flex min-h-0 w-full flex-1 flex-col"
     >
+      <MailSnoozeDialog
+        initial={snoozeDialog.snooze}
+        onApplied={(command) => {
+          if (command.kind === "snooze") {
+            onBackToList?.();
+          }
+        }}
+        onApply={async (command, expectedVersion, attempt) => {
+          await mailboxActions.applyThreadSnooze(
+            message.threadId,
+            command,
+            expectedVersion,
+            attempt
+          );
+        }}
+        onOpenChange={(open) => {
+          setSnoozeDialog((current) => ({ ...current, open }));
+        }}
+        open={snoozeDialog.open}
+        preview={isSandboxMailboxId(mailboxId)}
+        reschedule={snoozeDialog.action === "reschedule"}
+        shared={sharedPlacement}
+      />
       <WorkspaceHeader>
         <div className="flex min-w-0 items-center gap-3">
           {onBackToList ? (
@@ -369,99 +490,99 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               {visibleMessages.length === 1 ? "message" : "messages"}
             </p>
           )}
-          <MessageLabels
-            className="shrink-0"
-            labelIds={threadLabelIds}
-            labels={gmailLabels}
+          <div className="flex shrink-0 items-center gap-1 empty:hidden">
+            {mailboxProvider !== "api" &&
+            !isSandboxMailboxId(mailboxId) &&
+            activeMailbox !== "drafts" &&
+            !message.draftId &&
+            message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true &&
+            onOpenConversation ? (
+              <CorrespondentHistoryAction
+                mailboxEmail={currentUserEmail ?? null}
+                mailboxId={mailboxId}
+                messages={threadMessages}
+                onOpenConversation={onOpenConversation}
+                threadId={message.threadId}
+              />
+            ) : null}
+            {toggleThreadPlacement && (
+              <IconButtonTooltip label={placementLabel}>
+                <Button
+                  chrome="toolbar"
+                  aria-label={placementLabel}
+                  disabled={isActionPending}
+                  onClick={toggleThreadPlacement}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon
+                    aria-hidden
+                    icon={
+                      returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon
+                    }
+                  />
+                </Button>
+              </IconButtonTooltip>
+            )}
+            {mailboxProvider !== "api" && (
+              <div className="-me-2.25 shrink-0">
+                <MessageActionsDropdown
+                  actions={threadActions}
+                  isPending={isActionPending}
+                  isUnread={threadIsUnread}
+                  mailbox={activeMailbox}
+                  mailboxId={mailboxId}
+                  message={{
+                    ...message,
+                    snooze,
+                    threadIsImportant,
+                  }}
+                  reminderMessage={canSetReminder ? hotkeyMessage : null}
+                  snoozeEntry={
+                    snoozeAction === null
+                      ? undefined
+                      : {
+                          action: snoozeAction,
+                          onOpen: () => {
+                            setSnoozeDialog({
+                              action: snoozeAction,
+                              open: true,
+                              snooze,
+                            });
+                          },
+                        }
+                  }
+                  threadLabelIds={threadLabelIds}
+                />
+              </div>
+            )}
+          </div>
+          <AssistantSidebarTrigger
+            className={cn(
+              "data-[sidebar-open=false]:ms-2.25 data-[sidebar-open=true]:-ms-3",
+              {
+                "lg:hidden": !detailOnly,
+              }
+            )}
           />
-          {mailboxProvider === "api" || activeMailbox === "drafts" ? null : (
-            <MessageReminderQuickAction
+        </div>
+
+        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
+          <MessageLabels labelIds={threadLabelIds} labels={gmailLabels} />
+          {toggleThreadImportance && threadIsImportant ? (
+            <span className="inline-flex items-center gap-1 text-caption text-muted-fg">
+              <Icon aria-hidden icon={Flag01Icon} size={14} />
+              Important
+            </span>
+          ) : null}
+          {canSetReminder ? (
+            <MessageReminderStatus
               mailboxId={mailboxId}
               message={hotkeyMessage}
             />
-          )}
-          {mailboxProvider !== "api" &&
-          !isSandboxMailboxId(mailboxId) &&
-          activeMailbox !== "drafts" &&
-          !message.draftId &&
-          message.labelIds?.includes(MAILBOX_LABELS.drafts) !== true &&
-          onOpenConversation ? (
-            <CorrespondentHistoryAction
-              mailboxEmail={currentUserEmail ?? null}
-              mailboxId={mailboxId}
-              messages={threadMessages}
-              onOpenConversation={onOpenConversation}
-              threadId={message.threadId}
-            />
           ) : null}
-          {canSetThreadPlacement && (
-            <IconButtonTooltip label={placementLabel}>
-              <Button
-                chrome="toolbar"
-                aria-label={placementLabel}
-                disabled={isActionPending}
-                onClick={() => {
-                  void (
-                    returnThreadToInbox
-                      ? threadActions.onReturnToInbox
-                      : threadActions.onMarkDone
-                  )?.(message.threadId);
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon
-                  aria-hidden
-                  icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
-                />
-              </Button>
-            </IconButtonTooltip>
-          )}
-          {canSetThreadImportance && (
-            <IconButtonTooltip label={importanceLabel}>
-              <Button
-                chrome="toolbar"
-                aria-label={importanceLabel}
-                aria-pressed={threadIsImportant}
-                disabled={isActionPending}
-                onClick={() => {
-                  void threadActions.onSetImportance?.(
-                    message.threadId,
-                    !threadIsImportant
-                  );
-                }}
-                size="icon-sm"
-                type="button"
-                variant="ghost"
-              >
-                <Icon
-                  aria-hidden
-                  icon={threadIsImportant ? Flag01Icon : FlagOffIcon}
-                  tone={threadIsImportant ? "default" : "muted"}
-                />
-              </Button>
-            </IconButtonTooltip>
-          )}
-          {mailboxProvider !== "api" && (
-            <div className="shrink-0">
-              <MessageActionsDropdown
-                actions={threadActions}
-                isPending={isActionPending}
-                isUnread={threadIsUnread}
-                mailbox={activeMailbox}
-                mailboxId={mailboxId}
-                message={{
-                  ...message,
-                  threadIsImportant,
-                }}
-                threadLabelIds={threadLabelIds}
-              />
-            </div>
-          )}
-          <div className={cn("shrink-0", { "lg:hidden": !detailOnly })}>
-            <AssistantSidebarTrigger />
-          </div>
+          {hasSnooze ? <MailSnoozeStatus snooze={snooze} /> : null}
         </div>
 
         {apiSource !== null && apiSource !== undefined && (
@@ -473,8 +594,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           </div>
         )}
 
-        {mailboxProvider === "api" ||
-        activeMailbox === "drafts" ||
+        {!canSetReminder ||
         composeDemoMode === true ||
         composeManagedDemoMode === true ? null : (
           <MessageReminderSuggestion
@@ -589,7 +709,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             )}
 
             {showInlineCompose ? (
-              <div className="px-4 py-4 @sm:px-5 @sm:py-5">
+              <div className="p-4">
                 <LazyMotion features={domMax}>
                   <AnimatePresence initial={false} mode="popLayout">
                     {inlineDraft ? (
@@ -645,6 +765,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                               setActionDraft(null);
                             }}
                             onManageSnippets={onManageSnippets}
+                            onRestoreUndoneSend={restoreUndoneSend}
                             persistDrafts={composePersistDrafts}
                             senderEmail={currentUserEmail}
                             senderMailbox={composeSenderMailbox}

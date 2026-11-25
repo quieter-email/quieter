@@ -1,0 +1,232 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "c1b72761-4816-4b4a-ac39-179c98f764b5",
+  "prevIds": ["a04a9459-da4f-4ce4-b4f1-9ca42b7dbb2d"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailDispatchEvent"],
+      "writes": [
+        "s|tbl|public.mailDispatchEvent",
+        "n|tbl|public.mailDispatchEvent",
+        "e|tbl|public.mailDispatchEvent",
+        "n|rel|public.mailDispatchEvent",
+        "n|type|public.mailDispatchEvent",
+        "n|rel|public.mailDispatchEvent_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailDispatchSettings"],
+      "writes": [
+        "s|tbl|public.mailDispatchSettings",
+        "n|tbl|public.mailDispatchSettings",
+        "e|tbl|public.mailDispatchSettings",
+        "n|rel|public.mailDispatchSettings",
+        "n|type|public.mailDispatchSettings",
+        "n|rel|public.mailDispatchSettings_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailDispatchEvent",
+        "mail_dispatch_event_shard_created_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_dispatch_event_shard_created_idx",
+        "n|idx|public.mail_dispatch_event_shard_created_idx",
+        "e|idx|public.mail_dispatch_event_shard_created_idx",
+        "n|rel|public.mail_dispatch_event_shard_created_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailDispatchEvent",
+        "n|sch|public",
+        "n|col|public.mailDispatchEvent.shard",
+        "n|col|public.mailDispatchEvent.createdAt",
+        "n|col|public.mailDispatchEvent.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailDispatchEvent",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailDispatchSettings",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "createdAt",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "timezone('UTC', now())",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "gen_random_uuid()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "payload",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "shard",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchSettings",
+        "name": "enabled",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchSettings",
+        "name": "key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "mail_dispatch_event_shard_created_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "shard",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "createdAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchEvent",
+        "name": "mailDispatchEvent_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailDispatchSettings",
+        "name": "mailDispatchSettings_pkey",
+        "columns": ["key"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

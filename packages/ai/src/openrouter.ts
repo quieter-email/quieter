@@ -5,12 +5,16 @@ import { wrapLanguageModel } from "ai";
 import { z } from "zod";
 
 import { createAiBillingMiddleware } from "./billing";
-import type { MailAiRequestBudget } from "./billing";
-import type { ChatModel } from "./chat-models";
-import { chatModelSchema, resolveModelFallbacks } from "./chat-models";
+import type { GenerationModel } from "./chat-models";
+import {
+  chatModelSchema,
+  memoryLearningModel,
+  resolveModelFallbacks,
+} from "./chat-models";
 import { openRouterStreamMiddleware } from "./openrouter-stream";
 
 let cachedProvider: ReturnType<typeof createOpenRouter> | null = null;
+const memoryLearningMaxPrice = { completion: 0.5, prompt: 0.1, request: 0 };
 
 const getOpenRouterProvider = () => {
   const apiKey = serverEnv.OPENROUTER_API_KEY;
@@ -49,29 +53,25 @@ export const readChatUsageCostUsd = (
  * provider-constrained failover order.
  */
 export const createChatModel = (
-  model: ChatModel,
+  model: GenerationModel,
   options: {
     billing: AiBillingContext;
     onProviderStart?: () => void;
     allowFallbacks?: boolean;
     prioritizeLatency?: boolean;
-    mailRequestBudget?: MailAiRequestBudget;
   }
 ) => {
-  const parsedModel = chatModelSchema.parse(model);
-  if (
-    options.mailRequestBudget !== undefined &&
-    options.mailRequestBudget.model !== parsedModel
-  ) {
-    throw new Error("The mail AI model does not match its spending ceiling.");
-  }
+  const parsedModel =
+    model === memoryLearningModel ? model : chatModelSchema.parse(model);
   const fallbacks =
-    options.allowFallbacks === false || options.mailRequestBudget !== undefined
+    options.allowFallbacks === false || parsedModel === memoryLearningModel
       ? []
       : resolveModelFallbacks(parsedModel);
   const providerRouting = {
     ...(options.prioritizeLatency === true ? { sort: "latency" } : {}),
-    ...options.mailRequestBudget?.provider,
+    ...(parsedModel === memoryLearningModel
+      ? { max_price: memoryLearningMaxPrice, only: ["azure"] }
+      : {}),
     zdr: true,
   };
   return wrapLanguageModel({
@@ -80,23 +80,9 @@ export const createChatModel = (
       {
         specificationVersion: "v4",
         // oxlint-disable-next-line eslint/require-await -- The SDK requires a promise-returning transform without I/O.
-        transformParams: async ({ params }) => {
-          if (
-            options.mailRequestBudget !== undefined &&
-            (options.mailRequestBudget.model !==
-              "google/gemini-3.1-flash-lite" ||
-              params.maxOutputTokens === undefined ||
-              params.maxOutputTokens >
-                options.mailRequestBudget.maxOutputTokens ||
-              params.tools !== undefined ||
-              Object.keys(params.providerOptions?.openrouter ?? {}).length > 0)
-          ) {
-            throw new Error(
-              "The mail AI request exceeds its spending ceiling."
-            );
-          }
-          return params.responseFormat?.type === "json" &&
-            params.responseFormat.schema !== undefined
+        transformParams: async ({ params }) =>
+          params.responseFormat?.type === "json" &&
+          params.responseFormat.schema !== undefined
             ? {
                 ...params,
                 providerOptions: {
@@ -110,14 +96,26 @@ export const createChatModel = (
                   },
                 },
               }
-            : params;
-        },
+            : params,
       },
       createAiBillingMiddleware(
         options.billing,
         readChatUsageCostUsd,
         options.onProviderStart,
-        options.mailRequestBudget?.maximumCostUsd
+        parsedModel === memoryLearningModel
+          ? (params) => {
+              // The serialized input includes the prompt and structured output schema.
+              const bytes = new TextEncoder().encode(
+                JSON.stringify(params)
+              ).length;
+              return (
+                ((bytes * 2 + 4096) * memoryLearningMaxPrice.prompt +
+                  (params.maxOutputTokens ?? 0) *
+                    memoryLearningMaxPrice.completion) /
+                1_000_000
+              );
+            }
+          : undefined
       ),
     ],
     model: getOpenRouterProvider().chat(parsedModel, {

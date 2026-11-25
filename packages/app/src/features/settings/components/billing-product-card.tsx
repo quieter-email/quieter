@@ -100,46 +100,48 @@ export const BillingProductCard = ({
   }
 
   return (
-    <SettingsCard className={settingsSurfaceVariants({ variant: "body" })}>
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2">
-            <h3 className={settingsSurfaceVariants({ variant: "title" })}>
-              {product.name}
-            </h3>
-            {isCurrent && (
-              <Pill size="xs" tone="blue">
-                Current
-              </Pill>
-            )}
+    <SettingsCard>
+      <div className={settingsSurfaceVariants({ variant: "body" })}>
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <h3 className={settingsSurfaceVariants({ variant: "title" })}>
+                {product.name}
+              </h3>
+              {isCurrent && (
+                <Pill size="xs" tone="blue">
+                  Current
+                </Pill>
+              )}
+            </div>
+            <p className="mt-1.5 text-body/6 text-muted-fg">
+              {product.description}
+            </p>
           </div>
-          <p className="mt-1.5 text-body/6 text-muted-fg">
-            {product.description}
-          </p>
+          <div className="flex shrink-0 flex-col gap-3 sm:items-end">
+            <p className="text-title-md font-medium text-fg">
+              {moneyFormatter.format(product.monthlyPriceCents / 100)}
+              <span className="ml-1 text-body font-normal text-muted-fg">
+                /mo
+              </span>
+            </p>
+            {checkoutButton}
+          </div>
         </div>
-        <div className="flex shrink-0 flex-col gap-3 sm:items-end">
-          <p className="text-title-md font-medium text-fg">
-            {moneyFormatter.format(product.monthlyPriceCents / 100)}
-            <span className="ml-1 text-body font-normal text-muted-fg">
-              /mo
-            </span>
-          </p>
-          {checkoutButton}
-        </div>
+        <ul className="mt-4 flex flex-col gap-2 text-body text-muted-fg">
+          {product.features.map((feature) => (
+            <li className="flex items-start gap-2" key={feature}>
+              <Icon
+                aria-hidden
+                tone="muted"
+                className="mt-0.5"
+                icon={CheckmarkCircle02Icon}
+              />
+              <span>{feature}</span>
+            </li>
+          ))}
+        </ul>
       </div>
-      <ul className="mt-4 flex flex-col gap-2 text-body text-muted-fg">
-        {product.features.map((feature) => (
-          <li className="flex items-start gap-2" key={feature}>
-            <Icon
-              aria-hidden
-              tone="muted"
-              className="mt-0.5"
-              icon={CheckmarkCircle02Icon}
-            />
-            <span>{feature}</span>
-          </li>
-        ))}
-      </ul>
     </SettingsCard>
   );
 };

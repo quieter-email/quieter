@@ -5,14 +5,12 @@ import { db } from "@quieter/database/client";
 import {
   mailbox,
   mailPlacementOperation,
+  mailSnooze,
   managedMailMessage,
 } from "@quieter/database/schema";
 import {
   batchModifyMessages,
   getGmailCaptureMetadata,
-  getGmailMessageThreadAssociations,
-  getGmailThreadMessageCount,
-  getThreadWithDetails,
   isGmailServiceError,
 } from "@quieter/gmail";
 import type {
@@ -20,60 +18,180 @@ import type {
   MailMutationTargetResult,
 } from "@quieter/mail/data-plane";
 import { reportError } from "@quieter/observability";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, or, sql } from "drizzle-orm";
 
 import { consumeRateLimit } from "../abuse-protection";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
-import {
-  refreshGmailCapturedMessageMetadata,
-  writeGmailCapturedMessage,
-} from "../mail-capture";
-import { getAuthorizedManagedMailbox } from "../mailbox/access";
-import { assertAccessibleMailbox } from "../mailbox/service";
+import { refreshGmailCapturedMessageMetadata } from "../mail-capture";
+import { MAIL_SNOOZE_LIVE_STATUSES } from "../snooze/state";
 import type { MailInputs } from "./inputs";
+import { authorizeMailPlacement } from "./placement-access";
+import {
+  loadMailPlacementAssociations,
+  loadMailPlacementSnapshot,
+} from "./placement-admission";
 import { resolvePlacementMessageIds } from "./placement-model";
 import type { PlacementMessage } from "./placement-model";
 
-const authorizePlacement = async (
-  context: MailRequestContext,
-  mailboxId: string
-) => {
-  const selected = await assertAccessibleMailbox({
-    mailboxId,
-    userId: context.userId,
-  });
-  if (selected.provider === "managed") {
-    await getAuthorizedManagedMailbox({
-      mailboxId,
-      requiredRoles: ["manager", "responder"],
-      userId: context.userId,
-    });
-  } else if (selected.provider !== "gmail") {
-    throw new ORPCError("FORBIDDEN", {
-      message: "You cannot change placement in this inbox.",
+export type MailSnoozePlacement = {
+  id: string;
+  version: number;
+  leaseToken: string | null;
+} & (
+  | { kind: "snooze-hide" }
+  | {
+      kind: "snooze-return";
+      trigger: "due" | "manual";
+    }
+);
+
+const lockPlacementSnooze = async (input: {
+  database: Pick<typeof db, "select">;
+  guard: MailSnoozePlacement;
+  mailboxId: string;
+  threadId: string;
+  userId: string;
+  requestId: string;
+}) => {
+  const [current] = await input.database
+    .select()
+    .from(mailSnooze)
+    .where(
+      and(
+        eq(mailSnooze.id, input.guard.id),
+        eq(mailSnooze.mailboxId, input.mailboxId),
+        eq(mailSnooze.threadId, input.threadId)
+      )
+    )
+    .for("update");
+  if (
+    current === undefined ||
+    current.version !== input.guard.version ||
+    current.leaseToken !== input.guard.leaseToken ||
+    current.actorUserId !== input.userId ||
+    (input.guard.kind === "snooze-hide"
+      ? current.status !== "preparing" ||
+        current.hideRequestId !== input.requestId
+      : current.status !== "returning" ||
+        current.returnRequestId !== input.requestId)
+  ) {
+    throw new ORPCError("CONFLICT", {
+      message: "This snooze changed. Refresh before trying again.",
     });
   }
-  return selected;
+  return current;
 };
 
 export const supersedePendingMailPlacement = async (input: {
   context: MailRequestContext;
   mailboxId: string;
+  matchHiddenMessageIdsOnly?: boolean;
   messageId?: string;
+  messageIds?: string[];
+  retireSnoozes?: boolean;
   threadIds?: string[];
 }) => {
-  await authorizePlacement(input.context, input.mailboxId);
+  const requestedMessageIds = [
+    ...new Set([
+      ...(input.messageIds ?? []),
+      ...(input.messageId === undefined ? [] : [input.messageId]),
+    ]),
+  ];
+  const requestedThreadIds =
+    input.threadIds === undefined ? [] : [...new Set(input.threadIds)];
+  if (requestedMessageIds.length === 0 && requestedThreadIds.length === 0) {
+    return;
+  }
+  const selected = await authorizeMailPlacement(input.context, input.mailboxId);
+  let threadIds = requestedThreadIds;
+  if (requestedMessageIds.length > 0) {
+    const associations =
+      selected.provider === "managed"
+        ? await loadMailPlacementAssociations({
+            context: input.context,
+            database: db,
+            mailboxId: input.mailboxId,
+            messageIds: requestedMessageIds,
+            provider: selected.provider,
+          })
+        : await callGmail(
+            input.context,
+            input.mailboxId,
+            async (accessToken) =>
+              await loadMailPlacementAssociations({
+                accessToken,
+                context: input.context,
+                database: db,
+                mailboxId: input.mailboxId,
+                messageIds: requestedMessageIds,
+                provider: selected.provider,
+              })
+          );
+    threadIds = [
+      ...new Set([...threadIds, ...associations.map((item) => item.threadId)]),
+    ];
+  }
+  const messageConditions = requestedMessageIds.map(
+    (id) =>
+      sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([id])}::text::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([id])}::text::jsonb)`
+  );
+  const hiddenMessageConditions = requestedMessageIds.map(
+    (id) =>
+      sql`${mailSnooze.hiddenMessageIds} @> ${JSON.stringify([id])}::text::jsonb`
+  );
   const targetCondition =
-    input.messageId === undefined
-      ? inArray(mailPlacementOperation.threadId, input.threadIds ?? [])
-      : sql`(${mailPlacementOperation.messageIds} @> ${JSON.stringify([input.messageId])}::jsonb or ${mailPlacementOperation.requestedMessageIds} @> ${JSON.stringify([input.messageId])}::jsonb)`;
+    requestedMessageIds.length === 0
+      ? inArray(mailPlacementOperation.threadId, threadIds)
+      : or(
+          ...(threadIds.length > 0
+            ? [inArray(mailPlacementOperation.threadId, threadIds)]
+            : []),
+          ...messageConditions
+        );
+  const retireSnoozes = input.retireSnoozes !== false;
   await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
       .where(eq(mailbox.id, input.mailboxId))
       .for("update");
+    const retired =
+      retireSnoozes && threadIds.length > 0
+        ? await tx
+            .update(mailSnooze)
+            .set({
+              code: "newer_intent",
+              leaseToken: null,
+              leaseUntil: null,
+              message: null,
+              nextWakeAt: null,
+              status: "superseded",
+              updatedAt: new Date(),
+              version: sql`${mailSnooze.version} + 1`,
+            })
+            .where(
+              and(
+                eq(mailSnooze.mailboxId, input.mailboxId),
+                inArray(mailSnooze.threadId, threadIds),
+                inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES),
+                input.matchHiddenMessageIdsOnly === true &&
+                  hiddenMessageConditions.length > 0
+                  ? or(...hiddenMessageConditions)
+                  : undefined
+              )
+            )
+            .returning({ id: mailSnooze.id })
+        : [];
+    if (retired.length > 0) {
+      await tx
+        .update(mailbox)
+        .set({
+          contentRevision: sql`${mailbox.contentRevision} + 1`,
+          updatedAt: new Date(),
+        })
+        .where(eq(mailbox.id, input.mailboxId));
+    }
     await tx
       .update(mailPlacementOperation)
       .set({
@@ -113,35 +231,34 @@ const toPlacementResult = (
   threadId: operation.threadId,
 });
 
-export const applyMailPlacement = async ({
-  context: requestContext,
+export const hashMailPlacementRequest = ({
+  actorUserId,
   input,
+  snooze,
 }: {
-  context: MailRequestContext;
-  input: MailInputs["applyChanges"] & {
+  actorUserId: string;
+  snooze?: MailSnoozePlacement;
+  input: Pick<MailInputs["applyChanges"], "mailboxId" | "targets"> & {
     command: { kind: "set-placement"; placement: "done" | "inbox" };
   };
-}): Promise<MailMutationResult> => {
-  const deadline = AbortSignal.timeout(30_000);
-  const context: MailRequestContext = {
-    ...requestContext,
-    signal: requestContext.signal
-      ? AbortSignal.any([requestContext.signal, deadline])
-      : deadline,
-  };
-  const selected = await authorizePlacement(context, input.mailboxId);
-  const { requestId } = input;
-  if (requestId === undefined) {
-    throw new ORPCError("BAD_REQUEST", {
-      message: "This action needs a request identity. Refresh and try again.",
-    });
-  }
-  const requestHash = createHash("sha256")
+}): string =>
+  createHash("sha256")
     .update(
       JSON.stringify({
-        actorUserId: context.userId,
+        actorUserId,
         command: input.command,
         mailboxId: input.mailboxId,
+        snooze:
+          snooze === undefined
+            ? undefined
+            : {
+                id: snooze.id,
+                kind: snooze.kind,
+                ...(snooze.kind === "snooze-return"
+                  ? { trigger: snooze.trigger }
+                  : {}),
+                version: snooze.version,
+              },
         targets: input.targets
           .map((target) => ({
             messageIds: [...new Set(target.messageIds)].toSorted(),
@@ -153,6 +270,52 @@ export const applyMailPlacement = async ({
       })
     )
     .digest("hex");
+
+export const applyMailPlacement = async ({
+  chargeRateLimit = true,
+  context: requestContext,
+  input,
+  prefetched,
+  snooze,
+}: {
+  chargeRateLimit?: boolean;
+  context: MailRequestContext;
+  prefetched?: {
+    associations?: readonly { id: string; threadId: string }[];
+    snapshot?: {
+      incomingMessageIds: string[];
+      messages: PlacementMessage[];
+    };
+  };
+  snooze?: MailSnoozePlacement;
+  input: MailInputs["applyChanges"] & {
+    command: { kind: "set-placement"; placement: "done" | "inbox" };
+  };
+}): Promise<MailMutationResult> => {
+  const deadline = AbortSignal.timeout(30_000);
+  const context: MailRequestContext = {
+    ...requestContext,
+    signal: requestContext.signal
+      ? AbortSignal.any([requestContext.signal, deadline])
+      : deadline,
+  };
+  const selected = await authorizeMailPlacement(context, input.mailboxId);
+  const { requestId } = input;
+  if (requestId === undefined) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This action needs a request identity. Refresh and try again.",
+    });
+  }
+  const requestHash = hashMailPlacementRequest({
+    actorUserId: context.userId,
+    input,
+    snooze,
+  });
+  if (snooze !== undefined && input.targets.length !== 1) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Choose one conversation for this snooze.",
+    });
+  }
   const requestCondition = and(
     eq(mailPlacementOperation.actorUserId, context.userId),
     eq(mailPlacementOperation.mailboxId, input.mailboxId),
@@ -179,13 +342,19 @@ export const applyMailPlacement = async ({
   let operations = await readExistingRequest(db);
   const ownedIds = new Set<string>();
   if (operations.length === 0) {
-    const budget = await consumeRateLimit({
-      ...workBudget,
-      cost: input.targets.reduce(
-        (total, target) => total + Math.max(1, target.messageIds.length),
-        0
-      ),
-    });
+    const budget = chargeRateLimit
+      ? await consumeRateLimit({
+          ...workBudget,
+          cost: input.targets.reduce(
+            (total, target) => total + Math.max(1, target.messageIds.length),
+            0
+          ),
+        })
+      : {
+          allowed: true as const,
+          remaining: workBudget.limit,
+          resetAt: new Date(),
+        };
     if (budget.allowed) {
       const reserve = async (accessToken?: string) =>
         await db.transaction(async (tx) => {
@@ -199,40 +368,66 @@ export const applyMailPlacement = async ({
           if (existing.length > 0) {
             return { operations: existing, ownedIds: new Set<string>() };
           }
+          let currentSnooze: typeof mailSnooze.$inferSelect | undefined;
+          const [onlyTarget] = input.targets;
+          if (snooze !== undefined && onlyTarget !== undefined) {
+            currentSnooze = await lockPlacementSnooze({
+              database: tx,
+              guard: snooze,
+              mailboxId: input.mailboxId,
+              requestId,
+              threadId: onlyTarget.threadId,
+              userId: context.userId,
+            });
+            if (snooze.kind === "snooze-return") {
+              const [latest] = await tx
+                .select()
+                .from(mailPlacementOperation)
+                .where(
+                  and(
+                    eq(mailPlacementOperation.mailboxId, input.mailboxId),
+                    eq(mailPlacementOperation.threadId, onlyTarget.threadId)
+                  )
+                )
+                .orderBy(desc(mailPlacementOperation.sequence))
+                .limit(1);
+              const predecessorId =
+                currentSnooze.returnOperationId ??
+                currentSnooze.hideOperationId;
+              const duePredecessorValid =
+                currentSnooze.returnAt.getTime() <= Date.now() &&
+                currentSnooze.hideOperationId !== null &&
+                ((currentSnooze.returnOperationId === null &&
+                  latest?.id === currentSnooze.hideOperationId &&
+                  latest.status === "applied") ||
+                  (currentSnooze.returnOperationId !== null &&
+                    latest?.id === currentSnooze.returnOperationId &&
+                    latest.status === "failed"));
+              if (
+                (snooze.trigger === "due" && !duePredecessorValid) ||
+                (snooze.trigger === "manual" &&
+                  latest?.id !== (predecessorId ?? undefined))
+              ) {
+                throw new ORPCError("CONFLICT", {
+                  message:
+                    "A newer action changed this conversation. Refresh before trying again.",
+                });
+              }
+            }
+          }
           const anchorIds = [
             ...new Set(input.targets.flatMap((target) => target.messageIds)),
           ];
-          let associations: { id: string; threadId: string }[];
-          if (selected.provider === "managed") {
-            associations = await tx
-              .select({
-                id: managedMailMessage.id,
-                threadId: managedMailMessage.threadId,
-              })
-              .from(managedMailMessage)
-              .where(
-                and(
-                  eq(managedMailMessage.mailboxId, input.mailboxId),
-                  inArray(managedMailMessage.id, anchorIds)
-                )
-              );
-          } else {
-            if (accessToken === undefined) {
-              throw new Error(
-                "Placement admission requires an authorized mailbox token."
-              );
-            }
-            const timeout = AbortSignal.timeout(15_000);
-            const signal = context.signal
-              ? AbortSignal.any([context.signal, timeout])
-              : timeout;
-            associations = await getGmailMessageThreadAssociations(
+          const associations =
+            prefetched?.associations ??
+            (await loadMailPlacementAssociations({
               accessToken,
-              anchorIds,
-              signal
-            );
-            signal.throwIfAborted();
-          }
+              context,
+              database: tx,
+              mailboxId: input.mailboxId,
+              messageIds: anchorIds,
+              provider: selected.provider,
+            }));
           context.signal?.throwIfAborted();
           const threadIdsByMessageId = new Map(
             associations.map((message) => [message.id, message.threadId])
@@ -245,9 +440,75 @@ export const applyMailPlacement = async ({
               )
           );
           if (admittedTargets.length === 0) {
+            if (currentSnooze !== undefined && snooze !== undefined) {
+              const retiredAt = new Date();
+              await tx
+                .update(mailSnooze)
+                .set({
+                  code: "source_changed",
+                  leaseToken: null,
+                  leaseUntil: null,
+                  message:
+                    "This conversation changed and is no longer snoozed.",
+                  nextWakeAt: null,
+                  status: "superseded",
+                  updatedAt: retiredAt,
+                  version: sql`${mailSnooze.version} + 1`,
+                })
+                .where(
+                  and(
+                    eq(mailSnooze.id, currentSnooze.id),
+                    eq(mailSnooze.version, snooze.version),
+                    snooze.leaseToken === null
+                      ? isNull(mailSnooze.leaseToken)
+                      : eq(mailSnooze.leaseToken, snooze.leaseToken)
+                  )
+                );
+              await tx
+                .update(mailbox)
+                .set({
+                  contentRevision: sql`${mailbox.contentRevision} + 1`,
+                  updatedAt: retiredAt,
+                })
+                .where(eq(mailbox.id, input.mailboxId));
+            }
             return { operations: [], ownedIds: new Set<string>() };
           }
           const now = new Date();
+          if (snooze === undefined) {
+            const retired = await tx
+              .update(mailSnooze)
+              .set({
+                code: "newer_intent",
+                leaseToken: null,
+                leaseUntil: null,
+                message: null,
+                nextWakeAt: null,
+                status: "superseded",
+                updatedAt: now,
+                version: sql`${mailSnooze.version} + 1`,
+              })
+              .where(
+                and(
+                  eq(mailSnooze.mailboxId, input.mailboxId),
+                  inArray(
+                    mailSnooze.threadId,
+                    admittedTargets.map((target) => target.threadId)
+                  ),
+                  inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
+                )
+              )
+              .returning({ id: mailSnooze.id });
+            if (retired.length > 0) {
+              await tx
+                .update(mailbox)
+                .set({
+                  contentRevision: sql`${mailbox.contentRevision} + 1`,
+                  updatedAt: now,
+                })
+                .where(eq(mailbox.id, input.mailboxId));
+            }
+          }
           const inserted = await tx
             .insert(mailPlacementOperation)
             .values(
@@ -267,13 +528,33 @@ export const applyMailPlacement = async ({
               }))
             )
             .returning();
+          const [insertedOperation] = inserted;
+          if (
+            currentSnooze !== undefined &&
+            snooze !== undefined &&
+            insertedOperation !== undefined
+          ) {
+            await tx
+              .update(mailSnooze)
+              .set(
+                snooze.kind === "snooze-hide"
+                  ? { hideOperationId: insertedOperation.id, updatedAt: now }
+                  : { returnOperationId: insertedOperation.id, updatedAt: now }
+              )
+              .where(
+                and(
+                  eq(mailSnooze.id, currentSnooze.id),
+                  eq(mailSnooze.version, snooze.version)
+                )
+              );
+          }
           return {
             operations: inserted,
             ownedIds: new Set(inserted.map((operation) => operation.id)),
           };
         });
       const reserved =
-        selected.provider === "gmail"
+        selected.provider === "gmail" && prefetched?.associations === undefined
           ? await callGmail(
               context,
               input.mailboxId,
@@ -301,7 +582,7 @@ export const applyMailPlacement = async ({
     }
   }
   const results: MailMutationTargetResult[] = [];
-  let remainingSourceMessages = 1000;
+  const sourceBudget = { remaining: 1000 };
   for (const target of input.targets) {
     const operation = operations.find(
       (item) => item.threadId === target.threadId
@@ -324,169 +605,128 @@ export const applyMailPlacement = async ({
     let dispatched = false;
     try {
       context.signal?.throwIfAborted();
-      if (remainingSourceMessages === 0) {
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "This action includes too much conversation history. Choose fewer conversations and try again.",
+      const { messages, incomingMessageIds } =
+        prefetched?.snapshot !== undefined && input.targets.length === 1
+          ? prefetched.snapshot
+          : await loadMailPlacementSnapshot({
+              anchorCount: target.messageIds.length,
+              budget: sourceBudget,
+              chargeRateLimit,
+              context,
+              mailboxId: input.mailboxId,
+              provider: selected.provider,
+              threadId: target.threadId,
+            });
+      let messageIds: string[] | null;
+      let currentSnooze: typeof mailSnooze.$inferSelect | undefined;
+      // oxlint-disable-next-line unicorn/no-negated-condition -- Ordinary placement resolves a prefix, snooze restores its saved exact set.
+      if (snooze === undefined) {
+        messageIds = resolvePlacementMessageIds({
+          messages,
+          placement: input.command.placement,
+          requestedMessageIds: target.messageIds,
+          threadId: target.threadId,
         });
-      }
-      let source:
-        | { kind: "managed"; messages: PlacementMessage[] }
-        | { kind: "gmail"; messageCount: number };
-      if (selected.provider === "managed") {
-        const records = await db
-          .select({
-            createdAt: managedMailMessage.createdAt,
-            direction: managedMailMessage.direction,
-            id: managedMailMessage.id,
-            mailboxState: managedMailMessage.mailboxState,
-            threadId: managedMailMessage.threadId,
-          })
-          .from(managedMailMessage)
+      } else {
+        [currentSnooze] = await db
+          .select()
+          .from(mailSnooze)
           .where(
             and(
-              eq(managedMailMessage.mailboxId, input.mailboxId),
-              eq(managedMailMessage.threadId, target.threadId)
+              eq(mailSnooze.id, snooze.id),
+              eq(mailSnooze.mailboxId, input.mailboxId)
             )
-          )
-          .orderBy(
-            asc(managedMailMessage.createdAt),
-            asc(managedMailMessage.id)
-          )
-          .limit(remainingSourceMessages + 1);
-        source = {
-          kind: "managed",
-          messages: records.map((message): PlacementMessage => {
-            let placement: PlacementMessage["placement"] = "protected";
-            if (message.direction === "inbound") {
-              if (message.mailboxState === "active") {
-                placement = "inbox";
-              } else if (message.mailboxState === "done") {
-                placement = "done";
-              }
-            }
-            return {
-              id: message.id,
-              placement,
-              receivedAt: message.createdAt.getTime(),
-              threadId: message.threadId,
-            };
-          }),
-        };
-      } else {
-        source = {
-          kind: "gmail",
-          messageCount: await callGmail(
-            context,
-            input.mailboxId,
-            async (accessToken, signal) =>
-              await getGmailThreadMessageCount(
-                accessToken,
-                target.threadId,
-                signal
-              )
-          ),
-        };
-      }
-      const sourceMessageCount =
-        source.kind === "managed"
-          ? source.messages.length
-          : source.messageCount;
-      const additionalCost = Math.max(
-        0,
-        sourceMessageCount - target.messageIds.length
-      );
-      if (additionalCost > 0) {
-        const expandedBudget = await consumeRateLimit({
-          ...workBudget,
-          cost: additionalCost,
-        });
-        if (!expandedBudget.allowed) {
-          remainingSourceMessages = 0;
-          const retryAfter = Math.max(
-            1,
-            Math.ceil((expandedBudget.resetAt.getTime() - Date.now()) / 1000)
           );
-          context.resHeaders?.set("retry-after", String(retryAfter));
-          throw new ORPCError("RATE_LIMITED", {
-            data: { provider: "server", retryAfter },
-            message: "Too many conversations were changed. Try again later.",
-            status: 429,
+        if (
+          currentSnooze === undefined ||
+          currentSnooze.version !== snooze.version ||
+          currentSnooze.leaseToken !== snooze.leaseToken ||
+          currentSnooze.hiddenMessageIds.length === 0
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message: "This snooze changed. Refresh before trying again.",
           });
         }
+        const hidden = new Set(currentSnooze.hiddenMessageIds);
+        if (
+          (snooze.kind === "snooze-hide" || snooze.trigger === "due") &&
+          messages.some(
+            (message) =>
+              message.placement === "inbox" && !hidden.has(message.id)
+          )
+        ) {
+          throw new ORPCError("SNOOZE_REOPENED", {
+            message: "New mail arrived. This conversation is back in Inbox.",
+            status: 409,
+          });
+        }
+        if (
+          currentSnooze.hiddenMessageIds.some(
+            (id) =>
+              !messages.some(
+                (message) =>
+                  message.id === id && message.placement !== "protected"
+              )
+          )
+        ) {
+          throw new ORPCError("SNOOZE_SOURCE_CHANGED", {
+            message: "This conversation changed. Refresh before trying again.",
+            status: 409,
+          });
+        }
+        const sourcePlacement =
+          snooze.kind === "snooze-hide" ? "inbox" : "done";
+        messageIds = messages
+          .filter(
+            (message) =>
+              hidden.has(message.id) && message.placement === sourcePlacement
+          )
+          .map((message) => message.id);
       }
-      if (sourceMessageCount > remainingSourceMessages) {
-        remainingSourceMessages = 0;
-        throw new ORPCError("BAD_REQUEST", {
-          message:
-            "This action includes too much conversation history. Choose fewer conversations and try again.",
-        });
-      }
-      remainingSourceMessages -= sourceMessageCount;
-      let messages: PlacementMessage[];
-      if (source.kind === "gmail") {
-        const thread = await callGmail(
-          context,
-          input.mailboxId,
-          async (accessToken, signal) =>
-            await getThreadWithDetails(
-              accessToken,
-              target.threadId,
-              signal,
-              async (snapshot) => {
-                signal?.throwIfAborted();
-                await writeGmailCapturedMessage({
-                  mailboxId: input.mailboxId,
-                  snapshot,
-                  source: "on_demand",
-                });
-              },
-              sourceMessageCount
-            )
-        );
-        messages = thread.messages.map((message): PlacementMessage => {
-          let placement: PlacementMessage["placement"] = "done";
-          if (
-            message.labelIds?.some((label) =>
-              ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-            ) === true
-          ) {
-            placement = "protected";
-          } else if (message.labelIds?.includes("INBOX") === true) {
-            placement = "inbox";
-          }
-          return {
-            id: message.id,
-            placement,
-            receivedAt: Number(message.internalDate ?? 0),
-            threadId: message.threadId,
-          };
-        });
-      } else {
-        ({ messages } = source);
-      }
-      const messageIds = resolvePlacementMessageIds({
-        messages,
-        placement: input.command.placement,
-        requestedMessageIds: target.messageIds,
-        threadId: target.threadId,
-      });
       if (messageIds === null) {
         throw new ORPCError("BAD_REQUEST", {
           message:
             "This conversation changed or is no longer available. Refresh and try again.",
         });
       }
-      const [claimed] = await db
-        .update(mailPlacementOperation)
-        .set({ messageIds, status: "submitting", updatedAt: new Date() })
-        .where(
-          and(
-            eq(mailPlacementOperation.id, operation.id),
-            eq(mailPlacementOperation.status, "pending")
+      const claimed = await db.transaction(async (tx) => {
+        if (snooze !== undefined) {
+          await tx
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(eq(mailbox.id, input.mailboxId))
+            .for("update");
+          const registered = await lockPlacementSnooze({
+            database: tx,
+            guard: snooze,
+            mailboxId: input.mailboxId,
+            requestId,
+            threadId: target.threadId,
+            userId: context.userId,
+          });
+          if (snooze.kind === "snooze-hide") {
+            await tx
+              .update(mailSnooze)
+              .set({
+                hiddenMessageIds: registered.hiddenMessageIds,
+                knownIncomingMessageIds: incomingMessageIds,
+                updatedAt: new Date(),
+              })
+              .where(eq(mailSnooze.id, registered.id));
+          }
+        }
+        const [row] = await tx
+          .update(mailPlacementOperation)
+          .set({ messageIds, status: "submitting", updatedAt: new Date() })
+          .where(
+            and(
+              eq(mailPlacementOperation.id, operation.id),
+              eq(mailPlacementOperation.status, "pending")
+            )
           )
-        )
-        .returning();
+          .returning();
+        return row;
+      });
       if (claimed === undefined) {
         results.push({
           code: "newer_intent",
@@ -525,6 +765,16 @@ export const applyMailPlacement = async ({
             .from(mailbox)
             .where(eq(mailbox.id, input.mailboxId))
             .for("update");
+          const registeredSnooze = snooze
+            ? await lockPlacementSnooze({
+                database: tx,
+                guard: snooze,
+                mailboxId: input.mailboxId,
+                requestId,
+                threadId: target.threadId,
+                userId: context.userId,
+              })
+            : undefined;
           const [locked] = await tx
             .select()
             .from(mailPlacementOperation)
@@ -622,10 +872,41 @@ export const applyMailPlacement = async ({
             })
             .where(eq(mailPlacementOperation.id, operation.id))
             .returning();
+          if (registeredSnooze !== undefined && snooze) {
+            await tx
+              .update(mailSnooze)
+              .set({
+                ...(snooze.kind === "snooze-hide" ? { attempts: 0 } : {}),
+                code: null,
+                leaseToken: null,
+                leaseUntil: null,
+                message: null,
+                nextWakeAt: snooze.kind === "snooze-hide" ? new Date() : null,
+                status: snooze.kind === "snooze-hide" ? "active" : "returned",
+                updatedAt: new Date(),
+                version: registeredSnooze.version + 1,
+              })
+              .where(
+                and(
+                  eq(mailSnooze.id, registeredSnooze.id),
+                  eq(mailSnooze.version, snooze.version),
+                  snooze.leaseToken === null
+                    ? isNull(mailSnooze.leaseToken)
+                    : eq(mailSnooze.leaseToken, snooze.leaseToken)
+                )
+              );
+            await tx
+              .update(mailbox)
+              .set({
+                contentRevision: sql`${mailbox.contentRevision} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(eq(mailbox.id, input.mailboxId));
+          }
           return toPlacementResult(completed ?? locked, false);
         });
       if (selected.provider === "managed") {
-        await authorizePlacement(context, input.mailboxId);
+        await authorizeMailPlacement(context, input.mailboxId);
       }
       const result =
         selected.provider === "gmail"
@@ -690,7 +971,7 @@ export const applyMailPlacement = async ({
     } catch (error) {
       const oversized = isGmailServiceError(error) && error.status === 413;
       if (oversized) {
-        remainingSourceMessages = 0;
+        sourceBudget.remaining = 0;
       }
       const placementError = oversized
         ? new ORPCError("BAD_REQUEST", {
@@ -708,6 +989,8 @@ export const applyMailPlacement = async ({
             "NOT_FOUND",
             "RATE_LIMITED",
             "UNAUTHORIZED",
+            "SNOOZE_REOPENED",
+            "SNOOZE_SOURCE_CHANGED",
           ].includes(placementError.code)) &&
         !(
           placementError instanceof Error &&
@@ -751,6 +1034,72 @@ export const applyMailPlacement = async ({
           )
         )
         .returning();
+      if (snooze !== undefined) {
+        if (snooze.leaseToken !== null && !dispatched) {
+          const isTerminalSnoozeError =
+            (placementError instanceof ORPCError &&
+              typeof placementError.code === "string" &&
+              [
+                "BAD_REQUEST",
+                "CONFLICT",
+                "SNOOZE_REOPENED",
+                "SNOOZE_SOURCE_CHANGED",
+              ].includes(placementError.code)) ||
+            (isGmailServiceError(placementError) &&
+              (placementError.status === 400 || placementError.status === 404));
+          if (!isTerminalSnoozeError) {
+            throw placementError;
+          }
+        }
+        await db.transaction(async (tx) => {
+          await tx
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(eq(mailbox.id, input.mailboxId))
+            .for("update");
+          let status: "superseded" | "uncertain" | "failed" = dispatched
+            ? "uncertain"
+            : "failed";
+          if (
+            failure.code === "SNOOZE_REOPENED" ||
+            failure.code === "SNOOZE_SOURCE_CHANGED"
+          ) {
+            status = "superseded";
+          }
+          const changed = await tx
+            .update(mailSnooze)
+            .set({
+              ...failure,
+              leaseToken: null,
+              leaseUntil: null,
+              nextWakeAt:
+                status === "uncertain" ? new Date(Date.now() + 60_000) : null,
+              status,
+              updatedAt: new Date(),
+              version: sql`${mailSnooze.version} + 1`,
+            })
+            .where(
+              and(
+                eq(mailSnooze.id, snooze.id),
+                eq(mailSnooze.mailboxId, input.mailboxId),
+                eq(mailSnooze.version, snooze.version),
+                snooze.leaseToken === null
+                  ? isNull(mailSnooze.leaseToken)
+                  : eq(mailSnooze.leaseToken, snooze.leaseToken)
+              )
+            )
+            .returning({ id: mailSnooze.id });
+          if (changed.length > 0) {
+            await tx
+              .update(mailbox)
+              .set({
+                contentRevision: sql`${mailbox.contentRevision} + 1`,
+                updatedAt: new Date(),
+              })
+              .where(eq(mailbox.id, input.mailboxId));
+          }
+        });
+      }
       results.push(
         failed === undefined
           ? {

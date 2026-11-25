@@ -1,12 +1,11 @@
 import { withRequestDatabaseClient } from "@quieter/database/client";
 import { serverEnv } from "@quieter/env/server";
+import { mailDispatchPath } from "@quieter/mail/dispatch";
+import { GMAIL_MAILBOX_WAKE_PATH } from "@quieter/mail/updates";
 import { z } from "zod";
 
 import { runGmailMaintenance } from "./gmail-maintenance-worker";
-import {
-  enqueueGmailNotification,
-  processGmailQueue,
-} from "./gmail-processing";
+import { acceptGmailNotification, processGmailQueue } from "./gmail-processing";
 import realtimeWorker from "./worker";
 import {
   parseGmailNotification,
@@ -16,6 +15,7 @@ import {
 } from "./worker-utils";
 
 export { MailLiveUser } from "./mail-live-user";
+export { MailSnooze } from "./mail-snooze";
 export { ReminderMailbox } from "./reminder-mailbox";
 export { ScheduledSend } from "./scheduled-send";
 export { GmailLiveSyncMailboxV2 } from "./gmail-live-sync-mailbox";
@@ -31,7 +31,14 @@ export default {
       return new Response(null, { status: 404 });
     }
     const url = new URL(request.url);
-    if (url.pathname.startsWith("/mail/")) {
+    if (url.pathname === mailDispatchPath) {
+      const { handleMailDispatch } = await import("./mail-dispatch-worker");
+      return await handleMailDispatch(request, env, ctx);
+    }
+    if (
+      url.pathname.startsWith("/mail/") ||
+      url.pathname === GMAIL_MAILBOX_WAKE_PATH
+    ) {
       return await realtimeWorker.fetch(request, env, ctx);
     }
     const token = serverEnv.QUIETER_LOCAL_WORKER_TOKEN;
@@ -53,6 +60,11 @@ export default {
     }
     if (request.method !== "POST") {
       return new Response(null, { status: 405 });
+    }
+    if (url.pathname === "/__dev/mail-dispatch") {
+      const { repairMailDispatch } = await import("./mail-dispatch-worker");
+      await repairMailDispatch(env);
+      return new Response(null, { status: 204 });
     }
     if (url.pathname === "/__dev/mail/seed") {
       try {
@@ -97,7 +109,7 @@ export default {
           return new Response(null, { status: 403 });
         }
         const notification = parseGmailNotification(delivery.data.message.data);
-        await enqueueGmailNotification(
+        await acceptGmailNotification(
           {
             emailAddress: notification.emailAddress.trim().toLowerCase(),
             historyId: notification.historyId,
@@ -122,6 +134,19 @@ export default {
         );
       } catch (error) {
         return requestErrorResponse(error, "local-scheduled-send");
+      }
+    }
+    if (url.pathname === "/__dev/snooze") {
+      try {
+        const { reconcileMailSnoozes } =
+          await import("@quieter/orpc/snooze/repair");
+        return Response.json(
+          await withRequestDatabaseClient(
+            async () => await reconcileMailSnoozes({ limit: 4 })
+          )
+        );
+      } catch (error) {
+        return requestErrorResponse(error, "local-mail-snooze");
       }
     }
     if (url.pathname === "/__dev/maintenance") {
@@ -247,6 +272,8 @@ export default {
         await import("@quieter/orpc/ai-memory");
       const { cleanupGmailComposeOperations } =
         await import("@quieter/orpc/gmail-compose-retention");
+      const { backfillGmailCapturedBodies } =
+        await import("@quieter/orpc/gmail-body-backfill");
       const { cleanupMailObjects } =
         await import("@quieter/orpc/managed-mail/storage");
       const { processManagedRuleBackfills } =
@@ -261,6 +288,7 @@ export default {
           recoverMailSends(),
           processPendingAiMemoryEvents(),
           cleanupGmailComposeOperations(),
+          backfillGmailCapturedBodies(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),
           processManagedRuleBackfills(),
@@ -277,5 +305,13 @@ export default {
     }
     return new Response(null, { status: 404 });
   },
-  queue: processGmailQueue,
+  async queue(batch, env) {
+    if (batch.queue === "quieter-local-mail-dispatch-repair") {
+      const { processMailDispatchRepairQueue } =
+        await import("./mail-dispatch-worker");
+      await processMailDispatchRepairQueue(batch, env);
+      return;
+    }
+    await processGmailQueue(batch, env);
+  },
 } satisfies ExportedHandler<Env>;

@@ -335,7 +335,7 @@ export const ManagedUsageSummary = ({
   return (
     <Surface
       // oxlint-disable-next-line shadcn/no-restyle -- Flow and gap arrange the groups without changing the shared surface appearance.
-      className="flex flex-col gap-0.5"
+      className="flex flex-col gap-2"
       padding="compact"
     >
       <Surface chrome="inset" variant="detail">
@@ -577,7 +577,7 @@ const ManagedUsageSettingsControls = ({
     <div className="space-y-4">
       <SettingsCard>
         <SettingsInsetRows>
-          <SettingsInsetRow className="justify-between gap-6">
+          <SettingsInsetRow className="justify-between">
             <SettingsRowText
               className="max-w-xl"
               title={
@@ -659,7 +659,7 @@ const ManagedUsageSettingsControls = ({
 
       <SettingsCard>
         <SettingsInsetRows>
-          <SettingsInsetRow className="justify-between gap-4">
+          <SettingsInsetRow className="justify-between">
             <SettingsRowText className="max-w-xl" title="Alert milestones">
               <span>Recorded once per threshold each billing period.</span>
             </SettingsRowText>

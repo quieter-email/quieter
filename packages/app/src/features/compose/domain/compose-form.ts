@@ -18,6 +18,7 @@ type ComposeFormWriter = {
 
 type ComposeDraftFormMeta = Pick<
   ComposeDraftState,
+  | "assistantUnsaved"
   | "followUpReminder"
   | "localId"
   | "baseRevision"
@@ -31,6 +32,8 @@ type ComposeDraftFormMeta = Pick<
   | "sendOperationId"
   | "sendUncertain"
   | "scheduleAttempt"
+  | "holdAttempt"
+  | "heldDraftHasNewerEdits"
   | "errorMessage"
   | "lastSavedAt"
   | "recoveryEditorId"
