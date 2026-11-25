@@ -42,6 +42,8 @@ export const selectTriggerVariants = cva(
         toolbar: null,
       },
       size: {
+        // Content-sized trigger for a multiline value, such as an identity.
+        auto: "h-auto min-h-8 px-2 py-1.5 text-body-sm [&_svg]:size-4",
         default: "h-8 px-2.5 text-body-sm [&_svg]:size-4",
         sm: "h-7 px-2 text-body-sm [&_svg]:size-3.5",
       },

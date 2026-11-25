@@ -1675,6 +1675,40 @@ export const DesignSystemShowcase = () => {
               </Select>
             </InputGroup>
           </Row>
+          <Row label="Two-line selection">
+            <div className="w-64 max-w-full">
+              <Select
+                defaultValue="alice@example.test"
+                items={[
+                  { label: "Alice Moreno", value: "alice@example.test" },
+                  { label: "Dana Rios", value: "dana@example.test" },
+                ]}
+              >
+                <SelectTrigger aria-label="Contact" size="auto">
+                  <SelectValue>
+                    {(address: string) => (
+                      <span className="flex flex-col items-start">
+                        {address === "alice@example.test"
+                          ? "Alice Moreno"
+                          : "Dana Rios"}
+                        <Text as="span" size="caption" tone="muted">
+                          {address}
+                        </Text>
+                      </span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="alice@example.test">
+                      Alice Moreno
+                    </SelectItem>
+                    <SelectItem value="dana@example.test">Dana Rios</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </div>
+          </Row>
           <Row label="Searchable choice">
             <CalendarTimeZonePicker
               aria-label="Sample time zone"

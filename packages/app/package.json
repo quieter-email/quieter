@@ -132,6 +132,7 @@
     "./features/message-search/components/message-list-search/message-list-search-view": "./src/features/message-search/components/message-list-search/message-list-search-view.tsx",
     "./features/message-search/components/message-list-search/use-message-list-search-controller": "./src/features/message-search/components/message-list-search/use-message-list-search-controller.ts",
     "./features/message-search/state/message-list-search-state": "./src/features/message-search/state/message-list-search-state.ts",
+    "./features/message-thread/components/correspondent-history-action": "./src/features/message-thread/components/correspondent-history-action.tsx",
     "./features/message-thread/components/message-action-handlers": "./src/features/message-thread/components/message-action-handlers.ts",
     "./features/message-thread/components/message-actions": "./src/features/message-thread/components/message-actions.tsx",
     "./features/message-thread/components/message-attachments": "./src/features/message-thread/components/message-attachments.tsx",

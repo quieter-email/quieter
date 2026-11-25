@@ -31,7 +31,9 @@ type MessageDateSource = {
   internalDate?: string;
 };
 
-const getParsedMessageDate = (message: MessageDateSource) => {
+export const getParsedMessageDate = (
+  message: MessageDateSource
+): Date | null => {
   const source = message.internalDate ?? message.date;
   if (!source) {
     return null;
