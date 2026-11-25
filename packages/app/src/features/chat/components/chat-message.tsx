@@ -15,6 +15,7 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { entranceMotionVariants } from "@quieter/ui/motion";
 import { Surface } from "@quieter/ui/surface";
 import { Text } from "@quieter/ui/text";
 import { Textarea } from "@quieter/ui/textarea";
@@ -139,7 +140,6 @@ const UserMessage = ({
       >
         {editing ? (
           <form
-            className="space-y-2"
             data-chat-message-editor=""
             onSubmit={(event) => {
               event.preventDefault();
@@ -160,23 +160,37 @@ const UserMessage = ({
               value={draft}
               variant="composer"
             />
-            <ActionFooter>
-              <Button
-                onClick={cancelEdit}
-                onKeyDown={handleEditKeyDown}
-                type="button"
-                variant="secondary"
+            <div
+              // oxlint-disable-next-line shadcn/no-arbitrary-values -- Expanding the footer's grid track moves the messages below in normal flow.
+              className="grid grid-rows-[1fr] duration-(--app-motion-duration-enter) ease-(--app-motion-ease-out) motion-safe:transition-[grid-template-rows] motion-safe:starting:grid-rows-[0fr]"
+            >
+              <div
+                className={cn(
+                  "min-h-0 overflow-clip",
+                  entranceMotionVariants({ effect: "pop" })
+                )}
               >
-                Cancel
-              </Button>
-              <Button
-                disabled={!canSend}
-                onKeyDown={handleEditKeyDown}
-                type="submit"
-              >
-                Send in new chat
-              </Button>
-            </ActionFooter>
+                <ActionFooter className="mt-2">
+                  <Button
+                    focusRing="inset"
+                    onClick={cancelEdit}
+                    onKeyDown={handleEditKeyDown}
+                    type="button"
+                    variant="secondary"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    disabled={!canSend}
+                    focusRing="inset"
+                    onKeyDown={handleEditKeyDown}
+                    type="submit"
+                  >
+                    Send in new chat
+                  </Button>
+                </ActionFooter>
+              </div>
+            </div>
           </form>
         ) : (
           <Text className="wrap-anywhere whitespace-pre-wrap">{text}</Text>
