@@ -43,7 +43,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@quieter/ui/alert-dialog";
-import { Autocomplete } from "@quieter/ui/autocomplete";
+import { Autocomplete, AutocompleteField } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Calendar } from "@quieter/ui/calendar";
 import { CardStack } from "@quieter/ui/card-stack";
@@ -642,6 +642,8 @@ export const DesignSystemShowcase = () => {
   const [cardStackPinned, setCardStackPinned] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
   const [location, setLocation] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [date, setDate] = useState("2026-10-27");
   const [time, setTime] = useState("14:35");
   const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
@@ -1493,6 +1495,41 @@ export const DesignSystemShowcase = () => {
               options={["Studio", "Boardroom"]}
               placeholder="Add a location"
             />
+          </Row>
+          <Row label="Autocomplete field">
+            <Field>
+              <FieldLabel className="sr-only">Example recipient</FieldLabel>
+              <AutocompleteField
+                chrome="composer"
+                onDismiss={() => {
+                  setSuggestionsOpen(false);
+                }}
+                onSuggestionSelect={(email) => {
+                  setRecipient(email);
+                  setSuggestionsOpen(false);
+                  return email.length;
+                }}
+                onValueChange={(nextValue) => {
+                  setRecipient(nextValue);
+                  setSuggestionsOpen(nextValue.trim().length > 1);
+                }}
+                open={suggestionsOpen}
+                placeholder="Try ma"
+                suggestions={[
+                  {
+                    description: "maya@example.com",
+                    label: "Maya Chen",
+                    value: "maya@example.com",
+                  },
+                  { label: "mail@example.com", value: "mail@example.com" },
+                ].filter(({ label, value }) =>
+                  `${label} ${value}`
+                    .toLowerCase()
+                    .includes(recipient.trim().toLowerCase())
+                )}
+                value={recipient}
+              />
+            </Field>
           </Row>
           <Row label="Date and time">
             <div className="flex gap-2">

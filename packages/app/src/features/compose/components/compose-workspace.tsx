@@ -27,7 +27,6 @@ import type {
   ComposeDialogController,
   PreparedComposeSenderSwitch,
 } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
-import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
   appendComposeSignature,
   deleteComposeDraft,
@@ -132,8 +131,10 @@ import {
   useState,
 } from "react";
 
+import { ComposeRecipientField } from "./compose-recipient-field";
 import { HeldSendNotice } from "./held-send-notice";
 import type { RestoreUndoneDraft } from "./held-send-toast";
+import { useRecipientSuggestionScope } from "./use-recipient-suggestions";
 
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
@@ -191,7 +192,7 @@ type ComposeFormFieldProps = Pick<
 > & {
   disabled?: boolean;
   label: string;
-  name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
+  name: "subject";
   placeholder?: string;
 };
 
@@ -365,6 +366,11 @@ const ReadyComposeSurface = ({
       input: { mailboxId: mailboxId ?? "" },
     }),
     enabled: !!mailboxId && !demoMode && !managedDemoMode,
+  });
+  const suggestionScope = useRecipientSuggestionScope({
+    enabled:
+      persistDrafts && !demoMode && !managedDemoMode && !senderUnavailable,
+    mailboxId,
   });
   let snippetStatus: string | undefined;
   if (snippetsQuery.isError) {
@@ -1165,71 +1171,48 @@ const ReadyComposeSurface = ({
                           />
                         </ComposerFieldRow>
                       ) : null}
-                      <form.Field name="to">
-                        {(recipientField) => {
-                          const [error] = recipientField.state.meta.errors;
-                          return (
-                            <ComposerFieldRow
-                              error={
-                                error
-                                  ? (error.message ?? "Invalid value")
-                                  : undefined
-                              }
-                              label="To"
-                              trailing={
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <Button
-                                    chrome="toolbar"
-                                    aria-controls="compose-cc-field"
-                                    aria-expanded={state.showCc}
-                                    aria-pressed={state.showCc}
-                                    onClick={() => {
-                                      toggleRecipientVisibility("cc");
-                                    }}
-                                    type="button"
-                                    size="field"
-                                    variant="secondary"
-                                  >
-                                    Cc
-                                  </Button>
-                                  <Button
-                                    chrome="toolbar"
-                                    aria-controls="compose-bcc-field"
-                                    aria-expanded={state.showBcc}
-                                    aria-pressed={state.showBcc}
-                                    onClick={() => {
-                                      toggleRecipientVisibility("bcc");
-                                    }}
-                                    type="button"
-                                    size="field"
-                                    variant="secondary"
-                                  >
-                                    Bcc
-                                  </Button>
-                                </div>
-                              }
+                      <ComposeRecipientField
+                        handleUserDraftChange={handleUserDraftChange}
+                        data-compose-recipient-field
+                        disabled={!canEditBody}
+                        form={form}
+                        label="To"
+                        name="to"
+                        placeholder="Add recipients"
+                        suggestionScope={suggestionScope}
+                        trailing={
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button
+                              chrome="toolbar"
+                              aria-controls="compose-cc-field"
+                              aria-expanded={state.showCc}
+                              aria-pressed={state.showCc}
+                              onClick={() => {
+                                toggleRecipientVisibility("cc");
+                              }}
+                              type="button"
+                              size="field"
+                              variant="secondary"
                             >
-                              <FieldControl
-                                aria-invalid={!!error}
-                                chrome="composer"
-                                data-compose-recipient-field
-                                disabled={!canEditBody}
-                                placeholder="Add recipients"
-                                onBlur={() => {
-                                  recipientField.handleBlur();
-                                }}
-                                onChange={(event) => {
-                                  handleUserDraftChange();
-                                  recipientField.handleChange(
-                                    event.currentTarget.value
-                                  );
-                                }}
-                                value={recipientField.state.value}
-                              />
-                            </ComposerFieldRow>
-                          );
-                        }}
-                      </form.Field>
+                              Cc
+                            </Button>
+                            <Button
+                              chrome="toolbar"
+                              aria-controls="compose-bcc-field"
+                              aria-expanded={state.showBcc}
+                              aria-pressed={state.showBcc}
+                              onClick={() => {
+                                toggleRecipientVisibility("bcc");
+                              }}
+                              type="button"
+                              size="field"
+                              variant="secondary"
+                            >
+                              Bcc
+                            </Button>
+                          </div>
+                        }
+                      />
                       <LazyMotion features={domAnimation} strict>
                         <AnimatePresence initial={false}>
                           {state.showCc ? (
@@ -1240,12 +1223,13 @@ const ReadyComposeSurface = ({
                               key="compose-cc"
                             >
                               <div className="min-h-0 overflow-hidden">
-                                <ComposeFormField
+                                <ComposeRecipientField
                                   handleUserDraftChange={handleUserDraftChange}
                                   disabled={!canEditBody}
                                   form={form}
                                   label="Cc"
                                   name="cc"
+                                  suggestionScope={suggestionScope}
                                 />
                               </div>
                             </m.div>
@@ -1258,12 +1242,13 @@ const ReadyComposeSurface = ({
                               key="compose-bcc"
                             >
                               <div className="min-h-0 overflow-hidden">
-                                <ComposeFormField
+                                <ComposeRecipientField
                                   handleUserDraftChange={handleUserDraftChange}
                                   disabled={!canEditBody}
                                   form={form}
                                   label="Bcc"
                                   name="bcc"
+                                  suggestionScope={suggestionScope}
                                 />
                               </div>
                             </m.div>
