@@ -45,6 +45,7 @@ import { appFetch, getApiUrl } from "@quieter/app/runtime";
 import { calendarMutationResultSchema } from "@quieter/calendar";
 import { reminderSchema } from "@quieter/mail/reminders";
 import { decodeChatStreamError } from "@quieter/orpc/chat-errors";
+import type { TokenFieldHandle } from "@quieter/ui/token-field";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCreateStore, useSelector } from "@tanstack/react-store";
 import { DefaultChatTransport, isToolUIPart } from "ai";
@@ -122,7 +123,7 @@ const ChatSession = ({
     workspace.mailboxId,
     activeWorkspace === "calendar" ? undefined : props.mailContext
   );
-  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const inputRef = useRef<TokenFieldHandle>(null);
   const dictation = useChatDictation({
     chatId: props.chatId,
     enabled: canUseAiChat && props.visible !== false,

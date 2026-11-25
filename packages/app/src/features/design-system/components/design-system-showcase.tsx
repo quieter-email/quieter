@@ -15,9 +15,11 @@ import {
   Tick01Icon,
   UserSwitchIcon,
 } from "@hugeicons/core-free-icons";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
+import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { ReminderEditor } from "@quieter/app/features/reminders/reminder-editor";
 import { ManagedUsageSummary } from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-settings";
@@ -623,6 +625,8 @@ export const DesignSystemShowcase = () => {
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
   const [commandIndex, setCommandIndex] = useState(0);
+  const [chatModel, setChatModel] = useState<ChatModel | "auto">("auto");
+  const [assistantMessage, setAssistantMessage] = useState("");
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
   );
@@ -1762,10 +1766,14 @@ export const DesignSystemShowcase = () => {
                   />
                 </div>
               ) : null}
-              <Textarea
+              <TokenField
                 aria-label="Example assistant message"
+                onChange={setAssistantMessage}
                 placeholder="Ask about your mail…"
-                variant="prompt"
+                size="composer"
+                tokens={showcaseTokens}
+                trigger={null}
+                value={assistantMessage}
               />
               <div className="flex items-center justify-between gap-2">
                 <Button
@@ -1961,6 +1969,9 @@ export const DesignSystemShowcase = () => {
               <FieldLabel size="caption">Reminder</FieldLabel>
               <Input defaultValue="Review the proposal" />
             </Field>
+          </Row>
+          <Row label="Anchored command search">
+            <ChatModelPicker model={chatModel} onModelChange={setChatModel} />
           </Row>
           <Row label="Scrollable anchored editor">
             <Popover
