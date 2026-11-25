@@ -259,6 +259,7 @@
     "./lib/audio-recorder": "./src/lib/audio-recorder.ts",
     "./lib/audio-transcription": "./src/lib/audio-transcription.ts",
     "./lib/auth": "./src/lib/auth.ts",
+    "./lib/background-prefetch": "./src/lib/background-prefetch.ts",
     "./lib/chat-query": "./src/lib/chat-query.ts",
     "./lib/client-error-reporting": "./src/lib/client-error-reporting.ts",
     "./lib/connector-icons": "./src/lib/connector-icons.ts",

@@ -14,17 +14,23 @@ export type CalendarEventsRange = {
   timeZone: string;
 };
 
+const predictedMonthOffsets = [1, -1, 2, -2, 3] as const;
+
+const getCalendarRangeDates = (range: CalendarEventsRange) => ({
+  first: getZonedDateTimeFields({
+    instant: range.start,
+    timeZone: range.timeZone,
+  }).date,
+  last: getZonedDateTimeFields({
+    instant: new Date(Date.parse(range.end) - 1).toISOString(),
+    timeZone: range.timeZone,
+  }).date,
+});
+
 export const getCalendarCacheMonthRanges = (
   range: CalendarEventsRange
 ): CalendarEventsRange[] => {
-  const first = getZonedDateTimeFields({
-    instant: range.start,
-    timeZone: range.timeZone,
-  }).date;
-  const last = getZonedDateTimeFields({
-    instant: new Date(Date.parse(range.end) - 1).toISOString(),
-    timeZone: range.timeZone,
-  }).date;
+  const { first, last } = getCalendarRangeDates(range);
   const current = new Date(`${first.slice(0, 7)}-01T12:00:00Z`);
   const months: CalendarEventsRange[] = [];
   while (current.toISOString().slice(0, 7) <= last.slice(0, 7)) {
@@ -47,6 +53,24 @@ export const getCalendarCacheMonthRanges = (
     });
   }
   return months;
+};
+
+export const getAdjacentCalendarMonthRanges = (
+  range: CalendarEventsRange
+): CalendarEventsRange[] => {
+  const { first, last } = getCalendarRangeDates(range);
+  return predictedMonthOffsets.flatMap((offset) => {
+    const month = new Date(
+      `${(offset > 0 ? last : first).slice(0, 7)}-01T12:00:00Z`
+    );
+    month.setUTCMonth(month.getUTCMonth() + offset);
+    const { end, start } = getCalendarRange({
+      date: month.toISOString().slice(0, 10),
+      timeZone: range.timeZone,
+      view: "day",
+    });
+    return getCalendarCacheMonthRanges({ ...range, end, start });
+  });
 };
 
 export const getCalendarQueryKey = (userId: string) =>
