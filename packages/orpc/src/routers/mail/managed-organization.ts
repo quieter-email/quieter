@@ -114,7 +114,11 @@ export const managedOrganizationMailRouter = {
     ),
   startManagedRuleBackfill: protectedProcedure
     .input(
-      z.object({ mailboxId: mailboxIdSchema, ruleId: z.string().trim().min(1) })
+      z.object({
+        expectedRevision: z.string().optional(),
+        mailboxId: mailboxIdSchema,
+        ruleId: z.string().trim().min(1),
+      })
     )
     .handler(
       async ({ context, input }) =>

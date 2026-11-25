@@ -39,6 +39,7 @@ import { useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 
+import { ConnectedAppsSettings } from "./connected-apps-settings";
 import {
   SettingsCard,
   SettingsFieldRow,
@@ -887,6 +888,10 @@ export const AccountSettingsPanel = ({
           <p className="px-1 text-body text-destructive">{sessionError}</p>
         )}
       </SettingsSection>
+
+      {sessionUser === undefined ? null : (
+        <ConnectedAppsSettings userId={sessionUser.id} />
+      )}
 
       <SettingsSection title="Delete account">
         <SettingsCard>

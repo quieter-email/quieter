@@ -35,6 +35,10 @@ import {
 import { GOOGLE_AUTH_SCOPES } from "./google-scopes";
 import { lazyAuth } from "./lazy-auth";
 import {
+  applyMcpAccountPrincipal,
+  clearMcpAccountCookies,
+} from "./mcp-account-principal";
+import {
   assertCanChangeFundingMembership,
   assertCanDeleteOrganization,
   assertCanLeaveOrganization,
@@ -193,7 +197,9 @@ export const auth = lazyAuth(() =>
       },
     },
     hooks: {
+      after: createAuthMiddleware(clearMcpAccountCookies),
       before: createAuthMiddleware(async (ctx) => {
+        await applyMcpAccountPrincipal(ctx);
         const requiresSession =
           ctx.path === "/get-session" ||
           ctx.path.startsWith("/organization") ||

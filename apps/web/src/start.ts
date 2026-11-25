@@ -62,6 +62,11 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
+/** MCP clients reach these without the site cookie. */
+const mcpOAuthPathPrefixes = [
+  "/.well-known/oauth-",
+  "/api/auth/oauth2/",
+] as const;
 const publicPathPrefixes = ["/_build/", "/assets/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
@@ -347,7 +352,10 @@ const sitePasswordMiddleware = createMiddleware().server(
     }
 
     if (shouldRedirectToHomePage(request)) {
-      if (normalizedPath === "/desktop/auth") {
+      if (
+        normalizedPath === "/desktop/auth" ||
+        normalizedPath.startsWith("/oauth/")
+      ) {
         const passwordUrl = new URL(sitePasswordPagePath, requestUrl);
         passwordUrl.searchParams.set(
           "returnTo",
@@ -413,6 +421,14 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (normalizedPath.startsWith(openTrackingPrefix)) {
+    return false;
+  }
+
+  if (
+    mcpOAuthPathPrefixes.some((pathPrefix) =>
+      normalizedPath.startsWith(pathPrefix)
+    )
+  ) {
     return false;
   }
 

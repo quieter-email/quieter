@@ -148,7 +148,10 @@ export const listManagedRules = async (input: {
     .from(managedMailRule)
     .where(eq(managedMailRule.mailboxId, input.mailboxId))
     .orderBy(asc(managedMailRule.priority), asc(managedMailRule.name));
-  return records.map(toRuleResponse);
+  return records.map((record) => ({
+    ...toRuleResponse(record),
+    revision: snapshotManagedRule(record).revision,
+  }));
 };
 
 export const createManagedRule = async (input: {
@@ -365,6 +368,7 @@ export const previewManagedRule = async (input: {
 };
 
 export const startManagedRuleBackfill = async (input: {
+  expectedRevision?: string;
   mailboxId: string;
   ruleId: string;
   userId: string;
@@ -413,6 +417,15 @@ export const startManagedRuleBackfill = async (input: {
       });
     }
     const definition = snapshotManagedRule(rule);
+    if (
+      input.expectedRevision !== undefined &&
+      input.expectedRevision !== definition.revision
+    ) {
+      throw new ORPCError("CONFLICT", {
+        message:
+          "The rule changed. Read it again before applying it to existing messages.",
+      });
+    }
     const now = new Date();
     const retry = jobs.find(
       (job) =>

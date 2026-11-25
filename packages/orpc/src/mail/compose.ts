@@ -26,6 +26,7 @@ import {
 } from "../gmail-compose";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
+import { assertOwnedGmailMailbox } from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   saveManagedDraft,
@@ -33,6 +34,7 @@ import {
 } from "../managed-mail/messages/drafts";
 import { sendManagedMailboxMessage } from "../managed-mail/messages/send";
 import { saveDraftReminderIntent } from "../reminders/draft-state";
+import { hashRequest } from "../request-hash";
 import {
   assertComposeNotScheduled,
   assertComposeSendAttemptActive,
@@ -83,6 +85,37 @@ const parseListUnsubscribeMailto = (value: string) => {
     body: url.searchParams.get("body") ?? "",
     subject: url.searchParams.get("subject") ?? "",
     to: recipients.join(", "),
+  };
+};
+
+const resolveUnsubscribeMessage = async (
+  accessToken: string,
+  messageId: string,
+  signal?: AbortSignal
+) => {
+  const message = await getGmailMessageMetadata(accessToken, messageId, signal);
+  const headers = message.payload?.headers ?? [];
+  const unsubscribeMailto = extractListUnsubscribeTargets(
+    headers.find((header) => header.name.toLowerCase() === "list-unsubscribe")
+      ?.value
+  ).mailto;
+  if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This message does not expose a valid unsubscribe address.",
+    });
+  }
+  const key = getUnsubscribeKey(headers);
+  if (key === undefined) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "This message does not identify a mailing list or sender.",
+    });
+  }
+  const outbound = parseListUnsubscribeMailto(unsubscribeMailto);
+  return {
+    headers,
+    key,
+    outbound,
+    requestHash: hashRequest({ key, outbound }),
   };
 };
 
@@ -187,6 +220,30 @@ export const composeMailOperations = {
       };
     }
     return { status: "pending" as const };
+  },
+  previewUnsubscribe: async ({
+    context,
+    input,
+  }: {
+    context: MailRequestContext;
+    input: MailInputs["unsubscribeFromMessage"];
+  }) => {
+    const mailbox = await assertOwnedGmailMailbox({
+      mailboxId: input.mailboxId,
+      userId: context.userId,
+    });
+    return await callGmail(
+      context,
+      input.mailboxId,
+      async (accessToken, signal) => {
+        const { outbound, requestHash } = await resolveUnsubscribeMessage(
+          accessToken,
+          input.messageId,
+          signal
+        );
+        return { ...outbound, from: mailbox.emailAddress, requestHash };
+      }
+    );
   },
   saveDraft: async ({
     context,
@@ -375,27 +432,15 @@ export const composeMailOperations = {
     input: MailInputs["unsubscribeFromMessage"];
   }) =>
     await callGmail(context, input.mailboxId, async (accessToken, signal) => {
-      const message = await getGmailMessageMetadata(
-        accessToken,
-        input.messageId,
-        signal
-      );
-      const unsubscribeMailto = extractListUnsubscribeTargets(
-        message.payload?.headers?.find(
-          (header) => header.name.toLowerCase() === "list-unsubscribe"
-        )?.value
-      ).mailto;
-
-      if (unsubscribeMailto === undefined || unsubscribeMailto.length === 0) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not expose a valid unsubscribe address.",
-        });
-      }
-
-      const key = getUnsubscribeKey(message.payload?.headers ?? []);
-      if (key === undefined) {
-        throw new ORPCError("BAD_REQUEST", {
-          message: "This message does not identify a mailing list or sender.",
+      const { headers, key, outbound, requestHash } =
+        await resolveUnsubscribeMessage(accessToken, input.messageId, signal);
+      if (
+        input.expectedRequestHash !== undefined &&
+        input.expectedRequestHash !== requestHash
+      ) {
+        throw new ORPCError("CONFLICT", {
+          message:
+            "The unsubscribe message changed. Review it again before sending.",
         });
       }
       const result = await sendGmailUnsubscribe(
@@ -403,7 +448,7 @@ export const composeMailOperations = {
         input.mailboxId,
         {
           key,
-          message: parseListUnsubscribeMailto(unsubscribeMailto),
+          message: outbound,
         },
         signal
       );
@@ -414,14 +459,13 @@ export const composeMailOperations = {
           mailboxId: input.mailboxId,
           metadata: {
             senderDomain:
-              message.payload?.headers
-                ?.find((header) => header.name.toLowerCase() === "from")
+              headers
+                .find((header) => header.name.toLowerCase() === "from")
                 ?.value.match(/@(?<domain>[a-z0-9.-]+\.[a-z]{2,})/iu)
                 ?.groups?.domain?.toLowerCase() ?? null,
             subject:
-              message.payload?.headers?.find(
-                (header) => header.name.toLowerCase() === "subject"
-              )?.value ?? null,
+              headers.find((header) => header.name.toLowerCase() === "subject")
+                ?.value ?? null,
           },
           targetCount: 1,
           userId: context.userId,

@@ -22,6 +22,17 @@ export type ProtectedContext = OrpcContext & {
 
 export const protectedProcedure = base.use(
   async ({ context, errors, next }) => {
+    // Set only by the server adapter after validating a resource-bound token.
+    if (context.mcpUser !== undefined) {
+      return await next({
+        context: {
+          ...context,
+          user: context.mcpUser,
+          userId: context.mcpUser.id,
+        },
+      });
+    }
+
     const headers = getRequestHeaders(context);
     const sessionStartedAt = performance.now();
     const session = await getSessionWithOrganization(headers);

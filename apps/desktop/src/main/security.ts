@@ -12,6 +12,8 @@ const AUTH_ENDPOINTS = new Set([
   "delete-user",
   "get-session",
   "list-accounts",
+  "oauth2/connections",
+  "oauth2/disconnect",
   "revoke-other-sessions",
   "sign-out",
   "unlink-account",
