@@ -242,15 +242,16 @@ const createWorkspaceBridge = (mailboxId: string) => {
         }
         const mounted = compose?.read();
         const expectedAnchor = expected?.draftAnchor;
+        const expectedDraftId = expected?.draftId;
         const mountedAnchor = mounted?.draftAnchor;
         const matchesRecoveredDraft =
+          expectedDraftId !== undefined &&
           expectedAnchor !== undefined &&
           expectedAnchor !== null &&
           mountedAnchor?.sourceMessageId === expectedAnchor.sourceMessageId &&
           mountedAnchor.sourceThreadId === expectedAnchor.sourceThreadId &&
           mountedAnchor.seededBy === expectedAnchor.seededBy &&
-          (expected?.draftId === undefined ||
-            mounted?.providerDraftId === expected.draftId);
+          mounted?.providerDraftId === expectedDraftId;
         if (mounted && (mounted.draftId === draftId || matchesRecoveredDraft)) {
           pending.resolve(mounted);
         }

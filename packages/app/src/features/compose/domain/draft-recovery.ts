@@ -209,6 +209,7 @@ export const findRecoverableComposeDraft = async (
       record.localId === draft.localId ||
       (draftId !== "" && recoveredDraftId === draftId);
     const matchesThread =
+      draft.assistantUnsaved !== true &&
       draftId === "" &&
       (threadId?.trim() ?? "") !== "" &&
       recoveredThreadId === threadId &&

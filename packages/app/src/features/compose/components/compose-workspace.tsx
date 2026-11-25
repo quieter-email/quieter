@@ -806,6 +806,11 @@ const ReadyComposeSurface = ({
           }
         />
       )}
+      {isInline && state.draft.assistantUnsaved === true ? (
+        <p className="mb-3 text-caption text-muted-fg">
+          Review and edit before sending.
+        </p>
+      ) : null}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the form only blocks implicit submission from its own fields; it never becomes a keyboard target. */}
       <form
         action={async () => {

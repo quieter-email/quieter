@@ -758,11 +758,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                           opacity: inlineComposeFadeTransition,
                         }}
                       >
-                        {inlineDraft.assistantUnsaved === true ? (
-                          <p className="mb-3 text-caption text-muted-fg">
-                            Review and edit before sending.
-                          </p>
-                        ) : null}
                         <Suspense
                           fallback={
                             <ComposerEditorFrame className="min-h-64">
