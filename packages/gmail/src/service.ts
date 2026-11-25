@@ -1654,7 +1654,17 @@ export const getGmailMessageThreadAssociations = async (
     signal
   );
   return messages.flatMap((message) =>
-    message === null ? [] : [{ id: message.id, threadId: message.threadId }]
+    message === null
+      ? []
+      : [
+          {
+            id: message.id,
+            ...(message.labelIds === undefined
+              ? {}
+              : { labelIds: message.labelIds }),
+            threadId: message.threadId,
+          },
+        ]
   );
 };
 

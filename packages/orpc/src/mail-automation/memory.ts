@@ -20,7 +20,17 @@ import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
-import { and, count, desc, eq, inArray, isNull, max, sql } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  inArray,
+  isNull,
+  max,
+  ne,
+  sql,
+} from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { z } from "zod";
 
@@ -103,7 +113,8 @@ const listManagedMessageSources = async (
     .where(
       and(
         eq(managedMailMessage.mailboxId, mailboxId),
-        inArray(managedMailMessage.id, [...new Set(messageIds)])
+        inArray(managedMailMessage.id, [...new Set(messageIds)]),
+        ne(managedMailMessage.mailboxState, "spam")
       )
     );
 
@@ -447,7 +458,7 @@ export const recordMailAutoLabelFeedback = async (input: {
   const removeLabelIds = (input.removeLabelIds ?? []).filter(
     (labelId) => !SYSTEM_LABEL_IDS.has(labelId)
   );
-  const providerMessageIds = [...new Set(input.providerMessageIds)];
+  let providerMessageIds = [...new Set(input.providerMessageIds)];
 
   if (
     providerMessageIds.length === 0 ||
@@ -470,6 +481,12 @@ export const recordMailAutoLabelFeedback = async (input: {
     selectedMailbox.provider === "managed"
       ? await listManagedMessageSources(input.mailboxId, providerMessageIds)
       : await listGmailMessageSources(input.mailboxId, providerMessageIds);
+  if (selectedMailbox.provider === "managed") {
+    providerMessageIds = providerMessageIds.filter((id) => sources.has(id));
+    if (providerMessageIds.length === 0) {
+      return null;
+    }
+  }
   const sourceOverrides = new Map(Object.entries(input.messageSources ?? {}));
   const resolveSource = (providerMessageId: string) =>
     sourceOverrides.has(providerMessageId)
