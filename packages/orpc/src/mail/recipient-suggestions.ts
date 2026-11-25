@@ -5,7 +5,12 @@ import {
   managedMailMessage,
 } from "@quieter/database/schema";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
-import { getHistoryCorrespondents } from "@quieter/mail/correspondent-history";
+import {
+  getHistoryCorrespondents,
+  rankMatchingRecipients,
+  RECIPIENT_SUGGESTION_BATCH_SIZE,
+  RECIPIENT_SUGGESTION_LIMIT,
+} from "@quieter/mail/correspondent-history";
 import { and, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import type { MailRequestContext } from "../gmail-request";
@@ -13,7 +18,6 @@ import { assertAccessibleMailbox } from "../mailbox/service";
 import type { MailInputs } from "./inputs";
 
 const RECENT_MESSAGE_LIMIT = 250;
-const SUGGESTION_LIMIT = 8;
 const readRecentGmailAddresses = async (mailboxId: string) => {
   const recent = db
     .select({
@@ -118,6 +122,11 @@ export const listRecipientSuggestions = async ({
       message: "You cannot send from this mailbox.",
     });
   }
+  if (input.query === undefined && selected.provider !== "gmail") {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Type a name or address to look up recipients.",
+    });
+  }
   context.signal?.throwIfAborted();
   const recentAddresses =
     selected.provider === "managed"
@@ -132,17 +141,16 @@ export const listRecipientSuggestions = async ({
   }
   context.signal?.throwIfAborted();
 
-  const query = input.query.toLowerCase();
   const correspondents = getHistoryCorrespondents(recentAddresses);
-  const prefixMatches: typeof correspondents = [];
-  const otherMatches: typeof correspondents = [];
-  for (const contact of correspondents) {
-    const name = contact.name?.toLowerCase() ?? "";
-    if (contact.email.startsWith(query) || name.startsWith(query)) {
-      prefixMatches.push(contact);
-    } else if (contact.email.includes(query) || name.includes(query)) {
-      otherMatches.push(contact);
-    }
-  }
-  return [...prefixMatches, ...otherMatches].slice(0, SUGGESTION_LIMIT);
+  return input.query === undefined
+    ? correspondents
+        .slice(0, RECIPIENT_SUGGESTION_BATCH_SIZE)
+        .map(({ email, name }) => ({
+          email,
+          name: name?.slice(0, 256).toWellFormed() ?? null,
+        }))
+    : rankMatchingRecipients(correspondents, input.query).slice(
+        0,
+        RECIPIENT_SUGGESTION_LIMIT
+      );
 };

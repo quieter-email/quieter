@@ -69,6 +69,7 @@ import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-manag
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
+import type { MailboxProvider } from "@quieter/mail/search";
 import type { RouterInputs } from "@quieter/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -139,6 +140,7 @@ import { useRecipientSuggestionScope } from "./use-recipient-suggestions";
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
+  provider?: MailboxProvider;
   emailAddress: string;
   displayName: string | null;
   signatureHtml?: string | null;
@@ -371,6 +373,7 @@ const ReadyComposeSurface = ({
     enabled:
       persistDrafts && !demoMode && !managedDemoMode && !senderUnavailable,
     mailboxId,
+    preload: currentSender?.provider === "gmail",
   });
   let snippetStatus: string | undefined;
   if (snippetsQuery.isError) {
