@@ -4321,6 +4321,62 @@ export const scheduledMailSendAbandonment = pgTable(
   ]
 );
 
+export const managedThreadCollaboration = pgTable(
+  "managedThreadCollaboration",
+  {
+    createdAt: timestamp("createdAt").notNull(),
+    id: text("id").primaryKey(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    revision: bigint("revision", { mode: "bigint" }).notNull().default(1n),
+    threadId: text("threadId").notNull(),
+    updatedAt: timestamp("updatedAt").notNull(),
+  },
+  (table) => [
+    unique("managed_thread_collaboration_scope_unique").on(
+      table.mailboxId,
+      table.threadId
+    ),
+    check(
+      "managed_thread_collaboration_revision_check",
+      sql`${table.revision} > 0`
+    ),
+  ]
+);
+
+export const managedThreadCollaborationEvent = pgTable(
+  "managedThreadCollaborationEvent",
+  {
+    actorMemberId: text("actorMemberId").references(() => member.id, {
+      onDelete: "set null",
+    }),
+    contextId: text("contextId")
+      .notNull()
+      .references(() => managedThreadCollaboration.id, { onDelete: "cascade" }),
+    createdAt: timestamp("createdAt").notNull(),
+    kind: text("kind").$type<"prepared">().notNull(),
+    revision: bigint("revision", { mode: "bigint" }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.contextId, table.revision],
+      name: "managed_thread_collaboration_event_pkey",
+    }),
+    index("managed_thread_collaboration_event_actor_idx").on(
+      table.actorMemberId
+    ),
+    check(
+      "managed_thread_collaboration_event_revision_check",
+      sql`${table.revision} > 0`
+    ),
+    check(
+      "managed_thread_collaboration_event_kind_check",
+      sql`${table.kind} = 'prepared'`
+    ),
+  ]
+);
+
 export const tables = {
   account,
   aiGeneratedMailBody,
@@ -4387,6 +4443,8 @@ export const tables = {
   managedMailRuleApplication,
   managedMailRuleBackfill,
   managedMailRuleRun,
+  managedThreadCollaboration,
+  managedThreadCollaborationEvent,
   member,
   organization,
   organizationApiMailAttachment,
