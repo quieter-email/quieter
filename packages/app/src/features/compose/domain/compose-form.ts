@@ -1,11 +1,10 @@
 import {
   haveComposeDraftPersistedFieldsChanged,
-  hasComposeDraftContent,
   getRenderableComposeBodyHtml,
   syncInlineImagesWithHtml,
 } from "@quieter/app/features/compose/domain/draft";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
-import { composeDraftFormValuesSchema } from "@quieter/mail/compose/schema";
+import type { composeDraftFormValuesSchema } from "@quieter/mail/compose/schema";
 import type { z } from "zod";
 
 export type ComposeFormValues = z.infer<typeof composeDraftFormValuesSchema>;
@@ -91,14 +90,10 @@ export const composeFormValuesToDraft = (
 export const shouldPersistComposeDraft = ({
   currentDraft,
   nextDraft,
-  values,
 }: {
   currentDraft: ComposeDraftState;
   nextDraft: ComposeDraftState;
-  values: ComposeFormValues;
 }) =>
-  composeDraftFormValuesSchema.safeParse(values).success &&
-  (hasComposeDraftContent(nextDraft) || !!currentDraft.draftId) &&
-  ((!currentDraft.draftId && currentDraft.lastSavedAt === undefined) ||
-    currentDraft.saveStatus === "error" ||
-    haveComposeDraftPersistedFieldsChanged(currentDraft, nextDraft));
+  (!currentDraft.draftId && currentDraft.lastSavedAt === undefined) ||
+  currentDraft.saveStatus === "error" ||
+  haveComposeDraftPersistedFieldsChanged(currentDraft, nextDraft);

@@ -473,11 +473,11 @@ const hasMeaningfulBodyHtml = (bodyHtml: string): boolean => {
   }
 
   if (typeof window === "undefined") {
-    return /<(?:img|video|audio|iframe)\b/iu.test(normalizedHtml);
+    return /<(?:img|video|audio|iframe|hr|table)\b/iu.test(normalizedHtml);
   }
 
   const doc = new DOMParser().parseFromString(normalizedHtml, "text/html");
-  return !!doc.body.querySelector("img,video,audio,iframe");
+  return !!doc.body.querySelector("img,video,audio,iframe,hr,table");
 };
 
 export const normalizeComposeBodyHtml = (bodyHtml: string): string => {
@@ -499,17 +499,75 @@ export const getRenderableComposeBodyHtml = (
 ): string =>
   normalizeComposeBodyHtml(bodyHtml) || textToComposeBodyHtml(bodyText);
 
-export const hasComposeDraftContent = (draft: ComposeDraftState): boolean =>
-  !!(
-    normalizeString(draft.recipients.to) ||
-    normalizeString(draft.recipients.cc) ||
-    normalizeString(draft.recipients.bcc) ||
-    normalizeString(draft.subject) ||
-    normalizeComposeBodyHtml(draft.bodyHtml) ||
-    normalizeString(draft.bodyText) ||
-    draft.attachments.length > 0 ||
+export const hasComposeDraftContent = (
+  draft: ComposeDraftState,
+  replyOrForwardSeed?: ComposeDraftState,
+  initialBodyHtml: string | null = draft.bodyHtml
+): boolean => {
+  const { bodyHtml, bodyText, recipients } = draft;
+  if (
+    (["to", "cc", "bcc"] as const).some(
+      (field) =>
+        normalizeString(recipients[field]) !== "" &&
+        recipients[field] !== replyOrForwardSeed?.recipients[field]
+    ) ||
+    (normalizeString(draft.subject) !== "" &&
+      draft.subject !== replyOrForwardSeed?.subject) ||
+    draft.attachments.some(
+      ({ id }) =>
+        replyOrForwardSeed?.attachments.some((asset) => asset.id === id) !==
+        true
+    )
+  ) {
+    return true;
+  }
+  if (!bodyHtml.trim()) {
+    return !!normalizeString(bodyText) || draft.inlineImages.length > 0;
+  }
+  if (
+    typeof DOMParser !== "undefined" &&
+    (bodyHtml.includes(COMPOSE_SIGNATURE_MARKER) || replyOrForwardSeed)
+  ) {
+    const parser = new DOMParser();
+    const { body } = parser.parseFromString(bodyHtml, "text/html");
+    for (const [selector, seedHtml] of [
+      [`:scope > [${COMPOSE_SIGNATURE_MARKER}]`, initialBodyHtml],
+      [":scope > [data-compose-quote]", replyOrForwardSeed?.bodyHtml],
+    ] as const) {
+      if (seedHtml === undefined || seedHtml === null) {
+        continue;
+      }
+      const seed = parser.parseFromString(seedHtml, "text/html");
+      const original = [...seed.body.querySelectorAll(selector)];
+      const current = [...body.querySelectorAll(selector)];
+      if (
+        current.length === original.length &&
+        current.every((element, index) => {
+          const generated = original[index];
+          return (
+            generated !== undefined &&
+            normalizeString(element.textContent) ===
+              normalizeString(generated.textContent) &&
+            element.querySelectorAll("img,video,audio,iframe,hr,table")
+              .length ===
+              generated.querySelectorAll("img,video,audio,iframe,hr,table")
+                .length
+          );
+        })
+      ) {
+        for (const element of current) {
+          element.remove();
+        }
+      }
+    }
+    return !!normalizeComposeBodyHtml(body.innerHTML);
+  }
+  return (
+    !!normalizeComposeBodyHtml(bodyHtml) ||
+    !!normalizeString(bodyText) ||
     draft.inlineImages.length > 0
   );
+};
 
 export const loadComposeRuntimeFile = async <
   T extends ComposeAttachment | ComposeInlineImage,

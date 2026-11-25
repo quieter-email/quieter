@@ -29,7 +29,10 @@ import {
   captureMailboxMessageMemory,
   queueMailboxMessageMemory,
 } from "../ai-memory-capture";
-import { hydrateUnsubscribeStatus } from "../gmail-compose";
+import {
+  hydrateUnsubscribeStatus,
+  restoreGmailDraftRecipients,
+} from "../gmail-compose";
 import { getGmailMessageDelivery } from "../gmail-open-tracking";
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -438,7 +441,19 @@ export const queriesMailOperations = {
             message: "This draft is no longer available.",
           });
         }
-        const parsed = parseDraftMessage(draft, { bodyHtml, bodyText });
+        let recipientsUnavailable = false;
+        const parsed = parseDraftMessage(draft, {
+          bodyHtml,
+          bodyText,
+          restoreRecipients: (sealedRecipients) => {
+            const recipients = restoreGmailDraftRecipients(
+              sealedRecipients,
+              input.mailboxId
+            );
+            recipientsUnavailable = recipients === undefined;
+            return recipients;
+          },
+        });
         await captureMailboxDraftMemory({
           draft: {
             ...parsed,
@@ -476,6 +491,7 @@ export const queriesMailOperations = {
             sourceMessageId: draft.message?.id,
           })),
           lastSavedAt: Number(draft.message.internalDate) || undefined,
+          recipientsUnavailable,
           replyContext:
             parsed.draftAnchor?.seededBy !== "forward" && parsed.inReplyTo
               ? parsed.replyContext

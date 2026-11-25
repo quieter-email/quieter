@@ -53,7 +53,7 @@
     "./features/chat/types": "./src/features/chat/types.ts",
     "./features/compose/components/compose-editor": "./src/features/compose/components/compose-editor.tsx",
     "./features/compose/components/compose-workspace": "./src/features/compose/components/compose-workspace.tsx",
-    "./features/compose/components/draft-recovery-notice": "./src/features/compose/components/draft-recovery-notice.tsx",
+    "./features/compose/components/compose-workspace-header": "./src/features/compose/components/compose-workspace-header.tsx",
     "./features/compose/components/held-send-toast": "./src/features/compose/components/held-send-toast.ts",
     "./features/compose/components/save-snippet-dialog": "./src/features/compose/components/save-snippet-dialog.tsx",
     "./features/compose/components/snippet-fields": "./src/features/compose/components/snippet-fields.tsx",
