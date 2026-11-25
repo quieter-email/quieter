@@ -281,6 +281,7 @@
     "./lib/mail-cache-lifecycle": "./src/lib/mail-cache-lifecycle.ts",
     "./lib/mail-mutation-state": "./src/lib/mail-mutation-state.ts",
     "./lib/mail-mutations": "./src/lib/mail-mutations.ts",
+    "./lib/mail-undo": "./src/lib/mail-undo.ts",
     "./lib/mail-updates": "./src/lib/mail-updates.ts",
     "./lib/mail/inbox-query/actions": "./src/lib/mail/inbox-query/actions.ts",
     "./lib/mail/inbox-query/data": "./src/lib/mail/inbox-query/data.ts",
