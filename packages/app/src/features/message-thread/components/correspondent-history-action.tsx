@@ -632,10 +632,9 @@ const CorrespondentHistoryOwner = ({
         ?.focus({ preventScroll: true });
     }
   }, [hasSelection, initialFocusId]);
-  let title = "Choose a person";
-  if (person) {
-    title = `Correspondent history, ${person.name ?? person.email}`;
-  }
+  const title = person
+    ? `Contact history for ${person.name ?? person.email}`
+    : "Choose a contact";
 
   return (
     <Dialog
@@ -652,9 +651,9 @@ const CorrespondentHistoryOwner = ({
       }}
       open={view.kind !== "closed"}
     >
-      <IconButtonTooltip label="Correspondent history">
+      <IconButtonTooltip label="Contact history">
         <DialogTrigger
-          aria-label="Correspondent history"
+          aria-label="Contact history"
           disabled={history.sessionEnded || choices.length === 0}
           id={triggerId}
           render={<Button chrome="toolbar" size="icon-sm" variant="ghost" />}
@@ -663,6 +662,7 @@ const CorrespondentHistoryOwner = ({
         </DialogTrigger>
       </IconButtonTooltip>
       <DialogContent
+        className="flex max-h-[calc(100dvh-2rem)] flex-col"
         finalFocus={() =>
           history.consumeFocusHandoff()
             ? false
@@ -671,7 +671,6 @@ const CorrespondentHistoryOwner = ({
         initialFocus={() =>
           document.querySelector<HTMLElement>(`#${CSS.escape(initialFocusId)}`)
         }
-        variant="inspector"
       >
         <DialogTitle className="sr-only">{title}</DialogTitle>
         <DialogDescription className="sr-only">
@@ -697,7 +696,7 @@ const CorrespondentHistoryOwner = ({
                     value={person.email}
                   >
                     <SelectTrigger
-                      aria-label={`Switch person, ${person.name ?? ""} ${person.email}`}
+                      aria-label="Switch contact"
                       className="-my-1.5 -ms-2 min-w-0 flex-1"
                       size="auto"
                       variant="ghost"
@@ -732,12 +731,12 @@ const CorrespondentHistoryOwner = ({
                     size="sm"
                     weight="medium"
                   >
-                    People in this conversation
+                    Choose a contact
                   </Text>
                 )}
                 <IconButtonTooltip label="Close">
                   <Button
-                    aria-label="Close correspondent history"
+                    aria-label="Close contact history"
                     chrome="toolbar"
                     onClick={() => {
                       history.close();
@@ -820,8 +819,8 @@ const CorrespondentHistoryOwner = ({
                   ))}
                 </ul>
                 <Text className="m-4 mt-2" size="caption" tone="muted">
-                  Choose a person to load their history. Personal context and
-                  reminders stay private to you in shared mailboxes.
+                  Personal context and reminders stay private to you in shared
+                  mailboxes.
                 </Text>
               </div>
             )}

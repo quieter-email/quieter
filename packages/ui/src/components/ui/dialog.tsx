@@ -11,8 +11,6 @@ import {
   overlayBackdropClassName,
   overlayCommandPopupClassName,
   overlayDescriptionClassName,
-  overlayInspectorBackdropClassName,
-  overlayInspectorPopupClassName,
   overlayPopupClassName,
   overlayTitleClassName,
   overlayTriggerClassName,
@@ -31,31 +29,23 @@ export const DialogTrigger = ({
   />
 );
 
-const dialogPopupClassNames = {
-  command: overlayCommandPopupClassName,
-  default: overlayPopupClassName,
-  inspector: overlayInspectorPopupClassName,
-};
-
 export const DialogContent = ({
   children,
   className,
   variant = "default",
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Popup> & {
-  /** `inspector` docks a read-mostly panel beside the view it describes. */
-  variant?: keyof typeof dialogPopupClassNames;
+  variant?: "command" | "default";
 }) => (
   <DialogPortal>
-    <DialogPrimitive.Backdrop
-      className={
-        variant === "inspector"
-          ? overlayInspectorBackdropClassName
-          : overlayBackdropClassName
-      }
-    />
+    <DialogPrimitive.Backdrop className={overlayBackdropClassName} />
     <DialogPrimitive.Popup
-      className={cn(dialogPopupClassNames[variant], className)}
+      className={cn(
+        variant === "command"
+          ? overlayCommandPopupClassName
+          : overlayPopupClassName,
+        className
+      )}
       {...props}
     >
       {children}
