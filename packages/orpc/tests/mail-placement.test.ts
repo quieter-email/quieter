@@ -254,17 +254,7 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
         "sentAt" timestamptz not null,
         "updatedAt" timestamptz not null,
         "bodyText" text not null,
-        "isRead" boolean not null,
-        "readRevision" bigint not null default 0,
-        "destinationRevision" bigint not null default 0
-      );
-      create table if not exists "mailMessageIntent" (
-        "mailboxId" text not null references mailbox(id) on delete cascade,
-        "messageId" text not null,
-        "readIntentToken" text,
-        "destinationIntentToken" text,
-        "updatedAt" timestamptz not null,
-        primary key ("mailboxId", "messageId")
+        "isRead" boolean not null
       );
       create table if not exists "mailPlacementOperation" (
         id text primary key,
@@ -280,7 +270,6 @@ describe.skipIf(!fixture.enabled)("durable mail placement commands", () => {
         status text not null check (status in ('pending', 'submitting', 'applied', 'failed', 'superseded', 'uncertain')),
         code text,
         message text,
-        "undoProof" jsonb,
         "createdAt" timestamptz not null,
         "updatedAt" timestamptz not null,
         unique ("actorUserId", "mailboxId", "requestId", "threadId")

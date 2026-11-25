@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { reminderDueAtSchema, reminderTimeZoneSchema } from "./reminders";
-import { mailUndoOfferSchema } from "./undo";
 
 const sourceIdSchema = z.string().trim().min(1).max(255);
 const scheduleFields = {
@@ -127,6 +126,5 @@ export type MailSnoozeTargetResult = z.infer<
 
 export const mailSnoozeResultSchema = z.strictObject({
   targets: z.array(mailSnoozeTargetResultSchema),
-  undoOffer: mailUndoOfferSchema.optional(),
 });
 export type MailSnoozeResult = z.infer<typeof mailSnoozeResultSchema>;

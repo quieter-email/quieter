@@ -16,7 +16,6 @@ import type {
   MailSnoozeTargetResult,
 } from "@quieter/mail/snooze";
 import type { MailSnoozeScope } from "@quieter/mail/snooze-ticket";
-import { mailUndoReceiptIdSchema } from "@quieter/mail/undo";
 import { reportError } from "@quieter/observability";
 import {
   and,
@@ -42,10 +41,8 @@ import {
   loadMailPlacementAssociations,
   loadMailPlacementSnapshot,
 } from "../mail/placement-admission";
-import { resolvePlacementTargets } from "../mail/placement-model";
-import { getMailUndoOffer } from "../mail/undo-state";
+import { resolvePlacementMessageIds } from "../mail/placement-model";
 import { MAIL_SNOOZE_LIVE_STATUSES, serializeMailSnoozeState } from "./state";
-import { recordManagedSnoozeUndoOriginal } from "./undo-proof";
 import { requestMailSnoozeWake } from "./wake";
 
 const finishSnoozeFailure = async (input: {
@@ -167,27 +164,7 @@ const replaySnoozeOperations = async (input: {
         )
       )
     );
-  const actorUserId = input.operations[0]?.actorUserId;
-  const undoOffer =
-    actorUserId === undefined
-      ? null
-      : await getMailUndoOffer({
-          authority: {
-            actorUserId,
-            canWrite: true,
-            mailboxId: input.mailboxId,
-          },
-          database: db,
-          now: new Date(),
-          receiptIds: input.operations.map((operation) =>
-            mailUndoReceiptIdSchema.parse(`snooze:${operation.id}`)
-          ),
-        }).catch((error: unknown) => {
-          reportError(error, { operation: "snooze-undo-offer" });
-          return null;
-        });
   return {
-    ...(undoOffer === null ? {} : { undoOffer }),
     targets: input.targets.map((target): MailSnoozeTargetResult => {
       const operation = input.operations.find(
         (item) => item.threadId === target.threadId
@@ -367,18 +344,17 @@ export const applyMailSnooze = async ({
           provider: selected.provider,
           threadId: target.threadId,
         });
-        const resolved = resolvePlacementTargets({
+        const hidden = resolvePlacementMessageIds({
           messages: snapshot.messages,
           placement: "done",
           requestedMessageIds: target.messageIds,
           threadId: target.threadId,
         });
-        if (resolved === null || resolved.messageIds.length === 0) {
+        if (hidden === null || hidden.length === 0) {
           throw new ORPCError("BAD_REQUEST", {
             message: "Choose mail in Inbox to snooze.",
           });
         }
-        const hidden = resolved.messageIds;
         if (
           snapshot.messages.some(
             (message) =>
@@ -399,7 +375,6 @@ export const applyMailSnooze = async ({
       }
     }
   }
-  const previousSchedules = new Map<string, typeof mailSnooze.$inferSelect>();
   const reservation = await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })
@@ -608,17 +583,6 @@ export const applyMailSnooze = async ({
         })
         .returning();
       if (operation !== undefined) {
-        if (current !== undefined) {
-          previousSchedules.set(operation.id, current);
-        }
-        if (selected.provider === "managed" && operation.status === "applied") {
-          await recordManagedSnoozeUndoOriginal({
-            current: schedule,
-            database: tx,
-            operation,
-            previous: current ?? null,
-          });
-        }
         operations.push(operation);
       }
     }
@@ -812,36 +776,6 @@ export const applyMailSnooze = async ({
       completed ??
       currentOperations.find((item) => item.id === operation.id) ??
       operation;
-    if (
-      selected.provider === "managed" &&
-      journal.status === "applied" &&
-      (journal.kind === "snooze" || journal.kind === "return-now")
-    ) {
-      try {
-        await db.transaction(async (tx) => {
-          await tx
-            .select({ id: mailbox.id })
-            .from(mailbox)
-            .where(eq(mailbox.id, input.mailboxId))
-            .for("update");
-          const [latestSchedule] = await tx
-            .select()
-            .from(mailSnooze)
-            .where(eq(mailSnooze.id, schedule.id))
-            .for("update");
-          if (latestSchedule !== undefined) {
-            await recordManagedSnoozeUndoOriginal({
-              current: latestSchedule,
-              database: tx,
-              operation: journal,
-              previous: previousSchedules.get(journal.id) ?? null,
-            });
-          }
-        });
-      } catch (error) {
-        reportError(error, { operation: "snooze-undo-proof" });
-      }
-    }
     targets.push({
       code:
         journal.status === "applied" ? undefined : (journal.code ?? undefined),
@@ -868,26 +802,9 @@ export const applyMailSnooze = async ({
     await publishMailUpdate({
       mailboxId: input.mailboxId,
       type: "mailbox.changed",
-    }).catch((error: unknown) => {
-      reportError(error, { operation: "snooze-publish-update" });
     });
   }
-  const undoOffer = await getMailUndoOffer({
-    authority: {
-      actorUserId: context.userId,
-      canWrite: true,
-      mailboxId: input.mailboxId,
-    },
-    database: db,
-    now: new Date(),
-    receiptIds: reservation.operations.map((operation) =>
-      mailUndoReceiptIdSchema.parse(`snooze:${operation.id}`)
-    ),
-  }).catch((error: unknown) => {
-    reportError(error, { operation: "snooze-undo-offer" });
-    return null;
-  });
-  return { targets, ...(undoOffer === null ? {} : { undoOffer }) };
+  return { targets };
 };
 
 const confirmObservedPlacement = async (input: {

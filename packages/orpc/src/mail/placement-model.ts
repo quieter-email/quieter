@@ -5,12 +5,12 @@ export type PlacementMessage = {
   placement: "inbox" | "done" | "protected";
 };
 
-export const resolvePlacementTargets = (input: {
+export const resolvePlacementMessageIds = (input: {
   messages: PlacementMessage[];
   placement: "done" | "inbox";
   threadId: string;
   requestedMessageIds: string[];
-}): { messageIds: string[]; intentMessageIds: string[] } | null => {
+}): string[] | null => {
   const messages = input.messages.toSorted(
     (left, right) =>
       left.receivedAt - right.receivedAt || left.id.localeCompare(right.id)
@@ -30,16 +30,12 @@ export const resolvePlacementTargets = (input: {
     requestedIds.has(message.id)
   );
   const sourcePlacement = input.placement === "done" ? "inbox" : "done";
-  const prefix = messages
+  return messages
     .slice(0, lastAnchorIndex + 1)
-    .filter(
-      (message) =>
-        message.threadId === input.threadId && message.placement !== "protected"
+    .flatMap((message) =>
+      message.threadId === input.threadId &&
+      message.placement === sourcePlacement
+        ? [message.id]
+        : []
     );
-  return {
-    intentMessageIds: prefix.map((message) => message.id),
-    messageIds: prefix.flatMap((message) =>
-      message.placement === sourcePlacement ? [message.id] : []
-    ),
-  };
 };

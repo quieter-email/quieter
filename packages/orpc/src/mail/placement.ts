@@ -17,18 +17,8 @@ import type {
   MailMutationResult,
   MailMutationTargetResult,
 } from "@quieter/mail/data-plane";
-import { mailUndoReceiptIdSchema } from "@quieter/mail/undo";
 import { reportError } from "@quieter/observability";
-import {
-  and,
-  asc,
-  desc,
-  eq,
-  getTableColumns,
-  inArray,
-  isNull,
-  sql,
-} from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, sql } from "drizzle-orm";
 
 import { consumeRateLimit } from "../abuse-protection";
 import { callGmail } from "../gmail-request";
@@ -41,11 +31,7 @@ import {
   loadMailPlacementAssociations,
   loadMailPlacementSnapshot,
 } from "./placement-admission";
-import { resolvePlacementTargets } from "./placement-model";
-import { snoozePlacementAcknowledgementSchema } from "./placement-undo-proof";
-import { advanceMailMessageIntents } from "./undo-intent";
-import { createMailUndoCutoff, mailUndoOriginalSchema } from "./undo-model";
-import { getMailUndoOffer, persistMailUndoOriginal } from "./undo-state";
+import { resolvePlacementMessageIds } from "./placement-model";
 
 export type MailSnoozePlacement = {
   id: string;
@@ -536,18 +522,15 @@ export const applyMailPlacement = async ({
         threadId: target.threadId,
       });
       let messageIds: string[] | null;
-      let intentMessageIds: string[];
       let currentSnooze: typeof mailSnooze.$inferSelect | undefined;
       // oxlint-disable-next-line unicorn/no-negated-condition -- Ordinary placement resolves a prefix, snooze restores its saved exact set.
       if (snooze === undefined) {
-        const resolved = resolvePlacementTargets({
+        messageIds = resolvePlacementMessageIds({
           messages,
           placement: input.command.placement,
           requestedMessageIds: target.messageIds,
           threadId: target.threadId,
         });
-        messageIds = resolved?.messageIds ?? null;
-        intentMessageIds = resolved?.intentMessageIds ?? [];
       } else {
         [currentSnooze] = await db
           .select()
@@ -569,7 +552,6 @@ export const applyMailPlacement = async ({
           });
         }
         const hidden = new Set(currentSnooze.hiddenMessageIds);
-        intentMessageIds = currentSnooze.hiddenMessageIds;
         if (
           (snooze.kind === "snooze-hide" || snooze.trigger === "due") &&
           messages.some(
@@ -611,7 +593,6 @@ export const applyMailPlacement = async ({
             "This conversation changed or is no longer available. Refresh and try again.",
         });
       }
-      const changedIds = new Set(messageIds);
       const claimed = await db.transaction(async (tx) => {
         if (snooze !== undefined) {
           await tx
@@ -664,13 +645,8 @@ export const applyMailPlacement = async ({
       const commit = async (accessToken?: string) =>
         await db.transaction(async (tx) => {
           context.signal?.throwIfAborted();
-          await tx
-            .select({ id: mailbox.id })
-            .from(mailbox)
-            .where(eq(mailbox.id, input.mailboxId))
-            .for("update");
           const lockedMessages =
-            selected.provider === "managed" && intentMessageIds.length > 0
+            selected.provider === "managed" && messageIds.length > 0
               ? await tx
                   .select({
                     id: managedMailMessage.id,
@@ -682,12 +658,17 @@ export const applyMailPlacement = async ({
                       eq(managedMailMessage.mailboxId, input.mailboxId),
                       eq(managedMailMessage.threadId, target.threadId),
                       eq(managedMailMessage.direction, "inbound"),
-                      inArray(managedMailMessage.id, intentMessageIds)
+                      inArray(managedMailMessage.id, messageIds)
                     )
                   )
                   .orderBy(asc(managedMailMessage.id))
                   .for("update")
               : [];
+          await tx
+            .select({ id: mailbox.id })
+            .from(mailbox)
+            .where(eq(mailbox.id, input.mailboxId))
+            .for("update");
           const registeredSnooze = snooze
             ? await lockPlacementSnooze({
                 database: tx,
@@ -699,17 +680,12 @@ export const applyMailPlacement = async ({
               })
             : undefined;
           const [locked] = await tx
-            .select({
-              ...getTableColumns(mailPlacementOperation),
-              sequenceText: sql<string>`${mailPlacementOperation.sequence}::text`,
-            })
+            .select()
             .from(mailPlacementOperation)
             .where(eq(mailPlacementOperation.id, operation.id))
             .for("update");
           const [latest] = await tx
-            .select({
-              sequence: sql<string>`${mailPlacementOperation.sequence}::text`,
-            })
+            .select({ sequence: mailPlacementOperation.sequence })
             .from(mailPlacementOperation)
             .where(
               and(
@@ -725,7 +701,7 @@ export const applyMailPlacement = async ({
           }
           if (
             locked.status !== "submitting" ||
-            latest?.sequence !== locked.sequenceText
+            latest?.sequence !== locked.sequence
           ) {
             const [superseded] = await tx
               .update(mailPlacementOperation)
@@ -740,16 +716,13 @@ export const applyMailPlacement = async ({
               .returning();
             return toPlacementResult(superseded ?? locked, false);
           }
-          if (selected.provider === "managed") {
+          if (selected.provider === "managed" && messageIds.length > 0) {
             const sourceState =
               input.command.placement === "done" ? "active" : "done";
             if (
-              lockedMessages.length !== intentMessageIds.length ||
+              lockedMessages.length !== messageIds.length ||
               lockedMessages.some(
-                (record) =>
-                  !["active", "done"].includes(record.mailboxState) ||
-                  (changedIds.has(record.id) &&
-                    record.mailboxState !== sourceState)
+                (record) => record.mailboxState !== sourceState
               )
             ) {
               throw new ORPCError("CONFLICT", {
@@ -757,36 +730,19 @@ export const applyMailPlacement = async ({
                   "This conversation changed. Refresh before trying again.",
               });
             }
-          }
-          await advanceMailMessageIntents({
-            database: tx,
-            facet: "destination",
-            mailboxId: input.mailboxId,
-            messageIds: intentMessageIds,
-            token: operation.id,
-          });
-          const updatedMessages =
-            selected.provider === "managed" && messageIds.length > 0
-              ? await tx
-                  .update(managedMailMessage)
-                  .set({
-                    mailboxState:
-                      input.command.placement === "done" ? "done" : "active",
-                    updatedAt: new Date(),
-                  })
-                  .where(
-                    and(
-                      eq(managedMailMessage.mailboxId, input.mailboxId),
-                      inArray(managedMailMessage.id, messageIds)
-                    )
-                  )
-                  .returning({
-                    destinationRevision: managedMailMessage.destinationRevision,
-                    id: managedMailMessage.id,
-                    mailboxState: managedMailMessage.mailboxState,
-                  })
-              : [];
-          if (selected.provider === "managed" && messageIds.length > 0) {
+            await tx
+              .update(managedMailMessage)
+              .set({
+                mailboxState:
+                  input.command.placement === "done" ? "done" : "active",
+                updatedAt: new Date(),
+              })
+              .where(
+                and(
+                  eq(managedMailMessage.mailboxId, input.mailboxId),
+                  inArray(managedMailMessage.id, messageIds)
+                )
+              );
             await tx
               .update(mailbox)
               .set({
@@ -820,91 +776,6 @@ export const applyMailPlacement = async ({
             })
             .where(eq(mailPlacementOperation.id, operation.id))
             .returning();
-          if (selected.provider === "managed") {
-            if (updatedMessages.length !== messageIds.length) {
-              throw new ORPCError("CONFLICT", {
-                message:
-                  "This conversation changed. Refresh before trying again.",
-              });
-            }
-            const beforeById = new Map(
-              lockedMessages.map((message) => [message.id, message])
-            );
-            const admittedAt = locked.createdAt.toISOString();
-            const original = mailUndoOriginalSchema.parse({
-              actorUserId: context.userId,
-              admittedAt,
-              cutoff: createMailUndoCutoff({
-                admittedAt,
-                previousReturnAt: null,
-              }),
-              kind: "placement",
-              mailboxId: input.mailboxId,
-              operationId: locked.id,
-              proof: {
-                acceptedSequence: locked.sequenceText,
-                effects: updatedMessages.map((message) => {
-                  const before = beforeById.get(message.id);
-                  const destinationState =
-                    input.command.placement === "done" ? "done" : "active";
-                  if (
-                    before === undefined ||
-                    message.mailboxState !== destinationState
-                  ) {
-                    throw new ORPCError("CONFLICT", {
-                      message:
-                        "This conversation changed. Refresh before trying again.",
-                    });
-                  }
-                  return {
-                    after: {
-                      kind: "managed",
-                      value:
-                        message.mailboxState === "active" ? "inbox" : "done",
-                    },
-                    before: {
-                      kind: "managed",
-                      value:
-                        before.mailboxState === "active" ? "inbox" : "done",
-                    },
-                    facet: "destination",
-                    intentToken: operation.id,
-                    messageId: message.id,
-                    outcome: {
-                      proof: {
-                        kind: "managed-revision",
-                        revision: message.destinationRevision.toString(),
-                      },
-                      status: "acknowledged",
-                    },
-                    phaseId: operation.id,
-                  };
-                }),
-              },
-              threadId: target.threadId,
-            });
-            if (snooze === undefined) {
-              await persistMailUndoOriginal({
-                authority: {
-                  actorUserId: context.userId,
-                  canWrite: true,
-                  mailboxId: input.mailboxId,
-                },
-                database: tx,
-                original,
-              });
-            } else {
-              await tx
-                .update(mailPlacementOperation)
-                .set({
-                  undoProof: snoozePlacementAcknowledgementSchema.parse({
-                    kind: "snooze-placement-ack",
-                    original,
-                  }),
-                })
-                .where(eq(mailPlacementOperation.id, locked.id));
-            }
-          }
           if (registeredSnooze !== undefined && snooze) {
             await tx
               .update(mailSnooze)
@@ -946,54 +817,28 @@ export const applyMailPlacement = async ({
               context,
               input.mailboxId,
               async (accessToken, signal) => {
-                const associations = await loadMailPlacementAssociations({
-                  accessToken,
-                  context,
-                  database: db,
-                  mailboxId: input.mailboxId,
-                  messageIds: intentMessageIds,
-                  provider: selected.provider,
-                });
-                if (
-                  associations.length !== intentMessageIds.length ||
-                  associations.some(
-                    (association) => association.threadId !== target.threadId
-                  )
-                ) {
-                  throw new ORPCError("CONFLICT", {
-                    message:
-                      "This conversation changed. Refresh before trying again.",
-                  });
-                }
-                for (
-                  let offset = 0;
-                  offset < intentMessageIds.length;
-                  offset += 4
-                ) {
+                for (let offset = 0; offset < messageIds.length; offset += 4) {
                   signal?.throwIfAborted();
-                  const selectedIds = intentMessageIds.slice(
-                    offset,
-                    offset + 4
-                  );
                   const metadata = await Promise.all(
-                    selectedIds.map(
-                      async (messageId) =>
-                        await getGmailCaptureMetadata(
-                          accessToken,
-                          messageId,
-                          signal
-                        )
-                    )
+                    messageIds
+                      .slice(offset, offset + 4)
+                      .map(
+                        async (messageId) =>
+                          await getGmailCaptureMetadata(
+                            accessToken,
+                            messageId,
+                            signal
+                          )
+                      )
                   );
                   if (
                     metadata.some(
-                      (message, index) =>
+                      (message) =>
                         message.labelIds.some((label) =>
                           ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
                         ) ||
-                        (changedIds.has(selectedIds[index]) &&
-                          message.labelIds.includes("INBOX") !==
-                            (input.command.placement === "done"))
+                        message.labelIds.includes("INBOX") !==
+                          (input.command.placement === "done")
                     )
                   ) {
                     throw new ORPCError("CONFLICT", {
@@ -1154,37 +999,5 @@ export const applyMailPlacement = async ({
       );
     }
   }
-  const appliedIds = results.flatMap((result) =>
-    result.status === "applied" && result.operationId !== undefined
-      ? [result.operationId]
-      : []
-  );
-  if (
-    selected.provider !== "managed" ||
-    snooze !== undefined ||
-    appliedIds.length === 0
-  ) {
-    return { targets: results };
-  }
-  const undoOffer = await getMailUndoOffer({
-    authority: {
-      actorUserId: context.userId,
-      canWrite: true,
-      mailboxId: input.mailboxId,
-    },
-    database: db,
-    now: new Date(),
-    receiptIds: appliedIds.map((id) =>
-      mailUndoReceiptIdSchema.parse(`placement:${id}`)
-    ),
-  }).catch((error: unknown) => {
-    if (context.signal?.aborted !== true) {
-      reportError(error, { operation: "placement-undo-offer" });
-    }
-    return null;
-  });
-  return {
-    targets: results,
-    ...(undoOffer === null ? {} : { undoOffer }),
-  };
+  return { targets: results };
 };

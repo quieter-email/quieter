@@ -1769,7 +1769,6 @@ export const mailPlacementOperation = pgTable(
       >()
       .notNull(),
     threadId: text("threadId").notNull(),
-    undoProof: jsonb("undoProof").$type<unknown>(),
     updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
   },
   (table) => [
@@ -1792,80 +1791,6 @@ export const mailPlacementOperation = pgTable(
       "mail_placement_operation_status_check",
       sql`${table.status} in ('pending', 'submitting', 'applied', 'failed', 'uncertain', 'superseded')`
     ),
-  ]
-);
-
-export const mailMessageOperation = pgTable(
-  "mailMessageOperation",
-  {
-    actorUserId: text("actorUserId")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
-    code: text("code"),
-    command: jsonb("command").$type<unknown>().notNull(),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
-    id: text("id").primaryKey(),
-    mailboxId: text("mailboxId")
-      .notNull()
-      .references(() => mailbox.id, { onDelete: "cascade" }),
-    message: text("message"),
-    messageIds: jsonb("messageIds").$type<unknown>().notNull(),
-    requestHash: text("requestHash").notNull(),
-    requestId: text("requestId").notNull(),
-    status: text("status")
-      .$type<
-        | "pending"
-        | "submitting"
-        | "applied"
-        | "failed"
-        | "uncertain"
-        | "superseded"
-      >()
-      .notNull(),
-    threadId: text("threadId").notNull(),
-    undoProof: jsonb("undoProof").$type<unknown>(),
-    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
-  },
-  (table) => [
-    unique("mail_message_operation_request_unique").on(
-      table.actorUserId,
-      table.mailboxId,
-      table.requestId,
-      table.threadId
-    ),
-    index("mail_message_operation_actor_created_idx").on(
-      table.actorUserId,
-      table.createdAt
-    ),
-    index("mail_message_operation_mailbox_idx").on(table.mailboxId),
-    check(
-      "mail_message_operation_status_check",
-      sql`${table.status} in ('pending', 'submitting', 'applied', 'failed', 'uncertain', 'superseded')`
-    ),
-    check(
-      "mail_message_operation_message_ids_check",
-      sql`case when jsonb_typeof(${table.messageIds}) = 'array'
-        then jsonb_array_length(${table.messageIds}) <= 1000 else false end`
-    ),
-  ]
-);
-
-export const mailMessageIntent = pgTable(
-  "mailMessageIntent",
-  {
-    destinationIntentToken: text("destinationIntentToken"),
-    mailboxId: text("mailboxId")
-      .notNull()
-      .references(() => mailbox.id, { onDelete: "cascade" }),
-    messageId: text("messageId").notNull(),
-    readIntentToken: text("readIntentToken"),
-    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
-  },
-  (table) => [
-    primaryKey({
-      columns: [table.mailboxId, table.messageId],
-      name: "mail_message_intent_pkey",
-    }),
   ]
 );
 
@@ -1971,7 +1896,6 @@ export const mailSnoozeOperation = pgTable(
       .$type<"pending" | "applied" | "failed" | "uncertain" | "superseded">()
       .notNull(),
     threadId: text("threadId").notNull(),
-    undoProof: jsonb("undoProof").$type<unknown>(),
     updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
   },
   (table) => [
@@ -1996,97 +1920,6 @@ export const mailSnoozeOperation = pgTable(
     check(
       "mail_snooze_operation_status_check",
       sql`${table.status} in ('pending', 'applied', 'failed', 'uncertain', 'superseded')`
-    ),
-  ]
-);
-
-export const mailUndoAttempt = pgTable(
-  "mailUndoAttempt",
-  {
-    actorUserId: text("actorUserId").notNull(),
-    admittedAt: timestamp("admittedAt", { withTimezone: true }).notNull(),
-    createdAt: timestamp("createdAt", { withTimezone: true }).notNull(),
-    cutoff: timestamp("cutoff", { withTimezone: true }).notNull(),
-    id: text("id").primaryKey(),
-    items: jsonb("items").$type<unknown>().notNull().default([]),
-    liveActorUserId: text("liveActorUserId").references(() => user.id, {
-      onDelete: "set null",
-    }),
-    liveMessageOperationId: text("liveMessageOperationId").references(
-      () => mailMessageOperation.id,
-      { onDelete: "set null" }
-    ),
-    livePlacementOperationId: text("livePlacementOperationId").references(
-      () => mailPlacementOperation.id,
-      { onDelete: "set null" }
-    ),
-    liveSnoozeOperationId: text("liveSnoozeOperationId").references(
-      () => mailSnoozeOperation.id,
-      { onDelete: "set null" }
-    ),
-    mailboxId: text("mailboxId")
-      .notNull()
-      .references(() => mailbox.id, { onDelete: "cascade" }),
-    originalKind: text("originalKind")
-      .$type<"message" | "placement" | "snooze">()
-      .notNull(),
-    originalOperationId: text("originalOperationId").notNull(),
-    plan: jsonb("plan").$type<unknown>(),
-    progress: jsonb("progress").$type<unknown>(),
-    state: text("state")
-      .$type<"accepted" | "submitting" | "completed" | "uncertain">()
-      .notNull(),
-    updatedAt: timestamp("updatedAt", { withTimezone: true }).notNull(),
-  },
-  (table) => [
-    unique("mail_undo_attempt_original_unique").on(
-      table.originalKind,
-      table.originalOperationId
-    ),
-    index("mail_undo_attempt_mailbox_idx").on(table.mailboxId),
-    index("mail_undo_attempt_live_actor_idx")
-      .on(table.liveActorUserId)
-      .where(sql`${table.liveActorUserId} is not null`),
-    index("mail_undo_attempt_live_message_idx")
-      .on(table.liveMessageOperationId)
-      .where(sql`${table.liveMessageOperationId} is not null`),
-    index("mail_undo_attempt_live_placement_idx")
-      .on(table.livePlacementOperationId)
-      .where(sql`${table.livePlacementOperationId} is not null`),
-    index("mail_undo_attempt_live_snooze_idx")
-      .on(table.liveSnoozeOperationId)
-      .where(sql`${table.liveSnoozeOperationId} is not null`),
-    check(
-      "mail_undo_attempt_kind_check",
-      sql`${table.originalKind} in ('message', 'placement', 'snooze')`
-    ),
-    check(
-      "mail_undo_attempt_state_check",
-      sql`${table.state} in ('accepted', 'submitting', 'completed', 'uncertain')`
-    ),
-    check(
-      "mail_undo_attempt_admission_check",
-      sql`${table.admittedAt} < ${table.cutoff}`
-    ),
-    check(
-      "mail_undo_attempt_live_actor_check",
-      sql`${table.liveActorUserId} is null or ${table.liveActorUserId} = ${table.actorUserId}`
-    ),
-    check(
-      "mail_undo_attempt_live_original_check",
-      sql`(${table.liveMessageOperationId} is null or (${table.originalKind} = 'message' and ${table.liveMessageOperationId} = ${table.originalOperationId}))
-        and (${table.livePlacementOperationId} is null or (${table.originalKind} = 'placement' and ${table.livePlacementOperationId} = ${table.originalOperationId}))
-        and (${table.liveSnoozeOperationId} is null or (${table.originalKind} = 'snooze' and ${table.liveSnoozeOperationId} = ${table.originalOperationId}))`
-    ),
-    check(
-      "mail_undo_attempt_items_check",
-      sql`case when jsonb_typeof(${table.items}) = 'array'
-        then jsonb_array_length(${table.items}) <= 1000 and (${table.state} = 'accepted' or jsonb_array_length(${table.items}) > 0)
-        else false end`
-    ),
-    check(
-      "mail_undo_attempt_plan_check",
-      sql`${table.plan} is null or jsonb_typeof(${table.plan}) = 'object'`
     ),
   ]
 );
@@ -2713,9 +2546,6 @@ export const managedMailMessage = pgTable(
     cc: text("cc"),
     ccNormalized: text("ccNormalized").notNull().default(""),
     createdAt: timestamp("createdAt").notNull(),
-    destinationRevision: bigint("destinationRevision", { mode: "bigint" })
-      .notNull()
-      .default(0n),
     direction: text("direction").$type<ManagedMailDirection>().notNull(),
     from: text("from").notNull(),
     fromNormalized: text("fromNormalized").notNull().default(""),
@@ -2740,9 +2570,6 @@ export const managedMailMessage = pgTable(
     rawObjectProvider:
       text("rawObjectProvider").$type<ManagedMailRawObjectProvider>(),
     rawSizeBytes: integer("rawSizeBytes"),
-    readRevision: bigint("readRevision", { mode: "bigint" })
-      .notNull()
-      .default(0n),
     references: text("references"),
     replyTo: text("replyTo"),
     s3Bucket: text("s3Bucket"),
@@ -2757,14 +2584,6 @@ export const managedMailMessage = pgTable(
     updatedAt: timestamp("updatedAt").notNull(),
   },
   (table) => [
-    check(
-      "managed_mail_message_read_revision_check",
-      sql`${table.readRevision} >= 0`
-    ),
-    check(
-      "managed_mail_message_destination_revision_check",
-      sql`${table.destinationRevision} >= 0`
-    ),
     check(
       "managed_mail_message_direction_check",
       sql`${table.direction} in ('inbound', 'outbound')`
@@ -4483,13 +4302,10 @@ export const tables = {
   mailDomainConnectAttempt,
   mailImportanceAttempt,
   mailMessageImportance,
-  mailMessageIntent,
-  mailMessageOperation,
   mailPlacementOperation,
   mailSnippet,
   mailSnooze,
   mailSnoozeOperation,
-  mailUndoAttempt,
   mailbox,
   mailboxAction,
   mailboxActionExternalEffect,
