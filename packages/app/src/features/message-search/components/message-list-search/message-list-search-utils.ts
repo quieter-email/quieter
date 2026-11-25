@@ -1,3 +1,4 @@
+import type { DropdownDirection } from "@quieter/app/features/message-search/components/message-list-search/message-list-search-types";
 import { normalizeLabelSelectionKey } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type { SearchFilterChip } from "@quieter/app/features/message-search/state/message-list-search-state";
 import { isRepeatableMailSearchFilter } from "@quieter/mail/search";
@@ -40,6 +41,16 @@ export const parseDateFilterValue = (value: string): Date | undefined => {
   }
 
   return date;
+};
+
+export const getDropdownDirection = (key: string): DropdownDirection | null => {
+  if (key === "ArrowDown") {
+    return "next";
+  }
+  if (key === "ArrowUp") {
+    return "previous";
+  }
+  return null;
 };
 
 export const isDateFilter = ({ type }: SearchFilterChip) =>
