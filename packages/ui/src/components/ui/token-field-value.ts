@@ -12,6 +12,7 @@ export type TokenFieldToken = {
   id: string;
   keywords?: string[];
   label: string;
+  match?: "literal";
   text: string;
   tone?: PillTone;
 };
@@ -37,8 +38,9 @@ const normalizeTerm = (term: string) =>
 
 const matchesAt = (value: string, index: number, token: TokenFieldToken) =>
   value.startsWith(token.text, index) &&
-  !isWordCharacter(value[index - 1]) &&
-  !isWordCharacter(value[index + token.text.length]);
+  (token.match === "literal" ||
+    (!isWordCharacter(value[index - 1]) &&
+      !isWordCharacter(value[index + token.text.length])));
 
 /**
  * Splits a value into text and token runs. Longer tokens win so that a token
