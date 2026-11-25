@@ -1340,58 +1340,6 @@ export const DesignSystemShowcase = () => {
               </DrawerContent>
             </Drawer>
           </Row>
-          <Row label="Inspector">
-            <Dialog>
-              <DialogTrigger render={<Button variant="outline" />}>
-                Open inspector
-              </DialogTrigger>
-              <DialogContent variant="inspector">
-                <DialogHeader>
-                  <DialogTitle>Contact details</DialogTitle>
-                  <DialogDescription>
-                    View the address for a conversation participant.
-                  </DialogDescription>
-                </DialogHeader>
-                <div className="px-4">
-                  <Select
-                    defaultValue="alice@example.test"
-                    items={[
-                      { label: "Alice Moreno", value: "alice@example.test" },
-                      { label: "Dana Rios", value: "dana@example.test" },
-                    ]}
-                  >
-                    <SelectTrigger aria-label="Contact" size="auto">
-                      <SelectValue>
-                        {(address: string) => (
-                          <span className="flex flex-col items-start">
-                            {address === "alice@example.test"
-                              ? "Alice Moreno"
-                              : "Dana Rios"}
-                            <Text as="span" size="caption" tone="muted">
-                              {address}
-                            </Text>
-                          </span>
-                        )}
-                      </SelectValue>
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectList>
-                        <SelectItem value="alice@example.test">
-                          Alice Moreno
-                        </SelectItem>
-                        <SelectItem value="dana@example.test">
-                          Dana Rios
-                        </SelectItem>
-                      </SelectList>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <DialogFooter>
-                  <DialogCloseButton variant="default">Close</DialogCloseButton>
-                </DialogFooter>
-              </DialogContent>
-            </Dialog>
-          </Row>
           <Row label="Paired footer actions">
             <div className="w-80">
               <ActionFooter>
@@ -1726,6 +1674,40 @@ export const DesignSystemShowcase = () => {
                 </SelectContent>
               </Select>
             </InputGroup>
+          </Row>
+          <Row label="Two-line selection">
+            <div className="w-64 max-w-full">
+              <Select
+                defaultValue="alice@example.test"
+                items={[
+                  { label: "Alice Moreno", value: "alice@example.test" },
+                  { label: "Dana Rios", value: "dana@example.test" },
+                ]}
+              >
+                <SelectTrigger aria-label="Contact" size="auto">
+                  <SelectValue>
+                    {(address: string) => (
+                      <span className="flex flex-col items-start">
+                        {address === "alice@example.test"
+                          ? "Alice Moreno"
+                          : "Dana Rios"}
+                        <Text as="span" size="caption" tone="muted">
+                          {address}
+                        </Text>
+                      </span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="alice@example.test">
+                      Alice Moreno
+                    </SelectItem>
+                    <SelectItem value="dana@example.test">Dana Rios</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </div>
           </Row>
           <Row label="Searchable choice">
             <CalendarTimeZonePicker
