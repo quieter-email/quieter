@@ -25,6 +25,7 @@ import {
 import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
 import { authClient } from "@quieter/app/lib/auth";
+import { scheduleBackgroundPrefetch } from "@quieter/app/lib/background-prefetch";
 import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
 import {
   chatsQueryOptions,
@@ -38,12 +39,13 @@ import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
+import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Text } from "@quieter/ui/text";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useLocation } from "@tanstack/react-router";
+import { useLocation, useRouter } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 
@@ -935,6 +937,7 @@ const MailboxSessionNotice = ({
 
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const initialSearch = useLocation({
     select: (location) => location.searchStr,
   });
@@ -1022,6 +1025,62 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     sessionMatchesUser &&
     (isSandboxMode ||
       (!mailboxesQuery.isPending && !isCompletingGmailConnection));
+  const sessionUserId = session.data?.user.id;
+  useEffect(() => {
+    const enabled = isWorkspaceReady && Boolean(sessionUserId);
+    return enabled
+      ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
+          await Promise.allSettled([
+            router.loadRouteChunk(router.routesByPath["/settings"]),
+            (async () => {
+              const { loadPreferenceSettingsPanels, prefetchSettingsOverview } =
+                await import("@quieter/app/features/settings/components/settings-prefetch");
+              if (!signal.aborted) {
+                await Promise.allSettled([
+                  loadPreferenceSettingsPanels(),
+                  previewPersona === null && !isSandboxMode
+                    ? prefetchSettingsOverview(queryClient)
+                    : undefined,
+                ]);
+              }
+            })(),
+            loadComposeWorkspace(),
+            loadSnippetWorkspace(),
+          ]);
+        })
+      : undefined;
+  }, [
+    isSandboxMode,
+    isWorkspaceReady,
+    previewPersona,
+    queryClient,
+    router,
+    sessionUserId,
+  ]);
+  const calendarActive = workspace === "calendar";
+  useEffect(() => {
+    const enabled =
+      isWorkspaceReady && sessionUserId !== undefined && !calendarActive;
+    return enabled
+      ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
+          const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
+          if (!signal.aborted && previewPersona === null) {
+            await prefetchCalendarWorkspace(queryClient, {
+              route: mailboxSearchSchema.parse(router.state.location.search),
+              signal,
+              userId: sessionUserId,
+            });
+          }
+        })
+      : undefined;
+  }, [
+    calendarActive,
+    isWorkspaceReady,
+    previewPersona,
+    queryClient,
+    router,
+    sessionUserId,
+  ]);
   useEffect(() => {
     if (!isWorkspaceReady || startupViewAppliedRef.current) {
       return;
@@ -1130,7 +1189,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     onCompose: workspaceActions.createComposeDraft,
     onManageSnippets: workspaceActions.manageSnippets,
     onOpenCalendar: async () => {
-      const calendarUserId = user.id ?? user.email ?? "preview";
+      const calendarUserId =
+        sessionUserId ?? user.id ?? user.email ?? "preview";
       void loadCalendarWorkspace();
       if (calendarUserId !== "preview" && previewPersona === null) {
         void Promise.allSettled([
@@ -1191,7 +1251,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
 
   return (
     <MailboxWorkspaceBody
-      userId={user.id ?? user.email ?? "preview"}
+      userId={sessionUserId ?? user.id ?? user.email ?? "preview"}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}
