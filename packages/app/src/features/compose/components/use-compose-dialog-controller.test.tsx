@@ -16,7 +16,6 @@ import type { rpc } from "@quieter/app/lib/orpc";
 import type { RouterOutputs } from "@quieter/orpc";
 import { toast } from "@quieter/ui/toast";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import type { UseBlockerOpts } from "@tanstack/react-router";
 import { act, useLayoutEffect } from "react";
 import { createRoot } from "react-dom/client";
 import {
@@ -40,11 +39,6 @@ type RegisteredCompose = NonNullable<
 > & {
   applyHeldReceipt: (receipt: ComposeHeldReceipt) => Promise<void>;
 };
-
-type FixtureLocation = Pick<
-  Parameters<UseBlockerOpts["shouldBlockFn"]>[0]["current"],
-  "pathname"
-> & { search: object };
 
 const boundary = vi.hoisted(
   (): {
@@ -160,27 +154,25 @@ vi.mock(import("./use-draft-autosave"), () => ({
     boundary.autosave = save;
   },
 }));
-// oxlint-disable-next-line vitest/prefer-import-in-mock -- This callback fixture omits the router's generic resolver and legacy overloads.
-vi.mock("@tanstack/react-router", () => ({
-  useBlocker: (options: {
-    shouldBlockFn: (locations: {
-      current: FixtureLocation;
-      next: FixtureLocation;
-    }) => ReturnType<UseBlockerOpts["shouldBlockFn"]>;
-  }) => {
-    boundary.navigate = async () =>
-      await options.shouldBlockFn({
-        current: {
-          pathname: "/mail",
-          search: {},
-        },
-        next: {
-          pathname: "/settings",
-          search: {},
-        },
-      });
-  },
-}));
+vi.mock(
+  import("@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search"),
+  () => ({
+    useMailboxNavigationBlocker: ({ shouldBlockFn }) => {
+      boundary.navigate = async () =>
+        await shouldBlockFn({
+          action: "PUSH",
+          current: {
+            pathname: "/mail",
+            search: {},
+          },
+          next: {
+            pathname: "/settings",
+            search: {},
+          },
+        });
+    },
+  })
+);
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- This compose fixture omits unrelated calendar and workspace navigation contracts.
 vi.mock("@quieter/app/features/chat/domain/workspace-context", () => {
   const workspace = {
