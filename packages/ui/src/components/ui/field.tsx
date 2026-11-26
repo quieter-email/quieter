@@ -17,6 +17,7 @@ const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
   compoundVariants: [
     { chrome: "ghost", className: "px-2.5" },
     { chrome: "composer", className: "h-10 px-3 text-body-sm" },
+    { chrome: "composer-token", className: "h-7 w-auto px-1 text-body-sm" },
   ],
   defaultVariants: {
     chrome: "default",
@@ -26,6 +27,8 @@ const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
     chrome: {
       composer:
         "min-w-0 flex-1 rounded-xl border border-transparent bg-detail text-ellipsis shadow-none read-only:bg-detail focus-visible:bg-control-hover focus-visible:ring-0 focus-visible:outline-none",
+      "composer-token":
+        "min-w-20 flex-1 bg-transparent shadow-none focus-visible:ring-0 aria-invalid:focus-visible:ring-0",
       default:
         "rounded-md border border-border bg-input shadow-sm read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,
