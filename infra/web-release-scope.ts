@@ -16,6 +16,29 @@ export const WEB_RELEASE_SLOTS = [
 
 type WebReleaseSlot = (typeof WEB_RELEASE_SLOTS)[number];
 
+export const assertSstWebReleasePlan = (input: {
+  plan: z.infer<typeof webReleasePlanSchema>;
+  nativeMode: boolean;
+  cutoverBuildId?: string;
+}) => {
+  const { plan, nativeMode, cutoverBuildId } = input;
+  if (
+    plan.manifest.current.versionId !== undefined ||
+    plan.manifest.previous?.versionId !== undefined ||
+    plan.sourceDeployment?.versionId !== undefined
+  ) {
+    throw new Error("SST requires the legacy web routing manifest.");
+  }
+  if (
+    nativeMode &&
+    (plan.updateSlot !== null || cutoverBuildId !== undefined)
+  ) {
+    throw new Error(
+      "Native infrastructure sync requires the same legacy build and skips mail cutover."
+    );
+  }
+};
+
 type WebReleaseScope =
   | {
       kind: "bootstrap";

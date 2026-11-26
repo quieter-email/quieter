@@ -4,7 +4,8 @@ import { setTimeout } from "node:timers/promises";
 export const checkDeployment = async (
   origin: string,
   buildId: string,
-  mailUpdatesUrl?: string
+  mailUpdatesUrl?: string,
+  probeHeaders?: ConstructorParameters<typeof Headers>[0]
 ) => {
   const base = new URL(origin);
   const options = {
@@ -12,7 +13,8 @@ export const checkDeployment = async (
     redirect: "error",
     signal: AbortSignal.timeout(15_000),
   } as const;
-  const health = await fetch(new URL("/api/health", base), options);
+  const probeOptions = { ...options, headers: probeHeaders };
+  const health = await fetch(new URL("/api/health", base), probeOptions);
   const status: unknown = await health.json();
   if (
     !health.ok ||
@@ -25,14 +27,19 @@ export const checkDeployment = async (
   ) {
     throw new Error("The expected server release is not healthy.");
   }
-  const marker = await fetch(new URL("/assets/build-id.txt", base), options);
+  const marker = await fetch(
+    new URL("/assets/build-id.txt", base),
+    probeOptions
+  );
   const markerText = await marker.text();
   if (!marker.ok || markerText.trim() !== buildId) {
     throw new Error("Server and static assets belong to different releases.");
   }
+  const htmlHeaders = new Headers(probeHeaders);
+  htmlHeaders.set("accept", "text/html");
   const page = await fetch(new URL("/about", base), {
     ...options,
-    headers: { accept: "text/html" },
+    headers: htmlHeaders,
   });
   const html = await page.text();
   if (
@@ -59,7 +66,7 @@ export const checkDeployment = async (
   }
   for (const asset of assets) {
     const response = await fetch(asset, {
-      ...options,
+      ...probeOptions,
       signal: AbortSignal.timeout(15_000),
     });
     const body = await response.arrayBuffer();
@@ -88,17 +95,13 @@ export const checkDeployment = async (
   }
 };
 
-if (import.meta.main) {
-  const [origin, buildId, mailUpdatesUrl] = process.argv.slice(2);
-  if (!origin || !buildId) {
-    throw new Error(
-      "Usage: check-deployment.ts <origin> <expected-build-id> [mail-updates-url]"
-    );
-  }
+export const checkDeploymentWithRetry = async (
+  ...args: Parameters<typeof checkDeployment>
+) => {
   for (let attempt = 0; ; attempt += 1) {
     try {
-      await checkDeployment(origin, buildId, mailUpdatesUrl);
-      break;
+      await checkDeployment(...args);
+      return;
     } catch (error) {
       if (attempt === 3) {
         throw error;
@@ -106,6 +109,16 @@ if (import.meta.main) {
       await setTimeout(5000);
     }
   }
+};
+
+if (import.meta.main) {
+  const [origin, buildId, mailUpdatesUrl] = process.argv.slice(2);
+  if (!origin || !buildId) {
+    throw new Error(
+      "Usage: check-deployment.ts <origin> <expected-build-id> [mail-updates-url]"
+    );
+  }
+  await checkDeploymentWithRetry(origin, buildId, mailUpdatesUrl);
   process.stdout.write(
     `Verified server, database, SSR and assets${mailUpdatesUrl ? ", and mail updates endpoint" : ""} for ${buildId}.\n`
   );

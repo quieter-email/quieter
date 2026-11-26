@@ -5,6 +5,7 @@ import path from "node:path";
 
 import { COMPATIBILITY_DATE } from "@quieter/cloudflare/compatibility-date";
 import { webReleasePlanSchema } from "@quieter/env/deployment";
+import { createSstCommandEnv } from "@quieter/env/sst";
 import { z } from "zod";
 
 import type { createAppDatabase } from "./database";
@@ -19,8 +20,13 @@ import {
   production,
   stage,
 } from "./stage";
-import type { SstLinkable } from "./types";
-import { deriveWebReleaseScope, WEB_RELEASE_SLOTS } from "./web-release-scope";
+import type { SecretBindings, SecretResource, SstLinkable } from "./types";
+import { createNativeWeb } from "./web-native";
+import {
+  assertSstWebReleasePlan,
+  deriveWebReleaseScope,
+  WEB_RELEASE_SLOTS,
+} from "./web-release-scope";
 
 const webSitePath = "apps/web";
 
@@ -93,9 +99,18 @@ class WebTanStackStart extends sst.cloudflare.TanStackStart {
 export const createWeb = (
   appDatabase: ReturnType<typeof createAppDatabase>,
   webSecretBindings: SstLinkable[],
-  runtimeEnvironment: Record<string, $util.Input<string>> = {},
-  links: SstLinkable[] = []
+  runtimeEnvironment: Record<string, $util.Input<string>>,
+  links: SstLinkable[],
+  nativeBindings: {
+    secretBindings: SecretBindings;
+    signingSecret: SecretResource;
+  }
 ) => {
+  const commandEnv = createSstCommandEnv();
+  const nativeMode =
+    production && !$dev && commandEnv.QUIETER_NATIVE_WEB === "true";
+  const nativeBootstrap =
+    nativeMode && commandEnv.QUIETER_NATIVE_WEB_BOOTSTRAP === "true";
   const deployment =
     production && !$dev
       ? webReleasePlanSchema.parse(
@@ -104,10 +119,16 @@ export const createWeb = (
       : null;
   if (
     deployment !== null &&
-    deployment.manifest.current.buildId !==
-      getEnvironmentValue("QUIETER_BUILD_ID", "")
+    deployment.manifest.current.buildId !== commandEnv.QUIETER_BUILD_ID
   ) {
     throw new Error("The prepared web routing belongs to another build.");
+  }
+  if (deployment !== null) {
+    assertSstWebReleasePlan({
+      cutoverBuildId: commandEnv.QUIETER_ACTION_CUTOVER_BUILD_ID,
+      nativeMode,
+      plan: deployment,
+    });
   }
   const environment = {
     AWS_DEFAULT_REGION: getEnvironmentValue("AWS_REGION", "eu-central-1"),
@@ -157,6 +178,19 @@ export const createWeb = (
     VITE_SENTRY_DSN: getEnvironmentValue("VITE_SENTRY_DSN", ""),
     ...runtimeEnvironment,
   };
+  const nativeWeb = nativeMode
+    ? createNativeWeb({
+        accountId: commandEnv.CLOUDFLARE_DEFAULT_ACCOUNT_ID ?? "",
+        hyperdriveId: appDatabase.id,
+        linkPermissions: links,
+        runtimeEnvironment: environment,
+        ...nativeBindings,
+      })
+    : null;
+  const legacyWebEnvironment = {
+    ...environment,
+    QUIETER_BUILD_ID: commandEnv.QUIETER_BUILD_ID ?? `local-${stage}`,
+  };
   const releaseLinks = [...webSecretBindings, appDatabase, ...links];
   let promotionManifest: $util.Input<string> | undefined;
   class RetainedWebTanStackStart extends WebTanStackStart {
@@ -180,7 +214,7 @@ export const createWeb = (
               flags: ["nodejs_compat"],
             },
             dev: false,
-            environment,
+            environment: legacyWebEnvironment,
             handler: $util
               .all([outputPath, plan])
               .apply(([directory, paths]) =>
@@ -236,13 +270,14 @@ export const createWeb = (
         }
       : undefined
   );
-  return new RetainedWebTanStackStart("Web", {
-    buildCommand: production
-      ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
-      : "vp run build",
+  const legacyBuildCommand = production
+    ? `vp exec node ../../scripts/prepared-web-build.ts ${$cli.command}`
+    : "vp run build";
+  const web = new RetainedWebTanStackStart("Web", {
+    buildCommand: nativeMode ? "true" : legacyBuildCommand,
     dev: { command: "vp run dev" },
     domain: webDomain,
-    environment,
+    environment: legacyWebEnvironment,
     link: releaseLinks,
     path: webSitePath,
     transform: {
@@ -272,6 +307,25 @@ export const createWeb = (
                       type: "service" as const,
                     })
                   ),
+                  ...(nativeWeb === null || nativeBootstrap
+                    ? []
+                    : [
+                        {
+                          name: "WebApp",
+                          service: nativeWeb.scriptName,
+                          type: "service" as const,
+                        },
+                        {
+                          name: "WebAppScriptName",
+                          text: nativeWeb.scriptName,
+                          type: "plain_text" as const,
+                        },
+                        {
+                          name: "WebReleaseProbeToken",
+                          text: nativeWeb.probeToken,
+                          type: "secret_text" as const,
+                        },
+                      ]),
                 ]);
             }
           },
@@ -294,4 +348,5 @@ export const createWeb = (
       },
     },
   });
+  return { nativeWebWorkerId: nativeWeb?.workerId, url: web.url };
 };

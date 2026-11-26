@@ -1,0 +1,100 @@
+name: Administer production mail dispatch and capture
+
+on:
+  workflow_dispatch:
+    inputs:
+      operation:
+        description: Operation to perform against production mail
+        required: true
+        type: choice
+        options:
+          - repair-capture-labels
+          - enable-dispatch
+          - disable-dispatch
+      fallback_schedules_restored:
+        description: For disable-dispatch, confirm the restored fallback schedules are running
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: quieter-deploy-production
+  cancel-in-progress: false
+
+jobs:
+  administer:
+    if: github.ref == 'refs/heads/main'
+    environment: production
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    env:
+      MAIL_OPERATION: ${{ inputs.operation }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+
+      - name: Require administrator and a verified production release of current main
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          test "$GITHUB_REF_PROTECTED" = true
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/collaborators/$GITHUB_TRIGGERING_ACTOR/permission" --jq '.permission')" = admin
+          test "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" = "$GITHUB_SHA"
+          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/sst-deploy.yml/runs?branch=main&per_page=1" --jq '.workflow_runs[0]')
+          jq -e --arg sha "$GITHUB_SHA" '.head_sha == $sha and .status == "completed" and .conclusion == "success"' <<< "$run" > /dev/null
+          run_id=$(jq -er '.id' <<< "$run")
+          attempt=$(jq -er '.run_attempt' <<< "$run")
+          jobs=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/attempts/$attempt/jobs?per_page=100")
+          jq -e --arg operation "$MAIL_OPERATION" '
+            [.jobs[] | select(.name == "Deploy production")] |
+            length == 1 and all(.[]; .conclusion == "success" and
+              (any(.steps[]; .name == "Deploy prepared build with SST" and .conclusion == "success") or
+               ($operation == "repair-capture-labels" and any(.steps[]; .name == "Verify live native web version" and .conclusion == "success"))) and
+              ($operation != "enable-dispatch" or any(.steps[]; .name == "Verify hosted mail dispatch" and .conclusion == "success")))
+          ' <<< "$jobs" > /dev/null || {
+            echo '::error::Mail dispatch operations need a successful infrastructure sync of current main. Run Deploy SST Stack manually first.'
+            exit 1
+          }
+
+      - uses: ./.github/actions/setup
+
+      - name: Perform the requested mail operation
+        env:
+          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
+          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
+          QUIETER_GMAIL_EVENTS_ENABLED: ${{ vars.QUIETER_GMAIL_EVENTS_ENABLED }}
+          QUIETER_MAIL_DISPATCH_ENABLED: ${{ vars.QUIETER_MAIL_DISPATCH_ENABLED }}
+          QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: ${{ vars.QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED }}
+          FALLBACK_SCHEDULES_RESTORED: ${{ inputs.fallback_schedules_restored }}
+        run: |
+          set -euo pipefail
+          case "$MAIL_OPERATION" in
+            repair-capture-labels)
+              vp exec node packages/database/scripts/repair-gmail-capture-labels.ts
+              ;;
+            enable-dispatch)
+              if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
+                echo 'Deploy the mail dispatch Worker before activating events.' >&2
+                exit 1
+              fi
+              vp exec node packages/database/scripts/mail-event-cutover.ts enable gmail
+              ;;
+            disable-dispatch)
+              if [[ "$FALLBACK_SCHEDULES_RESTORED" != true || "$QUIETER_GMAIL_EVENTS_ENABLED" == true || "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" == true ]]; then
+                echo 'Restore the fallback schedules and confirm they are running before disabling committed dispatch.' >&2
+                exit 1
+              fi
+              vp exec node packages/database/scripts/mail-event-cutover.ts disable
+              ;;
+            *)
+              echo 'Select a supported mail operation.' >&2
+              exit 1
+              ;;
+          esac

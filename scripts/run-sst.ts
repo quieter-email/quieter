@@ -5,7 +5,10 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { parseArgs, parseEnv } from "node:util";
 
-import { deriveWebReleaseScope } from "../infra/web-release-scope.ts";
+import {
+  assertSstWebReleasePlan,
+  deriveWebReleaseScope,
+} from "../infra/web-release-scope.ts";
 
 export const prepareSstArguments = async (input: {
   args: string[];
@@ -98,8 +101,20 @@ export const prepareSstArguments = async (input: {
   if (plan.manifest.current.buildId !== deploymentEnv.QUIETER_BUILD_ID) {
     throw new Error("The prepared web routing belongs to another build.");
   }
+  const nativeMode = deploymentEnv.QUIETER_NATIVE_WEB === "true";
+  const bootstrap = deploymentEnv.QUIETER_NATIVE_WEB_BOOTSTRAP === "true";
+  if (bootstrap && !nativeMode) {
+    throw new Error("Creating the native web Worker requires native web mode.");
+  }
+  assertSstWebReleasePlan({
+    cutoverBuildId: deploymentEnv.QUIETER_ACTION_CUTOVER_BUILD_ID,
+    nativeMode,
+    plan,
+  });
   const fingerprint = JSON.stringify({
+    bootstrap,
     buildId: plan.manifest.current.buildId,
+    nativeMode,
     plan: createHash("sha256").update(planBytes).digest("hex"),
   });
   const fingerprintPath = path.join(

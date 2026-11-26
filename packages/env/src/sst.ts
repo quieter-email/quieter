@@ -153,11 +153,20 @@ export const createSstCommandEnv = (
     emptyStringAsUndefined: true,
     onValidationError: throwEnvironmentValidationError,
     runtimeEnvStrict: {
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: runtimeEnv.CLOUDFLARE_DEFAULT_ACCOUNT_ID,
+      QUIETER_ACTION_CUTOVER_BUILD_ID:
+        runtimeEnv.QUIETER_ACTION_CUTOVER_BUILD_ID,
       QUIETER_BUILD_ID: runtimeEnv.QUIETER_BUILD_ID,
+      QUIETER_NATIVE_WEB: runtimeEnv.QUIETER_NATIVE_WEB,
+      QUIETER_NATIVE_WEB_BOOTSTRAP: runtimeEnv.QUIETER_NATIVE_WEB_BOOTSTRAP,
       SST_STAGE: runtimeEnv.SST_STAGE,
     },
     server: {
+      CLOUDFLARE_DEFAULT_ACCOUNT_ID: z.string().optional(),
+      QUIETER_ACTION_CUTOVER_BUILD_ID: z.string().optional(),
       QUIETER_BUILD_ID: z.string().optional(),
+      QUIETER_NATIVE_WEB: z.enum(["true", "false"]).optional(),
+      QUIETER_NATIVE_WEB_BOOTSTRAP: z.enum(["true", "false"]).optional(),
       SST_STAGE: z.string().optional(),
     },
   });

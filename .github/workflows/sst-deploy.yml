@@ -11,20 +11,6 @@ on:
         required: false
         default: false
         type: boolean
-      mail_event_dispatch:
-        description: Enable committed dispatch or disable it after restoring fallback schedules
-        required: false
-        default: unchanged
-        type: choice
-        options:
-          - unchanged
-          - enable
-          - disable
-      repair_gmail_capture_labels:
-        description: Repair Gmail capture metadata written by the old label encoder
-        required: false
-        default: false
-        type: boolean
       refresh_state:
         description: Run sst refresh before planning (auto skips it unless an emergency web recovery ran since the last deploy)
         required: false
@@ -148,6 +134,8 @@ jobs:
     env:
       SST_STAGE: production
       QUIETER_BUILD_ID: ${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      QUIETER_NATIVE_WEB: ${{ vars.QUIETER_NATIVE_WEB }}
+      QUIETER_ACTION_CUTOVER_BUILD_ID: ${{ inputs.execute_personal_action_cutover && format('{0}-{1}-{2}', github.sha, github.run_id, github.run_attempt) || '' }}
       BETTER_AUTH_APP_NAME: ${{ vars.BETTER_AUTH_APP_NAME }}
       BETTER_AUTH_TRUSTED_ORIGINS: ${{ vars.BETTER_AUTH_TRUSTED_ORIGINS }}
       CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
@@ -187,12 +175,32 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Setup repository
         uses: ./.github/actions/setup
 
+      - name: Plan native web release
+        if: env.QUIETER_NATIVE_WEB == 'true'
+        id: web-plan
+        env:
+          FORCE_INFRASTRUCTURE: ${{ github.event_name == 'workflow_dispatch' }}
+        run: |
+          if [[ -n "$QUIETER_ACTION_CUTOVER_BUILD_ID" ]]; then
+            echo 'Complete the personal Action transition before enabling native web publishing.' >&2
+            exit 1
+          fi
+          export QUIETER_BUILD_ID="$GITHUB_SHA-$GITHUB_RUN_ID"
+          echo "QUIETER_BUILD_ID=$QUIETER_BUILD_ID" >> "$GITHUB_ENV"
+          args=()
+          if [[ "$FORCE_INFRASTRUCTURE" == true ]]; then
+            args+=(force-infrastructure)
+          fi
+          vp exec node scripts/native-web-release.ts plan "${args[@]}" >> "$GITHUB_OUTPUT"
+
       - name: Install infrastructure type definitions
+        if: env.QUIETER_NATIVE_WEB != 'true' || steps.web-plan.outputs.infrastructure == 'true'
         run: vp exec sst install --stage "$SST_STAGE"
 
       - name: Configure AWS credentials
@@ -202,17 +210,32 @@ jobs:
           aws-region: ${{ vars.AWS_REGION || 'eu-central-1' }}
 
       - name: Build deployment configuration
+        if: steps.web-plan.outputs.verify-only != 'true'
         run: |
           vp run @quieter/observability#build
           vp run quieter#build
 
+      - name: Build native web candidate
+        if: env.QUIETER_NATIVE_WEB == 'true' && steps.web-plan.outputs.verify-only != 'true'
+        run: |
+          : "${SENTRY_AUTH_TOKEN:?Sentry upload credentials are required}"
+          : "${SENTRY_ORG:?Sentry organization is required}"
+          : "${SENTRY_PROJECT:?Sentry project is required}"
+          vp exec node packages/cloudflare/scripts/write-build-wrangler.ts \
+            --name quieter-production-web-app \
+            --main "$GITHUB_WORKSPACE/apps/web/src/server.ts" \
+            --out "$RUNNER_TEMP/web-release.wrangler.jsonc"
+          SST_WRANGLER_PATH="$RUNNER_TEMP/web-release.wrangler.jsonc" vp run @quieter/web#build
+
       - name: Prepare web release routing
+        if: env.QUIETER_NATIVE_WEB != 'true'
         run: vp exec node scripts/web-release.ts prepare https://quieter.email "$QUIETER_BUILD_ID"
 
       # Emergency web recoveries change the live worker outside SST, so state
       # needs a refresh afterwards. Normal deploys only go through SST, in
       # which case the ~100s refresh is pure overhead and skipped.
       - name: Check for recovery drift since last deploy
+        if: env.QUIETER_NATIVE_WEB != 'true'
         id: drift-check
         env:
           GH_REPO: ${{ github.repository }}
@@ -232,6 +255,7 @@ jobs:
           fi
 
       - name: Prepare web asset directories
+        if: env.QUIETER_NATIVE_WEB != 'true' || steps.web-plan.outputs.infrastructure == 'true'
         # Refresh can still read the previous release's asset path during migration.
         run: mkdir -p apps/web/dist/client apps/web/.cloudflare/output/v0/workers/default/assets apps/web/.cloudflare/output/v1/workers/default/assets
 
@@ -241,7 +265,10 @@ jobs:
         run: vp exec sst refresh --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Preview production changes
+        if: env.QUIETER_NATIVE_WEB != 'true' || (steps.web-plan.outputs.infrastructure == 'true' && steps.web-plan.outputs.bootstrap != 'true')
         timeout-minutes: 10
+        env:
+          QUIETER_BUILD_ID: ${{ steps.web-plan.outputs.sst-build-id || env.QUIETER_BUILD_ID }}
         run: vp run sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Upload SST logs on failure
@@ -255,9 +282,11 @@ jobs:
           overwrite: true
 
       - name: Record previous healthy web version
+        if: env.QUIETER_NATIVE_WEB != 'true'
         run: vp exec node scripts/web-recovery.ts record previous-web.json
 
       - name: Retain web recovery record before deployment
+        if: env.QUIETER_NATIVE_WEB != 'true'
         uses: actions/upload-artifact@v7
         with:
           name: previous-web
@@ -267,9 +296,11 @@ jobs:
           overwrite: true
 
       - name: Verify web release routing has not drifted
+        if: env.QUIETER_NATIVE_WEB != 'true'
         run: vp exec node scripts/web-release.ts verify https://quieter.email "$QUIETER_BUILD_ID"
 
       - name: Prepare or assert durable personal Action cutover
+        if: steps.web-plan.outputs.verify-only != 'true'
         id: action-cutover
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
@@ -294,18 +325,21 @@ jobs:
           vp exec node packages/database/scripts/run-personal-action-cutover.ts assert --build-id "$GITHUB_SHA"
 
       - name: Check for old mail relay replication slots
+        if: env.QUIETER_NATIVE_WEB != 'true' || steps.web-plan.outputs.infrastructure == 'true'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp exec node packages/database/scripts/mail-event-cutover.ts verify
 
       - name: Apply production database migrations
+        if: steps.web-plan.outputs.verify-only != 'true'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
         run: vp run @quieter/database#db:deploy
 
       - name: Check mail event cutover
+        if: env.QUIETER_NATIVE_WEB != 'true' || steps.web-plan.outputs.infrastructure == 'true'
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
           QUIETER_ALLOW_REMOTE_MIGRATIONS: production
@@ -320,74 +354,32 @@ jobs:
           [[ "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" != true ]] || scopes+=(maintenance)
           vp exec node packages/database/scripts/mail-event-cutover.ts verify "$(IFS=, ; echo "${scopes[*]}")"
 
-      - name: Bootstrap explicitly authorized account access
-        if: ${{ vars.BILLING_BOOTSTRAP_USER_ID != '' }}
+      - name: Bootstrap private native web Worker
+        if: steps.web-plan.outputs.bootstrap == 'true'
         env:
-          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
-          BILLING_BOOTSTRAP_USER_ID: ${{ vars.BILLING_BOOTSTRAP_USER_ID }}
-          BILLING_BOOTSTRAP_ACCEPT_FUNDING: ${{ vars.BILLING_BOOTSTRAP_ACCEPT_FUNDING }}
+          QUIETER_BUILD_ID: ${{ steps.web-plan.outputs.sst-build-id }}
         run: |
-          set -euo pipefail
-          args=(--action grant-unlimited --user-id "$BILLING_BOOTSTRAP_USER_ID" --permanent
-            --reason account-billing-cutover-authorized-permanent-access
-            --operator "github:$GITHUB_TRIGGERING_ACTOR:run:$GITHUB_RUN_ID")
-          if [[ "$BILLING_BOOTSTRAP_ACCEPT_FUNDING" == true ]]; then
-            args+=(--accept-unfunded-owned-organizations)
-          fi
-          vp exec node packages/database/scripts/billing-account-admin.ts "${args[@]}"
-
-      - name: Inspect database connections before deployment
-        continue-on-error: true
-        timeout-minutes: 2
-        run: vp exec sst shell --stage "$SST_STAGE" -- node packages/database/scripts/inspect-connections.ts
+          QUIETER_NATIVE_WEB_BOOTSTRAP=true vp run sst diff --config sst.config.ts --stage "$SST_STAGE"
+          QUIETER_NATIVE_WEB_BOOTSTRAP=true vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
+          vp exec node scripts/check-action-deployment.ts secure-private-releases
+          vp exec node scripts/native-web-release.ts bootstrap
+          vp run sst diff --config sst.config.ts --stage "$SST_STAGE"
 
       - name: Deploy prepared build with SST
+        if: env.QUIETER_NATIVE_WEB != 'true' || steps.web-plan.outputs.infrastructure == 'true'
         id: deploy
+        env:
+          QUIETER_BUILD_ID: ${{ steps.web-plan.outputs.sst-build-id || env.QUIETER_BUILD_ID }}
         run: vp run sst deploy --config sst.config.ts --stage "$SST_STAGE"
 
-      - name: Verify hosted mail dispatch
-        if: vars.QUIETER_MAIL_DISPATCH_ENABLED == 'true'
-        timeout-minutes: 2
-        run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email --dispatch
-
-      - name: Repair legacy Gmail capture labels
-        if: github.event_name == 'workflow_dispatch' && inputs.repair_gmail_capture_labels
-        env:
-          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
-        run: vp exec node packages/database/scripts/repair-gmail-capture-labels.ts
-
-      - name: Change committed mail dispatch
-        if: github.event_name == 'workflow_dispatch' && inputs.mail_event_dispatch != 'unchanged'
-        env:
-          DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
-          QUIETER_ALLOW_REMOTE_MIGRATIONS: production
-          MAIL_EVENT_DISPATCH_OPERATION: ${{ inputs.mail_event_dispatch }}
-        run: |
-          set -euo pipefail
-          if [[ "$MAIL_EVENT_DISPATCH_OPERATION" == disable ]]; then
-            if [[ "$QUIETER_GMAIL_EVENTS_ENABLED" == true || "$QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED" == true ]]; then
-              echo "Restore the fallback schedules before disabling committed dispatch." >&2
-              exit 1
-            fi
-            vp exec node packages/database/scripts/mail-event-cutover.ts disable
-          else
-            if [[ "$QUIETER_MAIL_DISPATCH_ENABLED" != true ]]; then
-              echo "Enable the Cloudflare mail dispatch Worker before activating events." >&2
-              exit 1
-            fi
-            vp exec node packages/database/scripts/mail-event-cutover.ts enable gmail
-          fi
-
       - name: Disable direct private release URLs
+        if: steps.deploy.outcome == 'success'
         run: vp exec node scripts/check-action-deployment.ts secure-private-releases
 
-      - name: Inspect database connections after deployment
-        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
-        continue-on-error: true
+      - name: Verify hosted mail dispatch
+        if: vars.QUIETER_MAIL_DISPATCH_ENABLED == 'true' && steps.deploy.outcome == 'success'
         timeout-minutes: 2
-        run: vp exec sst shell --stage "$SST_STAGE" -- node packages/database/scripts/inspect-connections.ts
+        run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email --dispatch
 
       - name: Verify signed mail updates
         if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
@@ -395,12 +387,24 @@ jobs:
         # Cloudflare Worker shell targets do not export their linked secrets.
         run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/check-mail-updates.ts https://updates.quieter.email
 
+      - name: Stage, verify, and promote native web version
+        if: env.QUIETER_NATIVE_WEB == 'true' && steps.web-plan.outputs.verify-only != 'true'
+        id: publish-web
+        timeout-minutes: 10
+        run: vp exec sst shell --stage "$SST_STAGE" -- node scripts/native-web-release.ts publish
+
+      - name: Verify live native web version
+        if: ${{ !cancelled() && env.QUIETER_NATIVE_WEB == 'true' && (steps.publish-web.outcome == 'success' || steps.web-plan.outputs.verify-only == 'true') }}
+        timeout-minutes: 5
+        run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID"
+
       - name: Verify production release
-        if: ${{ !cancelled() && steps.deploy.outcome == 'success' }}
+        if: ${{ !cancelled() && env.QUIETER_NATIVE_WEB != 'true' && steps.deploy.outcome == 'success' }}
         timeout-minutes: 5
         run: vp exec node scripts/check-deployment.ts https://quieter.email "$QUIETER_BUILD_ID" https://updates.quieter.email/mail/live
 
       - name: Verify every deployed Action consumer
+        if: steps.action-cutover.outputs.pending == 'true'
         id: action-consumers
         run: vp exec node scripts/check-action-deployment.ts verify .sst/outputs.json action-deployment-initial-evidence.json
 
@@ -411,6 +415,7 @@ jobs:
           sleep 960
 
       - name: Reverify Action consumers before release
+        if: steps.action-cutover.outputs.pending == 'true'
         run: vp exec node scripts/check-action-deployment.ts verify
 
       - name: Release verified personal Actions
@@ -425,7 +430,7 @@ jobs:
           vp exec node packages/database/scripts/run-personal-action-cutover.ts release --build-id "$GITHUB_SHA" --verified-build-id "$GITHUB_SHA"
 
       - name: Record durable cutover state
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.execute_personal_action_cutover
         continue-on-error: true
         env:
           DATABASE_MIGRATION_URL: ${{ secrets.DATABASE_MIGRATION_URL }}
@@ -437,7 +442,7 @@ jobs:
           echo 'Failure or cancellation never releases the fence. Resume this same commit with: gh workflow run sst-deploy.yml --ref main -f execute_personal_action_cutover=true' >> "$GITHUB_STEP_SUMMARY"
 
       - name: Retain nonsecret cutover evidence
-        if: always()
+        if: always() && github.event_name == 'workflow_dispatch' && inputs.execute_personal_action_cutover
         uses: actions/upload-artifact@v7
         with:
           name: action-cutover

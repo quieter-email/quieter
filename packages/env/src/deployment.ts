@@ -4,6 +4,9 @@ export const DEPLOYMENT_BUILD_HEADER = "x-quieter-build-id";
 export const DEPLOYMENT_RELOAD_HEADER = "x-quieter-reload";
 export const DEPLOYMENT_STATUS_PATH = "/assets/deployment.json";
 export const DEPLOYMENT_ASSET_PREFIX = "/_releases/";
+export const DEPLOYMENT_PROBE_HEADER = "x-quieter-release-probe";
+export const DEPLOYMENT_VERSION_HEADER = "x-quieter-release-version";
+export const DEPLOYMENT_BOOTSTRAP_HEADER = "x-quieter-web-bootstrap";
 
 export const PERSONAL_ACTION_PROTOCOL = "personal-actions-v1";
 
@@ -16,14 +19,17 @@ const deploymentBuildSchema = z.object({
   buildId: z.string().regex(/^[\w.-]{1,128}$/u),
   protocol: z.string().min(1).optional(),
   slot: z.enum(["a", "b"]),
+  versionId: z.uuid().optional(),
 });
+
+const previousDeploymentSchema = deploymentBuildSchema
+  .extend({ expiresAt: z.number().int().nonnegative() })
+  .nullable();
 
 export const deploymentManifestSchema = z
   .object({
     current: deploymentBuildSchema,
-    previous: deploymentBuildSchema
-      .extend({ expiresAt: z.number().int().nonnegative() })
-      .nullable(),
+    previous: previousDeploymentSchema,
   })
   .refine(
     ({ current, previous }) =>
@@ -35,6 +41,35 @@ export const deploymentManifestSchema = z
 export const deploymentStatusSchema = deploymentManifestSchema.safeExtend({
   serverTime: z.number().int().nonnegative(),
 });
+
+export const nativeWebReleaseSchema = deploymentBuildSchema
+  .pick({ slot: true })
+  .extend({ previous: previousDeploymentSchema });
+
+export const webReleaseProbeSchema = deploymentBuildSchema
+  .pick({ buildId: true })
+  .extend({ versionId: z.union([z.uuid(), z.literal("legacy")]) });
+
+export const createNativeWebDeploymentEnv = (
+  runtime: Record<string, unknown>,
+  buildId: string
+) => {
+  const release = nativeWebReleaseSchema.parse(
+    JSON.parse(z.string().parse(runtime.QUIETER_WEB_RELEASE))
+  );
+  const version = z
+    .object({ id: z.uuid() })
+    .parse(runtime.QUIETER_WORKER_VERSION);
+  return deploymentManifestSchema.parse({
+    current: {
+      buildId,
+      protocol: PERSONAL_ACTION_PROTOCOL,
+      slot: release.slot,
+      versionId: version.id,
+    },
+    previous: release.previous,
+  });
+};
 
 export const webReleasePlanSchema = z
   .object({

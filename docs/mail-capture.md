@@ -66,4 +66,4 @@ For local verification, use a disposable loopback database with the migrations a
 
 ## Repair legacy Gmail labels
 
-After all capture workers run the updated metadata writer, run the protected production deployment with `repair_gmail_capture_labels=true` to repair older snapshots whose label arrays were stored as JSON strings. The job updates snapshots in primary-key order, commits each page, and reports the number of rows repaired. It preserves message bodies and skips rows already repaired or updated by capture. Re-running the same operation is safe.
+After all capture workers run the updated metadata writer, run **Administer production mail dispatch and capture** with `repair-capture-labels` to repair older snapshots whose label arrays were stored as JSON strings. The job updates snapshots in primary-key order, commits each page, and reports the number of rows repaired. It preserves message bodies and skips rows already repaired or updated by capture. Re-running the same operation is safe.

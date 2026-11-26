@@ -96,7 +96,8 @@ jobs:
           deployed_run_id="$(jq -r .id deployed-run.json)"
           gh api --paginate --slurp "repos/$GITHUB_REPOSITORY/actions/runs/$deployed_run_id/jobs?per_page=100" > deployed-jobs.json
           jq -e '[.[].jobs[] | select(.name == "Deploy production")] |
-            length == 1 and all(.[]; .status == "completed" and .conclusion == "success")
+            length == 1 and all(.[]; .status == "completed" and .conclusion == "success" and
+              any(.steps[]; (.name == "Deploy prepared build with SST" or .name == "Verify live native web version") and .conclusion == "success"))
           ' deployed-jobs.json > /dev/null || {
             echo "::error::The successful run does not prove a complete production deployment. Run a full production redeploy before retrying write-off."
             exit 1
