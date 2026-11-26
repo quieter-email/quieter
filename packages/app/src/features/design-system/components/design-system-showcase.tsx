@@ -60,7 +60,7 @@ import {
   ComposerActionBar,
   ComposerDictationControl,
   ComposerContextChip,
-  ComposerTokenField,
+  ComposerInputGroup,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { CompositionChart } from "@quieter/ui/composition-chart";
@@ -1501,10 +1501,11 @@ export const DesignSystemShowcase = () => {
           <Row label="Autocomplete field">
             <Field>
               <FieldLabel className="sr-only">Example recipient</FieldLabel>
-              <ComposerTokenField>
+              <ComposerInputGroup>
                 {showRecipientChip ? (
                   <ComposerContextChip
-                    label="alex@example.com"
+                    description="alex@example.com"
+                    label="Alex"
                     onRemove={() => {
                       setShowRecipientChip(false);
                     }}
@@ -1541,7 +1542,7 @@ export const DesignSystemShowcase = () => {
                   )}
                   value={recipient}
                 />
-              </ComposerTokenField>
+              </ComposerInputGroup>
             </Field>
           </Row>
           <Row label="Date and time">

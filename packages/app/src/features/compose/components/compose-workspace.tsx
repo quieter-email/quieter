@@ -6,7 +6,6 @@ import {
   Attachment01Icon,
   Cancel01Icon,
   Delete02Icon,
-  Edit01Icon,
   Loading03Icon,
   MailSend02Icon,
   MoreHorizontalIcon,
@@ -79,6 +78,7 @@ import {
   ComposerFieldGroup,
   ComposerFieldRow,
   ComposerFrame,
+  ComposerInputGroup,
 } from "@quieter/ui/composer-chrome";
 import {
   Dialog,
@@ -250,6 +250,34 @@ const ComposeFormField = ({
       );
     }}
   </form.Field>
+);
+
+const SenderIdentity = ({
+  address,
+  className,
+  name,
+}: {
+  address: string;
+  className?: string;
+  name?: string;
+}) => (
+  <span className={cn("flex min-w-0 gap-x-2 text-left", className)}>
+    {name ? (
+      <Text as="span" className="max-w-full" size="sm" title={name} truncate>
+        {name}
+      </Text>
+    ) : null}
+    <Text
+      as="span"
+      className="max-w-full"
+      size="sm"
+      title={address}
+      tone={name ? "muted" : "default"}
+      truncate
+    >
+      {address}
+    </Text>
+  </span>
 );
 
 const RenameAttachmentDialog = ({
@@ -991,19 +1019,7 @@ const ReadyComposeSurface = ({
                                 }
                                 label="From"
                               >
-                                <div className="flex h-10 min-w-0 flex-1 items-center gap-2">
-                                  {canSwitchSender ? null : (
-                                    <FieldControl
-                                      chrome="composer"
-                                      readOnly
-                                      tabIndex={-1}
-                                      value={
-                                        senderEmail
-                                          ? `${senderName} <${senderEmail}>`
-                                          : "No sending address"
-                                      }
-                                    />
-                                  )}
+                                <div className="flex min-h-10 min-w-0 flex-1 items-center">
                                   <Popover
                                     onOpenChange={setSenderDetailsOpen}
                                     open={senderDetailsOpen}
@@ -1021,17 +1037,14 @@ const ReadyComposeSurface = ({
                                           />
                                         }
                                       >
-                                        {senderName ? (
-                                          <span className="max-w-1/2 shrink-0 truncate text-fg">
-                                            {senderName}
-                                          </span>
-                                        ) : null}
-                                        <span className="truncate">
-                                          {senderName && senderEmail
-                                            ? `<${senderEmail}>`
-                                            : (senderEmail ??
-                                              "Choose a sending address")}
-                                        </span>
+                                        <SenderIdentity
+                                          address={
+                                            senderEmail ??
+                                            "Choose a sending address"
+                                          }
+                                          className="flex-wrap items-baseline"
+                                          name={senderName}
+                                        />
                                         <Icon
                                           aria-hidden
                                           data-icon="inline-end"
@@ -1039,21 +1052,26 @@ const ReadyComposeSurface = ({
                                         />
                                       </PopoverTrigger>
                                     ) : (
-                                      <IconButtonTooltip label="Edit sender name">
+                                      <ComposerInputGroup>
+                                        <SenderIdentity
+                                          address={
+                                            senderEmail ?? "No sending address"
+                                          }
+                                          className="flex-1 flex-wrap items-baseline px-1"
+                                          name={senderName}
+                                        />
                                         <PopoverTrigger
-                                          aria-label="Edit sender name"
                                           disabled={senderDetailsDisabled}
                                           render={
                                             <Button
-                                              chrome="toolbar"
-                                              size="icon-lg"
-                                              variant="secondary"
+                                              size="compact"
+                                              variant="ghost"
                                             />
                                           }
                                         >
-                                          <Icon aria-hidden icon={Edit01Icon} />
+                                          Edit name
                                         </PopoverTrigger>
-                                      </IconButtonTooltip>
+                                      </ComposerInputGroup>
                                     )}
                                     <PopoverContent
                                       align={canSwitchSender ? "start" : "end"}
@@ -1075,7 +1093,7 @@ const ReadyComposeSurface = ({
                                                 ...(senderMailboxes?.map(
                                                   (sender) => ({
                                                     label: sender.displayName
-                                                      ? `${sender.displayName} <${sender.emailAddress}>`
+                                                      ? `${sender.displayName}, ${sender.emailAddress}`
                                                       : sender.emailAddress,
                                                     value: sender.id,
                                                   })
@@ -1130,19 +1148,13 @@ const ReadyComposeSurface = ({
                                                         key={sender.id}
                                                         value={sender.id}
                                                       >
-                                                        <span className="flex min-w-0 flex-col gap-0.5 py-1">
-                                                          <span className="truncate text-body-sm font-medium">
-                                                            {sender.displayName ||
-                                                              sender.emailAddress}
-                                                          </span>
-                                                          {sender.displayName ? (
-                                                            <span className="text-caption break-all text-muted-fg">
-                                                              {
-                                                                sender.emailAddress
-                                                              }
-                                                            </span>
-                                                          ) : null}
-                                                        </span>
+                                                        <SenderIdentity
+                                                          address={
+                                                            sender.emailAddress
+                                                          }
+                                                          className="flex-col gap-y-0.5 py-1"
+                                                          name={sender.displayName?.trim()}
+                                                        />
                                                       </SelectItem>
                                                     )
                                                   )}

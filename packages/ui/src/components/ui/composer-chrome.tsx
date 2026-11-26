@@ -42,6 +42,7 @@ export const ComposerActionBar = ({
 );
 
 export const ComposerContextChip = ({
+  description,
   disabled,
   icon,
   invalid,
@@ -49,44 +50,60 @@ export const ComposerContextChip = ({
   onRemove,
   surface = "default",
 }: {
+  description?: string;
   disabled?: boolean;
   icon?: ReactNode;
   invalid?: boolean;
   label: string;
   onRemove: () => void;
   surface?: "default" | "field";
-}) => (
-  <span
-    aria-invalid={invalid}
-    className={cn(
-      "inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-transparent pl-2 text-caption",
-      {
-        "bg-detail text-muted-fg": surface === "default",
-        "border-border bg-panel text-fg": surface === "field",
-        "border-destructive bg-destructive/10 text-destructive": invalid,
-      }
-    )}
-  >
-    {icon}
-    <span className="min-w-0 truncate" title={label}>
-      {label}
-    </span>
-    <IconButtonTooltip label={`Remove ${label}`}>
-      <Button
-        aria-label={`Remove ${label}`}
-        disabled={disabled}
-        onClick={onRemove}
-        size="icon-xs"
-        type="button"
-        variant="ghost"
+}) => {
+  const removeLabel = description
+    ? `Remove ${label}, ${description}`
+    : `Remove ${label}`;
+  return (
+    <span
+      aria-invalid={invalid}
+      className={cn(
+        "inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-transparent pl-2 text-caption",
+        {
+          "bg-detail text-muted-fg": surface === "default",
+          "border-border bg-panel text-fg": surface === "field",
+          "border-destructive bg-destructive/10 text-destructive": invalid,
+        }
+      )}
+    >
+      {icon}
+      <span
+        className={cn("min-w-0 truncate", {
+          "max-w-1/2 shrink-0": !!description,
+        })}
+        title={label}
       >
-        <Icon aria-hidden icon={Cancel01Icon} />
-      </Button>
-    </IconButtonTooltip>
-  </span>
-);
+        {label}
+      </span>
+      {description ? (
+        <span className="min-w-0 truncate text-muted-fg" title={description}>
+          {description}
+        </span>
+      ) : null}
+      <IconButtonTooltip label={removeLabel}>
+        <Button
+          aria-label={removeLabel}
+          disabled={disabled}
+          onClick={onRemove}
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+        >
+          <Icon aria-hidden icon={Cancel01Icon} />
+        </Button>
+      </IconButtonTooltip>
+    </span>
+  );
+};
 
-export const ComposerTokenField = ({
+export const ComposerInputGroup = ({
   className,
   ...props
 }: ComponentPropsWithoutRef<"div">) => (

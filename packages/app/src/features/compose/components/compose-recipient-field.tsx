@@ -2,14 +2,16 @@
 
 import type { ComposeDialogController } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
 import {
+  extractMailAddress,
   findInvalidMailAddresses,
   splitMailAddressList,
 } from "@quieter/mail/compose/schema";
+import { parseSender } from "@quieter/mail/thread-list";
 import { AutocompleteField } from "@quieter/ui/autocomplete";
 import {
   ComposerContextChip,
   ComposerFieldRow,
-  ComposerTokenField,
+  ComposerInputGroup,
 } from "@quieter/ui/composer-chrome";
 import type { ComponentProps, ReactNode } from "react";
 import { useRef, useState } from "react";
@@ -106,21 +108,27 @@ const RecipientInput = ({
   };
 
   return (
-    <ComposerTokenField>
-      {recipients.map((recipient, index) => (
-        <ComposerContextChip
-          disabled={props.disabled}
-          invalid={findInvalidMailAddresses(recipient).length > 0}
-          // Older drafts can contain duplicate addresses.
-          // oxlint-disable-next-line react/no-array-index-key
-          key={`${recipient}-${index}`}
-          label={recipient}
-          onRemove={() => {
-            removeRecipient(index);
-          }}
-          surface="field"
-        />
-      ))}
+    <ComposerInputGroup>
+      {recipients.map((recipient, index) => {
+        const invalid = findInvalidMailAddresses(recipient).length > 0;
+        const address = invalid ? recipient : extractMailAddress(recipient);
+        const name = address === recipient ? "" : parseSender(recipient).name;
+        return (
+          <ComposerContextChip
+            description={name ? address : undefined}
+            disabled={props.disabled}
+            invalid={invalid}
+            // Older drafts can contain duplicate addresses.
+            // oxlint-disable-next-line react/no-array-index-key
+            key={`${recipient}-${index}`}
+            label={name || address}
+            onRemove={() => {
+              removeRecipient(index);
+            }}
+            surface="field"
+          />
+        );
+      })}
       <AutocompleteField
         {...props}
         chrome="composer-token"
@@ -235,7 +243,7 @@ const RecipientInput = ({
         )}
         value={input}
       />
-    </ComposerTokenField>
+    </ComposerInputGroup>
   );
 };
 
