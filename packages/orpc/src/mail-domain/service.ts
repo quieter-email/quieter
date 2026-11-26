@@ -251,12 +251,12 @@ const sstOutputsSchema = z.object({
   mailReceiptTopicArn: z.string().optional(),
 });
 
-const getSstOutputPaths = () => [
+const getSstOutputPaths = (moduleDirectory: string) => [
   ...new Set(
     [
       path.join(process.cwd(), ".sst", "outputs.json"),
       path.join(process.cwd(), "..", "..", ".sst", "outputs.json"),
-      path.join(import.meta.dirname, "..", "..", "..", ".sst", "outputs.json"),
+      path.join(moduleDirectory, "..", "..", "..", ".sst", "outputs.json"),
     ].map((outputPath) => path.resolve(outputPath))
   ),
 ];
@@ -278,7 +278,12 @@ const loadSstOutputs = async (): Promise<SstOutputs | null> => {
     return sstOutputs;
   }
 
-  const outputPaths = getSstOutputPaths();
+  const moduleDirectory = import.meta.dirname;
+  if (typeof moduleDirectory !== "string") {
+    return null;
+  }
+
+  const outputPaths = getSstOutputPaths(moduleDirectory);
   const loadedOutputCandidates = await Promise.all(
     outputPaths.map(
       async (outputPath) => await readSstOutputsFromPath(outputPath)
@@ -293,7 +298,13 @@ const loadSstOutputs = async (): Promise<SstOutputs | null> => {
 };
 
 const getReceiptRuleConfig = async (): Promise<ReceiptRuleConfig> => {
-  const outputs = await loadSstOutputs();
+  const outputs =
+    serverEnv.MAIL_BUCKET &&
+    serverEnv.MAIL_RECEIPT_TOPIC_ARN &&
+    serverEnv.MAIL_RECEIPT_ROLE_ARN &&
+    serverEnv.MAIL_RECEIPT_RULE_SET_NAME
+      ? null
+      : await loadSstOutputs();
   const bucketName = serverEnv.MAIL_BUCKET || outputs?.mailBucket?.trim();
   const topicArn =
     serverEnv.MAIL_RECEIPT_TOPIC_ARN || outputs?.mailReceiptTopicArn?.trim();
