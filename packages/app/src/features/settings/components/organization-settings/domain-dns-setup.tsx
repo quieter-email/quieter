@@ -28,8 +28,7 @@ import { Icon } from "@quieter/ui/icon";
 import { Surface, surfaceVariants } from "@quieter/ui/surface";
 import { toast } from "@quieter/ui/toast";
 
-const dnsTableColumns =
-  "grid grid-cols-[2.5rem_minmax(5.5rem,1fr)_minmax(9rem,2fr)_3rem_2rem_5.25rem] items-center gap-2";
+const dnsTableRow = "col-span-full grid grid-cols-subgrid items-center";
 
 const copyDnsValue = async (value: string) => {
   try {
@@ -240,12 +239,12 @@ const DomainDnsRecordsTable = ({
     <div className="overflow-x-auto">
       <table
         aria-label="DNS records"
-        className="block w-full min-w-152 text-left"
+        className="grid w-full min-w-152 grid-cols-[max-content_minmax(5.5rem,1fr)_minmax(9rem,2fr)_3rem_2rem_5.25rem] gap-x-2 text-left"
       >
-        <thead className="block">
+        <thead className="col-span-full grid grid-cols-subgrid">
           <tr
             className={cn(
-              dnsTableColumns,
+              dnsTableRow,
               surfaceVariants({ chrome: "inset", variant: "detail" }),
               "text-caption font-medium text-muted-fg [&_th]:font-medium"
             )}
@@ -258,7 +257,7 @@ const DomainDnsRecordsTable = ({
             <th scope="col">Status</th>
           </tr>
         </thead>
-        <tbody className="block">
+        <tbody className="col-span-full grid grid-cols-subgrid">
           {records.map((record) => {
             const check = dnsChecks.find(
               (candidate) =>
@@ -271,7 +270,7 @@ const DomainDnsRecordsTable = ({
                 : String(record.priority);
             return (
               <tr
-                className={cn(dnsTableColumns, "px-4 py-3")}
+                className={cn(dnsTableRow, "px-4 py-3")}
                 key={`${record.type}:${record.name}:${record.value}`}
               >
                 <td className="min-w-0">
