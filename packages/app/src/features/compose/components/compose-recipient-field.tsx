@@ -98,9 +98,11 @@ const RecipientInput = ({
   };
   const commitInput = () => {
     const pending = splitMailAddressList(input);
-    if (pending.length > 0 && findInvalidMailAddresses(input).length === 0) {
-      update([...recipients, ...pending], "");
+    if (pending.length === 0 || findInvalidMailAddresses(input).length > 0) {
+      return false;
     }
+    update([...recipients, ...pending], "");
+    return true;
   };
 
   return (
@@ -185,6 +187,15 @@ const RecipientInput = ({
           return input.length;
         }}
         onValueChange={(nextValue, { caret, typed }) => {
+          if (
+            typed &&
+            caret === nextValue.length &&
+            nextValue === `${input} ` &&
+            commitInput()
+          ) {
+            dismiss();
+            return;
+          }
           // Keep the final fragment editable while splitting delimiters outside quoted addresses.
           const parts = splitMailAddressList(`${nextValue}x`);
           const tail = parts.pop()?.slice(0, -1) ?? "";
