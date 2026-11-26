@@ -327,7 +327,7 @@ const ReadyComposeSurface = ({
   onRestoreUndoneSend,
   onSenderSwitch,
   persistDrafts = true,
-  senderEmail,
+  senderEmail: fallbackSenderEmail,
   senderMailbox,
   senderMailboxes,
   senderUnavailable = false,
@@ -359,6 +359,7 @@ const ReadyComposeSurface = ({
     senderMailboxes?.find((sender) => sender.id === mailboxId) ??
     senderMailbox ??
     undefined;
+  const senderEmail = currentSender?.emailAddress ?? fallbackSenderEmail;
   const editableSender =
     currentSender?.capabilities.canSetSenderName === true
       ? resolveMailSender(currentSender)
@@ -514,6 +515,8 @@ const ReadyComposeSurface = ({
     (currentSender === undefined
       ? senderUnavailable && senderMailboxes.length > 0
       : senderMailboxes.length > 1);
+  const canEditSenderName =
+    !isInline && senderMailboxes !== undefined && editableSender !== undefined;
   const showSubject =
     !isInline || state.draft.draftAnchor?.seededBy === "forward";
   const [showQuotedContent, setShowQuotedContent] = useState(false);
@@ -970,7 +973,7 @@ const ReadyComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
-                      {canSwitchSender || editableSender ? (
+                      {canSwitchSender || canEditSenderName ? (
                         <form.Field name="senderName">
                           {(senderField) => {
                             const [error] = senderField.state.meta.errors;
@@ -1120,7 +1123,7 @@ const ReadyComposeSurface = ({
                                             </Select>
                                           </Field>
                                         ) : null}
-                                        {editableSender ? (
+                                        {canEditSenderName ? (
                                           <Field invalid={!!error}>
                                             <FieldLabel>Sender name</FieldLabel>
                                             <FieldControl
@@ -1167,21 +1170,27 @@ const ReadyComposeSurface = ({
                             );
                           }}
                         </form.Field>
-                      ) : null}
-                      {!canSwitchSender &&
-                      !editableSender &&
-                      !isInline &&
-                      senderMailboxes &&
-                      senderEmail ? (
-                        <ComposerFieldRow label="From">
-                          <FieldControl
-                            chrome="composer"
-                            readOnly
-                            tabIndex={-1}
-                            value={senderEmail}
-                          />
-                        </ComposerFieldRow>
-                      ) : null}
+                      ) : (
+                        <form.Field name="senderName">
+                          {(senderField) => (
+                            <ComposerFieldRow
+                              error={senderField.state.meta.errors[0]?.message}
+                              label="From"
+                            >
+                              <FieldControl
+                                chrome="composer"
+                                readOnly
+                                tabIndex={-1}
+                                value={
+                                  editableSender
+                                    ? `${senderField.state.value.trim() || editableSender.name} <${editableSender.address}>`
+                                    : (senderEmail ?? "No sending address")
+                                }
+                              />
+                            </ComposerFieldRow>
+                          )}
+                        </form.Field>
+                      )}
                       <ComposeRecipientField
                         handleUserDraftChange={handleUserDraftChange}
                         data-compose-recipient-field

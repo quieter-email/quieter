@@ -60,6 +60,7 @@ import {
   ComposerActionBar,
   ComposerDictationControl,
   ComposerContextChip,
+  ComposerTokenField,
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { CompositionChart } from "@quieter/ui/composition-chart";
@@ -643,6 +644,7 @@ export const DesignSystemShowcase = () => {
   const [showPromptContext, setShowPromptContext] = useState(true);
   const [location, setLocation] = useState("");
   const [recipient, setRecipient] = useState("");
+  const [showRecipientChip, setShowRecipientChip] = useState(true);
   const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [date, setDate] = useState("2026-10-27");
   const [time, setTime] = useState("14:35");
@@ -1499,36 +1501,47 @@ export const DesignSystemShowcase = () => {
           <Row label="Autocomplete field">
             <Field>
               <FieldLabel className="sr-only">Example recipient</FieldLabel>
-              <AutocompleteField
-                chrome="composer"
-                onDismiss={() => {
-                  setSuggestionsOpen(false);
-                }}
-                onSuggestionSelect={(email) => {
-                  setRecipient(email);
-                  setSuggestionsOpen(false);
-                  return email.length;
-                }}
-                onValueChange={(nextValue) => {
-                  setRecipient(nextValue);
-                  setSuggestionsOpen(nextValue.trim().length > 1);
-                }}
-                open={suggestionsOpen}
-                placeholder="Try ma"
-                suggestions={[
-                  {
-                    description: "maya@example.com",
-                    label: "Maya Chen",
-                    value: "maya@example.com",
-                  },
-                  { label: "mail@example.com", value: "mail@example.com" },
-                ].filter(({ label, value }) =>
-                  `${label} ${value}`
-                    .toLowerCase()
-                    .includes(recipient.trim().toLowerCase())
-                )}
-                value={recipient}
-              />
+              <ComposerTokenField>
+                {showRecipientChip ? (
+                  <ComposerContextChip
+                    label="alex@example.com"
+                    onRemove={() => {
+                      setShowRecipientChip(false);
+                    }}
+                    surface="field"
+                  />
+                ) : null}
+                <AutocompleteField
+                  chrome="composer-token"
+                  onDismiss={() => {
+                    setSuggestionsOpen(false);
+                  }}
+                  onSuggestionSelect={(email) => {
+                    setRecipient(email);
+                    setSuggestionsOpen(false);
+                    return email.length;
+                  }}
+                  onValueChange={(nextValue) => {
+                    setRecipient(nextValue);
+                    setSuggestionsOpen(nextValue.trim().length > 1);
+                  }}
+                  open={suggestionsOpen}
+                  placeholder="Try ma"
+                  suggestions={[
+                    {
+                      description: "maya@example.com",
+                      label: "Maya Chen",
+                      value: "maya@example.com",
+                    },
+                    { label: "mail@example.com", value: "mail@example.com" },
+                  ].filter(({ label, value }) =>
+                    `${label} ${value}`
+                      .toLowerCase()
+                      .includes(recipient.trim().toLowerCase())
+                  )}
+                  value={recipient}
+                />
+              </ComposerTokenField>
             </Field>
           </Row>
           <Row label="Date and time">
