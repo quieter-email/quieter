@@ -84,6 +84,9 @@ const recordMetadataAction = async (
       actionName = `move:${destination.destination}`;
     }
   }
+  if (actionName === "move:spam") {
+    return;
+  }
   const action = {
     action: actionName,
     mailboxId: input.mailboxId,
@@ -121,19 +124,24 @@ const mutateMessage = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
-  if (
+  const supersedesPlacement =
     operation === "trash" ||
     operation === "untrash" ||
     (typeof operation === "object" &&
       [
         ...(operation.addLabelIds ?? []),
         ...(operation.removeLabelIds ?? []),
-      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)))
-  ) {
+      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)));
+  const reopensInbox =
+    operation === "untrash" ||
+    (typeof operation === "object" &&
+      operation.addLabelIds?.includes("INBOX") === true);
+  if (supersedesPlacement) {
     await supersedePendingMailPlacement({
       context,
       mailboxId: input.mailboxId,
       messageId: input.messageId,
+      retireSnoozes: false,
     });
   }
   if (selectedMailbox.provider === "managed") {
@@ -143,13 +151,22 @@ const mutateMessage = async (
         ...authorizedInput,
         read: operation === "read",
       });
-      await recordMetadataAction({ context, input }, operation, [result.id]);
+      if (!result.labelIds.includes(MAILBOX_LABELS.spam)) {
+        await recordMetadataAction({ context, input }, operation, [result.id]);
+      }
       return result;
     }
     if (operation === "trash" || operation === "untrash") {
       const result = await setManagedMessageMailboxState({
         ...authorizedInput,
         state: operation === "trash" ? "trash" : "active",
+      });
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        matchHiddenMessageIdsOnly: !reopensInbox,
+        messageId: input.messageId,
+        retireSnoozes: true,
       });
       await recordMetadataAction({ context, input }, operation, [result.id]);
       return result;
@@ -158,6 +175,18 @@ const mutateMessage = async (
       ...authorizedInput,
       ...operation,
     });
+    if (supersedesPlacement) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        matchHiddenMessageIdsOnly: !reopensInbox,
+        messageId: input.messageId,
+        retireSnoozes: true,
+      });
+    }
+    if (result.labelIds.includes(MAILBOX_LABELS.spam)) {
+      return result;
+    }
     const labelFeedback = await recordLabelFeedback({
       ...operation,
       mailboxId: input.mailboxId,
@@ -183,24 +212,36 @@ const mutateMessage = async (
       input.messageId,
       change
     );
+    if (supersedesPlacement) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        matchHiddenMessageIdsOnly: !reopensInbox,
+        messageId: result.id,
+        retireSnoozes: true,
+      });
+    }
     await refreshGmailCapturedMessageMetadata({
       accessToken,
       mailboxId: input.mailboxId,
       messageIds: [result.id],
     });
+    const memoryMessageIds = result.labelIds.includes(MAILBOX_LABELS.spam)
+      ? []
+      : [result.id];
     const labelFeedback =
       typeof operation === "string"
         ? undefined
         : await recordLabelFeedback({
             ...operation,
             mailboxId: input.mailboxId,
-            providerMessageIds: [result.id],
+            providerMessageIds: memoryMessageIds,
             userId: context.userId,
           });
     await recordMetadataAction(
       { accessToken, context, input, labelFeedback },
       operation,
-      [result.id]
+      memoryMessageIds
     );
     return result;
   });
@@ -219,18 +260,19 @@ const mutateThread = async (
     mailboxId: input.mailboxId,
     userId: context.userId,
   });
-  if (
+  const supersedesPlacement =
     operation === "trash" ||
     operation === "untrash" ||
     (typeof operation === "object" &&
       [
         ...(operation.addLabelIds ?? []),
         ...(operation.removeLabelIds ?? []),
-      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)))
-  ) {
+      ].some((label) => ["INBOX", "SPAM", "TRASH"].includes(label)));
+  if (supersedesPlacement) {
     await supersedePendingMailPlacement({
       context,
       mailboxId: input.mailboxId,
+      retireSnoozes: false,
       threadIds: [input.threadId],
     });
   }
@@ -244,7 +286,9 @@ const mutateThread = async (
       await recordMetadataAction(
         { context, input },
         operation,
-        result.messages.map((message) => message.id)
+        result.messages
+          .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+          .map((message) => message.id)
       );
       return result;
     }
@@ -252,6 +296,12 @@ const mutateThread = async (
       const result = await setManagedThreadMailboxState({
         ...authorizedInput,
         state: operation === "trash" ? "trash" : "active",
+      });
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        retireSnoozes: true,
+        threadIds: [input.threadId],
       });
       await recordMetadataAction(
         { context, input },
@@ -264,16 +314,27 @@ const mutateThread = async (
       ...authorizedInput,
       ...operation,
     });
+    if (supersedesPlacement) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        retireSnoozes: true,
+        threadIds: [input.threadId],
+      });
+    }
+    const memoryMessageIds = result.messages
+      .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+      .map((message) => message.id);
     const labelFeedback = await recordLabelFeedback({
       ...operation,
       mailboxId: input.mailboxId,
-      providerMessageIds: result.messages.map((message) => message.id),
+      providerMessageIds: memoryMessageIds,
       userId: context.userId,
     });
     await recordMetadataAction(
       { context, input, labelFeedback },
       operation,
-      result.messages.map((message) => message.id)
+      memoryMessageIds
     );
     return result;
   }
@@ -287,24 +348,35 @@ const mutateThread = async (
       change = operation;
     }
     const result = await mutateGmailThread(accessToken, input.threadId, change);
+    if (supersedesPlacement) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        retireSnoozes: true,
+        threadIds: [input.threadId],
+      });
+    }
     await refreshGmailCapturedMessageMetadata({
       accessToken,
       mailboxId: input.mailboxId,
       messageIds: result.messages.map((message) => message.id),
     });
+    const memoryMessageIds = result.messages
+      .filter((message) => !message.labelIds.includes(MAILBOX_LABELS.spam))
+      .map((message) => message.id);
     const labelFeedback =
       typeof operation === "string"
         ? undefined
         : await recordLabelFeedback({
             ...operation,
             mailboxId: input.mailboxId,
-            providerMessageIds: result.messages.map((message) => message.id),
+            providerMessageIds: memoryMessageIds,
             userId: context.userId,
           });
     await recordMetadataAction(
       { accessToken, context, input, labelFeedback },
       operation,
-      result.messages.map((message) => message.id)
+      memoryMessageIds
     );
     return result;
   });
@@ -328,16 +400,17 @@ export const mutationsMailOperations = {
         input: { ...input, command: input.command },
       });
     }
-    if (
+    const supersedesPlacement =
       input.command.kind === "move" ||
       (input.command.kind === "set-labels" &&
         [...input.command.addIds, ...input.command.removeIds].some((label) =>
           ["INBOX", "SPAM", "TRASH"].includes(label)
-        ))
-    ) {
+        ));
+    if (supersedesPlacement) {
       await supersedePendingMailPlacement({
         context,
         mailboxId: input.mailboxId,
+        retireSnoozes: false,
         threadIds: input.targets.map((target) => target.threadId),
       });
     }
@@ -416,6 +489,21 @@ export const mutationsMailOperations = {
         command: input.command,
         userId: context.userId,
       });
+      const appliedThreadIds = [
+        ...new Set(
+          input.targets.flatMap((target, index) =>
+            result.targets[index]?.status === "applied" ? [target.threadId] : []
+          )
+        ),
+      ];
+      if (supersedesPlacement && appliedThreadIds.length > 0) {
+        await supersedePendingMailPlacement({
+          context,
+          mailboxId: input.mailboxId,
+          retireSnoozes: true,
+          threadIds: appliedThreadIds,
+        });
+      }
       const messageIds = [
         ...new Set(
           input.targets.flatMap((target, index) =>
@@ -471,16 +559,14 @@ export const mutationsMailOperations = {
           requestedMessageIds,
           signal
         );
-        const threadIdByMessageId = new Map(
-          associations.map((association) => [
-            association.id,
-            association.threadId,
-          ])
+        const associationByMessageId = new Map(
+          associations.map((association) => [association.id, association])
         );
         const validTargets = input.targets.filter((target) =>
           target.messageIds.every(
             (messageId) =>
-              threadIdByMessageId.get(messageId) === target.threadId
+              associationByMessageId.get(messageId)?.threadId ===
+              target.threadId
           )
         );
         const messageIds = [
@@ -522,34 +608,52 @@ export const mutationsMailOperations = {
             messageIds
           );
         } else if (input.command.kind === "set-labels") {
+          const { addIds, removeIds } = input.command;
           await batchModifyMessages(
             accessToken,
             messageIds,
             {
-              addLabelIds: input.command.addIds,
-              removeLabelIds: input.command.removeIds,
+              addLabelIds: addIds,
+              removeLabelIds: removeIds,
             },
             signal
           );
+          if (supersedesPlacement) {
+            await supersedePendingMailPlacement({
+              context,
+              mailboxId: input.mailboxId,
+              retireSnoozes: true,
+              threadIds: validTargets.map((target) => target.threadId),
+            });
+          }
           await refreshGmailCapturedMessageMetadata({
             accessToken,
             mailboxId: input.mailboxId,
             messageIds,
           });
+          const memoryMessageIds = addIds.includes(MAILBOX_LABELS.spam)
+            ? []
+            : messageIds.filter(
+                (id) =>
+                  removeIds.includes(MAILBOX_LABELS.spam) ||
+                  associationByMessageId
+                    .get(id)
+                    ?.labelIds?.includes(MAILBOX_LABELS.spam) !== true
+              );
           const labelFeedback = await recordLabelFeedback({
-            addLabelIds: input.command.addIds,
+            addLabelIds: addIds,
             mailboxId: input.mailboxId,
-            providerMessageIds: messageIds,
-            removeLabelIds: input.command.removeIds,
+            providerMessageIds: memoryMessageIds,
+            removeLabelIds: removeIds,
             userId: context.userId,
           });
           await recordMetadataAction(
             { accessToken, context, input, labelFeedback },
             {
-              addLabelIds: input.command.addIds,
-              removeLabelIds: input.command.removeIds,
+              addLabelIds: addIds,
+              removeLabelIds: removeIds,
             },
-            messageIds
+            memoryMessageIds
           );
         } else if (
           input.command.kind === "move" &&
@@ -604,19 +708,32 @@ export const mutationsMailOperations = {
           );
         }
         if (input.command.kind === "move" && appliedMessageIds.length > 0) {
+          const appliedThreadIds = [
+            ...new Set(
+              appliedMessageIds.flatMap((id) => {
+                const threadId = associationByMessageId.get(id)?.threadId;
+                return threadId === undefined ? [] : [threadId];
+              })
+            ),
+          ];
+          if (appliedThreadIds.length > 0) {
+            await supersedePendingMailPlacement({
+              context,
+              mailboxId: input.mailboxId,
+              retireSnoozes: true,
+              threadIds: appliedThreadIds,
+            });
+          }
           await refreshGmailCapturedMessageMetadata({
             accessToken,
             mailboxId: input.mailboxId,
             messageIds: appliedMessageIds,
           });
-          await learnAiMemoryFromGmailAction({
-            accessToken,
-            action: `move:${input.command.destination}`,
-            mailboxId: input.mailboxId,
-            messageIds: appliedMessageIds,
-            targetCount: appliedMessageIds.length,
-            userId: context.userId,
-          });
+          await recordMetadataAction(
+            { accessToken, context, input },
+            `move:${input.command.destination}`,
+            appliedMessageIds
+          );
         }
         if (failedMutation) {
           throw failedMutation.reason;

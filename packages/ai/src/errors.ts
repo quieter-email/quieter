@@ -1,6 +1,8 @@
 import { AiCreditAdmissionBusyError } from "@quieter/billing/ai-credit-errors";
 import { NoOutputGeneratedError, RetryError } from "ai";
 
+import { AiProviderDeferredError } from "./provider-admission";
+
 export const isAiCreditAdmissionBusy = (error: unknown): boolean => {
   const visited = new Set<unknown>();
   let current = error;
@@ -26,10 +28,11 @@ export const isTransientAiProviderError = (error: unknown): boolean => {
   while (current instanceof Error && !visited.has(current)) {
     visited.add(current);
     if (
-      current.name === "AI_APICallError" &&
-      (("statusCode" in current &&
-        (current.statusCode === 429 || current.statusCode === 503)) ||
-        ("isRetryable" in current && current.isRetryable === true))
+      current instanceof AiProviderDeferredError ||
+      (current.name === "AI_APICallError" &&
+        (("statusCode" in current &&
+          (current.statusCode === 429 || current.statusCode === 503)) ||
+          ("isRetryable" in current && current.isRetryable === true)))
     ) {
       return true;
     }

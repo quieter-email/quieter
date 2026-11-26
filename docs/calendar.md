@@ -36,7 +36,7 @@ The former Calendar connector setup and callback are retired. Historical credent
 
 Local execution uses the existing [development setup](development.md) and `vp run dev:sst --stage local-<name>`. Credentials use development SST Secret links or an approved ignored development environment file, read through `@quieter/env`. The database destination remains loopback PostgreSQL or the allowlisted `quieter_dev` database. `vp run env:doctor` validates local configuration after environment changes.
 
-Calendar reads use foreground requests and browser refreshes. No Calendar worker, watch registration, or Pub/Sub subscription is required. Existing preview persona mode supplies sample accounts and events. Preview Calendar edits stay in browser memory and do not call Google or an AI model.
+The browser prefetches connected calendars and events for the current date range while Mail is open and when Settings links back to Calendar. Calendar also prefetches nearby month ranges after the active view loads. Views share month data across day, week, and month navigation. The event inspector can open directly from an event in the loaded range. Existing preview persona mode supplies sample accounts and events. Preview Calendar edits stay in browser memory and do not call Google or an AI model.
 
 ## Local write controls
 

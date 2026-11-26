@@ -1,33 +1,64 @@
 import { chatModelGroups, chatModels } from "@quieter/ai/chat-models";
-import type { ChatModelGroup } from "@quieter/ai/chat-models";
+import type { ChatModel, ChatModelGroup } from "@quieter/ai/chat-models";
+import type { CommandMenuItem } from "@quieter/ui/command-menu";
 
-export const chatModelLabs = {
+export type ChatModelItem = Omit<CommandMenuItem, "icon"> & {
+  kind: "model";
+  lab?: ChatModelGroup;
+  model: ChatModel | "auto";
+};
+
+const chatModelLabs = {
   anthropic: { keywords: "claude", label: "Anthropic" },
-  deepseek: { keywords: "", label: "DeepSeek" },
   google: { keywords: "gemini", label: "Google" },
-  moonshotai: { keywords: "moonshotai", label: "Moonshot" },
   openai: { keywords: "gpt chatgpt", label: "OpenAI" },
-  "z-ai": { keywords: "z-ai zai", label: "Z.ai" },
 } satisfies Record<ChatModelGroup, { keywords: string; label: string }>;
 
-export const getChatModelOptions = (query: string) => {
-  const searchTerms = query.toLowerCase().trim().split(/\s+/u).filter(Boolean);
-  const autoMatches = searchTerms.every((term) =>
-    "auto automatic".includes(term)
+export const getSelectedChatModel = (model: ChatModel | "auto") =>
+  chatModels.find(
+    (option) =>
+      option.value === model ||
+      option.versions.some((version) => version === model)
   );
-  const groups = chatModelGroups
-    .map((group) => ({
-      group,
-      options: chatModels.filter(
-        (option) =>
-          option.group === group &&
-          searchTerms.every((term) =>
-            `${chatModelLabs[group].label} ${chatModelLabs[group].keywords} ${option.label}`
-              .toLowerCase()
-              .includes(term)
-          )
-      ),
-    }))
-    .filter(({ options }) => options.length > 0);
-  return { autoMatches, groups };
+
+export const getChatModelItems = (query: string): ChatModelItem[] => {
+  const searchTerms = query.toLowerCase().trim().split(/\s+/u).filter(Boolean);
+  const items: ChatModelItem[] = [];
+  if (searchTerms.every((term) => "auto automatic".includes(term))) {
+    items.push({
+      group: "Models",
+      id: "model-auto",
+      kind: "model",
+      label: "Auto",
+      model: "auto",
+    });
+  }
+  for (const group of chatModelGroups) {
+    const lab = chatModelLabs[group];
+    for (const option of chatModels) {
+      const searchable = [
+        lab.label,
+        lab.keywords,
+        option.label,
+        option.value,
+        option.value.replaceAll(/[-/]/gu, " "),
+      ]
+        .join(" ")
+        .toLowerCase();
+      if (
+        option.group === group &&
+        searchTerms.every((term) => searchable.includes(term))
+      ) {
+        items.push({
+          group: lab.label,
+          id: option.value,
+          kind: "model",
+          lab: group,
+          label: option.label,
+          model: option.value,
+        });
+      }
+    }
+  }
+  return items;
 };

@@ -300,11 +300,8 @@ export const CalendarEventEditor = ({
           </IconButtonTooltip>
         </div>
       </WorkspaceHeader>
-      <div className="min-h-0 flex-1 overflow-y-auto">
-        <fieldset
-          className="min-w-0 space-y-0.5 px-0.5 pb-0.5"
-          disabled={pending}
-        >
+      <div className="mb-2 min-h-0 flex-1 scroll-fade-y overflow-y-auto">
+        <fieldset className="min-w-0 space-y-2 px-2" disabled={pending}>
           {state.problem ? (
             <p className="px-4 py-2 text-body-sm text-destructive" role="alert">
               {state.problem}
@@ -950,7 +947,7 @@ export const CalendarEventEditor = ({
         </fieldset>
       </div>
       {dirty || editor.kind === "create" || onDelete ? (
-        <Surface className="mx-0.5 mb-0.5 shrink-0" variant="section">
+        <Surface className="mx-2 mb-2 shrink-0" variant="section">
           <ActionFooter>
             {dirty || editor.kind === "create" ? (
               <Button

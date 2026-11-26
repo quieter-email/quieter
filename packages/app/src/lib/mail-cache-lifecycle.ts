@@ -1,7 +1,14 @@
 import { mailCache } from "@quieter/app/lib/mail-cache";
-import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
+import {
+  getThreadQueryKey,
+  getThreadWithDetailsOptions,
+} from "@quieter/app/lib/mail/thread-query";
+import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
+import { CancelledError } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
+
+import { canPrefetchInBackground } from "./background-prefetch";
 
 const threadSchema = z.object({
   messages: z.array(z.object({ id: z.string() })),
@@ -42,6 +49,7 @@ const preloaders = new WeakMap<
 >();
 
 const preloadAttachments = new WeakMap<QueryClient, Set<() => void>>();
+export const THREAD_PRELOAD_LIMIT = 60;
 
 export const attachThreadPreloader = (client: QueryClient): ThreadPreloader => {
   const attachmentOwner = Symbol("thread-preloader");
@@ -66,7 +74,7 @@ export const attachThreadPreloader = (client: QueryClient): ThreadPreloader => {
       current?.intent(candidate);
     },
     update: (candidates) => {
-      latest = candidates.slice(0, 10);
+      latest = candidates.slice(0, THREAD_PRELOAD_LIMIT);
       current?.update(latest);
     },
   };
@@ -82,6 +90,7 @@ export const bindMailCache = (client: QueryClient) => {
   let active = 0;
   let scheduled = false;
   const attempted = new Set<string>();
+  const blockedMailboxes = new Set<string>();
   const pump = async () => {
     scheduled = false;
     if (
@@ -93,40 +102,31 @@ export const bindMailCache = (client: QueryClient) => {
     ) {
       return;
     }
-    const connection =
-      typeof navigator !== "undefined" && "connection" in navigator
-        ? navigator.connection
-        : null;
-    const constrained =
-      typeof connection === "object" &&
-      connection !== null &&
-      (("saveData" in connection && connection.saveData === true) ||
-        ("effectiveType" in connection &&
-          (connection.effectiveType === "slow-2g" ||
-            connection.effectiveType === "2g")));
     const fetching = client.isFetching({ queryKey: ["message-thread"] });
     if (active >= 3 || fetching >= 3) {
       return;
     }
-    const candidate =
-      intent ??
-      (!constrained && active < 2 && fetching === active
-        ? [...candidates.values()].find(
-            (entry) =>
-              !attempted.has(
-                JSON.stringify([
-                  entry.mailboxId,
-                  entry.threadId,
-                  entry.expectedMessage,
-                ])
-              )
-          )
-        : undefined);
+    const intentional = intent;
+    intent = null;
+    const next =
+      intentional && !blockedMailboxes.has(intentional.mailboxId)
+        ? [intentional]
+        : [];
+    if (canPrefetchInBackground() && active < 2 && fetching === active) {
+      for (const [key, entry] of candidates) {
+        if (!attempted.has(key) && !blockedMailboxes.has(entry.mailboxId)) {
+          next.push(entry);
+        }
+      }
+    }
+    const candidate = next.find((entry) => {
+      const query = client.getQueryCache().find({
+        queryKey: getThreadQueryKey(entry.mailboxId, entry.threadId),
+      });
+      return query?.isActive() !== true;
+    });
     if (!candidate) {
       return;
-    }
-    if (candidate === intent) {
-      intent = null;
     }
     const candidateKey = JSON.stringify([
       candidate.mailboxId,
@@ -139,16 +139,30 @@ export const bindMailCache = (client: QueryClient) => {
     active += 1;
     // oxlint-disable-next-line no-use-before-define -- Fill available capacity through the same queue.
     schedule();
-    await Promise.allSettled([
-      client.query(
+    try {
+      await client.query(
         getThreadWithDetailsOptions(
           candidate.mailboxId,
           candidate.threadId,
           true,
-          candidate.expectedMessage
+          candidate.expectedMessage,
+          { prefetch: true }
         )
-      ),
-    ]);
+      );
+    } catch (error) {
+      if (error instanceof CancelledError) {
+        attempted.delete(candidateKey);
+      } else if (
+        !(
+          typeof error === "object" &&
+          error !== null &&
+          "status" in error &&
+          error.status === 404
+        )
+      ) {
+        blockedMailboxes.add(candidate.mailboxId);
+      }
+    }
     active -= 1;
     // oxlint-disable-next-line no-use-before-define -- Completion schedules the same bounded queue.
     schedule();
@@ -165,6 +179,7 @@ export const bindMailCache = (client: QueryClient) => {
     owner = nextOwner;
     candidates.clear();
     attempted.clear();
+    blockedMailboxes.clear();
     intent = null;
     clearTimeout(intentTimer);
     return {
@@ -183,7 +198,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         clearTimeout(intentTimer);
         intent = null;
-        if (candidate) {
+        if (candidate && !blockedMailboxes.has(candidate.mailboxId)) {
           intentTimer = setTimeout(() => {
             intent = candidate;
             schedule();
@@ -196,7 +211,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         candidates = new Map(
           next
-            .slice(0, 10)
+            .filter((entry) => !blockedMailboxes.has(entry.mailboxId))
             .map((entry) => [
               JSON.stringify([
                 entry.mailboxId,
@@ -255,6 +270,7 @@ export const bindMailCache = (client: QueryClient) => {
             z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
               .success))
       ) {
+        blockedMailboxes.add(mailboxId);
         for (const [candidateKey, candidate] of candidates) {
           if (candidate.mailboxId === mailboxId) {
             candidates.delete(candidateKey);
@@ -319,6 +335,10 @@ export const bindMailCache = (client: QueryClient) => {
       schedule();
     }
   });
+  const unsubscribeSession = subscribeQuerySessionInvalidation(client, () => {
+    disposed = true;
+    clearTimeout(intentTimer);
+  });
   return () => {
     disposed = true;
     candidates.clear();
@@ -331,6 +351,7 @@ export const bindMailCache = (client: QueryClient) => {
       connection.removeEventListener("change", schedule);
     }
     unsubscribe();
+    unsubscribeSession();
     for (const key of pinned) {
       mailCache.protect(key, false);
     }

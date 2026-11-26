@@ -20,6 +20,14 @@ import {
   calendarWriteInputSchemas,
 } from "./chat-tools";
 
+export const mailReferencePrompt = `Use this exact internal Markdown link format when referring to a specific email.
+
+[Subject](/mail-reference?messageId=MESSAGE_ID&threadId=THREAD_ID&subject=URL_ENCODED_SUBJECT&from=URL_ENCODED_SENDER)
+
+The interface renders each mail reference as an outlined button with a sender avatar, subject, and sender name. Finish the prose sentence with its punctuation. Place each mail reference on a separate paragraph or bullet with no surrounding parentheses, leading colon, or trailing punctuation.
+
+Use only message ids, thread ids, subjects, and senders returned by mailbox tools in this conversation. URL-encode each query value. Include messageId and omit unknown optional fields. Never include a mailbox id, external host, or other parameters. These links open the email in the selected mailbox. Do not navigate away from the user's current email just to cite another message.`;
+
 export const gmailToolsPrompt = `You are quieter's assistant in the user's mailbox. Fulfill the user's request using the available tools and report what happened. You can speak to the user and call tools throughout the turn.
 
 ## Ground truth and honesty
@@ -71,7 +79,7 @@ Apply a mailbox action to a single message or thread: mark_read, mark_unread, st
 Apply one mailbox action to up to 50 exact message IDs or thread IDs and return per-target receipts. Thread actions affect the entire conversation. Writes can change which items appear on subsequent search pages. Only count confirmed successes.
 
 ### open_compose, open_inline_compose and edit_compose
-Use open_compose for a new email. For a reply, reply-all or forward, read the thread and call open_inline_compose with its threadId, the desired action and the source messageId. It opens the conversation's inline composer with the complete recipients, subject, quote, attachments and threading metadata. Then read get_workspace and use edit_compose with its draftId and expectedDraftRevision to write the authored body. bodyText edits retain the existing quote and signature. Never recreate reply or forward metadata in a new-message composer.
+Use open_compose for a new email. For a reply, reply-all or forward, read the thread and call open_inline_compose with its threadId, the desired action and the source messageId. It opens the conversation's inline composer with the complete recipients, subject, quote, attachments and threading metadata. Include the authored body in bodyText to put the reply directly in the thread. Use edit_compose with the current draftId and revision for follow-up edits. bodyText edits retain the existing quote and signature. Never recreate reply or forward metadata in a new-message composer.
 
 If a draft is already visible, read it and edit it only when it is the user's intended draft. Do not overwrite an unrelated draft or silently change its conversation. Use get_workspace after a user edit before proposing save_compose_draft or send_mail, so their reviewed draft is the exact payload that is saved or sent.
 
@@ -129,12 +137,7 @@ When the user asks general questions that do not require mailbox data, answer di
 
 Lead with the answer or outcome. Use short paragraphs or bullets for lists, action items, or multiple messages. Quote sparingly. When you made assumptions, state them in one short clause instead of a questionnaire.
 
-When referring to a specific email, link its subject inline using this exact internal Markdown format:
-[Subject](/mail-reference?messageId=MESSAGE_ID&threadId=THREAD_ID&subject=URL_ENCODED_SUBJECT&from=URL_ENCODED_SENDER).
-Use only message ids, thread ids, subjects, and senders returned by mailbox tools in this conversation.
-URL-encode each query value. messageId is required; omit any unknown optional field. Never include a mailbox id,
-external host, or other parameters. These links open the email in the selected mailbox. Do not navigate away
-from the user's current email just to cite another message.
+${mailReferencePrompt}
 
 The suggest_replies tool can show optional follow-up messages in the user's language.
 

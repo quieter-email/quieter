@@ -1,6 +1,8 @@
 import type { ComposeDraftAnchor } from "./compose/schema";
 import type { MailCategory } from "./data-plane";
 import type { OtpToken } from "./otp-token";
+import { isMailSnoozeLiveStatus } from "./snooze";
+import type { MailSnoozeState } from "./snooze";
 
 export type { MailCategory as MailboxCategory } from "./data-plane";
 
@@ -28,6 +30,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  snooze?: MailSnoozeState;
   otpToken?: OtpToken;
   isImportant?: boolean;
   threadIsImportant?: boolean;
@@ -35,11 +38,13 @@ export type MessageListItem = {
   id: string;
   threadId: string;
   threadLabelIds?: string[];
+  threadInboxIncomingMessageIds?: string[];
   threadMessageCount?: number;
   threadAttachmentCount?: number;
   threadAttachmentNames?: string[];
   draftId?: string;
   baseRevision?: string;
+  sourceRevision?: string;
   draftAnchor?: ComposeDraftAnchor;
   snippet?: string;
   subject?: string;
@@ -101,6 +106,7 @@ export type MessageInspectorResult = {
 };
 
 export type ListMessagesPageResult = {
+  changeVersion?: string;
   messages: MessageListItem[];
   nextPageToken?: string;
   resultSizeEstimate?: number;
@@ -108,6 +114,7 @@ export type ListMessagesPageResult = {
 };
 
 export type ThreadMessagesResult = {
+  snooze?: MailSnoozeState;
   threadId: string;
   snippet?: string;
   subject?: string;
@@ -117,11 +124,13 @@ export type ThreadMessagesResult = {
 export type MailLabelListItem = { id: string; name: string; type?: string };
 
 export type MailboxSyncDelta = {
+  changeVersion?: string;
   historyId?: string;
   hasChanges: boolean;
   refreshFirstPage: boolean;
   refreshThreadIds?: string[];
   removedMessageIds: string[];
+  replacedThreadIds?: string[];
   requiresFullRefresh: boolean;
   updatedMessages: MessageListItem[];
 };
@@ -198,10 +207,20 @@ export const isMessageInMailbox = (
     labelIds?: string[];
     isImportant?: boolean;
     threadIsImportant?: boolean;
+    snooze?: MailSnoozeState;
   },
   mailbox: MailCategory
 ): boolean => {
   const { labelIds } = message;
+  if (mailbox === "later") {
+    return (
+      message.snooze !== undefined &&
+      isMailSnoozeLiveStatus(message.snooze.status) &&
+      labelIds?.some((label) =>
+        ["SPAM", "TRASH", "DRAFT", "SENT"].includes(label)
+      ) !== true
+    );
+  }
   if (mailbox === "done") {
     return (
       labelIds !== undefined &&

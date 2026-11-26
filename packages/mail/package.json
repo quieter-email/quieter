@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./correspondent-history": "./src/correspondent-history.ts",
     "./reminders": "./src/reminders.ts",
     "./snippet": "./src/snippet.ts",
     "./delivery": "./src/delivery.ts",
@@ -28,6 +29,7 @@
     "./messages": "./src/messages.ts",
     "./thread-list": "./src/thread-list.ts",
     "./updates": "./src/updates.ts",
+    "./dispatch": "./src/dispatch.ts",
     "./visual-email": "./src/visual-email.ts",
     "./auto-label": "./src/auto-label.ts",
     "./auto-label-matching": "./src/auto-label-matching.ts",
@@ -35,7 +37,10 @@
     "./capture": "./src/capture.ts",
     "./otp-token": "./src/otp-token.ts",
     "./scheduled-send": "./src/scheduled-send.ts",
-    "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts"
+    "./scheduled-send-ticket": "./src/scheduled-send-ticket.ts",
+    "./snooze": "./src/snooze.ts",
+    "./snooze-ticket": "./src/snooze-ticket.ts",
+    "./undo": "./src/undo.ts"
   },
   "dependencies": {
     "@quieter/env": "workspace:*",

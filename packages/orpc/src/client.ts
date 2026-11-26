@@ -5,6 +5,8 @@ import type { RouterClient } from "@orpc/server";
 
 import type { AppRouter } from "./routers/index";
 
+export { AI_MEMORY_BULK_DELETE_LIMIT } from "./ai-memory-contract";
+
 type HeaderMap = Record<string, string>;
 type OrpcClientContext = Record<never, never>;
 type UrlSource = string | URL | (() => string | URL | Promise<string | URL>);

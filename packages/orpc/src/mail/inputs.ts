@@ -1,11 +1,12 @@
 import { autoLabelSettingsSchema } from "@quieter/mail/auto-label";
 import {
-  composeDraftInputSchema,
   composeMessageInputSchema,
+  composeSaveDraftInputSchema,
   composeSendDraftInputSchema,
 } from "@quieter/mail/compose/schema";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
+import { mailChangeVersionSchema } from "@quieter/mail/updates";
 import { z } from "zod";
 
 const updateLabelsInputSchema = z
@@ -158,6 +159,7 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
     mimeType: z.string().min(1),
+    threadId: z.string().optional(),
   }),
   getComposeSendStatus: z.object({
     mailboxId: z.string().trim().min(1),
@@ -178,6 +180,7 @@ export const mailInputSchemas = {
   }),
   getThread: z.object({
     mailboxId: z.string().trim().min(1),
+    prefetch: z.boolean().optional(),
     threadId: z.string(),
   }),
   listLabels: z.object({
@@ -187,12 +190,23 @@ export const mailInputSchemas = {
     mailboxId: z.string().trim().min(1),
     messageIds: z.array(z.string().trim().min(1)).max(100),
   }),
+  listRecipientSuggestions: z.strictObject({
+    mailboxId: z.string().trim().min(1).max(512),
+    query: z.string().trim().min(2).max(254).optional(),
+  }),
   listThreads: z.object({
     category: mailCategorySchema,
+    correspondentEmail: z
+      .string()
+      .trim()
+      .toLowerCase()
+      .pipe(z.email())
+      .optional(),
     mailboxId: z.string().trim().min(1),
     maxResults: z.number().int().positive().max(100).optional(),
     pageToken: z.string().optional(),
     query: z.string().optional(),
+    scope: z.literal("all_mail").optional(),
   }),
   markMessageAsRead: z.object({
     mailboxId: z.string().trim().min(1),
@@ -219,7 +233,7 @@ export const mailInputSchemas = {
     threadId: z.string(),
   }),
   saveDraft: z.object({
-    draft: composeDraftInputSchema,
+    draft: composeSaveDraftInputSchema,
     mailboxId: z.string().trim().min(1),
   }),
   sendDraft: z.object({
@@ -241,9 +255,12 @@ export const mailInputSchemas = {
       "trash",
     ]),
     mailboxId: z.string().trim().min(1),
+    startChangeVersion: mailChangeVersionSchema.optional(),
     startHistoryId: z.string().min(1),
+    targetChangeVersion: mailChangeVersionSchema.optional(),
   }),
   unsubscribeFromMessage: z.object({
+    expectedRequestHash: z.string().optional(),
     mailboxId: z.string().trim().min(1),
     messageId: z.string(),
   }),

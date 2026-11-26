@@ -1,0 +1,259 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "5333dbf0-6ebc-4b5a-9bc7-1e4e8851af51",
+  "prevIds": ["c1b72761-4816-4b4a-ac39-179c98f764b5"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailboxChangeHead"],
+      "writes": [
+        "s|tbl|public.mailboxChangeHead",
+        "n|tbl|public.mailboxChangeHead",
+        "e|tbl|public.mailboxChangeHead",
+        "n|rel|public.mailboxChangeHead",
+        "n|type|public.mailboxChangeHead",
+        "n|rel|public.mailboxChangeHead_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailboxChangeJournal"],
+      "writes": [
+        "s|tbl|public.mailboxChangeJournal",
+        "n|tbl|public.mailboxChangeJournal",
+        "e|tbl|public.mailboxChangeJournal",
+        "n|rel|public.mailboxChangeJournal",
+        "n|type|public.mailboxChangeJournal",
+        "n|rel|public.mailboxChangeJournal_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailboxChangeHead"],
+      "writes": [
+        "s|fk|public.mailboxChangeHead.mailboxChangeHead_mailboxId_mailbox_id_fkey",
+        "n|fk|public.mailboxChangeHead.mailboxChangeHead_mailboxId_mailbox_id_fkey",
+        "e|fk|public.mailboxChangeHead.mailboxChangeHead_mailboxId_mailbox_id_fkey",
+        "n|con|public.mailboxChangeHead.mailboxChangeHead_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxChangeHead",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailboxChangeHead.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailboxChangeJournal"],
+      "writes": [
+        "s|fk|public.mailboxChangeJournal.mailboxChangeJournal_mailboxId_mailbox_id_fkey",
+        "n|fk|public.mailboxChangeJournal.mailboxChangeJournal_mailboxId_mailbox_id_fkey",
+        "e|fk|public.mailboxChangeJournal.mailboxChangeJournal_mailboxId_mailbox_id_fkey",
+        "n|con|public.mailboxChangeJournal.mailboxChangeJournal_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxChangeJournal",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailboxChangeJournal.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailboxChangeHead",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailboxChangeJournal",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeHead",
+        "name": "mailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeHead",
+        "name": "version",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "changes",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "contentRevision",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "mailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "recipientUserIds",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "version",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeHead",
+        "name": "mailboxChangeHead_mailboxId_mailbox_id_fkey",
+        "nameExplicit": false,
+        "columns": ["mailboxId"],
+        "schemaTo": "public",
+        "tableTo": "mailbox",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "mailboxChangeJournal_mailboxId_mailbox_id_fkey",
+        "nameExplicit": false,
+        "columns": ["mailboxId"],
+        "schemaTo": "public",
+        "tableTo": "mailbox",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeJournal",
+        "name": "mailboxChangeJournal_pkey",
+        "columns": ["mailboxId", "version"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxChangeHead",
+        "name": "mailboxChangeHead_pkey",
+        "columns": ["mailboxId"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

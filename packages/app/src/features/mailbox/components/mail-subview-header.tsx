@@ -7,7 +7,7 @@ import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Text } from "@quieter/ui/text";
-import type { ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 
 export const MailSubviewHeader = ({
   children,
@@ -15,6 +15,8 @@ export const MailSubviewHeader = ({
   closeAction,
   onOpenSidebar,
   title,
+  titleAccessory,
+  titleSize = "lg",
 }: {
   children?: ReactNode;
   className?: string;
@@ -25,6 +27,8 @@ export const MailSubviewHeader = ({
   };
   onOpenSidebar?: () => void;
   title: string;
+  titleAccessory?: ReactNode;
+  titleSize?: ComponentProps<typeof Text>["size"];
 }) => {
   const handleClose = closeAction?.onClick;
   return (
@@ -58,17 +62,14 @@ export const MailSubviewHeader = ({
           </IconButtonTooltip>
         </div>
       ) : null}
-      <Text
-        as="h1"
-        className="min-w-0 flex-1"
-        size="lg"
-        truncate
-        weight="medium"
-      >
-        {title}
-      </Text>
+      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+        <Text as="h1" size={titleSize} truncate weight="medium">
+          {title}
+        </Text>
+        {titleAccessory}
+      </div>
       {children}
-      <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
+      <AssistantSidebarTrigger className="ms-auto data-[sidebar-open=true]:-ms-2" />
     </div>
   );
 };

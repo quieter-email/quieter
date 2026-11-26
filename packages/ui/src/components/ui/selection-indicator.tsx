@@ -5,7 +5,7 @@ import { m, useReducedMotion } from "motion/react";
 import { cn } from "../../lib/cn";
 
 export const SelectionIndicator = ({
-  layoutId = "selection",
+  layoutId,
   variant = "default",
 }: {
   layoutId?: string;

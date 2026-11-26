@@ -127,6 +127,13 @@ export const KEYBOARD_SHORTCUTS = [
   },
   {
     category: "Navigation",
+    id: "go-later",
+    label: "Go to Later",
+    scope: "mailbox",
+    sequence: ["G", "L"],
+  },
+  {
+    category: "Navigation",
     id: "go-scheduled",
     label: "Go to Scheduled",
     scope: "mailbox",

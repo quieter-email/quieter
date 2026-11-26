@@ -11,6 +11,7 @@ import {
   createMiddleware,
   createStart,
 } from "@tanstack/react-start";
+import { waitUntil } from "cloudflare:workers";
 
 import { getRequestRateLimit } from "#/lib/abuse-protection.server";
 import { isAiCrawlerRequest, prefersMarkdown } from "#/lib/agent-access.server";
@@ -43,6 +44,7 @@ const sitePasswordPaths = new Set([
   "/api/auth/polar/webhooks",
   "/api/internal/gmail-credentials/rotate",
   "/api/internal/scheduled-send",
+  "/api/internal/mail-snooze",
   "/api/desktop/session",
   "/api/openapi",
   MCP_API_PATH,
@@ -60,6 +62,11 @@ const publicLegalPaths = new Set([
 ]);
 const sitePasswordPagePath = "/site-password";
 const homePagePath = "/home";
+/** MCP clients reach these without the site cookie. */
+const mcpOAuthPathPrefixes = [
+  "/.well-known/oauth-",
+  "/api/auth/oauth2/",
+] as const;
 const publicPathPrefixes = ["/_build/", "/assets/"];
 /** Open-tracking markers are fetched by mail clients without cookies. */
 const openTrackingPrefix = `${OPEN_TRACKING_PATH_PREFIX}/`;
@@ -68,7 +75,10 @@ const csrfMiddleware = createCsrfMiddleware({
 });
 
 const databaseMiddleware = createMiddleware().server(
-  async ({ next }) => await withRequestDatabaseClient(async () => await next())
+  async ({ next }) =>
+    await withRequestDatabaseClient(async () => await next(), {
+      defer: waitUntil,
+    })
 );
 
 let databaseHealthyUntil = 0;
@@ -342,7 +352,10 @@ const sitePasswordMiddleware = createMiddleware().server(
     }
 
     if (shouldRedirectToHomePage(request)) {
-      if (normalizedPath === "/desktop/auth") {
+      if (
+        normalizedPath === "/desktop/auth" ||
+        normalizedPath.startsWith("/oauth/")
+      ) {
         const passwordUrl = new URL(sitePasswordPagePath, requestUrl);
         passwordUrl.searchParams.set(
           "returnTo",
@@ -408,6 +421,14 @@ const shouldGatePath = (pathname: string) => {
   }
 
   if (normalizedPath.startsWith(openTrackingPrefix)) {
+    return false;
+  }
+
+  if (
+    mcpOAuthPathPrefixes.some((pathPrefix) =>
+      normalizedPath.startsWith(pathPrefix)
+    )
+  ) {
     return false;
   }
 

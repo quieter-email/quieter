@@ -1,5 +1,8 @@
 import { serverEnv } from "@quieter/env/server";
-import { configureErrorReporter } from "@quieter/observability";
+import {
+  configureErrorReporter,
+  prepareReportedEvent,
+} from "@quieter/observability";
 import type { ErrorContext } from "@quieter/observability";
 import * as Sentry from "@sentry/cloudflare";
 
@@ -43,6 +46,21 @@ export const reportServerError = (
       typeof current.statusCode === "number"
     ) {
       tags.statusCode = current.statusCode;
+    } else if (
+      !("statusCode" in tags) &&
+      "status" in current &&
+      typeof current.status === "number"
+    ) {
+      tags.statusCode = current.status;
+    }
+    if (
+      current instanceof Error &&
+      current.name === "PostgresError" &&
+      "code" in current &&
+      typeof current.code === "string" &&
+      /^[0-9A-Z]{5}$/u.test(current.code)
+    ) {
+      tags.sqlState = current.code;
     }
     if (
       !("retryable" in tags) &&
@@ -68,6 +86,13 @@ export const reportServerError = (
     }
   }
 
+  if (
+    serverEnv.QUIETER_DEPLOYMENT_ENV !== "local" &&
+    prepareReportedEvent({}, error) !== null
+  ) {
+    // oxlint-disable-next-line no-console -- Structured diagnostics for Workers Logs.
+    console.error({ event: "web.server.error", ...tags });
+  }
   Sentry.captureException(error, { tags });
 };
 

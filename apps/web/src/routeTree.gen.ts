@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AppRouteImport } from './routes/_app'
 import { Route as PublicRouteImport } from './routes/_public'
+import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known.$'
 import { Route as AppIndexRouteImport } from './routes/_app/index'
 import { Route as AppAuthRouteImport } from './routes/_app/auth'
 import { Route as AppDesignSystemRouteImport } from './routes/_app/design-system'
@@ -34,11 +35,14 @@ import { Route as ApiSitePasswordRouteImport } from './routes/api/site-password'
 import { Route as ApiSuppressionsRouteImport } from './routes/api/suppressions'
 import { Route as ApiWaitlistRouteImport } from './routes/api/waitlist'
 import { Route as AppDesktopAuthRouteImport } from './routes/_app/desktop.auth'
+import { Route as AppOauthConsentRouteImport } from './routes/_app/oauth.consent'
+import { Route as AppOauthLoginRouteImport } from './routes/_app/oauth.login'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth.$'
 import { Route as ApiConnectorsCallbackRouteImport } from './routes/api/connectors.callback'
 import { Route as ApiDesktopSessionRouteImport } from './routes/api/desktop.session'
 import { Route as ApiDomainConnectCallbackRouteImport } from './routes/api/domain-connect.callback'
 import { Route as ApiGmailCallbackRouteImport } from './routes/api/gmail.callback'
+import { Route as ApiInternalMailSnoozeRouteImport } from './routes/api.internal.mail-snooze'
 import { Route as ApiInternalScheduledSendRouteImport } from './routes/api.internal.scheduled-send'
 import { Route as ApiMessagesMessageIdRouteImport } from './routes/api/messages.$messageId'
 import { Route as ApiOTokenRouteImport } from './routes/api/o.$token'
@@ -52,6 +56,11 @@ const AppRoute = AppRouteImport.update({
 } as any).lazy(() => import('./routes/_app.lazy').then((d) => d.Route))
 const PublicRoute = PublicRouteImport.update({
   id: '/_public',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DotwellKnownSplatRoute = DotwellKnownSplatRouteImport.update({
+  id: '/.well-known/$',
+  path: '/.well-known/$',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AppIndexRoute = AppIndexRouteImport.update({
@@ -173,6 +182,16 @@ const AppDesktopAuthRoute = AppDesktopAuthRouteImport.update({
   path: '/desktop/auth',
   getParentRoute: () => AppRoute,
 } as any)
+const AppOauthConsentRoute = AppOauthConsentRouteImport.update({
+  id: '/oauth/consent',
+  path: '/oauth/consent',
+  getParentRoute: () => AppRoute,
+} as any)
+const AppOauthLoginRoute = AppOauthLoginRouteImport.update({
+  id: '/oauth/login',
+  path: '/oauth/login',
+  getParentRoute: () => AppRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -197,6 +216,11 @@ const ApiDomainConnectCallbackRoute =
 const ApiGmailCallbackRoute = ApiGmailCallbackRouteImport.update({
   id: '/api/gmail/callback',
   path: '/api/gmail/callback',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiInternalMailSnoozeRoute = ApiInternalMailSnoozeRouteImport.update({
+  id: '/api/internal/mail-snooze',
+  path: '/api/internal/mail-snooze',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiInternalScheduledSendRoute =
@@ -235,6 +259,7 @@ const ApiInternalGmailCredentialsRotateRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof AppIndexRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/auth': typeof AppAuthRoute
   '/design-system': typeof AppDesignSystemRoute
   '/onboarding': typeof AppOnboardingRoute
@@ -257,11 +282,14 @@ export interface FileRoutesByFullPath {
   '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/desktop/auth': typeof AppDesktopAuthRoute
+  '/oauth/consent': typeof AppOauthConsentRoute
+  '/oauth/login': typeof AppOauthLoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -271,6 +299,7 @@ export interface FileRoutesByFullPath {
 }
 export interface FileRoutesByTo {
   '/': typeof AppIndexRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/auth': typeof AppAuthRoute
   '/design-system': typeof AppDesignSystemRoute
   '/onboarding': typeof AppOnboardingRoute
@@ -293,11 +322,14 @@ export interface FileRoutesByTo {
   '/api/suppressions': typeof ApiSuppressionsRoute
   '/api/waitlist': typeof ApiWaitlistRoute
   '/desktop/auth': typeof AppDesktopAuthRoute
+  '/oauth/consent': typeof AppOauthConsentRoute
+  '/oauth/login': typeof AppOauthLoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -309,6 +341,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_app': typeof AppRouteWithChildren
   '/_public': typeof PublicRouteWithChildren
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/_app/auth': typeof AppAuthRoute
   '/_app/design-system': typeof AppDesignSystemRoute
   '/_app/onboarding': typeof AppOnboardingRoute
@@ -332,11 +365,14 @@ export interface FileRoutesById {
   '/api/waitlist': typeof ApiWaitlistRoute
   '/_app/': typeof AppIndexRoute
   '/_app/desktop/auth': typeof AppDesktopAuthRoute
+  '/_app/oauth/consent': typeof AppOauthConsentRoute
+  '/_app/oauth/login': typeof AppOauthLoginRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/connectors/callback': typeof ApiConnectorsCallbackRoute
   '/api/desktop/session': typeof ApiDesktopSessionRoute
   '/api/domain-connect/callback': typeof ApiDomainConnectCallbackRoute
   '/api/gmail/callback': typeof ApiGmailCallbackRoute
+  '/api/internal/mail-snooze': typeof ApiInternalMailSnoozeRoute
   '/api/internal/scheduled-send': typeof ApiInternalScheduledSendRoute
   '/api/messages/$messageId': typeof ApiMessagesMessageIdRoute
   '/api/o/$token': typeof ApiOTokenRoute
@@ -348,6 +384,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/.well-known/$'
     | '/auth'
     | '/design-system'
     | '/onboarding'
@@ -370,11 +407,14 @@ export interface FileRouteTypes {
     | '/api/suppressions'
     | '/api/waitlist'
     | '/desktop/auth'
+    | '/oauth/consent'
+    | '/oauth/login'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -384,6 +424,7 @@ export interface FileRouteTypes {
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/.well-known/$'
     | '/auth'
     | '/design-system'
     | '/onboarding'
@@ -406,11 +447,14 @@ export interface FileRouteTypes {
     | '/api/suppressions'
     | '/api/waitlist'
     | '/desktop/auth'
+    | '/oauth/consent'
+    | '/oauth/login'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -421,6 +465,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_app'
     | '/_public'
+    | '/.well-known/$'
     | '/_app/auth'
     | '/_app/design-system'
     | '/_app/onboarding'
@@ -444,11 +489,14 @@ export interface FileRouteTypes {
     | '/api/waitlist'
     | '/_app/'
     | '/_app/desktop/auth'
+    | '/_app/oauth/consent'
+    | '/_app/oauth/login'
     | '/api/auth/$'
     | '/api/connectors/callback'
     | '/api/desktop/session'
     | '/api/domain-connect/callback'
     | '/api/gmail/callback'
+    | '/api/internal/mail-snooze'
     | '/api/internal/scheduled-send'
     | '/api/messages/$messageId'
     | '/api/o/$token'
@@ -460,6 +508,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AppRoute: typeof AppRouteWithChildren
   PublicRoute: typeof PublicRouteWithChildren
+  DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   ApiChatRoute: typeof ApiChatRoute
   ApiMcpRoute: typeof ApiMcpRoute
   ApiOpenapiRoute: typeof ApiOpenapiRoute
@@ -473,6 +522,7 @@ export interface RootRouteChildren {
   ApiDesktopSessionRoute: typeof ApiDesktopSessionRoute
   ApiDomainConnectCallbackRoute: typeof ApiDomainConnectCallbackRoute
   ApiGmailCallbackRoute: typeof ApiGmailCallbackRoute
+  ApiInternalMailSnoozeRoute: typeof ApiInternalMailSnoozeRoute
   ApiInternalScheduledSendRoute: typeof ApiInternalScheduledSendRoute
   ApiMessagesMessageIdRoute: typeof ApiMessagesMessageIdRoute
   ApiOTokenRoute: typeof ApiOTokenRoute
@@ -495,6 +545,13 @@ declare module '@tanstack/react-router' {
       path: ''
       fullPath: '/'
       preLoaderRoute: typeof PublicRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/.well-known/$': {
+      id: '/.well-known/$'
+      path: '/.well-known/$'
+      fullPath: '/.well-known/$'
+      preLoaderRoute: typeof DotwellKnownSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/_app/': {
@@ -658,6 +715,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AppDesktopAuthRouteImport
       parentRoute: typeof AppRoute
     }
+    '/_app/oauth/consent': {
+      id: '/_app/oauth/consent'
+      path: '/oauth/consent'
+      fullPath: '/oauth/consent'
+      preLoaderRoute: typeof AppOauthConsentRouteImport
+      parentRoute: typeof AppRoute
+    }
+    '/_app/oauth/login': {
+      id: '/_app/oauth/login'
+      path: '/oauth/login'
+      fullPath: '/oauth/login'
+      preLoaderRoute: typeof AppOauthLoginRouteImport
+      parentRoute: typeof AppRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -691,6 +762,13 @@ declare module '@tanstack/react-router' {
       path: '/api/gmail/callback'
       fullPath: '/api/gmail/callback'
       preLoaderRoute: typeof ApiGmailCallbackRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/internal/mail-snooze': {
+      id: '/api/internal/mail-snooze'
+      path: '/api/internal/mail-snooze'
+      fullPath: '/api/internal/mail-snooze'
+      preLoaderRoute: typeof ApiInternalMailSnoozeRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/internal/scheduled-send': {
@@ -747,6 +825,8 @@ interface AppRouteChildren {
   AppSitePasswordRoute: typeof AppSitePasswordRoute
   AppIndexRoute: typeof AppIndexRoute
   AppDesktopAuthRoute: typeof AppDesktopAuthRoute
+  AppOauthConsentRoute: typeof AppOauthConsentRoute
+  AppOauthLoginRoute: typeof AppOauthLoginRoute
 }
 
 const AppRouteChildren: AppRouteChildren = {
@@ -758,6 +838,8 @@ const AppRouteChildren: AppRouteChildren = {
   AppSitePasswordRoute: AppSitePasswordRoute,
   AppIndexRoute: AppIndexRoute,
   AppDesktopAuthRoute: AppDesktopAuthRoute,
+  AppOauthConsentRoute: AppOauthConsentRoute,
+  AppOauthLoginRoute: AppOauthLoginRoute,
 }
 
 const AppRouteWithChildren = AppRoute._addFileChildren(AppRouteChildren)
@@ -788,6 +870,7 @@ const PublicRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AppRoute: AppRouteWithChildren,
   PublicRoute: PublicRouteWithChildren,
+  DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   ApiChatRoute: ApiChatRoute,
   ApiMcpRoute: ApiMcpRoute,
   ApiOpenapiRoute: ApiOpenapiRoute,
@@ -801,6 +884,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiDesktopSessionRoute: ApiDesktopSessionRoute,
   ApiDomainConnectCallbackRoute: ApiDomainConnectCallbackRoute,
   ApiGmailCallbackRoute: ApiGmailCallbackRoute,
+  ApiInternalMailSnoozeRoute: ApiInternalMailSnoozeRoute,
   ApiInternalScheduledSendRoute: ApiInternalScheduledSendRoute,
   ApiMessagesMessageIdRoute: ApiMessagesMessageIdRoute,
   ApiOTokenRoute: ApiOTokenRoute,

@@ -9,6 +9,8 @@ import { MAIL_MESSAGE_ANALYSIS_VERSION } from "@quieter/mail/capture";
 import { sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 
+import { gmailCapturedBodyText } from "./gmail-captured-body";
+
 export type SemanticSearchScope = {
   kind: "memory" | "chat" | "mail";
   mailboxId: string;
@@ -47,7 +49,7 @@ export const semanticSourceQuery = (
     projected = sql`select 'gmail'::text as kind, ${gmailCapturedMessage.messageId} as id,
               concat_ws(E'\n',
                 ${gmailCapturedMessage.analysis}->>'subject',
-                coalesce(nullif(${gmailCapturedMessage.snapshot}->>'bodyText', ''),
+                coalesce(nullif(${gmailCapturedBodyText}, ''),
                   ${gmailCapturedMessage.analysis}->>'htmlText')) as content,
               coalesce(${gmailCapturedMessage.analysis}->>'subject', 'Message') as title, 0 as version,
               coalesce(${gmailCapturedMessage.analysis}->>'version' = ${String(MAIL_MESSAGE_ANALYSIS_VERSION)}, false) as "metadataReady",

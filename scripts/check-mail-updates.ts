@@ -2,6 +2,10 @@ import { Resource } from "sst";
 import { z } from "zod";
 
 import {
+  mailDispatchProbePath,
+  mailDispatchProbeSchema,
+} from "../packages/mail/src/dispatch.ts";
+import {
   mailUpdateSchema,
   signMailPayload,
 } from "../packages/mail/src/updates.ts";
@@ -17,25 +21,35 @@ try {
     mailboxId: `deployment-check-${crypto.randomUUID()}`,
     type: "mailbox.changed",
   });
-  const body = JSON.stringify({
-    event,
-    expiresAt: Date.now() + 20_000,
-    purpose: "mail-event",
-  });
-  const response = await fetch(new URL("/mail/events", origin), {
-    body,
-    headers: {
-      "content-type": "application/json",
-      "x-mail-signature": await signMailPayload(body, secret),
-    },
-    method: "POST",
-    redirect: "error",
-    signal: AbortSignal.timeout(15_000),
-  });
+  const probe = process.argv.includes("--dispatch");
+  const expiresAt = Date.now() + 20_000;
+  const body = JSON.stringify(
+    probe
+      ? mailDispatchProbeSchema.parse({
+          expiresAt,
+          purpose: "mail-dispatch-probe",
+        })
+      : { event, expiresAt, purpose: "mail-event" }
+  );
+  const response = await fetch(
+    new URL(probe ? mailDispatchProbePath : "/mail/events", origin),
+    {
+      body,
+      headers: {
+        "content-type": "application/json",
+        "x-mail-signature": await signMailPayload(body, secret),
+      },
+      method: "POST",
+      redirect: "error",
+      signal: AbortSignal.timeout(15_000),
+    }
+  );
   await response.arrayBuffer();
   if (response.status === 204) {
     process.stdout.write(
-      "Verified signed mail event delivery and recipient lookup.\n"
+      probe
+        ? "Verified hosted database notices and signed mail dispatch.\n"
+        : "Verified signed mail event delivery and recipient lookup.\n"
     );
   } else {
     process.stderr.write(

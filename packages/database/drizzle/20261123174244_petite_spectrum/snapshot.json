@@ -1,0 +1,135 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "0cc85084-dfef-4ca9-956b-5259b443d91c",
+  "prevIds": ["f517be8f-e4aa-41c0-97eb-960615fa1bad"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailCapturedMessage",
+        "bodyBackfillAfter"
+      ],
+      "writes": [
+        "s|col|public.gmailCapturedMessage.bodyBackfillAfter",
+        "n|col|public.gmailCapturedMessage.bodyBackfillAfter",
+        "e|col|public.gmailCapturedMessage.bodyBackfillAfter"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailCapturedMessage",
+        "bodyObject"
+      ],
+      "writes": [
+        "s|col|public.gmailCapturedMessage.bodyObject",
+        "n|col|public.gmailCapturedMessage.bodyObject",
+        "e|col|public.gmailCapturedMessage.bodyObject"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailCapturedMessage",
+        "bodySearchDocument"
+      ],
+      "writes": [
+        "s|col|public.gmailCapturedMessage.bodySearchDocument",
+        "n|col|public.gmailCapturedMessage.bodySearchDocument",
+        "e|col|public.gmailCapturedMessage.bodySearchDocument"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailCapturedMessage",
+        "bodySearchText"
+      ],
+      "writes": [
+        "s|col|public.gmailCapturedMessage.bodySearchText",
+        "n|col|public.gmailCapturedMessage.bodySearchText",
+        "e|col|public.gmailCapturedMessage.bodySearchText"
+      ],
+      "reads": ["n|tbl|public.gmailCapturedMessage", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "bodyBackfillAfter",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "bodyObject",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "bodySearchDocument",
+        "type": "tsvector",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 1,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailCapturedMessage",
+        "name": "bodySearchText",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

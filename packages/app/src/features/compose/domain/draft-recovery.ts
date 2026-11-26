@@ -1,4 +1,8 @@
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import {
+  hasComposeDraftContent,
+  saveComposeDraft,
+} from "@quieter/app/features/compose/domain/draft";
 import type {
   DraftRecoveryScope,
   draftRecoveryJournal,
@@ -112,7 +116,10 @@ export const restoreComposeDraft = (
       ...missing.map((asset) => asset.name),
     ]),
   ];
-  let { errorMessage } = draft;
+  let errorMessage =
+    draft.sendUncertain === true || draft.scheduleAttempt !== undefined
+      ? draft.errorMessage
+      : null;
   if (draft.saveStatus === "sending") {
     errorMessage = draft.scheduleAttempt
       ? "Scheduling was interrupted. Check the schedule before sending this message again."
@@ -202,6 +209,7 @@ export const findRecoverableComposeDraft = async (
       record.localId === draft.localId ||
       (draftId !== "" && recoveredDraftId === draftId);
     const matchesThread =
+      draft.assistantUnsaved !== true &&
       draftId === "" &&
       (threadId?.trim() ?? "") !== "" &&
       recoveredThreadId === threadId &&
@@ -223,4 +231,65 @@ export const findRecoverableComposeDraft = async (
     }
   }
   return threadRecovery;
+};
+
+export const syncUnlinkedBrowserDrafts = async (
+  scope: DraftRecoveryScope,
+  recovery: ReturnType<typeof draftRecoveryJournal.session>,
+  signal: AbortSignal
+) => {
+  const pending: ComposeDraftState[] = [];
+  let synced = false;
+  if (!(await recovery.ready())) {
+    return { pending, synced };
+  }
+  const records = await recovery.listRecoverable(scope);
+  for (const record of records) {
+    signal.throwIfAborted();
+    let draft: ComposeDraftState;
+    try {
+      draft = restoreComposeDraft(
+        record.payload,
+        record.editorId,
+        record.updatedAt,
+        undefined,
+        record.revision
+      );
+    } catch {
+      continue;
+    }
+    if (draft.draftId) {
+      continue;
+    }
+    const requiresReview =
+      draft.assistantUnsaved === true ||
+      draft.sendUncertain === true ||
+      draft.holdAttempt === true ||
+      draft.heldDraftHasNewerEdits === true ||
+      (draft.recoveryMissingFiles?.length ?? 0) > 0;
+    if (!requiresReview && !hasComposeDraftContent(draft)) {
+      continue;
+    }
+    if (
+      !requiresReview &&
+      !draft.draftAnchor &&
+      !draft.replyContext &&
+      draft.attachments.length === 0 &&
+      draft.inlineImages.length === 0 &&
+      !records.some(
+        (other) => other.localId === record.localId && other !== record
+      )
+    ) {
+      try {
+        await saveComposeDraft(scope.mailboxId, draft, signal);
+        await recovery.remove(record);
+        synced = true;
+        continue;
+      } catch {
+        signal.throwIfAborted();
+      }
+    }
+    pending.push(draft);
+  }
+  return { pending, synced };
 };

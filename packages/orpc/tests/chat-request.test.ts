@@ -138,8 +138,7 @@ describe("chat request validation", () => {
     const continued = validated.kind === "continue" ? validated : undefined;
     expect(continued?.toolOutputs.has("server-1")).toBeFalsy();
     expect(continued?.toolOutputs.get("client-1")).toMatchObject({
-      mailboxId: "mailbox-1",
-      view: "inbox",
+      output: { mailboxId: "mailbox-1", view: "inbox" },
     });
   });
 

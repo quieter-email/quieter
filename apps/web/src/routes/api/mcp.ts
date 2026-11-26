@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { waitUntil } from "cloudflare:workers";
 
 export const Route = createFileRoute("/api/mcp")({
   server: {
@@ -12,7 +13,6 @@ export const Route = createFileRoute("/api/mcp")({
 });
 
 const handleMcpRequest = async (request: Request): Promise<Response> => {
-  const { handleTransactionalMailMcpRequest } =
-    await import("#/lib/transactional-mail-mcp.server");
-  return await handleTransactionalMailMcpRequest(request);
+  const { handleQuieterMcpRequest } = await import("#/lib/quieter-mcp.server");
+  return await handleQuieterMcpRequest(request, waitUntil);
 };

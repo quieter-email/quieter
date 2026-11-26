@@ -27,7 +27,6 @@ import type {
   ComposeDialogController,
   PreparedComposeSenderSwitch,
 } from "@quieter/app/features/compose/components/use-compose-dialog-controller";
-import type { ComposeFormValues } from "@quieter/app/features/compose/domain/compose-form";
 import {
   appendComposeSignature,
   deleteComposeDraft,
@@ -43,7 +42,6 @@ import {
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { findRecoverableComposeDraft } from "@quieter/app/features/compose/domain/draft-recovery";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
-import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import {
   appEaseOut,
   appMotionDuration,
@@ -70,6 +68,7 @@ import { deleteManagedDemoDraft } from "@quieter/app/lib/managed-mail/demo-manag
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { resolveMailSender } from "@quieter/mail/compose/sender";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
+import type { MailboxProvider } from "@quieter/mail/search";
 import type { RouterInputs } from "@quieter/orpc";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
@@ -132,12 +131,16 @@ import {
   useState,
 } from "react";
 
+import { ComposeRecipientField } from "./compose-recipient-field";
+import { ComposeWorkspaceHeader } from "./compose-workspace-header";
 import { HeldSendNotice } from "./held-send-notice";
 import type { RestoreUndoneDraft } from "./held-send-toast";
+import { useRecipientSuggestionScope } from "./use-recipient-suggestions";
 
 export type ComposeSenderMailbox = {
   capabilities: Pick<MailboxCapabilities, "canSetSenderName">;
   id: string;
+  provider?: MailboxProvider;
   emailAddress: string;
   displayName: string | null;
   signatureHtml?: string | null;
@@ -191,7 +194,7 @@ type ComposeFormFieldProps = Pick<
 > & {
   disabled?: boolean;
   label: string;
-  name: keyof Pick<ComposeFormValues, "to" | "cc" | "bcc" | "subject">;
+  name: "subject";
   placeholder?: string;
 };
 
@@ -365,6 +368,12 @@ const ReadyComposeSurface = ({
       input: { mailboxId: mailboxId ?? "" },
     }),
     enabled: !!mailboxId && !demoMode && !managedDemoMode,
+  });
+  const suggestionScope = useRecipientSuggestionScope({
+    enabled:
+      persistDrafts && !demoMode && !managedDemoMode && !senderUnavailable,
+    mailboxId,
+    preload: currentSender?.provider === "gmail",
   });
   let snippetStatus: string | undefined;
   if (snippetsQuery.isError) {
@@ -777,8 +786,7 @@ const ReadyComposeSurface = ({
   return (
     <>
       {isInline ? null : (
-        <MailSubviewHeader
-          className="px-4 pt-4 sm:px-6 sm:pt-6"
+        <ComposeWorkspaceHeader
           closeAction={{
             disabled:
               !state.open ||
@@ -791,9 +799,18 @@ const ReadyComposeSurface = ({
             },
           }}
           onOpenSidebar={onOpenSidebar}
-          title="New message"
+          saveStatus={
+            persistDrafts && state.draft.assistantUnsaved !== true
+              ? state.draft.saveStatus
+              : undefined
+          }
         />
       )}
+      {isInline && state.draft.assistantUnsaved === true ? (
+        <p className="mb-3 text-caption text-muted-fg">
+          Review and edit before sending.
+        </p>
+      ) : null}
       {/* oxlint-disable-next-line jsx-a11y/no-noninteractive-element-interactions -- the form only blocks implicit submission from its own fields; it never becomes a keyboard target. */}
       <form
         action={async () => {
@@ -1165,71 +1182,48 @@ const ReadyComposeSurface = ({
                           />
                         </ComposerFieldRow>
                       ) : null}
-                      <form.Field name="to">
-                        {(recipientField) => {
-                          const [error] = recipientField.state.meta.errors;
-                          return (
-                            <ComposerFieldRow
-                              error={
-                                error
-                                  ? (error.message ?? "Invalid value")
-                                  : undefined
-                              }
-                              label="To"
-                              trailing={
-                                <div className="flex shrink-0 items-center gap-2">
-                                  <Button
-                                    chrome="toolbar"
-                                    aria-controls="compose-cc-field"
-                                    aria-expanded={state.showCc}
-                                    aria-pressed={state.showCc}
-                                    onClick={() => {
-                                      toggleRecipientVisibility("cc");
-                                    }}
-                                    type="button"
-                                    size="field"
-                                    variant="secondary"
-                                  >
-                                    Cc
-                                  </Button>
-                                  <Button
-                                    chrome="toolbar"
-                                    aria-controls="compose-bcc-field"
-                                    aria-expanded={state.showBcc}
-                                    aria-pressed={state.showBcc}
-                                    onClick={() => {
-                                      toggleRecipientVisibility("bcc");
-                                    }}
-                                    type="button"
-                                    size="field"
-                                    variant="secondary"
-                                  >
-                                    Bcc
-                                  </Button>
-                                </div>
-                              }
+                      <ComposeRecipientField
+                        handleUserDraftChange={handleUserDraftChange}
+                        data-compose-recipient-field
+                        disabled={!canEditBody}
+                        form={form}
+                        label="To"
+                        name="to"
+                        placeholder="Add recipients"
+                        suggestionScope={suggestionScope}
+                        trailing={
+                          <div className="flex shrink-0 items-center gap-2">
+                            <Button
+                              chrome="toolbar"
+                              aria-controls="compose-cc-field"
+                              aria-expanded={state.showCc}
+                              aria-pressed={state.showCc}
+                              onClick={() => {
+                                toggleRecipientVisibility("cc");
+                              }}
+                              type="button"
+                              size="field"
+                              variant="secondary"
                             >
-                              <FieldControl
-                                aria-invalid={!!error}
-                                chrome="composer"
-                                data-compose-recipient-field
-                                disabled={!canEditBody}
-                                placeholder="Add recipients"
-                                onBlur={() => {
-                                  recipientField.handleBlur();
-                                }}
-                                onChange={(event) => {
-                                  handleUserDraftChange();
-                                  recipientField.handleChange(
-                                    event.currentTarget.value
-                                  );
-                                }}
-                                value={recipientField.state.value}
-                              />
-                            </ComposerFieldRow>
-                          );
-                        }}
-                      </form.Field>
+                              Cc
+                            </Button>
+                            <Button
+                              chrome="toolbar"
+                              aria-controls="compose-bcc-field"
+                              aria-expanded={state.showBcc}
+                              aria-pressed={state.showBcc}
+                              onClick={() => {
+                                toggleRecipientVisibility("bcc");
+                              }}
+                              type="button"
+                              size="field"
+                              variant="secondary"
+                            >
+                              Bcc
+                            </Button>
+                          </div>
+                        }
+                      />
                       <LazyMotion features={domAnimation} strict>
                         <AnimatePresence initial={false}>
                           {state.showCc ? (
@@ -1240,12 +1234,13 @@ const ReadyComposeSurface = ({
                               key="compose-cc"
                             >
                               <div className="min-h-0 overflow-hidden">
-                                <ComposeFormField
+                                <ComposeRecipientField
                                   handleUserDraftChange={handleUserDraftChange}
                                   disabled={!canEditBody}
                                   form={form}
                                   label="Cc"
                                   name="cc"
+                                  suggestionScope={suggestionScope}
                                 />
                               </div>
                             </m.div>
@@ -1258,12 +1253,13 @@ const ReadyComposeSurface = ({
                               key="compose-bcc"
                             >
                               <div className="min-h-0 overflow-hidden">
-                                <ComposeFormField
+                                <ComposeRecipientField
                                   handleUserDraftChange={handleUserDraftChange}
                                   disabled={!canEditBody}
                                   form={form}
                                   label="Bcc"
                                   name="bcc"
+                                  suggestionScope={suggestionScope}
                                 />
                               </div>
                             </m.div>
@@ -1675,6 +1671,9 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     props.persistDrafts !== false &&
     demoMode !== true &&
     managedDemoMode !== true &&
+    (!!initialDraft?.draftId ||
+      !!initialDraft?.draftAnchor ||
+      !!initialDraft?.replyContext) &&
     initialDraft?.recoveryEditorId === undefined;
   const needsLoading = needsRemoteLoading || needsRecoveryLoading;
   const seedRef = useRef(initialDraft ?? createEmptyComposeDraft());
@@ -1751,7 +1750,10 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
           ...seed,
           ...saved,
           draftAnchor: saved.draftAnchor ?? null,
-          errorMessage: null,
+          errorMessage:
+            "recipientsUnavailable" in saved && saved.recipientsUnavailable
+              ? "The addresses could not be restored. Re-enter them before sending."
+              : null,
           lastSavedAt: saved.lastSavedAt,
           messageId: saved.messageId ?? undefined,
           saveStatus: "saved",
@@ -1823,11 +1825,9 @@ export const ComposeSurface = (props: ComposeSurfaceProps) => {
     return (
       <>
         {props.variant === "inline" ? null : (
-          <MailSubviewHeader
-            className="px-4 pt-4 sm:px-6 sm:pt-6"
+          <ComposeWorkspaceHeader
             closeAction={{ label: "Close composer", onClick: props.onClose }}
             onOpenSidebar={props.onOpenSidebar}
-            title="New message"
           />
         )}
         <output className="flex flex-col items-center justify-center gap-3 p-6">

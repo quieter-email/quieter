@@ -7,24 +7,143 @@
   "compatibility_flags": ["nodejs_compat"],
   "workers_dev": false,
   "preview_urls": false,
+  "r2_buckets": [
+    { "binding": "LocalMailStorage", "bucket_name": "quieter-local-mail" },
+  ],
   "queues": {
     "producers": [
       {
-        "binding": "GmailProcessingQueue",
-        "queue": "quieter-local-gmail-processing",
+        "binding": "GmailMailboxAutomationQueue0",
+        "queue": "quieter-local-gmail-mailbox-automation-0",
       },
       {
-        "binding": "GmailFreshProcessingQueue",
-        "queue": "quieter-local-gmail-fresh-processing",
+        "binding": "GmailMailboxAutomationQueue1",
+        "queue": "quieter-local-gmail-mailbox-automation-1",
       },
       {
-        "binding": "GmailCatchupProcessingQueue",
-        "queue": "quieter-local-gmail-catchup-processing",
+        "binding": "GmailMailboxAutomationQueue2",
+        "queue": "quieter-local-gmail-mailbox-automation-2",
+      },
+      {
+        "binding": "GmailMailboxAutomationQueue3",
+        "queue": "quieter-local-gmail-mailbox-automation-3",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue0",
+        "queue": "quieter-local-gmail-mailbox-fresh-0",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue1",
+        "queue": "quieter-local-gmail-mailbox-fresh-1",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue2",
+        "queue": "quieter-local-gmail-mailbox-fresh-2",
+      },
+      {
+        "binding": "GmailMailboxFreshQueue3",
+        "queue": "quieter-local-gmail-mailbox-fresh-3",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue0",
+        "queue": "quieter-local-gmail-mailbox-catchup-0",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue1",
+        "queue": "quieter-local-gmail-mailbox-catchup-1",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue2",
+        "queue": "quieter-local-gmail-mailbox-catchup-2",
+      },
+      {
+        "binding": "GmailMailboxCatchupQueue3",
+        "queue": "quieter-local-gmail-mailbox-catchup-3",
+      },
+    ],
+    "consumers": [
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-0",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-1",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-2",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-automation-3",
+        "max_batch_size": 1,
+        "max_batch_timeout": 0,
+        "max_concurrency": 1,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-fresh-0",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-fresh-1",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-fresh-2",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-fresh-3",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-catchup-0",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-catchup-1",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-catchup-2",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
+      },
+      {
+        "queue": "quieter-local-gmail-mailbox-catchup-3",
+        "max_batch_size": 1,
+        "max_concurrency": 1,
+        "max_batch_timeout": 0,
       },
     ],
   },
   "durable_objects": {
     "bindings": [
+      { "name": "GmailProjectQuota", "class_name": "GmailProjectQuota" },
+
+      {
+        "name": "GmailMailboxScheduler",
+        "class_name": "GmailMailboxScheduler",
+      },
       {
         "name": "GmailFreshExecutor",
         "class_name": "GmailFreshExecutor",
@@ -38,5 +157,10 @@
   },
   "migrations": [
     { "tag": "fresh-v1", "new_sqlite_classes": ["GmailFreshExecutor"] },
+    {
+      "tag": "mailbox-scheduler-v1",
+      "new_sqlite_classes": ["GmailMailboxScheduler"],
+    },
+    { "tag": "gmail-quota-v1", "new_sqlite_classes": ["GmailProjectQuota"] },
   ],
 }

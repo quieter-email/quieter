@@ -24,12 +24,20 @@ import {
   buildPlainTextMessage,
   normalizeComposeBodyHtml,
 } from "@quieter/mail/compose/mime";
-import type { composeDraftInputSchema } from "@quieter/mail/compose/schema";
+import type {
+  composeDraftInputSchema,
+  ComposeDraftRecipients,
+} from "@quieter/mail/compose/schema";
+import {
+  composeDraftRecipientFieldsSchema,
+  hasUnfinishedDraftRecipients,
+} from "@quieter/mail/compose/schema";
 import type { MessageListItem } from "@quieter/mail/messages";
 import { reportError } from "@quieter/observability";
 import { and, eq, inArray } from "drizzle-orm";
-import type { z } from "zod";
+import { z } from "zod";
 
+import { decryptSecret, encryptSecret } from "./gmail-mailbox-access";
 import { prepareGmailOpenTracking } from "./gmail-open-tracking";
 import { withMailComposeLock } from "./mail/compose-lock";
 import {
@@ -46,6 +54,31 @@ const UNCERTAIN_SEND_MESSAGE =
 const DRAFT_CONFLICT_MESSAGE =
   "This draft changed elsewhere. Reopen it before saving or sending again.";
 const DRAFT_RECONCILIATION_WINDOW_MS = 120_000;
+
+const sealedDraftRecipientsSchema = z.object({
+  kind: z.literal("quieter-draft-recipients"),
+  mailboxId: z.string(),
+  recipients: composeDraftRecipientFieldsSchema,
+});
+
+export const restoreGmailDraftRecipients = (
+  sealedRecipients: string,
+  mailboxId: string
+): ComposeDraftRecipients | undefined => {
+  try {
+    const payload: unknown = JSON.parse(decryptSecret(sealedRecipients));
+    const parsed = sealedDraftRecipientsSchema.safeParse(payload);
+    if (parsed.success && parsed.data.mailboxId === mailboxId) {
+      return parsed.data.recipients;
+    }
+  } catch {
+    // A decryption error may contain sensitive input. Report a generic error below.
+  }
+  reportError(new Error("Could not open sealed draft recipients"), {
+    operation: "compose:gmail-draft-recipients",
+  });
+  return undefined;
+};
 
 const hashComposeRequest = async (draft: ComposeDraftInput) => {
   const files = await Promise.all(
@@ -520,6 +553,15 @@ export const saveGmailDraft = async (
         await buildMimeMessage(draft, {
           includeQuieterDraftHeaders: true,
           messageId: operation.messageHeaderId,
+          sealedDraftRecipients: hasUnfinishedDraftRecipients(draft.recipients)
+            ? encryptSecret(
+                JSON.stringify({
+                  kind: "quieter-draft-recipients",
+                  mailboxId,
+                  recipients: draft.recipients,
+                } satisfies z.infer<typeof sealedDraftRecipientsSchema>)
+              )
+            : undefined,
         })
       ).toString("base64url");
       requestSignal.throwIfAborted();

@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import type { MailboxActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
@@ -8,6 +9,8 @@ import {
 } from "@quieter/app/lib/mail/inbox-query/data";
 import { formatMailSender } from "@quieter/mail/compose/sender";
 import type { MailCommand } from "@quieter/mail/data-plane";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
+import type { MailSnoozeCommand, MailSnoozeState } from "@quieter/mail/snooze";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 
 export type DemoMessageStore = {
@@ -16,11 +19,213 @@ export type DemoMessageStore = {
   ) => void;
 };
 
+export type DemoSnoozeSchedule = {
+  hiddenMessageIds: string[];
+  knownIncomingMessageIds: string[];
+  state: MailSnoozeState;
+};
+
+type DemoSnoozeData = {
+  messages: MessageListItem[];
+  snoozes: Partial<Record<string, DemoSnoozeSchedule>>;
+};
+
+export type DemoSnoozeStore = DemoMessageStore & {
+  mailboxId: string;
+  updateSnoozes: (update: (state: DemoSnoozeData) => DemoSnoozeData) => void;
+};
+
+export const reconcileDemoSnoozes = ({
+  messages,
+  snoozes,
+}: DemoSnoozeData): DemoSnoozeData => {
+  const nextSchedules = { ...snoozes };
+  for (const [threadId, schedule] of Object.entries(nextSchedules)) {
+    if (
+      schedule === undefined ||
+      !["active", "suspended"].includes(schedule.state.status)
+    ) {
+      continue;
+    }
+    const newReply = messages.some(
+      (message) =>
+        message.threadId === threadId &&
+        !schedule.knownIncomingMessageIds.includes(message.id) &&
+        message.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+        !message.labelIds.some((id) =>
+          ["SENT", "DRAFT", "SPAM", "TRASH"].includes(id)
+        )
+    );
+    if (newReply) {
+      nextSchedules[threadId] = {
+        ...schedule,
+        state: {
+          ...schedule.state,
+          status: "superseded",
+          version: schedule.state.version + 1,
+        },
+      };
+    }
+  }
+  return {
+    messages: messages.map((message) => {
+      const schedule = nextSchedules[message.threadId];
+      return schedule === undefined
+        ? message
+        : { ...message, snooze: schedule.state };
+    }),
+    snoozes: nextSchedules,
+  };
+};
+
 export const createDemoActions = (
-  store: DemoMessageStore,
+  store: DemoSnoozeStore,
   invalidate: () => Promise<void>,
   placementScope: MailboxActions["placementScope"] = "personal"
 ): MailboxActions => {
+  const applySnooze = async (
+    threadIds: string[],
+    command: MailSnoozeCommand,
+    expectedVersions?: ReadonlyMap<string, number | null>
+  ) => {
+    store.updateSnoozes(({ messages, snoozes }) => {
+      const nextSchedules = { ...snoozes };
+      let nextMessages = messages;
+      for (const threadId of threadIds) {
+        const thread = nextMessages.filter(
+          (message) => message.threadId === threadId
+        );
+        const previous = nextSchedules[threadId];
+        if (
+          expectedVersions &&
+          expectedVersions.get(threadId) !== (previous?.state.version ?? null)
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message: "This snooze changed. Refresh before trying again.",
+          });
+        }
+        if (
+          thread.length === 0 ||
+          thread.some(
+            (message) =>
+              message.labelIds?.some((id) =>
+                ["DRAFT", "SPAM", "TRASH"].includes(id)
+              ) === true
+          )
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This conversation cannot be snoozed. Refresh before trying again.",
+          });
+        }
+        if (
+          command.kind === "snooze" &&
+          previous !== undefined &&
+          [
+            "active",
+            "suspended",
+            "preparing",
+            "returning",
+            "uncertain",
+          ].includes(previous.state.status)
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message:
+              "This conversation is already snoozed. Reschedule it instead.",
+          });
+        }
+        const hiddenMessageIds =
+          command.kind === "snooze"
+            ? thread
+                .filter(
+                  (message) =>
+                    message.labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+                    !message.labelIds.includes(MAILBOX_LABELS.sent)
+                )
+                .map((message) => message.id)
+            : previous?.hiddenMessageIds;
+        if (
+          hiddenMessageIds === undefined ||
+          hiddenMessageIds.length === 0 ||
+          (command.kind !== "snooze" &&
+            (previous === undefined ||
+              !["active", "suspended", "failed", "uncertain"].includes(
+                previous.state.status
+              )))
+        ) {
+          throw new ORPCError("CONFLICT", {
+            message: "This conversation changed. Refresh before trying again.",
+          });
+        }
+        const schedule =
+          command.kind === "snooze" || command.kind === "reschedule"
+            ? command
+            : previous?.state;
+        if (
+          schedule === undefined ||
+          ((command.kind === "snooze" || command.kind === "reschedule") &&
+            new Date(schedule.returnAt).getTime() <= Date.now())
+        ) {
+          throw new ORPCError("BAD_REQUEST", {
+            message: "Choose a time in the future.",
+          });
+        }
+        let status: MailSnoozeState["status"] = "active";
+        if (command.kind === "cancel") {
+          status = "cancelled";
+        } else if (command.kind === "return-now") {
+          status = "returned";
+        }
+        const state: MailSnoozeState = {
+          id: previous?.state.id ?? crypto.randomUUID(),
+          mailboxId: store.mailboxId,
+          returnAt: schedule.returnAt,
+          status,
+          threadId,
+          timeZone: schedule.timeZone,
+          version: (previous?.state.version ?? 0) + 1,
+        };
+        nextSchedules[threadId] = {
+          hiddenMessageIds,
+          knownIncomingMessageIds:
+            command.kind === "snooze"
+              ? thread
+                  .filter(
+                    (message) =>
+                      message.labelIds?.includes(MAILBOX_LABELS.sent) !==
+                        true && !message.draftId
+                  )
+                  .map((message) => message.id)
+              : (previous?.knownIncomingMessageIds ?? []),
+          state,
+        };
+        const hidden = new Set(hiddenMessageIds);
+        nextMessages = nextMessages.map((message) => {
+          if (message.threadId !== threadId) {
+            return message;
+          }
+          let placement: "done" | "inbox" | undefined;
+          if (hidden.has(message.id)) {
+            if (command.kind === "snooze") {
+              placement = "done";
+            } else if (command.kind === "return-now") {
+              placement = "inbox";
+            }
+          }
+          return {
+            ...(placement
+              ? getMailCommandUpdater({ kind: "set-placement", placement })(
+                  message
+                )
+              : message),
+            snooze: state,
+          };
+        });
+      }
+      return { messages: nextMessages, snoozes: nextSchedules };
+    });
+    await invalidate();
+  };
   const apply = async (
     ids: string[],
     scope: "message" | "thread",
@@ -28,6 +233,48 @@ export const createDemoActions = (
   ) => {
     const selected = new Set(ids);
     const update = getMailCommandUpdater(command);
+    if (command.kind === "move" || command.kind === "set-placement") {
+      store.updateSnoozes(({ messages, snoozes }) => {
+        const affectedThreads = new Set<string>();
+        const nextMessages = messages.flatMap((message) => {
+          if (
+            !selected.has(scope === "message" ? message.id : message.threadId)
+          ) {
+            return [message];
+          }
+          affectedThreads.add(message.threadId);
+          return [update(message)];
+        });
+        const nextSchedules = { ...snoozes };
+        for (const threadId of affectedThreads) {
+          const schedule = nextSchedules[threadId];
+          if (
+            schedule !== undefined &&
+            isMailSnoozeLiveStatus(schedule.state.status)
+          ) {
+            nextSchedules[threadId] = {
+              ...schedule,
+              state: {
+                ...schedule.state,
+                status: "superseded",
+                version: schedule.state.version + 1,
+              },
+            };
+          }
+        }
+        return {
+          messages: nextMessages.map((message) => {
+            const schedule = nextSchedules[message.threadId];
+            return schedule === undefined
+              ? message
+              : { ...message, snooze: schedule.state };
+          }),
+          snoozes: nextSchedules,
+        };
+      });
+      await invalidate();
+      return;
+    }
     store.updateMessages((messages) =>
       messages.flatMap((message) => {
         if (
@@ -56,6 +303,27 @@ export const createDemoActions = (
     await invalidate();
   };
   return {
+    applyThreadSnooze: async (threadId, command, expectedVersion) => {
+      await applySnooze(
+        [threadId],
+        command,
+        expectedVersion === undefined
+          ? undefined
+          : new Map([[threadId, expectedVersion]])
+      );
+    },
+    applyThreadsSnooze: async (threads, command) => {
+      await applySnooze(
+        threads.map((thread) => thread.threadId),
+        command,
+        new Map(
+          threads.map((thread) => [
+            thread.threadId,
+            thread.anchorMessage.snooze?.version ?? null,
+          ])
+        )
+      );
+    },
     canMarkRead: true,
     canSetImportance: true,
     canSetPlacement: true,

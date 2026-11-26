@@ -12,11 +12,14 @@ import {
   AssistantSidebarContext,
   AssistantSidebarTrigger,
 } from "@quieter/app/features/chat/components/assistant-sidebar-context";
+import { ChatView } from "@quieter/app/features/chat/components/chat-view";
 import { useAgentWorkspace } from "@quieter/app/features/chat/domain/workspace-context";
-import { DraftRecoveryNotice } from "@quieter/app/features/compose/components/draft-recovery-notice";
+import { ComposeWorkspaceHeader } from "@quieter/app/features/compose/components/compose-workspace-header";
 import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import { buildComposeDraftFromSavedDraftMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
+import { syncUnlinkedBrowserDrafts } from "@quieter/app/features/compose/domain/draft-recovery";
+import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
 import { FirstRunManagedMailSetup } from "@quieter/app/features/mailbox/components/mailbox-workspace/first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-messages-panel";
@@ -26,7 +29,6 @@ import {
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import {
   loadCalendarWorkspace,
-  loadChatView,
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -37,12 +39,23 @@ import { MailSidebar } from "@quieter/app/features/navigation/components/mail-si
 import { MailboxOrganizer } from "@quieter/app/features/navigation/components/mailbox-organizer";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { ReminderOpenRequest } from "@quieter/app/features/reminders/reminders-panel";
+import { userBillingQueryOptions } from "@quieter/app/features/settings/domain/billing";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
+import { authClient } from "@quieter/app/lib/auth";
+import { chatQueryOptions } from "@quieter/app/lib/chat-query";
+import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
+import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { Text } from "@quieter/ui/text";
 import { WorkspaceDock } from "@quieter/ui/workspace-dock";
@@ -52,6 +65,8 @@ import {
   workspaceGutterClassName,
   workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
+import { captureException } from "@sentry/react";
+import { useQueryClient } from "@tanstack/react-query";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
   Activity,
@@ -65,6 +80,8 @@ import {
   useState,
 } from "react";
 import type { ComponentProps, ReactNode } from "react";
+
+import { useCommandPalette } from "../../../hotkeys/components/command-palette-context";
 
 const CalendarWorkspace = lazy(loadCalendarWorkspace);
 
@@ -160,11 +177,9 @@ const ComposeWorkspaceLoading = ({
   onClose: () => void;
 }) => (
   <div className="flex h-full min-h-0 flex-col" data-compose-workspace>
-    <MailSubviewHeader
-      className="px-4 pt-4 sm:px-6 sm:pt-6"
+    <ComposeWorkspaceHeader
       closeAction={{ label: "Close composer", onClick: onClose }}
       onOpenSidebar={onOpenSidebar}
-      title="New message"
     />
     <output
       aria-label="Loading composer"
@@ -197,12 +212,6 @@ const SnippetWorkspaceLoading = ({
   </WorkspaceSection>
 );
 
-const AssistantLoading = () => (
-  <p className="p-4 text-body-sm text-muted-fg" data-assistant-loading>
-    Loading assistant…
-  </p>
-);
-
 type WorkspaceModuleResource<Module> = {
   load: () => Promise<Module>;
   readonly module: Module | undefined;
@@ -228,8 +237,6 @@ const composeWorkspaceResource =
 
 const snippetWorkspaceResource =
   createWorkspaceModuleResource(loadSnippetWorkspace);
-
-const chatViewResource = createWorkspaceModuleResource(loadChatView);
 
 // Keep module loading in state so Suspense cannot postpone a ready workspace.
 const useWorkspaceModule = <Module,>(
@@ -300,17 +307,6 @@ const SnippetWorkspace = (
   }
   const Workspace = module.default;
   return <Workspace {...props} />;
-};
-
-const ChatView = (
-  props: ComponentProps<Awaited<ReturnType<typeof loadChatView>>["default"]>
-) => {
-  const module = useWorkspaceModule(chatViewResource);
-  if (module === null) {
-    return <AssistantLoading />;
-  }
-  const View = module.default;
-  return <View {...props} />;
 };
 
 const NoMailboxWorkspace = ({
@@ -498,6 +494,9 @@ const MailboxWorkspaceContentInner = ({
   const isScheduledMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox === "scheduled",
   });
+  const isDraftsMailbox = inboxRouteApi.useSearch({
+    select: (search) => search.mailbox === "drafts",
+  });
   const allInboxesActive = selectedView === "all-inboxes";
   const mailViewActive =
     !isComposeMailbox &&
@@ -531,6 +530,79 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
+  const queryClient = useQueryClient();
+  const sessionId = authClient.useSession().data?.session.id;
+  const [interruptedCompose, setInterruptedCompose] = useState<{
+    drafts: ComposeDraftState[];
+    mailboxId: string;
+    sessionId: string;
+  }>();
+  const canSyncBrowserDrafts =
+    isDraftsMailbox &&
+    !isDemoMode &&
+    !isManagedDemoMode &&
+    senderMailboxes.some(({ id }) => id === selectedMailboxId);
+  useEffect((): (() => void) | undefined => {
+    if (!canSyncBrowserDrafts || !sessionId || !selectedMailboxId) {
+      return undefined;
+    }
+    const controller = new AbortController();
+    void (async () => {
+      try {
+        const { pending, synced } = await syncUnlinkedBrowserDrafts(
+          { mailboxId: selectedMailboxId, userId },
+          draftRecoveryJournal.session(userId, sessionId),
+          controller.signal
+        );
+        if (controller.signal.aborted) {
+          return;
+        }
+        setInterruptedCompose({
+          drafts: pending,
+          mailboxId: selectedMailboxId,
+          sessionId,
+        });
+        if (synced) {
+          await refreshCachedMailboxQueries(
+            queryClient,
+            selectedMailboxId,
+            "drafts"
+          );
+        }
+      } catch {
+        if (!controller.signal.aborted) {
+          captureException(new Error("Could not sync an older browser draft"), {
+            tags: { boundary: "compose-draft-sync" },
+          });
+        }
+      }
+    })();
+    return () => {
+      controller.abort();
+    };
+  }, [canSyncBrowserDrafts, queryClient, selectedMailboxId, sessionId, userId]);
+  const interruptedDrafts =
+    canSyncBrowserDrafts &&
+    interruptedCompose &&
+    interruptedCompose.mailboxId === selectedMailboxId &&
+    interruptedCompose.sessionId === sessionId
+      ? interruptedCompose.drafts
+      : [];
+  const assistantAvailable =
+    Boolean(selectedMailboxId) && selectedMailboxProvider !== "api";
+  useEffect(() => {
+    if (assistantAvailable) {
+      void Promise.allSettled([queryClient.query(userBillingQueryOptions())]);
+    }
+  }, [assistantAvailable, queryClient]);
+  useEffect(() => {
+    if (assistantAvailable && selectedMailboxId && chatId !== null) {
+      const options = chatQueryOptions(selectedMailboxId, chatId);
+      if (queryClient.getQueryData(options.queryKey) === undefined) {
+        void Promise.allSettled([queryClient.query(options)]);
+      }
+    }
+  }, [assistantAvailable, chatId, queryClient, selectedMailboxId]);
   useEffect(
     () =>
       appRuntime.reminderNotifications?.onOpen((event) => {
@@ -575,6 +647,8 @@ const MailboxWorkspaceContentInner = ({
   const [assistantNarrow, setAssistantNarrow] = useState(false);
   const assistantAutoCollapsedRef = useRef(false);
   const agentWorkspace = useAgentWorkspace();
+  const commandPalette = useCommandPalette();
+  const { openKeyboardShortcuts } = useKeyboardShortcuts();
   const restoreAssistantTriggerFocus = () => {
     window.requestAnimationFrame(() => {
       const trigger = assistantTriggerRef.current;
@@ -596,6 +670,86 @@ const MailboxWorkspaceContentInner = ({
       visibleTrigger?.focus();
     });
   };
+  const revealWorkspace = ({ restoreFocus = true } = {}) => {
+    if (assistantNarrow && assistantOpen) {
+      assistantAutoCollapsedRef.current = false;
+      if (
+        restoreFocus &&
+        document.activeElement?.closest("[data-assistant-sidebar]")
+      ) {
+        restoreAssistantTriggerFocus();
+      }
+      setAssistantOpen(false);
+    }
+  };
+  const showReminders = (request: ReminderOpenRequest | null) => {
+    assistantAutoCollapsedRef.current = false;
+    setAssistantTab("reminders");
+    setReminderRequest(request);
+    setAssistantOpened(true);
+    setAssistantFocusRequest((current) => current + 1);
+    setAssistantOpen(true);
+  };
+  const openReminders = useEffectEvent(() => {
+    showReminders(null);
+  });
+  const openSearch = useEffectEvent(async (generation: number) => {
+    const deadline = performance.now() + 2500;
+    let reason = "Open a conversation list to search mail.";
+    while (agentWorkspace?.control.isCurrent(generation) === true) {
+      const commands =
+        commandPalette?.getEntries().flatMap(([, entries]) => entries) ?? [];
+      const search = commands.findLast(
+        (command) => command.id === "focus-search" && !command.fallback
+      );
+      if (search?.state === "available") {
+        if (assistantNarrow) {
+          revealWorkspace({ restoreFocus: false });
+          const frame = Promise.withResolvers<number>();
+          requestAnimationFrame(frame.resolve);
+          await frame.promise;
+        }
+        if (!agentWorkspace.control.isCurrent(generation)) {
+          break;
+        }
+        await search.execute();
+        return;
+      }
+      reason = search?.reason ?? reason;
+      if (performance.now() >= deadline) {
+        throw new Error(reason);
+      }
+      const pending = Promise.withResolvers<null>();
+      window.setTimeout(() => {
+        pending.resolve(null);
+      }, 50);
+      await pending.promise;
+    }
+    throw new Error("The request was stopped.");
+  });
+  useLayoutEffect((): (() => void) | undefined => {
+    if (!agentWorkspace || !commandPalette) {
+      return undefined;
+    }
+    const unregister = [
+      agentWorkspace.registerPanel(
+        "command-palette",
+        commandPalette.requestOpen
+      ),
+      agentWorkspace.registerPanel("keyboard-shortcuts", openKeyboardShortcuts),
+      agentWorkspace.registerPanel("mail-search", async (generation) => {
+        await openSearch(generation);
+      }),
+      agentWorkspace.registerPanel("reminders", () => {
+        openReminders();
+      }),
+    ];
+    return () => {
+      for (const remove of unregister) {
+        remove();
+      }
+    };
+  }, [agentWorkspace, commandPalette, openKeyboardShortcuts]);
   useLayoutEffect(() => {
     let closed = false;
     try {
@@ -605,7 +759,7 @@ const MailboxWorkspaceContentInner = ({
       // Use the default sidebar layout when storage is unavailable.
     }
     const wide = window.matchMedia("(min-width: 80rem)").matches;
-    // oxlint-disable-next-line react/set-state-in-effect -- Load the chat only when the restored sidebar is visible.
+    // oxlint-disable-next-line react/set-state-in-effect -- Mount the chat when restoring an open sidebar.
     setAssistantOpened(wide && !closed);
     // oxlint-disable-next-line react/set-state-in-effect -- Restore the sidebar's initial visibility for the current viewport.
     setAssistantOpen(wide && !closed);
@@ -919,6 +1073,32 @@ const MailboxWorkspaceContentInner = ({
         })}
       >
         <MailboxMessagesPanel
+          headerAddon={
+            interruptedDrafts.length > 0 ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger
+                  render={<Button size="sm" variant="toolbar" />}
+                >
+                  Resume interrupted compose
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                  {interruptedDrafts.map((draft) => (
+                    <DropdownMenuItem
+                      key={draft.recoveryRevision ?? draft.recoveryEditorId}
+                      onSelect={() => {
+                        onComposeDraftRequested(draft);
+                      }}
+                    >
+                      {draft.sendUncertain === true
+                        ? "Check delivery"
+                        : "Resume"}
+                      {` ${draft.subject.trim() || draft.recipients.to.trim() || "message"}`}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : undefined
+          }
           mailLayout={mailLayout}
           activeMailbox={activeMailbox}
           senderMailbox={composeMailbox}
@@ -946,19 +1126,6 @@ const MailboxWorkspaceContentInner = ({
           selectedMailboxId && selectedMailboxProvider !== "api"
             ? {
                 onCreateReminder: async (input) => {
-                  const show = () => {
-                    assistantAutoCollapsedRef.current = false;
-                    setAssistantTab("reminders");
-                    setReminderRequest({
-                      id: crypto.randomUUID(),
-                      mailboxId: input.mailboxId,
-                      target: input.target,
-                      title: input.title,
-                    });
-                    setAssistantOpened(true);
-                    setAssistantFocusRequest((current) => current + 1);
-                    setAssistantOpen(true);
-                  };
                   if (input.mailboxId !== selectedMailboxId) {
                     await setMailboxSearch({
                       mailbox: "inbox",
@@ -967,7 +1134,12 @@ const MailboxWorkspaceContentInner = ({
                       threadId: null,
                     });
                   }
-                  show();
+                  showReminders({
+                    id: crypto.randomUUID(),
+                    mailboxId: input.mailboxId,
+                    target: input.target,
+                    title: input.title,
+                  });
                 },
                 onOpen: (trigger) => {
                   assistantTriggerRef.current = trigger;
@@ -988,24 +1160,6 @@ const MailboxWorkspaceContentInner = ({
                   if (trigger) {
                     assistantTriggerRef.current = trigger;
                   }
-                  const show = () => {
-                    assistantAutoCollapsedRef.current = false;
-                    setAssistantTab("reminders");
-                    setReminderRequest(
-                      selection
-                        ? {
-                            id: crypto.randomUUID(),
-                            mailboxId: mailboxId ?? selectedMailboxId,
-                            ...(selection.kind === "edit"
-                              ? { reminder: selection.reminder }
-                              : { reminderId: selection.reminderId }),
-                          }
-                        : null
-                    );
-                    setAssistantOpened(true);
-                    setAssistantFocusRequest((current) => current + 1);
-                    setAssistantOpen(true);
-                  };
                   if (mailboxId && mailboxId !== selectedMailboxId) {
                     await setMailboxSearch({
                       mailbox: "inbox",
@@ -1014,7 +1168,17 @@ const MailboxWorkspaceContentInner = ({
                       threadId: null,
                     });
                   }
-                  show();
+                  showReminders(
+                    selection
+                      ? {
+                          id: crypto.randomUUID(),
+                          mailboxId: mailboxId ?? selectedMailboxId,
+                          ...(selection.kind === "edit"
+                            ? { reminder: selection.reminder }
+                            : { reminderId: selection.reminderId }),
+                        }
+                      : null
+                  );
                 },
                 open: assistantOpen,
                 panelId: assistantPanelId,
@@ -1124,7 +1288,7 @@ const MailboxWorkspaceContentInner = ({
                     }}
                   >
                     {assistantOpened ? (
-                      <Suspense fallback={<AssistantLoading />}>
+                      <>
                         {allInboxesActive && (
                           <p className="border-b border-border px-4 py-2 text-caption text-muted-fg">
                             Assistant for{" "}
@@ -1151,8 +1315,9 @@ const MailboxWorkspaceContentInner = ({
                             )?.id ?? ""
                           }
                           onChatIdChange={onChatIdChange}
+                          onRevealWorkspace={revealWorkspace}
                         />
-                      </Suspense>
+                      </>
                     ) : null}
                   </AssistantSidebar>
                 ) : null
@@ -1175,17 +1340,6 @@ const MailboxWorkspaceContentInner = ({
               </Activity>
               <Activity mode={calendarActive ? "hidden" : "visible"}>
                 <div className="relative min-h-0 flex-1">{mailboxContent}</div>
-                {!allInboxesActive &&
-                !isComposeMailbox &&
-                !isDemoMode &&
-                !isManagedDemoMode &&
-                selectedMailboxId !== null ? (
-                  <DraftRecoveryNotice
-                    userId={userId}
-                    mailboxId={selectedMailboxId}
-                    onResume={onComposeDraftRequested}
-                  />
-                ) : null}
               </Activity>
             </WorkspaceDock>
           </div>
@@ -1199,12 +1353,8 @@ export const MailboxWorkspaceContent = (
   props: MailboxWorkspaceContentProps
 ) => (
   <AgentWorkspaceProvider
-    key={
-      props.selectedView === "all-inboxes"
-        ? `all-inboxes:${props.userId}`
-        : (props.selectedMailboxId ?? "empty")
-    }
     mailboxId={props.selectedMailboxId ?? ""}
+    mailboxProvider={props.selectedMailboxProvider}
     onComposeDraftRequested={props.onComposeDraftRequested}
   >
     <MailboxWorkspaceContentInner {...props} />

@@ -27,6 +27,9 @@ import {
 
 const NON_TRANSACTIONAL_MARKER = /^-- quieter:no-transaction(?:\r?\n|$)/u;
 const STATEMENT_BREAKPOINT = "--> statement-breakpoint";
+const GMAIL_CAPTURE_INDEX_MIGRATION = "20261123174247_acoustic_slyde";
+const gmailCaptureIndexName =
+  /^CREATE INDEX CONCURRENTLY "(?<name>gmail_captured_message_\w+_idx)" ON "gmailCapturedMessage"/u;
 
 export const migrationLedger = pgSchema("drizzle").table(
   "__drizzle_migrations",
@@ -98,10 +101,38 @@ const applyNonTransactionalMigration = async ({
 
   for (const statement of migration.sql.split(STATEMENT_BREAKPOINT)) {
     const executable = statement.replace(NON_TRANSACTIONAL_MARKER, "").trim();
-    if (executable !== "") {
-      // oxlint-disable-next-line eslint/no-await-in-loop -- Migration statements must run sequentially.
-      await sql.unsafe(executable);
+    if (executable === "") {
+      continue;
     }
+    // The original index build can leave earlier indexes valid and the failing
+    // index invalid. Resume it after the prefix installs the search-path fix.
+    const indexName =
+      migration.name === GMAIL_CAPTURE_INDEX_MIGRATION
+        ? gmailCaptureIndexName.exec(executable)?.groups?.name
+        : undefined;
+    if (indexName !== undefined) {
+      // oxlint-disable-next-line eslint/no-await-in-loop -- Inspect each index immediately before creating it.
+      const [existing] = await sql<{ valid: boolean; onCapture: boolean }[]>`
+        select index.indisvalid as valid,
+          index.indrelid = 'public."gmailCapturedMessage"'::regclass as "onCapture"
+        from pg_index as index
+        join pg_class as relation on relation.oid = index.indexrelid
+        join pg_namespace as namespace on namespace.oid = relation.relnamespace
+        where namespace.nspname = 'public' and relation.relname = ${indexName}
+      `;
+      if (existing !== undefined) {
+        if (!existing.onCapture) {
+          throw new Error(`Capture index name is in use: ${indexName}`);
+        }
+        if (existing.valid) {
+          continue;
+        }
+        // oxlint-disable-next-line eslint/no-await-in-loop -- A failed concurrent build must be removed before retrying it.
+        await sql`DROP INDEX CONCURRENTLY public.${sql(indexName)}`;
+      }
+    }
+    // oxlint-disable-next-line eslint/no-await-in-loop -- Migration statements must run sequentially.
+    await sql.unsafe(executable);
   }
 
   await drizzle({ client: sql })

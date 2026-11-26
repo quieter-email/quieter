@@ -1,7 +1,11 @@
 "use client";
 
 import { Alert02Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
-import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
+import {
+  ChatEntry,
+  ChatMessage,
+} from "@quieter/app/features/chat/components/chat-message";
+import { hasAssistantContent } from "@quieter/app/features/chat/domain/chat-messages";
 import type { ChatToolApproval } from "@quieter/app/features/chat/domain/chat-tools";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -21,8 +25,10 @@ type ChatTranscriptProps = {
   errorMessage?: string;
   isStreaming: boolean;
   messages: UIMessage[];
+  newUserMessageId?: string | null;
   onRetry?: () => void;
   onSuggestion?: (text: string) => void;
+  requestPending?: boolean;
 };
 
 const SCROLL_THRESHOLD = 120;
@@ -35,8 +41,10 @@ export const ChatTranscript = ({
   errorMessage,
   isStreaming,
   messages,
+  newUserMessageId = null,
   onRetry,
   onSuggestion,
+  requestPending = false,
 }: ChatTranscriptProps) => {
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -47,6 +55,15 @@ export const ChatTranscript = ({
   } | null>(null);
   const reducedMotion = useReducedMotion();
   const [showLatest, setShowLatest] = useState(false);
+  const lastMessage = messages.at(-1);
+  const hasError = errorMessage !== undefined && errorMessage !== "";
+  const awaitingResponse =
+    (requestPending || isStreaming) &&
+    !hasError &&
+    !(
+      lastMessage?.role === "assistant" &&
+      hasAssistantContent(lastMessage.parts)
+    );
 
   const scrollToLatest = (behavior: ScrollBehavior) => {
     const viewport = viewportRef.current;
@@ -79,7 +96,11 @@ export const ChatTranscript = ({
         scrollHeight: viewport.scrollHeight,
         scrollTop: viewport.scrollTop,
       };
-      if (wasFollowing) {
+      if (
+        wasFollowing &&
+        viewport.querySelector("[data-chat-message-editor]:focus-within") ===
+          null
+      ) {
         scrollToLatest("auto");
       }
     });
@@ -127,11 +148,12 @@ export const ChatTranscript = ({
             <ChatMessage
               approvals={approvals}
               edit={edit}
-              isStreaming={isStreaming && message === messages.at(-1)}
+              entering={message.id === newUserMessageId}
+              isStreaming={isStreaming && message === lastMessage}
               key={message.id}
               message={message}
               onSuggestion={
-                message === messages.at(-1) &&
+                message === lastMessage &&
                 message.id === completedAssistantMessageId &&
                 !isStreaming
                   ? onSuggestion
@@ -139,12 +161,16 @@ export const ChatTranscript = ({
               }
             />
           ))}
-          {isStreaming && messages.at(-1)?.role === "user" ? (
-            <Text aria-live="polite" size="sm" tone="muted">
-              Thinking…
-            </Text>
+          {awaitingResponse ? (
+            <ChatEntry animateOnMount>
+              <output className="status-shimmer flex w-fit">
+                <Text as="span" size="sm" tone="muted">
+                  Getting a response…
+                </Text>
+              </output>
+            </ChatEntry>
           ) : null}
-          {errorMessage === undefined || errorMessage === "" ? null : (
+          {hasError ? (
             <div className="flex items-start gap-2" role="alert">
               <Icon
                 aria-hidden
@@ -166,7 +192,7 @@ export const ChatTranscript = ({
                 </Button>
               )}
             </div>
-          )}
+          ) : null}
         </div>
       </div>
       {showLatest ? (

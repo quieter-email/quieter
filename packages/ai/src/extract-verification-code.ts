@@ -131,6 +131,9 @@ export const extractMailVerificationCode = async ({
           throw new APICallError({
             message: `Mail code extraction failed (${response.status}).`,
             requestBodyValues: {},
+            responseHeaders: {
+              "retry-after": response.headers.get("retry-after") ?? "",
+            },
             statusCode: response.status,
             url: "https://openrouter.ai/api/alpha/extractions",
           });

@@ -1,6 +1,8 @@
 "use client";
 
 import {
+  AlarmClockIcon,
+  CancelCircleIcon,
   CheckmarkCircle02Icon,
   Flag01Icon,
   Delete01Icon,
@@ -9,7 +11,6 @@ import {
   InboxIcon,
   Mail01Icon,
   MailOpen02Icon,
-  Loading03Icon,
   MoreVerticalIcon,
   NotificationOff01Icon,
 } from "@hugeicons/core-free-icons";
@@ -26,9 +27,14 @@ import {
   messageUnsubscribeLabels,
   openUnsubscribeUrl,
 } from "@quieter/app/features/message-thread/components/message-unsubscribe";
+import {
+  MessageReminderSubmenu,
+  useMessageReminderMenu,
+} from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { isMessageUnread } from "@quieter/app/lib/mail";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import {
   ContextMenu,
   ContextMenuContent,
@@ -47,25 +53,42 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import type { CSSProperties, PropsWithChildren } from "react";
 
+import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
+
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
   mailboxId: string;
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
   mailbox: MailboxCategory;
+  reminderMenu?: ReturnType<typeof useMessageReminderMenu>;
+  snoozeEntry?: { action: MailSnoozeAction; onOpen: () => void };
   threadLabelIds: readonly string[];
   isUnread?: boolean;
-  isPending?: boolean;
 };
 
-type MessageActionsDropdownProps = MessageActionsSharedProps;
+type MessageActionsDropdownProps = Omit<
+  MessageActionsSharedProps,
+  "reminderMenu"
+> & {
+  isMessageActionPending: boolean;
+  isThreadActionPending: boolean;
+  reminderMessage: Parameters<typeof useMessageReminderMenu>[1];
+};
 
 type MessageActionsContextMenuProps = PropsWithChildren<
   MessageActionsSharedProps & {
+    isPending?: boolean;
     triggerClassName?: string;
     triggerStyle?: CSSProperties;
   }
 >;
+
+type MenuPendingActions = {
+  message: boolean;
+  thread: boolean;
+  optimistic: boolean;
+};
 
 type MenuAction = {
   type: "item";
@@ -93,7 +116,13 @@ type MenuLabels = {
   targets: readonly MessageLabelsTarget[];
 };
 
-type MenuEntry = MenuAction | MenuLabels | MenuSeparator;
+type MenuReminder = {
+  type: "reminder";
+  id: string;
+  menu: NonNullable<MessageActionsSharedProps["reminderMenu"]>;
+};
+
+type MenuEntry = MenuAction | MenuLabels | MenuReminder | MenuSeparator;
 
 const renderLabelsEntry = (entry: MenuLabels) => (
   <MessageLabelsSubmenu
@@ -116,6 +145,10 @@ const renderDropdownEntry = (entry: MenuEntry) => {
     return renderLabelsEntry(entry);
   }
 
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
+  }
+
   return (
     <DropdownMenuItem
       disabled={entry.disabled}
@@ -136,6 +169,10 @@ const renderContextEntry = (entry: MenuEntry) => {
 
   if (entry.type === "labels") {
     return renderLabelsEntry(entry);
+  }
+
+  if (entry.type === "reminder") {
+    return <MessageReminderSubmenu key={entry.id} {...entry.menu} />;
   }
 
   return (
@@ -270,17 +307,20 @@ const createUnsubscribeEntry = (
 
 const createFolderEntries = (
   props: MessageActionsSharedProps,
-  isBusy: boolean,
+  pending: MenuPendingActions,
   sharedPlacement: boolean
 ): MenuEntry[] => {
   const entries: MenuEntry[] = [];
   const hasInbox = props.threadLabelIds.includes("INBOX");
+  const hasSnooze =
+    props.message.snooze !== undefined &&
+    isMailSnoozeLiveStatus(props.message.snooze.status);
   const canChangePlacement = !["drafts", "spam", "trash", "sent"].includes(
     props.mailbox
   );
   if (canChangePlacement && hasInbox && props.actions.onMarkDone) {
     entries.push({
-      disabled: isBusy,
+      disabled: pending.thread,
       icon: CheckmarkCircle02Icon,
       id: "mark-done",
       label: sharedPlacement ? "Done for everyone" : "Done",
@@ -292,14 +332,54 @@ const createFolderEntries = (
   }
   if (canChangePlacement && !hasInbox && props.actions.onReturnToInbox) {
     entries.push({
-      disabled: isBusy,
+      disabled: pending.thread,
       icon: InboxIcon,
       id: "return-to-inbox",
       label: sharedPlacement
         ? "Return to Inbox for everyone"
         : "Return to Inbox",
       onAction: () => {
+        if (hasSnooze) {
+          void props.actions.onApplySnooze?.(props.message.threadId, {
+            kind: "return-now",
+          });
+          return;
+        }
         void props.actions.onReturnToInbox?.(props.message.threadId);
+      },
+      type: "item",
+    });
+  }
+  const { snoozeEntry } = props;
+  if (canChangePlacement && snoozeEntry && props.actions.onApplySnooze) {
+    entries.push({
+      disabled: pending.thread,
+      icon: AlarmClockIcon,
+      id: "snooze",
+      label: `${snoozeEntry.action === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: snoozeEntry.onOpen,
+      type: "item",
+    });
+  }
+  if (
+    canChangePlacement &&
+    hasSnooze &&
+    props.message.snooze?.status !== "returning" &&
+    props.actions.onApplySnooze
+  ) {
+    const keepInDone =
+      props.message.snooze?.status === "active" &&
+      !hasInbox &&
+      (props.message.threadInboxIncomingMessageIds?.length ?? 0) === 0;
+    entries.push({
+      disabled: pending.thread,
+      icon: CancelCircleIcon,
+      id: "cancel-snooze",
+      label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
+      onAction: () => {
+        void props.actions.onApplySnooze?.(props.message.threadId, {
+          kind: "cancel",
+        });
       },
       type: "item",
     });
@@ -312,7 +392,7 @@ const createFolderEntries = (
   if (showMarkAsSpam && props.actions.onMarkAsSpam) {
     entries.push({
       destructive: true,
-      disabled: isBusy,
+      disabled: pending.optimistic,
       icon: Delete02Icon,
       id: "mark-as-spam",
       label: "Mark as Spam",
@@ -324,7 +404,7 @@ const createFolderEntries = (
   }
   if (isSpamMailbox && props.actions.onUnmarkAsSpam) {
     entries.push({
-      disabled: isBusy,
+      disabled: pending.optimistic,
       icon: Mail01Icon,
       id: "unmark-as-spam",
       label: "Unmark as Spam",
@@ -336,7 +416,7 @@ const createFolderEntries = (
   }
   if (isTrashMailbox && props.actions.onUntrash) {
     entries.push({
-      disabled: isBusy,
+      disabled: pending.optimistic,
       icon: InboxIcon,
       id: "remove-from-trash",
       label: "Move to Inbox",
@@ -349,7 +429,7 @@ const createFolderEntries = (
   if (!isTrashMailbox && props.actions.onMoveToTrash) {
     entries.push({
       destructive: true,
-      disabled: isBusy,
+      disabled: pending.optimistic,
       icon: Delete01Icon,
       id: "move-to-trash",
       label: "Move to Trash",
@@ -364,22 +444,26 @@ const createFolderEntries = (
 };
 
 const createMessageActionEntries = ({
-  isBusy,
   isUnread,
+  pending,
   props,
   unsubscribeTarget,
   sharedPlacement,
 }: {
   sharedPlacement: boolean;
-  isBusy: boolean;
   isUnread: boolean;
+  pending: MenuPendingActions;
   props: MessageActionsSharedProps;
   unsubscribeTarget: ReturnType<typeof getMessageUnsubscribeTarget>;
 }) => {
   const entries: MenuEntry[] = [];
-  const readStateEntry = createReadStateEntry(props, isBusy, isUnread);
-  const labelsEntry = createLabelsEntry(props, isBusy);
-  const folderEntries = createFolderEntries(props, isBusy, sharedPlacement);
+  const readStateEntry = createReadStateEntry(
+    props,
+    pending.optimistic,
+    isUnread
+  );
+  const labelsEntry = createLabelsEntry(props, pending.optimistic);
+  const folderEntries = createFolderEntries(props, pending, sharedPlacement);
 
   if (readStateEntry !== null) {
     entries.push(readStateEntry);
@@ -388,7 +472,7 @@ const createMessageActionEntries = ({
     const important =
       props.message.threadIsImportant ?? props.message.isImportant ?? false;
     entries.push({
-      disabled: isBusy,
+      disabled: pending.thread,
       icon: Flag01Icon,
       id: "toggle-importance",
       label: important ? "Mark as not important" : "Mark as important",
@@ -404,8 +488,17 @@ const createMessageActionEntries = ({
   if (labelsEntry !== null) {
     entries.push(labelsEntry);
   }
+  if (props.reminderMenu) {
+    entries.push({
+      id: "reminder",
+      menu: props.reminderMenu,
+      type: "reminder",
+    });
+  }
   if (unsubscribeTarget !== null) {
-    entries.push(createUnsubscribeEntry(props, isBusy, unsubscribeTarget));
+    entries.push(
+      createUnsubscribeEntry(props, pending.message, unsubscribeTarget)
+    );
   }
   if (folderEntries.length > 0) {
     entries.push({ id: "separator", type: "separator" }, ...folderEntries);
@@ -415,33 +508,43 @@ const createMessageActionEntries = ({
 };
 
 const getMessageActionEntries = (
-  props: MessageActionsSharedProps
-): { entries: MenuEntry[]; isBusy: boolean } => {
+  props: MessageActionsSharedProps,
+  pending: MenuPendingActions
+): MenuEntry[] => {
   const placementScope =
     props.mailboxContextsByThreadId?.get(props.message.threadId)?.mailboxActions
       .placementScope ?? props.actions.placementScope;
   const sharedPlacement = placementScope === "shared";
   const isUnread = props.isUnread ?? isMessageUnread(props.message);
-  const isBusy = props.isPending === true;
 
   if (props.mailbox === "drafts") {
-    return { entries: createDraftEntries(props, isBusy), isBusy };
+    return createDraftEntries(props, pending.message);
   }
 
-  return {
-    entries: createMessageActionEntries({
-      isBusy,
-      isUnread,
-      props,
-      sharedPlacement,
-      unsubscribeTarget: getMessageUnsubscribeTarget(props.message),
-    }),
-    isBusy,
-  };
+  return createMessageActionEntries({
+    isUnread,
+    pending,
+    props,
+    sharedPlacement,
+    unsubscribeTarget: getMessageUnsubscribeTarget(props.message),
+  });
 };
 
-export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
-  const { entries, isBusy } = getMessageActionEntries(props);
+export const MessageActionsDropdown = ({
+  isMessageActionPending,
+  isThreadActionPending,
+  reminderMessage,
+  ...props
+}: MessageActionsDropdownProps) => {
+  const reminderMenu = useMessageReminderMenu(props.mailboxId, reminderMessage);
+  const entries = getMessageActionEntries(
+    { ...props, reminderMenu },
+    {
+      message: isMessageActionPending,
+      optimistic: false,
+      thread: isThreadActionPending,
+    }
+  );
   if (entries.length === 0) {
     return null;
   }
@@ -453,16 +556,9 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
           chrome="toolbar"
           appearance="icon"
           aria-label="Open message actions"
-          aria-busy={isBusy || undefined}
-          disabled={isBusy}
           type="button"
         >
-          <Icon
-            aria-hidden
-            size={14}
-            animation={isBusy ? "spin" : undefined}
-            icon={isBusy ? Loading03Icon : MoreVerticalIcon}
-          />
+          <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
         </DropdownMenuTrigger>
       </IconButtonTooltip>
 
@@ -475,11 +571,16 @@ export const MessageActionsDropdown = (props: MessageActionsDropdownProps) => {
 
 export const MessageActionsContextMenu = ({
   children,
+  isPending = false,
   triggerClassName,
   triggerStyle,
   ...props
 }: MessageActionsContextMenuProps) => {
-  const { entries } = getMessageActionEntries(props);
+  const entries = getMessageActionEntries(props, {
+    message: isPending,
+    optimistic: isPending,
+    thread: isPending,
+  });
   if (entries.length === 0) {
     return children;
   }

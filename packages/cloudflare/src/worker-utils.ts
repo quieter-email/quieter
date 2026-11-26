@@ -3,7 +3,7 @@ import { z } from "zod";
 
 import { readBoundedJson } from "./bounded-json";
 import { timingSafeEqual } from "./crypto-utils";
-import { enqueueGmailNotification } from "./gmail-processing";
+import { acceptGmailNotification } from "./gmail-processing";
 import { RequestError } from "./request-error";
 
 const GOOGLE_JWKS = createRemoteJWKSet(
@@ -102,7 +102,7 @@ export const parseGmailNotification = (data: string) => {
 export const handlePubSub = async (
   request: Request,
   env: Env,
-  enqueueNotification = enqueueGmailNotification,
+  enqueueNotification = acceptGmailNotification,
   ctx?: Pick<ExecutionContext, "waitUntil">
 ) => {
   await verifyPubSubToken(request, env);

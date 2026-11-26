@@ -15,9 +15,11 @@ import {
   Tick01Icon,
   UserSwitchIcon,
 } from "@hugeicons/core-free-icons";
+import type { ChatModel } from "@quieter/ai/chat-models";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import { MobileHeader } from "@quieter/app/components/mobile-header";
 import { ChatMessage } from "@quieter/app/features/chat/components/chat-message";
+import { ChatModelPicker } from "@quieter/app/features/chat/components/chat-model-picker";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { ReminderEditor } from "@quieter/app/features/reminders/reminder-editor";
 import { ManagedUsageSummary } from "@quieter/app/features/settings/components/organization-settings/organization-mail-usage-settings";
@@ -41,7 +43,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@quieter/ui/alert-dialog";
-import { Autocomplete } from "@quieter/ui/autocomplete";
+import { Autocomplete, AutocompleteField } from "@quieter/ui/autocomplete";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { Calendar } from "@quieter/ui/calendar";
 import { CardStack } from "@quieter/ui/card-stack";
@@ -623,6 +625,8 @@ export const DesignSystemShowcase = () => {
   const [successPulse, setSuccessPulse] = useState(false);
   const [checked, setChecked] = useState(true);
   const [commandIndex, setCommandIndex] = useState(0);
+  const [chatModel, setChatModel] = useState<ChatModel | "auto">("auto");
+  const [assistantMessage, setAssistantMessage] = useState("");
   const [tokenFieldValue, setTokenFieldValue] = useState(
     "When it's a bug, use @Tracker to file it."
   );
@@ -638,6 +642,8 @@ export const DesignSystemShowcase = () => {
   const [cardStackPinned, setCardStackPinned] = useState(false);
   const [showPromptContext, setShowPromptContext] = useState(true);
   const [location, setLocation] = useState("");
+  const [recipient, setRecipient] = useState("");
+  const [suggestionsOpen, setSuggestionsOpen] = useState(false);
   const [date, setDate] = useState("2026-10-27");
   const [time, setTime] = useState("14:35");
   const [reminderEditorOpen, setReminderEditorOpen] = useState(false);
@@ -826,7 +832,7 @@ export const DesignSystemShowcase = () => {
                 </Button>
               </div>
             </WorkspaceHeader>
-            <div className="p-0.5">
+            <div className="px-2 pb-2">
               <Surface padding="compact">
                 <div className="p-4">
                   <Text weight="medium">Section</Text>
@@ -1363,6 +1369,7 @@ export const DesignSystemShowcase = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem>Mark as read</DropdownMenuItem>
+                <DropdownMenuItem highlight="subtle">Archive</DropdownMenuItem>
                 <DropdownMenuCheckboxItem defaultChecked>
                   Show previews
                 </DropdownMenuCheckboxItem>
@@ -1488,6 +1495,41 @@ export const DesignSystemShowcase = () => {
               options={["Studio", "Boardroom"]}
               placeholder="Add a location"
             />
+          </Row>
+          <Row label="Autocomplete field">
+            <Field>
+              <FieldLabel className="sr-only">Example recipient</FieldLabel>
+              <AutocompleteField
+                chrome="composer"
+                onDismiss={() => {
+                  setSuggestionsOpen(false);
+                }}
+                onSuggestionSelect={(email) => {
+                  setRecipient(email);
+                  setSuggestionsOpen(false);
+                  return email.length;
+                }}
+                onValueChange={(nextValue) => {
+                  setRecipient(nextValue);
+                  setSuggestionsOpen(nextValue.trim().length > 1);
+                }}
+                open={suggestionsOpen}
+                placeholder="Try ma"
+                suggestions={[
+                  {
+                    description: "maya@example.com",
+                    label: "Maya Chen",
+                    value: "maya@example.com",
+                  },
+                  { label: "mail@example.com", value: "mail@example.com" },
+                ].filter(({ label, value }) =>
+                  `${label} ${value}`
+                    .toLowerCase()
+                    .includes(recipient.trim().toLowerCase())
+                )}
+                value={recipient}
+              />
+            </Field>
           </Row>
           <Row label="Date and time">
             <div className="flex gap-2">
@@ -1670,6 +1712,40 @@ export const DesignSystemShowcase = () => {
               </Select>
             </InputGroup>
           </Row>
+          <Row label="Two-line selection">
+            <div className="w-64 max-w-full">
+              <Select
+                defaultValue="alice@example.test"
+                items={[
+                  { label: "Alice Moreno", value: "alice@example.test" },
+                  { label: "Dana Rios", value: "dana@example.test" },
+                ]}
+              >
+                <SelectTrigger aria-label="Contact" size="auto">
+                  <SelectValue>
+                    {(address: string) => (
+                      <span className="flex flex-col items-start">
+                        {address === "alice@example.test"
+                          ? "Alice Moreno"
+                          : "Dana Rios"}
+                        <Text as="span" size="caption" tone="muted">
+                          {address}
+                        </Text>
+                      </span>
+                    )}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectList>
+                    <SelectItem value="alice@example.test">
+                      Alice Moreno
+                    </SelectItem>
+                    <SelectItem value="dana@example.test">Dana Rios</SelectItem>
+                  </SelectList>
+                </SelectContent>
+              </Select>
+            </div>
+          </Row>
           <Row label="Searchable choice">
             <CalendarTimeZonePicker
               aria-label="Sample time zone"
@@ -1762,10 +1838,14 @@ export const DesignSystemShowcase = () => {
                   />
                 </div>
               ) : null}
-              <Textarea
+              <TokenField
                 aria-label="Example assistant message"
+                onChange={setAssistantMessage}
                 placeholder="Ask about your mail…"
-                variant="prompt"
+                size="composer"
+                tokens={showcaseTokens}
+                trigger={null}
+                value={assistantMessage}
               />
               <div className="flex items-center justify-between gap-2">
                 <Button
@@ -1961,6 +2041,9 @@ export const DesignSystemShowcase = () => {
               <FieldLabel size="caption">Reminder</FieldLabel>
               <Input defaultValue="Review the proposal" />
             </Field>
+          </Row>
+          <Row label="Anchored command search">
+            <ChatModelPicker model={chatModel} onModelChange={setChatModel} />
           </Row>
           <Row label="Scrollable anchored editor">
             <Popover

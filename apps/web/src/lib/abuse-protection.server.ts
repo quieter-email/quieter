@@ -1,5 +1,9 @@
 import { serverEnv } from "@quieter/env/server";
-import { MCP_API_PATH, SEND_API_PATH } from "@quieter/mail/public-api";
+import {
+  API_VERSION_HEADER,
+  MCP_API_PATH,
+  SEND_API_PATH,
+} from "@quieter/mail/public-api";
 import { consumeRateLimit } from "@quieter/orpc/abuse-protection";
 
 import { reportServerError } from "./server-error-reporting";
@@ -9,15 +13,32 @@ const fallbackRateLimitBuckets = new Map<
   { count: number; expiresAt: number }
 >();
 
-const getRateLimitPolicy = (pathname: string) => {
+const getRateLimitPolicy = (pathname: string, headers: Headers) => {
+  if (pathname === "/api/auth/oauth2/register") {
+    return { group: "oauth-register", limit: 30, windowMs: 10 * 60_000 };
+  }
+  // Hosted MCP clients refresh tokens for many accounts from shared addresses.
+  if (
+    pathname === "/api/auth/oauth2/token" ||
+    pathname === "/api/auth/oauth2/revoke" ||
+    pathname === "/api/auth/oauth2/introspect"
+  ) {
+    return { group: "oauth-token", limit: 300, windowMs: 60_000 };
+  }
   if (pathname.startsWith("/api/auth")) {
     return { group: "auth", limit: 20, windowMs: 60_000 };
   }
   if (pathname === "/api/waitlist") {
     return { group: "waitlist", limit: 5, windowMs: 60 * 60_000 };
   }
-  if (pathname === SEND_API_PATH || pathname === MCP_API_PATH) {
+  if (
+    pathname === SEND_API_PATH ||
+    (pathname === MCP_API_PATH && headers.has(API_VERSION_HEADER))
+  ) {
     return { group: "send", limit: 60, windowMs: 60_000 };
+  }
+  if (pathname === MCP_API_PATH) {
+    return { group: "mcp", limit: 1200, windowMs: 60_000 };
   }
   if (pathname.includes("/chat")) {
     return { group: "chat", limit: 120, windowMs: 60_000 };
@@ -68,11 +89,12 @@ export const getRequestRateLimit = async (request: Request) => {
   if (
     ["GET", "HEAD", "OPTIONS"].includes(request.method) ||
     pathname === "/api/auth/polar/webhooks" ||
+    pathname === "/api/internal/mail-snooze" ||
     pathname === "/api/internal/scheduled-send"
   ) {
     return null;
   }
-  const policy = getRateLimitPolicy(pathname);
+  const policy = getRateLimitPolicy(pathname, request.headers);
   const clientAddress =
     request.headers.get("cf-connecting-ip")?.trim() ||
     (serverEnv.NODE_ENV === "development"

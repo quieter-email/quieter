@@ -14,6 +14,14 @@ const handleAuthRequest = async (request: Request) => {
     return await handleSessionRequest(request);
   }
 
+  if (pathname.startsWith("/api/auth/oauth2")) {
+    const { handleMcpOAuthRequest } = await import("@quieter/auth/mcp-oauth");
+    const response = await handleMcpOAuthRequest(request);
+    if (response !== null) {
+      return response;
+    }
+  }
+
   const { auth } = await import("@quieter/auth");
   return await auth.handler(request);
 };
@@ -23,6 +31,7 @@ export const Route = createFileRoute("/api/auth/$")({
     handlers: {
       DELETE: async ({ request }) => await handleAuthRequest(request),
       GET: async ({ request }) => await handleAuthRequest(request),
+      OPTIONS: async ({ request }) => await handleAuthRequest(request),
       PATCH: async ({ request }) => await handleAuthRequest(request),
       POST: async ({ request }) => await handleAuthRequest(request),
       PUT: async ({ request }) => await handleAuthRequest(request),

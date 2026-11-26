@@ -1,10 +1,14 @@
 import MailComposer from "nodemailer/lib/mail-composer";
 import type { z } from "zod";
 
-import type { composeDraftInputSchema } from "./schema";
-import { QUIETER_DRAFT_HEADER_NAMES, splitMailAddressList } from "./schema";
+import type { composeSaveDraftInputSchema } from "./schema";
+import {
+  hasUnfinishedDraftRecipients,
+  QUIETER_DRAFT_HEADER_NAMES,
+  splitMailAddressList,
+} from "./schema";
 
-type ComposeDraftInput = z.infer<typeof composeDraftInputSchema>;
+type ComposeDraftInput = z.infer<typeof composeSaveDraftInputSchema>;
 
 export const normalizeComposeBodyHtml = (
   draft: Pick<ComposeDraftInput, "bodyHtml" | "inlineImages">
@@ -56,13 +60,26 @@ export const buildMimeMessage = async (
     includeQuieterDraftHeaders?: boolean;
     messageId?: string;
     omitBccHeader?: boolean;
+    sealedDraftRecipients?: string;
     sentAt?: Date;
   }
 ): Promise<string> => {
-  const headers = (draft.headers ?? []).map(({ name, value }) => ({
-    key: name,
-    value,
-  }));
+  const recipientHeaderName = QUIETER_DRAFT_HEADER_NAMES.recipients;
+  const headers = (draft.headers ?? [])
+    .filter(
+      ({ name }) => name.toLowerCase() !== recipientHeaderName.toLowerCase()
+    )
+    .map(({ name, value }) => ({ key: name, value }));
+  // Native mail clients must not be able to send an unfinished draft to a subset.
+  const omitRecipients =
+    options?.includeQuieterDraftHeaders === true &&
+    hasUnfinishedDraftRecipients(draft.recipients);
+  if (omitRecipients && options.sealedDraftRecipients) {
+    headers.push({
+      key: recipientHeaderName,
+      value: options.sealedDraftRecipients.replaceAll(/.{64}(?=.)/gu, "$& "),
+    });
+  }
   if (options?.includeQuieterDraftHeaders === true && draft.draftAnchor) {
     for (const field of [
       "seededBy",
@@ -113,8 +130,10 @@ export const buildMimeMessage = async (
   const html = normalizeComposeBodyHtml(draft);
   const message = new MailComposer({
     attachments,
-    bcc: splitMailAddressList(draft.recipients.bcc),
-    cc: splitMailAddressList(draft.recipients.cc),
+    bcc: omitRecipients
+      ? undefined
+      : splitMailAddressList(draft.recipients.bcc),
+    cc: omitRecipients ? undefined : splitMailAddressList(draft.recipients.cc),
     date: options?.sentAt,
     disableFileAccess: true,
     disableUrlAccess: true,
@@ -130,7 +149,7 @@ export const buildMimeMessage = async (
     references,
     subject: draft.subject,
     text: draft.bodyText,
-    to: splitMailAddressList(draft.recipients.to),
+    to: omitRecipients ? undefined : splitMailAddressList(draft.recipients.to),
   }).compile();
   message.keepBcc = options?.omitBccHeader !== true;
   const raw = await message.build();

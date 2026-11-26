@@ -6,13 +6,20 @@ import {
   cloudflareWorkerObservability,
 } from "./runtime";
 import { requireSecretBinding, requireSecretResource } from "./secrets";
-import { appOrigin, deploymentEnvironment, production, stage } from "./stage";
+import {
+  appOrigin,
+  deploymentEnvironment,
+  getEnvironmentValue,
+  production,
+  stage,
+} from "./stage";
 import type { SecretBindings, SecretResources } from "./types";
 
 export const createMailUpdateResources = (
   secretBindings: SecretBindings,
   secretResources: SecretResources,
-  appDatabase: ReturnType<typeof createAppDatabase>
+  appDatabase: ReturnType<typeof createAppDatabase>,
+  mailDispatchUrl: string
 ) => {
   const domain = production
     ? "updates.quieter.email"
@@ -26,14 +33,22 @@ export const createMailUpdateResources = (
   const scheduledSends = new sst.cloudflare.DurableObject("ScheduledSend", {
     className: "ScheduledSend",
   });
+  const snoozes = new sst.cloudflare.DurableObject("MailSnooze", {
+    className: "MailSnooze",
+  });
   const worker = new sst.cloudflare.Worker("MailUpdatesWorker", {
     build: cloudflareWorkerBuild,
     compatibility: { date: COMPATIBILITY_DATE, flags: ["nodejs_compat"] },
     domain,
     environment: {
       BETTER_AUTH_URL: appOrigin,
+      MAIL_DISPATCH_URL: mailDispatchUrl,
       MAIL_UPDATES_URL: `wss://${domain}/mail/live`,
       QUIETER_DEPLOYMENT_ENV: deploymentEnvironment,
+      QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED: getEnvironmentValue(
+        "QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED",
+        "false"
+      ),
       SENTRY_ENVIRONMENT: stage,
     },
     handler: "packages/cloudflare/src/mail-update-worker.ts",
@@ -41,6 +56,7 @@ export const createMailUpdateResources = (
       user,
       reminders,
       scheduledSends,
+      snoozes,
       appDatabase,
       requireSecretResource(secretResources, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
       requireSecretBinding(secretBindings, "GMAIL_LIVE_SYNC_TOKEN_SECRET"),
@@ -53,6 +69,7 @@ export const createMailUpdateResources = (
         newSqliteClasses: [scheduledSends.className],
         tag: "scheduled-send-v1",
       },
+      { newSqliteClasses: [snoozes.className], tag: "mail-snooze-v1" },
     ],
     transform: {
       worker(args) {
@@ -70,6 +87,7 @@ export const createMailUpdateResources = (
   return {
     reminders,
     scheduledSends,
+    snoozes,
     url: worker.url.apply(() => `wss://${domain}/mail/live`),
     user,
     worker,

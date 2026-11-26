@@ -2,7 +2,9 @@ import type { MailboxActions } from "@quieter/app/features/mailbox/components/ma
 import { createUnifiedInboxActions } from "@quieter/app/features/mailbox/components/unified-inbox-actions";
 import type { MessageListMailboxContext } from "@quieter/app/features/message-list/components/message-list-types";
 import { createDemoActions } from "@quieter/app/lib/demo-mail/actions";
+import type { DemoSnoozeSchedule } from "@quieter/app/lib/demo-mail/actions";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
+import type { MessageListItem } from "@quieter/app/lib/mail";
 import { describe, expect, it, vi } from "vite-plus/test";
 
 import { createMessageRowHandlers } from "./message-row-handlers";
@@ -14,9 +16,16 @@ vi.mock(import("@quieter/app/lib/error-toast"), () => ({
 }));
 
 const createActions = (canMarkRead: boolean) => ({
-  ...createDemoActions({ updateMessages: vi.fn<() => void>() }, async () => {
-    await Promise.resolve();
-  }),
+  ...createDemoActions(
+    {
+      mailboxId: "demo-test",
+      updateMessages: vi.fn<() => void>(),
+      updateSnoozes: vi.fn<() => void>(),
+    },
+    async () => {
+      await Promise.resolve();
+    }
+  ),
   canMarkRead,
   canSetImportance: canMarkRead,
   markThreadAsRead: vi.fn<MailboxActions["markThreadAsRead"]>(async () => {
@@ -28,6 +37,106 @@ const createActions = (canMarkRead: boolean) => ({
   markThreadsAsRead: vi.fn<MailboxActions["markThreadsAsRead"]>(async () => {
     await Promise.resolve();
   }),
+});
+
+describe("unified Snooze source snapshots", () => {
+  it("rejects a frozen older schedule after refresh and delegates current source identities", async () => {
+    let state: {
+      messages: MessageListItem[];
+      snoozes: Partial<Record<string, DemoSnoozeSchedule>>;
+    } = {
+      messages: [{ id: "message", labelIds: ["INBOX"], threadId: "thread" }],
+      snoozes: {},
+    };
+    const actions = createDemoActions(
+      {
+        mailboxId: "demo-test",
+        updateMessages: (update) => {
+          state = { ...state, messages: update(state.messages) };
+        },
+        updateSnoozes: (update) => {
+          state = update(state);
+        },
+      },
+      async () => {
+        await Promise.resolve();
+      }
+    );
+    const schedule = {
+      returnAt: new Date(Date.now() + 86_400_000).toISOString(),
+      timeZone: "America/New_York",
+    };
+    await actions.applyThreadSnooze("thread", { ...schedule, kind: "snooze" });
+    const selected = buildThreadListEntries(
+      state.messages.map((message) => ({
+        ...message,
+        id: JSON.stringify(["demo-test", message.id]),
+        threadId: JSON.stringify(["demo-test", message.threadId]),
+      }))
+    );
+    const newerReturnAt = new Date(Date.now() + 172_800_000).toISOString();
+    await actions.applyThreadSnooze("thread", {
+      ...schedule,
+      kind: "reschedule",
+      returnAt: newerReturnAt,
+    });
+    const newerVersion = state.snoozes.thread?.state.version;
+    const [currentThread] = buildThreadListEntries(state.messages);
+    const { mailboxActions } = createUnifiedInboxActions({
+      contextsByThreadId: new Map([
+        [
+          selected[0].threadId,
+          {
+            badge: null,
+            emailAddress: "demo@example.test",
+            mailboxActions: actions,
+            mailboxId: "demo-test",
+            mailboxProvider: "managed",
+            originalMessageIds: new Map([
+              [selected[0].anchorMessage.id, "message"],
+            ]),
+            originalThreadId: "thread",
+            pendingActions: {
+              isMessageActionPending: () => false,
+              isThreadActionPending: () => false,
+            },
+          },
+        ],
+      ]),
+      originalMessageById: new Map([
+        [selected[0].anchorMessage.id, currentThread.anchorMessage],
+      ]),
+      originalThreadById: new Map([[selected[0].threadId, currentThread]]),
+    });
+    await expect(
+      mailboxActions.applyThreadsSnooze(selected, {
+        ...schedule,
+        kind: "reschedule",
+      })
+    ).rejects.toThrow(/changed/u);
+    expect(state.snoozes.thread?.state).toMatchObject({
+      returnAt: newerReturnAt,
+      status: "active",
+      version: newerVersion,
+    });
+    const refreshed = buildThreadListEntries(
+      state.messages.map((message) => ({
+        ...message,
+        id: JSON.stringify(["demo-test", message.id]),
+        threadId: JSON.stringify(["demo-test", message.threadId]),
+      }))
+    );
+    await mailboxActions.applyThreadsSnooze(refreshed, { kind: "return-now" });
+    const returnedMessage = state.messages.find(
+      (message) => message.id === "message"
+    );
+    expect(returnedMessage).toMatchObject({
+      id: "message",
+      snooze: { status: "returned" },
+      threadId: "thread",
+    });
+    expect(returnedMessage?.labelIds).toContain("INBOX");
+  });
 });
 
 const [thread] = buildThreadListEntries([

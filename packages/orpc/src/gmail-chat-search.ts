@@ -41,6 +41,13 @@ import {
 } from "./gmail-mailbox-access";
 import { writeGmailCapturedMessage } from "./mail-capture";
 import { learnAiMemoryFromMailAction } from "./mail/feedback";
+import { supersedePendingMailPlacement } from "./mail/placement";
+import {
+  countVisibleMailSnoozes,
+  filterMailSnoozeVisibility,
+} from "./snooze/queries";
+
+const MAX_VISIBILITY_SCAN_PAGES = 5;
 
 const isGmailAuthError = (error: unknown) =>
   isGmailServiceError(error) &&
@@ -119,33 +126,79 @@ export const searchGmailForUser = async (
   }
 ): Promise<GmailSearchResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
-    const result = await listMessagesForAgent(accessToken, {
-      mailbox: input.scope === "all_mail" ? undefined : input.category,
-      maxResults: input.maxResults,
-      pageToken: input.pageToken,
-      query: input.query,
-      signal: input.signal,
-    });
+    if (
+      input.scope !== "all_mail" &&
+      input.category === "later" &&
+      (await countVisibleMailSnoozes({
+        mailboxId: input.mailboxId,
+        userId: input.userId,
+      })) === 0
+    ) {
+      return {
+        category: input.category,
+        fetchedAt: new Date().toISOString(),
+        messages: [],
+        nextPageToken: undefined,
+        query: input.query,
+        resultSizeEstimate: 0,
+        scope: input.scope,
+        status: "success",
+      };
+    }
+    let { pageToken } = input;
+    let pagesScanned = 0;
+    while (true) {
+      const result = await listMessagesForAgent(accessToken, {
+        mailbox: input.scope === "all_mail" ? undefined : input.category,
+        maxResults: input.maxResults,
+        pageToken,
+        query: input.query,
+        signal: input.signal,
+      });
+      let { messages } = result;
+      pagesScanned += 1;
+      if (
+        input.scope !== "all_mail" &&
+        (input.category === "done" || input.category === "later")
+      ) {
+        const visible = await filterMailSnoozeVisibility({
+          category: input.category,
+          mailboxId: input.mailboxId,
+          messages,
+          threadIds: messages.map((message) => message.threadId),
+          userId: input.userId,
+        });
+        messages = messages.filter((message) => visible.has(message.threadId));
+        if (
+          messages.length === 0 &&
+          result.nextPageToken &&
+          pagesScanned < MAX_VISIBILITY_SCAN_PAGES
+        ) {
+          pageToken = result.nextPageToken;
+          continue;
+        }
+      }
 
-    return {
-      category: input.category,
-      fetchedAt: new Date().toISOString(),
-      messages: result.messages.map((message) => ({
-        date: message.date ?? message.internalDate,
-        from: message.from,
-        id: message.id,
-        isUnread: message.isUnread,
-        labelIds: message.labelIds,
-        snippet: message.snippet,
-        subject: message.subject,
-        threadId: message.threadId,
-      })),
-      nextPageToken: result.nextPageToken,
-      query: input.query,
-      resultSizeEstimate: result.resultSizeEstimate,
-      scope: input.scope,
-      status: "success",
-    };
+      return {
+        category: input.category,
+        fetchedAt: new Date().toISOString(),
+        messages: messages.map((message) => ({
+          date: message.date ?? message.internalDate,
+          from: message.from,
+          id: message.id,
+          isUnread: message.isUnread,
+          labelIds: message.labelIds,
+          snippet: message.snippet,
+          subject: message.subject,
+          threadId: message.threadId,
+        })),
+        nextPageToken: result.nextPageToken,
+        query: input.query,
+        resultSizeEstimate: result.resultSizeEstimate,
+        scope: input.scope,
+        status: "success",
+      };
+    }
   });
 
 const THREAD_MESSAGE_LIMIT = 12;
@@ -531,6 +584,14 @@ export const modifyMailForUser = async (
 ): Promise<ModifyMailResult> => {
   const { action, category, id, signal, target } = input;
   const change = gmailChatMailChanges[action];
+  if (action === "trash" || action === "untrash") {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      retireSnoozes: false,
+      ...(target === "thread" ? { threadIds: [id] } : { messageId: id }),
+    });
+  }
   const run = await openAuthorizedGmailChatRequests(input);
   const mutate = target === "thread" ? mutateGmailThread : mutateGmailMessage;
   const receipt = await run(async (accessToken) => {
@@ -552,6 +613,15 @@ export const modifyMailForUser = async (
       target,
     };
   }
+  if (action === "trash" || action === "untrash") {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      matchHiddenMessageIdsOnly: action === "trash" && target === "message",
+      retireSnoozes: true,
+      ...(target === "thread" ? { threadIds: [id] } : { messageId: id }),
+    });
+  }
   await recordGmailChatAction(input, messageIds);
   return { action, category, id, status: "success", target };
 };
@@ -563,8 +633,16 @@ export const modifyMailBatchForUser = async (
 ): Promise<ModifyMailBatchResult> => {
   const { action, category, signal, target } = input;
   signal?.throwIfAborted();
-  const run = await openAuthorizedGmailChatRequests(input);
   const ids = [...new Set(input.ids)];
+  if ((action === "trash" || action === "untrash") && ids.length > 0) {
+    await supersedePendingMailPlacement({
+      context: { signal, userId: input.userId },
+      mailboxId: input.mailboxId,
+      retireSnoozes: false,
+      ...(target === "thread" ? { threadIds: ids } : { messageIds: ids }),
+    });
+  }
+  const run = await openAuthorizedGmailChatRequests(input);
   const change = gmailChatMailChanges[action];
   const results: ModifyMailBatchResult["results"] = [];
   const appliedMessageIds: string[] = [];
@@ -684,6 +762,22 @@ export const modifyMailBatchForUser = async (
     reportError(failure, { operation: "mailbox-tool:batch mail action" });
   }
   if (appliedMessageIds.length > 0) {
+    if (action === "trash" || action === "untrash") {
+      const succeededIds = results.flatMap((result) =>
+        result.status === "success" ? [result.id] : []
+      );
+      if (succeededIds.length > 0) {
+        await supersedePendingMailPlacement({
+          context: { signal, userId: input.userId },
+          mailboxId: input.mailboxId,
+          matchHiddenMessageIdsOnly: action === "trash" && target === "message",
+          retireSnoozes: true,
+          ...(target === "thread"
+            ? { threadIds: succeededIds }
+            : { messageIds: succeededIds }),
+        });
+      }
+    }
     await recordGmailChatAction(input, [...new Set(appliedMessageIds)]);
   }
   return {
@@ -701,6 +795,27 @@ export const getMailboxOverviewForUser = async (
   input: GmailChatRequest & { category: MailboxCategory }
 ): Promise<MailboxOverviewResult> =>
   await runAuthorizedGmailChatRequest(input, async (accessToken) => {
+    if (input.category === "later") {
+      const [profile, categoryMessages] = await Promise.all([
+        getGmailProfile(accessToken, input.signal),
+        countVisibleMailSnoozes({
+          mailboxId: input.mailboxId,
+          userId: input.userId,
+        }),
+      ]);
+      return {
+        ...(categoryMessages === 0
+          ? { attachmentMessages: 0, starredMessages: 0, unreadMessages: 0 }
+          : {}),
+        category: input.category,
+        categoryMessages,
+        emailAddress: profile.emailAddress,
+        fetchedAt: new Date().toISOString(),
+        status: "success",
+        totalMessages: profile.messagesTotal,
+        totalThreads: profile.threadsTotal,
+      };
+    }
     const [
       profile,
       categoryMessages,

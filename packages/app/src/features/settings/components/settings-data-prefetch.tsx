@@ -1,13 +1,11 @@
 "use client";
 
 import { fullOrganizationQueryOptions } from "@quieter/app/features/settings/components/organization-settings/domain";
-import { userBillingQueryOptions } from "@quieter/app/features/settings/domain/billing";
+import { prefetchSettingsOverview } from "@quieter/app/features/settings/components/settings-prefetch";
 import type { SettingsTab } from "@quieter/app/features/settings/domain/settings-tab";
 import { authClient } from "@quieter/app/lib/auth";
-import { connectorsQueryOptions } from "@quieter/app/lib/connectors-query";
-import { mailboxesQueryOptions } from "@quieter/app/lib/mailboxes-query";
-import { orpc } from "@quieter/app/lib/orpc";
-import { usePrefetchQuery } from "@tanstack/react-query";
+import { usePrefetchQuery, useQueryClient } from "@tanstack/react-query";
+import { useEffect } from "react";
 
 const AccountDataPrefetch = () => {
   authClient.useListPasskeys();
@@ -35,10 +33,10 @@ const OrganizationDataPrefetch = () => {
 };
 
 export const SettingsDataPrefetch = ({ tab }: { tab: SettingsTab }) => {
-  usePrefetchQuery(mailboxesQueryOptions());
-  usePrefetchQuery(connectorsQueryOptions());
-  usePrefetchQuery(userBillingQueryOptions());
-  usePrefetchQuery(orpc.ai.settings.queryOptions());
+  const queryClient = useQueryClient();
+  useEffect(() => {
+    void prefetchSettingsOverview(queryClient);
+  }, [queryClient]);
 
   return (
     <>

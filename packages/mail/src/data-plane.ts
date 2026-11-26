@@ -1,8 +1,11 @@
 import { z } from "zod";
 
+import type { MailSnoozeState } from "./snooze";
+
 export const mailCategorySchema = z.enum([
   "inbox",
   "done",
+  "later",
   "important",
   "unread",
   "sent",
@@ -22,6 +25,7 @@ export type MailMessageSummary = {
 };
 
 export type MailThreadSummary = {
+  snooze?: MailSnoozeState;
   id: string;
   messageIds: string[];
   messages: MailMessageSummary[];
@@ -148,6 +152,7 @@ export const getMailboxCapabilities = (input: {
     categories: [
       "inbox",
       "done",
+      "later",
       "important",
       "unread",
       "sent",

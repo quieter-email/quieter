@@ -31,6 +31,8 @@ const actionKeywords: ReadonlyMap<string, string> = new Map([
   ["mark-threads-done", "done archive finish"],
   ["return-threads-to-inbox", "done inbox move back"],
   ["toggle-importance", "important star flag"],
+  ["snooze-threads", "snooze later remind return time"],
+  ["cancel-thread-snoozes", "snooze later cancel return keep done"],
 ]);
 
 export const useMessageListCommands = ({

@@ -60,6 +60,15 @@ export type AiMemoryOverviewPage = {
   nextCursor: AiMemoryOverviewCursor | null;
   total: number;
 };
+export type AiCorrespondentMemoryPage = Omit<AiMemoryOverviewPage, "items"> & {
+  items: (AiMemoryOverviewPage["items"][number] & {
+    category: AiMemoryCategory;
+    correspondents: string[];
+    source: MemoryRow["source"];
+    updatedAt: string;
+    version: number;
+  })[];
+};
 
 const contextSelectionSchema = z.object({
   categories: z
@@ -524,7 +533,7 @@ const loadTaskCandidates = async ({
   );
   const applicability = or(
     sql`coalesce(${aiMemory.metadata}->'agents', '["all"]'::jsonb) @> '["all"]'::jsonb`,
-    sql`${aiMemory.metadata}->'agents' @> ${JSON.stringify([agent])}::jsonb`
+    sql`${aiMemory.metadata}->'agents' @> ${JSON.stringify([agent])}::text::jsonb`
   );
   const contacts = queryContacts(query);
   const contactMatch =
@@ -532,7 +541,7 @@ const loadTaskCandidates = async ({
       ? or(
           ...contacts.map(
             (contact) =>
-              sql`${aiMemory.metadata}->'correspondents' @> ${JSON.stringify([contact])}::jsonb`
+              sql`${aiMemory.metadata}->'correspondents' @> ${JSON.stringify([contact])}::text::jsonb`
           )
         )
       : undefined;
@@ -700,6 +709,14 @@ type AiMemoryOverviewInput = AiAgentMemoryAccess & {
     cursor?: AiMemoryOverviewCursor;
     query?: string;
     category?: AiMemoryCategory;
+    correspondentEmail?: never;
+  };
+  userId: string;
+};
+export type AiCorrespondentMemoryInput = {
+  mailboxId: string;
+  overview: Omit<AiMemoryOverviewInput["overview"], "correspondentEmail"> & {
+    correspondentEmail: string;
   };
   userId: string;
 };
@@ -707,7 +724,17 @@ const overviewCursorSchema = z.object({
   afterId: z.string().min(1).max(200),
   startedAt: z.iso.datetime(),
 });
+const correspondentOverviewSchema = z.object({
+  correspondentEmail: z.string().trim().toLowerCase().pipe(z.email().max(320)),
+  mailboxId: z.string().trim().min(1),
+});
+// Historical metadata must use the same whitespace normalization as String.trim.
+const correspondentTrimCharacters =
+  "\u0009\u000A\u000B\u000C\u000D\u0020\u00A0\u1680\u2000\u2001\u2002\u2003\u2004\u2005\u2006\u2007\u2008\u2009\u200A\u2028\u2029\u202F\u205F\u3000\uFEFF";
 
+export function loadAiAgentContext(
+  input: AiCorrespondentMemoryInput
+): Promise<AiCorrespondentMemoryPage>;
 export function loadAiAgentContext(
   input: AiMemoryOverviewInput
 ): Promise<AiMemoryOverviewPage>;
@@ -715,8 +742,27 @@ export function loadAiAgentContext(
   input: AiAgentContextInput
 ): Promise<AiAgentMemoryContext>;
 export async function loadAiAgentContext(
-  input: AiAgentContextInput | AiMemoryOverviewInput
-): Promise<AiAgentMemoryContext | AiMemoryOverviewPage> {
+  input:
+    | AiAgentContextInput
+    | AiMemoryOverviewInput
+    | AiCorrespondentMemoryInput
+): Promise<
+  AiAgentMemoryContext | AiMemoryOverviewPage | AiCorrespondentMemoryPage
+> {
+  const correspondent =
+    "overview" in input && input.overview.correspondentEmail !== undefined
+      ? correspondentOverviewSchema.safeParse({
+          correspondentEmail: input.overview.correspondentEmail,
+          mailboxId: input.mailboxId,
+        })
+      : null;
+  if (correspondent !== null && !correspondent.success) {
+    throw new ORPCError("BAD_REQUEST", {
+      message: "Choose a mailbox and a valid correspondent email address.",
+    });
+  }
+  const correspondentSelection = correspondent?.data;
+  const mailboxId = correspondentSelection?.mailboxId ?? input.mailboxId;
   const diagnostics: AiMemoryDiagnostics = { stages: {} };
   const onDiagnostics = "overview" in input ? undefined : input.onDiagnostics;
   let activeStage: {
@@ -742,10 +788,10 @@ export async function loadAiAgentContext(
       next === null ? null : { name: next, startedAt: performance.now() };
   };
   try {
-    if (input.mailboxId !== undefined) {
+    if (mailboxId !== undefined) {
       recordStage("authorization");
       await assertAccessibleMailbox({
-        mailboxId: input.mailboxId,
+        mailboxId,
         userId: input.userId,
       });
       recordStage(null);
@@ -847,6 +893,24 @@ export async function loadAiAgentContext(
       eq(aiMemory.status, "active"),
       or(isNull(aiMemory.expiresAt), gt(aiMemory.expiresAt, now)),
       lte(aiMemory.createdAt, startedAt),
+      correspondentSelection === undefined
+        ? undefined
+        : and(
+            or(
+              isNull(sql`${aiMemory.metadata}->>'sourceMailboxId'`),
+              eq(
+                sql`${aiMemory.metadata}->>'sourceMailboxId'`,
+                correspondentSelection.mailboxId
+              )
+            ),
+            sql`exists (
+              select 1 from jsonb_array_elements_text(
+                case when jsonb_typeof(${aiMemory.metadata}->'correspondents') = 'array'
+                  then ${aiMemory.metadata}->'correspondents' else '[]'::jsonb end
+              ) as correspondent(email)
+              where lower(btrim(correspondent.email, ${correspondentTrimCharacters})) = ${correspondentSelection.correspondentEmail}
+            )`
+          ),
       input.overview.category
         ? eq(sql`${aiMemory.metadata}->>'category'`, input.overview.category)
         : undefined,
@@ -854,6 +918,7 @@ export async function loadAiAgentContext(
         ? sql`(${aiMemory.content} || ' ' || ${aiMemory.summary} || ' ' || ${aiMemory.metadata}::text) ilike ${`%${query.replaceAll(/[\\%_]/gu, "\\$&")}%`}`
         : undefined
     );
+    const pageSize = correspondentSelection === undefined ? 100 : 10;
     const [rows, totals] = await Promise.all([
       db
         .select({
@@ -864,27 +929,48 @@ export async function loadAiAgentContext(
           id: aiMemory.id,
           kind: aiMemory.kind,
           lastConfirmedAt: aiMemory.lastConfirmedAt,
+          metadata: aiMemory.metadata,
           reinforcementCount: aiMemory.reinforcementCount,
           source: aiMemory.source,
           summary: aiMemory.summary,
+          updatedAt: aiMemory.updatedAt,
+          version: aiMemory.version,
         })
         .from(aiMemory)
         .where(and(where, cursor ? gt(aiMemory.id, cursor.afterId) : undefined))
         .orderBy(asc(aiMemory.id))
-        .limit(101),
+        .limit(pageSize + 1),
       db.select({ total: count() }).from(aiMemory).where(where),
     ]);
-    const items = rows.slice(0, 100).map((row) => {
+    if (correspondentSelection !== undefined) {
+      await assertAccessibleMailbox({
+        mailboxId: correspondentSelection.mailboxId,
+        userId: input.userId,
+      });
+    }
+    const items = rows.slice(0, pageSize).map((row) => {
       const sensitive = containsProhibitedMemorySecret(
         `${row.summary} ${row.content}`
       );
-      return {
+      const item = {
         content: sensitive ? "A sensitive detail was omitted." : row.content,
         id: row.id,
         kind: row.kind,
         provenance: serializeAiMemoryProvenance(row),
         summary: sensitive ? "Sensitive detail omitted" : row.summary,
       };
+      return correspondentSelection === undefined
+        ? item
+        : {
+            ...item,
+            category: row.metadata.category ?? "preferences",
+            correspondents: (row.metadata.correspondents ?? []).map((email) =>
+              email.trim().toLowerCase()
+            ),
+            source: row.source,
+            updatedAt: row.updatedAt.toISOString(),
+            version: row.version,
+          };
     });
     const last = items.at(-1);
     const hasMore = rows.length > items.length;

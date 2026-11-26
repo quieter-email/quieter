@@ -8,12 +8,12 @@ import {
   mailbox,
   mailMessageImportance,
 } from "@quieter/database/schema";
+import { serverEnv } from "@quieter/env/server";
 import {
   getGmailCapturedSnapshot,
   getGmailCaptureMetadata,
   getGmailProfile,
   isGmailServiceError,
-  listGmailCaptureHistoryPage,
   listGmailMessageIds,
 } from "@quieter/gmail";
 import {
@@ -23,6 +23,7 @@ import {
 } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
+import type { MailboxChange } from "@quieter/mail/updates";
 import {
   and,
   asc,
@@ -37,7 +38,12 @@ import {
   sql,
 } from "drizzle-orm";
 
+import {
+  finishGmailCapturedBody,
+  stageGmailCapturedBody,
+} from "./gmail-captured-body";
 import { ensureMailImportanceWork } from "./mail-importance";
+import { appendMailboxChange, publishMailboxChange } from "./mailbox-changes";
 import { assertAccessibleMailbox } from "./mailbox/service";
 
 type CaptureTransaction = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -62,6 +68,26 @@ const lockCaptureLease = async (
   if (state === undefined) {
     throw new Error("Mail capture lease expired.");
   }
+};
+
+const recordCaptureChange = async (
+  tx: CaptureTransaction,
+  mailboxId: string,
+  changes: MailboxChange[]
+) => {
+  const [revision] = await tx
+    .update(mailbox)
+    .set({
+      contentRevision: sql`${mailbox.contentRevision} + 1`,
+      updatedAt: new Date(),
+    })
+    .where(eq(mailbox.id, mailboxId))
+    .returning({ value: mailbox.contentRevision });
+  return await appendMailboxChange(tx, {
+    changes,
+    contentRevision: revision.value,
+    mailboxId,
+  });
 };
 
 export const writeGmailCapturedMessage = async (input: {
@@ -98,34 +124,64 @@ export const writeGmailCapturedMessage = async (input: {
   };
   const analysis = analyzeMailMessage(snapshot);
   analysis.truncated ||= Object.values(snapshot.truncation).some(Boolean);
+  const staged =
+    serverEnv.GMAIL_BODY_STORAGE_ENABLED === true
+      ? await stageGmailCapturedBody(
+          { mailboxId: input.mailboxId, messageId: snapshot.id },
+          snapshot
+        )
+      : null;
+  const content = staged?.columns ?? {
+    bodyObject: null,
+    bodySearchDocument: null,
+    bodySearchText: null,
+    snapshot,
+  };
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
     const accepted = await tx
       .insert(gmailCapturedMessage)
       .values({
+        ...content,
         analysis,
         capturedAt: now,
         deletedAt: null,
         mailboxId: input.mailboxId,
         messageId: snapshot.id,
         providerRevision: snapshot.providerRevision,
-        snapshot,
         source: input.source,
         updatedAt: now,
       })
       .onConflictDoUpdate({
         set: {
           analysis,
+          bodyBackfillAfter: null,
+          bodyObject: sql`excluded."bodyObject"`,
+          bodySearchDocument: sql`excluded."bodySearchDocument"`,
+          bodySearchText: sql`excluded."bodySearchText"`,
           deletedAt: null,
           providerRevision: snapshot.providerRevision,
-          snapshot,
+          snapshot: sql`excluded.snapshot`,
           source: input.source,
           updatedAt: now,
         },
-        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${snapshot.providerRevision}::numeric or (${gmailCapturedMessage.providerRevision}::numeric = ${snapshot.providerRevision}::numeric and ${gmailCapturedMessage.deletedAt} is null and (${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot or (${gmailCapturedMessage.source} = 'search' and excluded.source <> 'search')))`,
+        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < excluded."providerRevision"::numeric
+          or (${gmailCapturedMessage.providerRevision}::numeric = excluded."providerRevision"::numeric
+            and ${gmailCapturedMessage.deletedAt} is null
+            and (
+              case when ${gmailCapturedMessage.bodyObject} is null and excluded."bodyObject" is null
+                then ${gmailCapturedMessage.snapshot} is distinct from excluded.snapshot
+                else (${gmailCapturedMessage.snapshot} - array['bodyText','bodyHtml']) is distinct from (excluded.snapshot - array['bodyText','bodyHtml'])
+                  or coalesce(${gmailCapturedMessage.bodySearchText}, ${gmailCapturedMessage.snapshot}->>'bodyText')
+                    is distinct from coalesce(excluded."bodySearchText", excluded.snapshot->>'bodyText')
+                  or gmail_capture_html_digest(${gmailCapturedMessage.snapshot}, ${gmailCapturedMessage.bodyObject})
+                    is distinct from gmail_capture_html_digest(excluded.snapshot, excluded."bodyObject")
+              end
+              or (${gmailCapturedMessage.source} = 'search' and excluded.source <> 'search')
+            ))`,
         target: [
           gmailCapturedMessage.mailboxId,
           gmailCapturedMessage.messageId,
@@ -145,16 +201,17 @@ export const writeGmailCapturedMessage = async (input: {
         threadId: snapshot.threadId,
       });
     }
-    if (accepted.length) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+    if (accepted.length === 0) {
+      return null;
     }
+    if (staged !== null) {
+      await finishGmailCapturedBody(tx, staged);
+    }
+    return await recordCaptureChange(tx, input.mailboxId, [
+      { kind: "capture.changed", threadId: snapshot.threadId },
+    ]);
   });
+  await publishMailboxChange(update);
 };
 
 export const deleteGmailCapturedMessage = async (input: {
@@ -164,10 +221,24 @@ export const deleteGmailCapturedMessage = async (input: {
   leaseId?: string;
 }) => {
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
+    const [previous] = await tx
+      .select({
+        threadId: sql<
+          string | null
+        >`${gmailCapturedMessage.snapshot}->>'threadId'`,
+      })
+      .from(gmailCapturedMessage)
+      .where(
+        and(
+          eq(gmailCapturedMessage.mailboxId, input.mailboxId),
+          eq(gmailCapturedMessage.messageId, input.messageId)
+        )
+      )
+      .for("update");
     const accepted = await tx
       .insert(gmailCapturedMessage)
       .values({
@@ -184,12 +255,17 @@ export const deleteGmailCapturedMessage = async (input: {
       .onConflictDoUpdate({
         set: {
           analysis: null,
+          bodyBackfillAfter: null,
+          bodyObject: null,
+          bodySearchDocument: null,
+          bodySearchText: null,
           deletedAt: now,
           providerRevision: input.providerRevision,
           snapshot: null,
           updatedAt: now,
         },
-        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric <= ${input.providerRevision}::numeric`,
+        setWhere: sql`${gmailCapturedMessage.providerRevision}::numeric < ${input.providerRevision}::numeric
+          or (${gmailCapturedMessage.providerRevision} = ${input.providerRevision} and ${gmailCapturedMessage.deletedAt} is null)`,
         target: [
           gmailCapturedMessage.mailboxId,
           gmailCapturedMessage.messageId,
@@ -211,15 +287,17 @@ export const deleteGmailCapturedMessage = async (input: {
             eq(mailMessageImportance.messageId, input.messageId)
           )
         );
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+      return await recordCaptureChange(tx, input.mailboxId, [
+        {
+          kind: "message.deleted",
+          messageId: input.messageId,
+          threadId: previous?.threadId ?? undefined,
+        },
+      ]);
     }
+    return null;
   });
+  await publishMailboxChange(update);
 };
 
 const checkpointCapture = async (
@@ -295,7 +373,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
     .slice(0, 512)
     .map((label) => label.slice(0, 256));
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const update = await db.transaction(async (tx) => {
     if (input.leaseId) {
       await lockCaptureLease(tx, input.mailboxId, input.leaseId);
     }
@@ -303,9 +381,7 @@ export const writeGmailCapturedMessageMetadata = async (input: {
       .update(gmailCapturedMessage)
       .set({
         providerRevision: input.providerRevision,
-        // postgres.js JSON.stringifies jsonb parameters. A pre-stringified
-        // array is stored as a jsonb string, and `.some` then throws.
-        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${sql.param(labelIds)}::jsonb), '{providerRevision}', ${input.providerRevision}::jsonb)`,
+        snapshot: sql`jsonb_set(jsonb_set(${gmailCapturedMessage.snapshot}, '{labelIds}', ${JSON.stringify(labelIds)}::text::jsonb), '{providerRevision}', to_jsonb(${input.providerRevision}::text))`,
         updatedAt: now,
       })
       .where(
@@ -315,20 +391,24 @@ export const writeGmailCapturedMessageMetadata = async (input: {
           isNull(gmailCapturedMessage.deletedAt),
           sql`${gmailCapturedMessage.snapshot} is not null`,
           sql`${gmailCapturedMessage.providerRevision}::numeric <= ${input.providerRevision}::numeric`,
-          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${sql.param(labelIds)}::jsonb)`
+          sql`(${gmailCapturedMessage.providerRevision} <> ${input.providerRevision} or ${gmailCapturedMessage.snapshot}->'labelIds' is distinct from ${JSON.stringify(labelIds)}::text::jsonb)`
         )
       )
-      .returning({ messageId: gmailCapturedMessage.messageId });
-    if (accepted.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: now,
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+      .returning({
+        threadId: sql<
+          string | null
+        >`${gmailCapturedMessage.snapshot}->>'threadId'`,
+      });
+    if (accepted.length === 0) {
+      return null;
     }
+    return await recordCaptureChange(tx, input.mailboxId, [
+      accepted[0].threadId
+        ? { kind: "capture.changed", threadId: accepted[0].threadId }
+        : { kind: "mailbox.reconcile" },
+    ]);
   });
+  await publishMailboxChange(update);
 };
 
 const refreshRetainedMessage = async (input: {
@@ -508,43 +588,9 @@ export const processGmailMailCapture = async (input: {
         continue;
       }
       if (state.phase === "history") {
-        const page =
-          state.pendingHistoryPage ??
-          (await listGmailCaptureHistoryPage(accessToken, {
-            pageToken: state.historyPageToken ?? undefined,
-            startHistoryId: state.historyId,
-          }));
-        if ("historyExpired" in page && page.historyExpired === true) {
-          const profile = await getGmailProfile(accessToken);
-          if (!profile.historyId || !/^\d+$/u.test(profile.historyId)) {
-            throw new Error("Mailbox has no reliable capture baseline.");
-          }
-          await checkpointCapture(mailboxId, leaseId, {
-            coverageGapAt: state.coverageGapAt ?? new Date(),
-            historyChangeOffset: 0,
-            historyId: profile.historyId,
-            historyPageToken: null,
-            pendingHistoryPage: null,
-            phase: "recovery",
-            recoveryAfter: new Date(
-              (state.lastCapturedAt ?? state.createdAt).getTime() -
-                60 * 60 * 1000
-            ),
-            recoveryBefore: new Date(),
-            recoveryOffset: 0,
-            recoveryPageToken: null,
-          });
-          continue;
-        }
-        if (state.pendingHistoryPage === null) {
-          await checkpointCapture(mailboxId, leaseId, {
-            pendingHistoryPage: {
-              changes: page.changes,
-              historyId: page.historyId,
-              nextPageToken: page.nextPageToken,
-            },
-          });
-          continue;
+        const page = state.pendingHistoryPage;
+        if (page === null) {
+          return { busy: false, needsContinuation: false };
         }
         const change = page.changes[state.historyChangeOffset];
         if (change !== undefined) {
@@ -566,7 +612,6 @@ export const processGmailMailCapture = async (input: {
           historyId: page.nextPageToken ? state.historyId : page.historyId,
           historyPageToken: page.nextPageToken,
           pendingHistoryPage: null,
-          ...(page.nextPageToken ? {} : { lastCapturedAt: new Date() }),
         });
         if (!page.nextPageToken) {
           return { busy: false, needsContinuation: false };

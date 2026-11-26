@@ -1,7 +1,7 @@
 "use client";
 
 import { Tabs as TabsPrimitive } from "@base-ui/react/tabs";
-import { domMax, LayoutGroup, LazyMotion } from "motion/react";
+import { domMax, LayoutGroup, LazyMotion, m } from "motion/react";
 import { createContext, use, useId } from "react";
 import type { ComponentPropsWithoutRef } from "react";
 
@@ -33,6 +33,8 @@ export const TabsList = ({
               },
               className
             )}
+            // Keep the highlight anchored to the list when the panel moves.
+            render={<m.div layout layoutRoot />}
             {...props}
           />
         </LayoutGroup>
@@ -60,7 +62,7 @@ export const TabsTab = ({
       {...props}
       render={(tabProps, state) => (
         <button {...tabProps} type="button">
-          {state.active && <SelectionIndicator />}
+          {state.active && <SelectionIndicator layoutId="selection" />}
           {tabProps.children}
         </button>
       )}

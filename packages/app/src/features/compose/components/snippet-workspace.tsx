@@ -211,8 +211,8 @@ export const SnippetWorkspace = ({
             </InputGroup>
           </label>
         </WorkspaceHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
-          <div className="flex flex-col gap-0.5">
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <div className="flex flex-col gap-2">
             {filteredSnippets.map((snippet) => (
               <Button
                 aria-label={`Edit snippet ${snippet.name}`}

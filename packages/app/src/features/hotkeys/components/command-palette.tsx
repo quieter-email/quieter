@@ -27,6 +27,7 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { useSelector } from "@tanstack/react-store";
 import {
   useEffect,
+  useEffectEvent,
   useId,
   useLayoutEffect,
   useRef,
@@ -373,6 +374,31 @@ export const CommandPalette = ({
 
   useEffect(() => cancelPendingDispatch, []);
 
+  const showPalette = () => {
+    cancelPendingDispatch();
+    returnFocusRef.current =
+      document.activeElement instanceof HTMLElement
+        ? document.activeElement
+        : null;
+    pendingCommandRef.current = null;
+    skipReturnFocusRef.current = false;
+    registry.setOpen(true);
+    setSessionKey((current) => current + 1);
+    setOpen(true);
+  };
+  const openFromWorkspace = useEffectEvent(() => {
+    if (!open) {
+      showPalette();
+    }
+  });
+  useLayoutEffect(
+    () =>
+      registry.registerOpen(() => {
+        openFromWorkspace();
+      }),
+    [registry]
+  );
+
   useHotkey(
     commandPaletteHotkey,
     (event) => {
@@ -397,16 +423,7 @@ export const CommandPalette = ({
       }
       event.preventDefault();
       event.stopPropagation();
-      cancelPendingDispatch();
-      returnFocusRef.current =
-        document.activeElement instanceof HTMLElement
-          ? document.activeElement
-          : null;
-      pendingCommandRef.current = null;
-      skipReturnFocusRef.current = false;
-      registry.setOpen(true);
-      setSessionKey((current) => current + 1);
-      setOpen(true);
+      showPalette();
     },
     { ignoreInputs: false, preventDefault: false, stopPropagation: false }
   );

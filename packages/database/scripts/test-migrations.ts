@@ -49,6 +49,9 @@ const temporaryDirectory = mkdtempSync(
 );
 
 const resetDatabase = async () => {
+  await sql`DROP PUBLICATION IF EXISTS quieter_mail_dispatch,
+    quieter_mail_dispatch_0, quieter_mail_dispatch_1,
+    quieter_mail_dispatch_2, quieter_mail_dispatch_3`;
   await sql`DROP SCHEMA IF EXISTS drizzle CASCADE`;
   await sql`DROP SCHEMA public CASCADE`;
   await sql`CREATE SCHEMA public`;

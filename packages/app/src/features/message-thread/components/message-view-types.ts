@@ -6,6 +6,7 @@ import type {
   MailboxActions,
   MailboxPendingActions,
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import type { CorrespondentHistoryActionProps } from "@quieter/app/features/message-thread/components/correspondent-history-action";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 
 export type MessageViewProps = {
@@ -28,6 +29,7 @@ export type MessageViewProps = {
     mailboxId: string;
     message: MessageListItem;
   }) => void;
+  onOpenConversation?: CorrespondentHistoryActionProps["onOpenConversation"];
   onBackToList?: () => void;
   onAutoFocusComplete?: () => void;
   onManageSnippets?: () => void;
