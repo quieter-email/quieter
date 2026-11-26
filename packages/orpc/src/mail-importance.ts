@@ -19,6 +19,7 @@ import {
   organization,
 } from "@quieter/database/schema";
 import { extractListUnsubscribeTargets } from "@quieter/gmail";
+import { readCapturedLabelIds } from "@quieter/mail/capture";
 import type { CapturedMailSnapshot } from "@quieter/mail/capture";
 import { mailCategorySchema } from "@quieter/mail/data-plane";
 import type {
@@ -36,7 +37,7 @@ import { parseMailSearchExpression } from "@quieter/mail/search-expression";
 import { getSenderAvatarUrls } from "@quieter/mail/sender-avatar";
 import { getUnsubscribeKey } from "@quieter/mail/unsubscribe";
 import { reportError } from "@quieter/observability";
-import type { SQL } from "drizzle-orm";
+import type { SQL, SQLWrapper } from "drizzle-orm";
 import {
   and,
   asc,
@@ -78,6 +79,13 @@ import {
 } from "./managed-mail/search/normalization";
 
 const CLASSIFIER_VERSION = "1";
+
+const gmailCapturedLabelIds = (snapshot: SQLWrapper) => sql`(case
+  when jsonb_typeof(${snapshot}->'labelIds') = 'string'
+    and pg_input_is_valid(${snapshot}->>'labelIds', 'jsonb')
+  then (${snapshot}->>'labelIds')::jsonb
+  else ${snapshot}->'labelIds'
+end)`;
 
 const importanceMessage = (
   message: AutomationMailMessage | CapturedMailSnapshot
@@ -242,28 +250,29 @@ const loadImportanceSources = async (
   return [
     ...gmail.flatMap(({ snippet, ...captured }) => {
       const { snapshot } = captured;
-      return snapshot
-        ? [
-            {
-              captured,
-              eligible: !snapshot.labelIds.some((label) =>
-                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-              ),
-              incoming:
-                !snapshot.labelIds.includes("SENT") &&
-                !snapshot.labelIds.includes("DRAFT"),
-              message: {
-                ...importanceMessage({
-                  ...snapshot,
-                  bodyHtml: null,
-                  bodyText: snippet,
-                }),
-                threadId: snapshot.threadId,
-              },
-              receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
-            },
-          ]
-        : [];
+      if (!snapshot) {
+        return [];
+      }
+      const labelIds = readCapturedLabelIds(snapshot.labelIds);
+      const normalizedSnapshot = { ...snapshot, labelIds };
+      return [
+        {
+          captured: { ...captured, snapshot: normalizedSnapshot },
+          eligible: !labelIds.some((label) =>
+            ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
+          ),
+          incoming: !labelIds.includes("SENT") && !labelIds.includes("DRAFT"),
+          message: {
+            ...importanceMessage({
+              ...normalizedSnapshot,
+              bodyHtml: null,
+              bodyText: snippet,
+            }),
+            threadId: snapshot.threadId,
+          },
+          receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
+        },
+      ];
     }),
     ...managed.map((message) => {
       let stateLabel = message.mailboxState.toUpperCase();
@@ -329,13 +338,7 @@ export const hydrateMailImportance = async <T extends MessageListItem>(
         and(
           eq(gmailCapturedMessage.mailboxId, mailboxId),
           isNull(gmailCapturedMessage.deletedAt),
-          // The legacy metadata writer stored JSON arrays inside JSON strings.
-          sql`not ((case
-            when jsonb_typeof(${gmailCapturedMessage.snapshot}->'labelIds') = 'string'
-              and pg_input_is_valid(${gmailCapturedMessage.snapshot}->>'labelIds', 'jsonb')
-            then (${gmailCapturedMessage.snapshot}->>'labelIds')::jsonb
-            else ${gmailCapturedMessage.snapshot}->'labelIds'
-          end) ?| array['SENT','DRAFT','SPAM','TRASH'])`,
+          sql`not (${gmailCapturedLabelIds(gmailCapturedMessage.snapshot)} ?| array['SENT','DRAFT','SPAM','TRASH'])`,
           inArray(gmailCapturedMessage.messageId, messageIds)
         )
       ),
@@ -682,7 +685,7 @@ export const backfillMissingMailImportanceWork = async (
           ? undefined
           : eq(mailbox.provider, input.provider),
         sql`(
-    exists (select 1 from ${gmailCapturedMessage} c where c."mailboxId" = ${mailbox.id} and c."deletedAt" is null and c.source <> 'search' and not (c.snapshot->'labelIds' ?| array['SENT','DRAFT']) and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = c."mailboxId" and i."messageId" = c."messageId"))
+    exists (select 1 from ${gmailCapturedMessage} c where c."mailboxId" = ${mailbox.id} and c."deletedAt" is null and c.source <> 'search' and not (${gmailCapturedLabelIds(sql`c.snapshot`)} ?| array['SENT','DRAFT']) and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = c."mailboxId" and i."messageId" = c."messageId"))
     or exists (select 1 from ${managedMailMessage} m where m."mailboxId" = ${mailbox.id} and m.direction = 'inbound' and not exists (select 1 from ${mailMessageImportance} i where i."mailboxId" = m."mailboxId" and i."messageId" = m.id))
   )`
       )
@@ -710,26 +713,28 @@ export const backfillMissingMailImportanceWork = async (
           eq(gmailCapturedMessage.mailboxId, box.id),
           isNull(gmailCapturedMessage.deletedAt),
           sql`${gmailCapturedMessage.source} <> 'search'`,
-          sql`not (${gmailCapturedMessage.snapshot}->'labelIds' ?| array['SENT','DRAFT'])`,
+          sql`not (${gmailCapturedLabelIds(gmailCapturedMessage.snapshot)} ?| array['SENT','DRAFT'])`,
           isNull(mailMessageImportance.messageId)
         )
       )
       .limit(limit);
     for (const source of gmail) {
       const snapshot = await hydrateGmailCapturedSnapshot(source);
-      if (
-        snapshot &&
-        !snapshot.labelIds.some((label) => ["SENT", "DRAFT"].includes(label))
-      ) {
-        await ensureMailImportanceWork(db, {
-          mailboxId: box.id,
-          message: snapshot,
-          messageId: source.messageId,
-          receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
-          threadId: snapshot.threadId,
-        });
-        created += 1;
+      if (!snapshot) {
+        continue;
       }
+      const labelIds = readCapturedLabelIds(snapshot.labelIds);
+      if (labelIds.some((label) => ["SENT", "DRAFT"].includes(label))) {
+        continue;
+      }
+      await ensureMailImportanceWork(db, {
+        mailboxId: box.id,
+        message: { ...snapshot, labelIds },
+        messageId: source.messageId,
+        receivedAt: new Date(Number(snapshot.internalDate) || Date.now()),
+        threadId: snapshot.threadId,
+      });
+      created += 1;
     }
     const managed = await db
       .select({ source: managedMailMessage })
