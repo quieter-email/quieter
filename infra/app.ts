@@ -96,7 +96,14 @@ export const createInfrastructure = async (input: {
       SES_CONFIGURATION_SET_NAME:
         mail.mailOutboundConfigurationSet.configurationSetName,
     },
-    [mail.mailBucket, mail.webAwsPermissions]
+    [mail.mailBucket, mail.webAwsPermissions],
+    {
+      secretBindings,
+      signingSecret: requireSecretResource(
+        secretResources,
+        "GMAIL_LIVE_SYNC_TOKEN_SECRET"
+      ),
+    }
   );
 
   return {
@@ -132,6 +139,9 @@ export const createInfrastructure = async (input: {
     mailReceiptRoleArn: mail.mailReceiptRole.arn,
     mailReceiptRuleSetName,
     mailReceiptTopicArn: mail.mailReceiptTopic.arn,
+    ...(web.nativeWebWorkerId === undefined
+      ? {}
+      : { nativeWebWorkerId: web.nativeWebWorkerId }),
     stage: $app.stage,
     webUrl: web.url,
   };

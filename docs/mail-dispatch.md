@@ -14,10 +14,10 @@ Run `vp run dev:trigger mail-dispatch` to process the enrollment and to exercise
 
 ## Hosted rollout
 
-1. Set `QUIETER_MAIL_DISPATCH_ENABLED=true` and deploy with both scan-removal flags off. In the protected workflow, set `mail_event_dispatch` to `enable` to open the database gate and record the enrollment events after deployment.
+1. Set `QUIETER_MAIL_DISPATCH_ENABLED=true` and deploy with both scan-removal flags off. After the signed deployment check passes, run **Administer production mail dispatch and capture** with `enable-dispatch` to open the database gate and record the enrollment events.
 2. The deploy verifies that Hyperdrive forwards notices to the mail updates Worker and the resulting signed dispatch reaches the database. With both fallbacks running, confirm the outbox drains and both enrollments finish. The deploy preflight checks enrollment and checks for stale outbox entries before turning off the old scans.
 3. Set `QUIETER_GMAIL_EVENTS_ENABLED` and `QUIETER_MAIL_MAINTENANCE_EVENTS_ENABLED` for the scans you intend to retire. Allow older executors to drain before retiring their resources. If you enable encrypted storage later, rerun the protected activation after old capture writers finish to schedule legacy body backfill.
-4. To revert, restore the old schedules and confirm they have taken over. Set `mail_event_dispatch` to `disable` in the protected deploy to close the producer gate. Then remove the dispatch Worker in a subsequent deploy. The preflight also checks for any replication slots from a pre-release installation of the previous relay.
+4. To revert, restore the old schedules and confirm they have taken over. Run **Administer production mail dispatch and capture** with `disable-dispatch` and confirm the fallback schedules are live to close the producer gate. Then remove the dispatch Worker in a subsequent deploy. The preflight also checks for any replication slots from a pre-release installation of the previous relay.
 
 Watch dispatch failures and the age of the oldest pending event. The five-minute repair bounds recovery delay in ordinary operation. A prolonged outage or backlog can take longer to clear.
 

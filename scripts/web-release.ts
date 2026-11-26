@@ -62,6 +62,11 @@ export const prepareWebRelease = async (input: {
 }) => {
   const { origin, buildId, planFile } = input;
   const { deployment: previous, sourceBuildId } = await readWebRelease(origin);
+  if (previous?.current.versionId !== undefined) {
+    throw new Error(
+      "The live web build uses native Worker versions. Use the native release or recovery workflow."
+    );
+  }
   let updateSlot: "a" | "b" | null = previous?.current.slot === "a" ? "b" : "a";
   if (previous?.current.buildId === buildId) {
     updateSlot = null;

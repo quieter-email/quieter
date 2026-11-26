@@ -236,14 +236,6 @@ rm -f "$report_dir/key.pem" "$report_dir/cert.pem"
 rmdir "$report_dir"
 ```
 
-### Bootstrap before the first account-only deployment
-
-The standalone workflow exists only after merge. To guarantee a named authorized account has permanent access before account-only writers publish, set the production GitHub environment variable `BILLING_BOOTSTRAP_USER_ID` to the verified internal user ID before merging the cutover. Set `BILLING_BOOTSTRAP_ACCEPT_FUNDING=true` only when accepting every currently unfunded organization owned by that exact user is also explicitly authorized. No identity is inferred from an email address or display name.
-
-The deployment workflow invokes the same guarded CLI after migrations and before publishing writers. It uses an explicit permanent grant with an account-cutover audit reason and GitHub operator reference. A bootstrap failure stops publishing. Retries converge on the existing grant. This step does not retire old subscriptions or drain pending usage; complete the separately reviewed cutover procedure for those obligations.
-
-After the successful deployment, use the standalone inspection workflow and verify the account in the application. Remove both bootstrap variables from the production GitHub environment. The persisted override continues to grant access after the variables are removed. Never retain bootstrap configuration as a permanent identity allowlist. Merchant activation and tax details remain a separate operation and must not be simulated to complete this bootstrap.
-
 For local manual verification, use the approved `quieter_dev` configuration or a disposable loopback database, with synthetic users and organizations. Run `vp run @quieter/env#build`, then `vp exec node --env-file=.env.local packages/database/scripts/billing-account-admin.ts --user-id synthetic-user`. A local grant also requires `--operator local:restricted-reference`, `--reason`, and an explicit duration. Keep the configured database URL within the existing allowlist. Remove the synthetic overrides and settings before deleting fixture organizations and users. Financial records retain opaque payer IDs, so deleting a user alone does not clean up a financial fixture.
 
 ## Domains and mail after access ends

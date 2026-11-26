@@ -73,6 +73,14 @@ const createSentryEnvironment = (secretResources: SecretResources) => ({
 
 export const createDeploymentContext = (secretResources: SecretResources) => {
   const env = createSstConfigEnv({ production });
+  const { QUIETER_ACTION_CUTOVER_BUILD_ID, QUIETER_BUILD_ID } =
+    createSstCommandEnv();
+  if (
+    QUIETER_ACTION_CUTOVER_BUILD_ID !== undefined &&
+    (QUIETER_ACTION_CUTOVER_BUILD_ID !== QUIETER_BUILD_ID || !production)
+  ) {
+    throw new Error("The cutover build ID must match the production release.");
+  }
   const mailAutomationAiEnabled = String(
     env.QUIETER_GMAIL_AI_AUTOMATION_ENABLED ?? production
   );
@@ -134,11 +142,15 @@ export const createDeploymentContext = (secretResources: SecretResources) => {
     ).value,
     r2Environment: createR2Environment(env, secretResources),
     releaseEnvironment: {
-      ...actionReleaseEnvironmentSchema.parse({
-        QUIETER_ACTION_PROTOCOL: PERSONAL_ACTION_PROTOCOL,
-        QUIETER_BUILD_ID:
-          createSstCommandEnv().QUIETER_BUILD_ID ?? `local-${stage}`,
-      }),
+      QUIETER_ACTION_PROTOCOL: PERSONAL_ACTION_PROTOCOL,
+      ...(QUIETER_ACTION_CUTOVER_BUILD_ID === undefined
+        ? {}
+        : {
+            QUIETER_BUILD_ID:
+              actionReleaseEnvironmentSchema.shape.QUIETER_BUILD_ID.parse(
+                QUIETER_ACTION_CUTOVER_BUILD_ID
+              ),
+          }),
       MAIL_DISPATCH_URL:
         env.QUIETER_MAIL_DISPATCH_ENABLED === true
           ? `https://${mailDispatchDomain}/mail/dispatch/event`
