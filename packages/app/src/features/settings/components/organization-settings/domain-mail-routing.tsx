@@ -416,10 +416,11 @@ export const DomainCatchAllSection = ({
     RouterInputs["mailDomains"]["setCatchAll"]
   >;
 }) => {
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [step, setStep] = useState<
-    { kind: "pick" } | { kind: "create"; localPart: string } | null
-  >(null);
-  const isCreating = step?.kind === "create";
+    { kind: "pick" } | { kind: "create"; localPart: string }
+  >({ kind: "pick" });
+  const isCreating = step.kind === "create";
   const isSubmitting = createCatchAllMutation.isPending;
   const addressRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
@@ -431,7 +432,7 @@ export const DomainCatchAllSection = ({
     ...orpc.mail.listManagedMailboxAdministration.queryOptions({
       input: { organizationId },
     }),
-    enabled: step !== null,
+    enabled: pickerOpen,
   });
   const candidates = (adminData?.mailboxes ?? []).filter((mailbox) =>
     mailbox.emailAddress.toLowerCase().endsWith(`@${domainName}`)
@@ -466,6 +467,7 @@ export const DomainCatchAllSection = ({
               manageReason={manageReason}
               onChooseInbox={() => {
                 setStep({ kind: "pick" });
+                setPickerOpen(true);
               }}
               organizationId={organizationId}
               setCatchAllMutation={setCatchAllMutation}
@@ -476,18 +478,18 @@ export const DomainCatchAllSection = ({
 
       <Dialog
         onOpenChange={(open) => {
-          if (!open && !isSubmitting) {
-            setStep(null);
+          if (!isSubmitting) {
+            setPickerOpen(open);
           }
         }}
-        open={step !== null}
+        open={pickerOpen}
       >
         <DialogContent className="w-[min(92vw,28rem)]">
           <form
             onSubmit={(event) => {
               event.preventDefault();
               if (
-                step?.kind !== "create" ||
+                step.kind !== "create" ||
                 actionReason !== null ||
                 isSubmitting
               ) {
@@ -502,7 +504,7 @@ export const DomainCatchAllSection = ({
                 },
                 {
                   onSuccess: () => {
-                    setStep(null);
+                    setPickerOpen(false);
                   },
                 }
               );
@@ -521,7 +523,7 @@ export const DomainCatchAllSection = ({
               </DialogDescription>
             </DialogHeader>
             <DialogBody spacing="3">
-              {step?.kind === "create" ? (
+              {step.kind === "create" ? (
                 <Field>
                   <FieldLabel htmlFor="catch-all-address">
                     Email address
@@ -562,7 +564,7 @@ export const DomainCatchAllSection = ({
                     domainName={domainName}
                     isAdminPending={isAdminPending}
                     onPicked={() => {
-                      setStep(null);
+                      setPickerOpen(false);
                     }}
                     organizationId={organizationId}
                     setCatchAllMutation={setCatchAllMutation}
@@ -574,13 +576,17 @@ export const DomainCatchAllSection = ({
               <Button
                 disabled={isSubmitting}
                 onClick={() => {
-                  setStep(isCreating ? { kind: "pick" } : null);
+                  if (isCreating) {
+                    setStep({ kind: "pick" });
+                  } else {
+                    setPickerOpen(false);
+                  }
                 }}
                 variant="secondary"
               >
                 {isCreating ? "Back" : "Cancel"}
               </Button>
-              {step?.kind === "create" ? (
+              {step.kind === "create" ? (
                 <Button
                   disabled={
                     actionReason !== null || step.localPart.trim() === ""
