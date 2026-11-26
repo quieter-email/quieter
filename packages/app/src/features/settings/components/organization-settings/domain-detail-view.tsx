@@ -33,6 +33,7 @@ import {
   settingsSurfaceVariants,
 } from "@quieter/app/features/settings/components/settings-layout";
 import { toastError } from "@quieter/app/lib/error-toast";
+import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
 import { openExternalUrl } from "@quieter/app/runtime";
@@ -240,20 +241,41 @@ export const DomainDetailView = ({
       toast.success("Mail mode updated.");
     },
   });
+  const invalidateCatchAll = async () => {
+    await Promise.all([
+      queryClient.invalidateQueries({
+        queryKey: orpc.mail.listManagedMailboxAdministration.queryOptions({
+          input: { organizationId: organization.id },
+        }).queryKey,
+      }),
+      queryClient.invalidateQueries({
+        queryKey: ["mail", "managed-mailbox-details"],
+      }),
+      invalidateDomain(),
+    ]);
+  };
   const setCatchAllMutation = useMutation({
     ...orpc.mailDomains.setCatchAll.mutationOptions(),
     mutationKey: ["mail-domains", organization.id, domainId, "catch-all"],
     onSuccess: async () => {
-      await queryClient.invalidateQueries({
-        queryKey: orpc.mail.listManagedMailboxAdministration.queryOptions({
-          input: { organizationId: organization.id },
-        }).queryKey,
-      });
-      await queryClient.invalidateQueries({
-        queryKey: ["mail", "managed-mailbox-details"],
-      });
-      await invalidateDomain();
+      await invalidateCatchAll();
       toast.success("Whole-domain inbox updated.");
+    },
+  });
+  const createCatchAllMutation = useMutation({
+    ...orpc.mail.createManagedMailbox.mutationOptions(),
+    onError: (mutationError) => {
+      toastError(mutationError, {
+        boundary: "domain-settings",
+        fallback: "Could not create a shared inbox.",
+      });
+    },
+    onSuccess: async () => {
+      await Promise.all([
+        invalidateCatchAll(),
+        queryClient.invalidateQueries({ queryKey: getMailboxesQueryKey() }),
+      ]);
+      toast.success("Whole-domain shared inbox created.");
     },
   });
   const startDomainConnectMutation = useMutation({
@@ -439,6 +461,7 @@ export const DomainDetailView = ({
       />
       <DomainCatchAllSection
         catchAll={data.catchAll}
+        createCatchAllMutation={createCatchAllMutation}
         domainId={domainId}
         domainName={domain.domain}
         incomingReady={

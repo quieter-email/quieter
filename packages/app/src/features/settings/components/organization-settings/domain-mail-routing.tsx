@@ -22,18 +22,20 @@ import { cn } from "@quieter/ui/cn";
 import {
   Dialog,
   DialogBody,
-  DialogCloseButton,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@quieter/ui/dialog";
+import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Surface } from "@quieter/ui/surface";
+import { TextFieldInput } from "@quieter/ui/text-field";
 import { useQuery } from "@tanstack/react-query";
 import type { UseMutationResult } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 const getDeliveryRecordMessage = (
   ready: boolean,
@@ -340,7 +342,7 @@ const DomainCatchAllPickerBody = ({
     return (
       <Surface>
         <p className="text-caption/5 text-muted-fg">
-          Create a shared inbox on {domainName} first, then return here.
+          No shared inboxes on {domainName} yet.
         </p>
       </Surface>
     );
@@ -389,6 +391,7 @@ const DomainCatchAllPickerBody = ({
 
 export const DomainCatchAllSection = ({
   catchAll,
+  createCatchAllMutation,
   domainId,
   domainName,
   incomingReady,
@@ -397,6 +400,11 @@ export const DomainCatchAllSection = ({
   setCatchAllMutation,
 }: {
   catchAll: DomainCatchAll;
+  createCatchAllMutation: UseMutationResult<
+    RouterOutputs["mail"]["createManagedMailbox"],
+    unknown,
+    RouterInputs["mail"]["createManagedMailbox"]
+  >;
   domainId: string;
   domainName: string;
   incomingReady: boolean;
@@ -408,12 +416,22 @@ export const DomainCatchAllSection = ({
     RouterInputs["mailDomains"]["setCatchAll"]
   >;
 }) => {
-  const [pickerOpen, setPickerOpen] = useState(false);
+  const [step, setStep] = useState<
+    { kind: "pick" } | { kind: "create"; localPart: string } | null
+  >(null);
+  const isCreating = step?.kind === "create";
+  const isSubmitting = createCatchAllMutation.isPending;
+  const addressRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (isCreating) {
+      addressRef.current?.focus();
+    }
+  }, [isCreating]);
   const { data: adminData, isPending: isAdminPending } = useQuery({
     ...orpc.mail.listManagedMailboxAdministration.queryOptions({
       input: { organizationId },
     }),
-    enabled: pickerOpen,
+    enabled: step !== null,
   });
   const candidates = (adminData?.mailboxes ?? []).filter((mailbox) =>
     mailbox.emailAddress.toLowerCase().endsWith(`@${domainName}`)
@@ -447,7 +465,7 @@ export const DomainCatchAllSection = ({
               domainId={domainId}
               manageReason={manageReason}
               onChooseInbox={() => {
-                setPickerOpen(true);
+                setStep({ kind: "pick" });
               }}
               organizationId={organizationId}
               setCatchAllMutation={setCatchAllMutation}
@@ -456,35 +474,137 @@ export const DomainCatchAllSection = ({
         </SettingsInsetRows>
       </SettingsCard>
 
-      <Dialog onOpenChange={setPickerOpen} open={pickerOpen}>
+      <Dialog
+        onOpenChange={(open) => {
+          if (!open && !isSubmitting) {
+            setStep(null);
+          }
+        }}
+        open={step !== null}
+      >
         <DialogContent className="w-[min(92vw,28rem)]">
-          <DialogHeader>
-            <DialogTitle>Whole-domain inbox for {domainName}</DialogTitle>
-            <DialogDescription>
-              Pick the shared inbox that receives mail addressed to any other
-              recipient at {domainName}.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogBody spacing="3">
-            <p className="text-caption/5 text-muted-fg">
-              Exact shared inboxes always keep priority, and replies send from
-              the chosen inbox&rsquo;s own address.
-            </p>
-            <DomainCatchAllPickerBody
-              candidates={candidates}
-              domainId={domainId}
-              domainName={domainName}
-              isAdminPending={isAdminPending}
-              onPicked={() => {
-                setPickerOpen(false);
-              }}
-              organizationId={organizationId}
-              setCatchAllMutation={setCatchAllMutation}
-            />
-          </DialogBody>
-          <DialogFooter>
-            <DialogCloseButton variant="secondary">Cancel</DialogCloseButton>
-          </DialogFooter>
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              if (
+                step?.kind !== "create" ||
+                actionReason !== null ||
+                isSubmitting
+              ) {
+                return;
+              }
+              createCatchAllMutation.mutate(
+                {
+                  accessMode: "shared",
+                  emailAddress: `${step.localPart}@${domainName}`,
+                  organizationId,
+                  receiveWholeDomain: true,
+                },
+                {
+                  onSuccess: () => {
+                    setStep(null);
+                  },
+                }
+              );
+            }}
+          >
+            <DialogHeader>
+              <DialogTitle>
+                {isCreating
+                  ? "Create a shared inbox"
+                  : `Whole-domain inbox for ${domainName}`}
+              </DialogTitle>
+              <DialogDescription>
+                {isCreating
+                  ? `The new inbox will receive mail addressed to any other recipient at ${domainName}.`
+                  : `Pick the shared inbox that receives mail addressed to any other recipient at ${domainName}.`}
+              </DialogDescription>
+            </DialogHeader>
+            <DialogBody spacing="3">
+              {step?.kind === "create" ? (
+                <Field>
+                  <FieldLabel htmlFor="catch-all-address">
+                    Email address
+                  </FieldLabel>
+                  <InputGroup>
+                    <TextFieldInput
+                      autoCapitalize="none"
+                      chrome="attached"
+                      disabled={isSubmitting}
+                      id="catch-all-address"
+                      onChange={(event) => {
+                        setStep({
+                          kind: "create",
+                          localPart: event.currentTarget.value,
+                        });
+                      }}
+                      pattern="[^@\s]+"
+                      placeholder="inbox"
+                      ref={addressRef}
+                      required
+                      spellCheck={false}
+                      value={step.localPart}
+                    />
+                    <div className="mr-2.5 max-w-1/2 shrink-0 truncate">
+                      <InputAddon>@{domainName}</InputAddon>
+                    </div>
+                  </InputGroup>
+                </Field>
+              ) : (
+                <>
+                  <p className="text-caption/5 text-muted-fg">
+                    Exact shared inboxes always keep priority, and replies send
+                    from the chosen inbox&rsquo;s own address.
+                  </p>
+                  <DomainCatchAllPickerBody
+                    candidates={candidates}
+                    domainId={domainId}
+                    domainName={domainName}
+                    isAdminPending={isAdminPending}
+                    onPicked={() => {
+                      setStep(null);
+                    }}
+                    organizationId={organizationId}
+                    setCatchAllMutation={setCatchAllMutation}
+                  />
+                </>
+              )}
+            </DialogBody>
+            <DialogFooter>
+              <Button
+                disabled={isSubmitting}
+                onClick={() => {
+                  setStep(isCreating ? { kind: "pick" } : null);
+                }}
+                variant="secondary"
+              >
+                {isCreating ? "Back" : "Cancel"}
+              </Button>
+              {step?.kind === "create" ? (
+                <Button
+                  disabled={
+                    actionReason !== null || step.localPart.trim() === ""
+                  }
+                  pending={isSubmitting}
+                  pendingLabel="Creating inbox"
+                  type="submit"
+                >
+                  Create shared inbox
+                </Button>
+              ) : (
+                <Button
+                  disabled={
+                    actionReason !== null || setCatchAllMutation.isPending
+                  }
+                  onClick={() => {
+                    setStep({ kind: "create", localPart: "" });
+                  }}
+                >
+                  Create shared inbox
+                </Button>
+              )}
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
     </SettingsSection>
