@@ -42,33 +42,78 @@ export const ComposerActionBar = ({
 );
 
 export const ComposerContextChip = ({
+  description,
   disabled,
   icon,
+  invalid,
   label,
   onRemove,
+  surface = "default",
 }: {
+  description?: string;
   disabled?: boolean;
   icon?: ReactNode;
+  invalid?: boolean;
   label: string;
   onRemove: () => void;
-}) => (
-  <span className="inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-transparent bg-detail pl-2 text-caption text-muted-fg">
-    {icon}
-    <span className="min-w-0 truncate" title={label}>
-      {label}
-    </span>
-    <IconButtonTooltip label={`Remove ${label}`}>
-      <Button
-        aria-label={`Remove ${label}`}
-        disabled={disabled}
-        onClick={onRemove}
-        size="icon-xs"
-        variant="ghost"
+  surface?: "default" | "field";
+}) => {
+  const removeLabel = description
+    ? `Remove ${label}, ${description}`
+    : `Remove ${label}`;
+  return (
+    <span
+      aria-invalid={invalid}
+      className={cn(
+        "inline-flex max-w-full min-w-0 items-center gap-1 rounded-sm border border-transparent pl-2 text-caption",
+        {
+          "bg-detail text-muted-fg": surface === "default",
+          "border-border bg-panel text-fg": surface === "field",
+          "border-destructive bg-destructive/10 text-destructive": invalid,
+        }
+      )}
+    >
+      {icon}
+      <span
+        className={cn("min-w-0 truncate", {
+          "max-w-1/2 shrink-0": !!description,
+        })}
+        title={label}
       >
-        <Icon aria-hidden icon={Cancel01Icon} />
-      </Button>
-    </IconButtonTooltip>
-  </span>
+        {label}
+      </span>
+      {description ? (
+        <span className="min-w-0 truncate text-muted-fg" title={description}>
+          {description}
+        </span>
+      ) : null}
+      <IconButtonTooltip label={removeLabel}>
+        <Button
+          aria-label={removeLabel}
+          disabled={disabled}
+          onClick={onRemove}
+          size="icon-xs"
+          type="button"
+          variant="ghost"
+        >
+          <Icon aria-hidden icon={Cancel01Icon} />
+        </Button>
+      </IconButtonTooltip>
+    </span>
+  );
+};
+
+export const ComposerInputGroup = ({
+  className,
+  ...props
+}: ComponentPropsWithoutRef<"div">) => (
+  <div
+    className={cn(
+      "flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail px-2 py-1 squircle focus-within:bg-control-hover has-aria-invalid:border-destructive",
+      className
+    )}
+    {...props}
+  />
 );
 
 /** Shared chrome for the mail composer. */
@@ -136,6 +181,7 @@ export const ComposerFieldRow = ({
       "gap-1 [--composer-field-gap:calc(var(--spacing)*2)] [--composer-field-inset:0px] [--composer-field-label-width:calc(var(--spacing)*12)]",
       className
     )}
+    invalid={error !== undefined}
   >
     <div className={composerFieldRowClassName}>
       <FieldLabel className="w-(--composer-field-label-width) shrink-0 text-body-sm font-medium text-muted-fg">

@@ -1,7 +1,7 @@
 "use client";
 
 import { Autocomplete as AutocompletePrimitive } from "@base-ui/react/autocomplete";
-import type { ComponentProps } from "react";
+import type { ComponentProps, RefObject } from "react";
 import { useLayoutEffect, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
@@ -99,8 +99,9 @@ export type AutocompleteSuggestion = {
 
 type AutocompleteFieldProps = Omit<
   ComponentProps<typeof FieldControl>,
-  "defaultValue" | "onChange" | "onKeyDown" | "onSelect" | "onValueChange"
+  "defaultValue" | "onChange" | "onSelect" | "onValueChange"
 > & {
+  inputRef?: RefObject<HTMLInputElement | null>;
   onCaretChange?: (caret: number | null) => void;
   onDismiss: () => void;
   /** Returns the caret position to restore in the completed value. */
@@ -122,8 +123,10 @@ export const AutocompleteField = ({
   chrome,
   className,
   disabled,
+  inputRef: providedInputRef,
   onCaretChange,
   onDismiss,
+  onKeyDown,
   onSuggestionSelect,
   onValueChange,
   open,
@@ -132,7 +135,8 @@ export const AutocompleteField = ({
   value,
   ...props
 }: AutocompleteFieldProps) => {
-  const inputRef = useRef<HTMLInputElement>(null);
+  const localInputRef = useRef<HTMLInputElement>(null);
+  const inputRef = providedInputRef ?? localInputRef;
   const pendingCaretRef = useRef<number | null>(null);
   const keyboardChoiceRef = useRef<string | undefined>(undefined);
   // Late results must not replace the option under a highlight.
@@ -153,7 +157,7 @@ export const AutocompleteField = ({
       );
       pendingCaretRef.current = null;
     }
-  }, [value]);
+  }, [inputRef, value]);
 
   const select = (choice: string) => {
     keyboardChoiceRef.current = undefined;
@@ -213,22 +217,31 @@ export const AutocompleteField = ({
         onKeyDown={(event) => {
           // Safari may clear isComposing before the IME confirmation key event.
           if (
-            !isOpen ||
             event.nativeEvent.isComposing ||
             // oxlint-disable-next-line typescript/no-deprecated
             event.keyCode === 229
           ) {
             return;
           }
-          if (event.key === "Escape") {
+          if (isOpen && event.key === "Escape") {
             event.preventDefault();
             event.stopPropagation();
             event.preventBaseUIHandler();
             dismiss();
             return;
           }
+          if (
+            isOpen &&
+            heldSuggestions &&
+            event.key === "Enter" &&
+            !event.ctrlKey &&
+            !event.metaKey
+          ) {
+            return;
+          }
           const choice = keyboardChoiceRef.current;
           if (
+            isOpen &&
             choice !== undefined &&
             options.some((option) => option.value === choice) &&
             ((event.key === "Tab" && !event.shiftKey) ||
@@ -238,6 +251,11 @@ export const AutocompleteField = ({
             event.stopPropagation();
             event.preventBaseUIHandler();
             select(choice);
+            return;
+          }
+          onKeyDown?.(event);
+          if (event.defaultPrevented) {
+            event.preventBaseUIHandler();
           }
         }}
         onSelect={(event) => {
