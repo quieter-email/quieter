@@ -6,6 +6,7 @@ import {
   Attachment01Icon,
   Cancel01Icon,
   Delete02Icon,
+  Edit01Icon,
   Loading03Icon,
   MailSend02Icon,
   MoreHorizontalIcon,
@@ -515,8 +516,6 @@ const ReadyComposeSurface = ({
     (currentSender === undefined
       ? senderUnavailable && senderMailboxes.length > 0
       : senderMailboxes.length > 1);
-  const canEditSenderName =
-    !isInline && senderMailboxes !== undefined && editableSender !== undefined;
   const showSubject =
     !isInline || state.draft.draftAnchor?.seededBy === "forward";
   const [showQuotedContent, setShowQuotedContent] = useState(false);
@@ -973,7 +972,7 @@ const ReadyComposeSurface = ({
                     })}
                   >
                     <ComposerFieldGroup bare>
-                      {canSwitchSender || canEditSenderName ? (
+                      {canSwitchSender || editableSender ? (
                         <form.Field name="senderName">
                           {(senderField) => {
                             const [error] = senderField.state.meta.errors;
@@ -981,6 +980,10 @@ const ReadyComposeSurface = ({
                               ? senderField.state.value.trim() ||
                                 editableSender.name
                               : "";
+                            const senderDetailsDisabled =
+                              !canEditBody ||
+                              audioBusy ||
+                              state.draft.saveStatus === "saving";
                             return (
                               <ComposerFieldRow
                                 error={
@@ -988,47 +991,77 @@ const ReadyComposeSurface = ({
                                 }
                                 label="From"
                               >
-                                <div className="flex h-10 min-w-0 flex-1 items-center">
+                                <div className="flex h-10 min-w-0 flex-1 items-center gap-2">
+                                  {canSwitchSender ? null : (
+                                    <FieldControl
+                                      chrome="composer"
+                                      readOnly
+                                      tabIndex={-1}
+                                      value={
+                                        senderEmail
+                                          ? `${senderName} <${senderEmail}>`
+                                          : "No sending address"
+                                      }
+                                    />
+                                  )}
                                   <Popover
                                     onOpenChange={setSenderDetailsOpen}
                                     open={senderDetailsOpen}
                                   >
-                                    <PopoverTrigger
-                                      aria-label={`Edit sender, ${senderName ? `${senderName}, ` : ""}${senderEmail ?? "choose an address"}`}
-                                      disabled={
-                                        !canEditBody ||
-                                        audioBusy ||
-                                        state.draft.saveStatus === "saving"
-                                      }
-                                      render={
-                                        <Button
-                                          className="max-w-full min-w-0 shrink justify-start"
-                                          chrome="toolbar"
-                                          size="field"
-                                          variant="secondary"
-                                        />
-                                      }
-                                    >
-                                      {senderName ? (
-                                        <span className="max-w-1/2 shrink-0 truncate text-fg">
-                                          {senderName}
+                                    {canSwitchSender ? (
+                                      <PopoverTrigger
+                                        aria-label={`Edit sender, ${senderName ? `${senderName}, ` : ""}${senderEmail ?? "choose an address"}`}
+                                        disabled={senderDetailsDisabled}
+                                        render={
+                                          <Button
+                                            className="max-w-full min-w-0 shrink justify-start"
+                                            chrome="toolbar"
+                                            size="field"
+                                            variant="secondary"
+                                          />
+                                        }
+                                      >
+                                        {senderName ? (
+                                          <span className="max-w-1/2 shrink-0 truncate text-fg">
+                                            {senderName}
+                                          </span>
+                                        ) : null}
+                                        <span className="truncate">
+                                          {senderName && senderEmail
+                                            ? `<${senderEmail}>`
+                                            : (senderEmail ??
+                                              "Choose a sending address")}
                                         </span>
-                                      ) : null}
-                                      <span className="truncate">
-                                        {senderName && senderEmail
-                                          ? `<${senderEmail}>`
-                                          : (senderEmail ??
-                                            "Choose a sending address")}
-                                      </span>
-                                      <Icon
-                                        aria-hidden
-                                        data-icon="inline-end"
-                                        icon={ArrowDown01Icon}
-                                      />
-                                    </PopoverTrigger>
+                                        <Icon
+                                          aria-hidden
+                                          data-icon="inline-end"
+                                          icon={ArrowDown01Icon}
+                                        />
+                                      </PopoverTrigger>
+                                    ) : (
+                                      <IconButtonTooltip label="Edit sender name">
+                                        <PopoverTrigger
+                                          aria-label="Edit sender name"
+                                          disabled={senderDetailsDisabled}
+                                          render={
+                                            <Button
+                                              chrome="toolbar"
+                                              size="icon-lg"
+                                              variant="secondary"
+                                            />
+                                          }
+                                        >
+                                          <Icon aria-hidden icon={Edit01Icon} />
+                                        </PopoverTrigger>
+                                      </IconButtonTooltip>
+                                    )}
                                     <PopoverContent
-                                      align="start"
-                                      aria-label="Edit sender"
+                                      align={canSwitchSender ? "start" : "end"}
+                                      aria-label={
+                                        canSwitchSender
+                                          ? "Edit sender"
+                                          : "Edit sender name"
+                                      }
                                       size="sm"
                                     >
                                       <div className="flex flex-col gap-4">
@@ -1069,12 +1102,7 @@ const ReadyComposeSurface = ({
                                               <SelectTrigger
                                                 aria-label="Sending address"
                                                 className="w-full"
-                                                disabled={
-                                                  !canEditBody ||
-                                                  audioBusy ||
-                                                  state.draft.saveStatus ===
-                                                    "saving"
-                                                }
+                                                disabled={senderDetailsDisabled}
                                                 pending={switchingSender}
                                               >
                                                 <SelectValue>
@@ -1123,7 +1151,7 @@ const ReadyComposeSurface = ({
                                             </Select>
                                           </Field>
                                         ) : null}
-                                        {canEditSenderName ? (
+                                        {editableSender ? (
                                           <Field invalid={!!error}>
                                             <FieldLabel>Sender name</FieldLabel>
                                             <FieldControl
@@ -1171,25 +1199,14 @@ const ReadyComposeSurface = ({
                           }}
                         </form.Field>
                       ) : (
-                        <form.Field name="senderName">
-                          {(senderField) => (
-                            <ComposerFieldRow
-                              error={senderField.state.meta.errors[0]?.message}
-                              label="From"
-                            >
-                              <FieldControl
-                                chrome="composer"
-                                readOnly
-                                tabIndex={-1}
-                                value={
-                                  editableSender
-                                    ? `${senderField.state.value.trim() || editableSender.name} <${editableSender.address}>`
-                                    : (senderEmail ?? "No sending address")
-                                }
-                              />
-                            </ComposerFieldRow>
-                          )}
-                        </form.Field>
+                        <ComposerFieldRow label="From">
+                          <FieldControl
+                            chrome="composer"
+                            readOnly
+                            tabIndex={-1}
+                            value={senderEmail ?? "No sending address"}
+                          />
+                        </ComposerFieldRow>
                       )}
                       <ComposeRecipientField
                         handleUserDraftChange={handleUserDraftChange}
