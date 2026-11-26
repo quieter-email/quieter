@@ -2,6 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { setTimeout } from "node:timers/promises";
 
 import {
   createDeploymentVerificationEnv,
@@ -82,18 +83,6 @@ const cloudflare = async (route: string, body?: unknown) => {
   return result.result;
 };
 
-const deployVersions = async (
-  versions: z.infer<typeof cloudflareDeploymentSchema>["versions"],
-  message: string
-) => {
-  const result = await cloudflare(`scripts/${worker}/deployments`, {
-    annotations: { "workers/message": message },
-    strategy: "percentage",
-    versions,
-  });
-  return cloudflareDeploymentSchema.parse(result);
-};
-
 const getDeployment = async (script: string) => {
   const { deployments } = z
     .object({ deployments: z.array(cloudflareDeploymentSchema) })
@@ -120,6 +109,43 @@ const getDeployment = async (script: string) => {
     previous: active.versions.find(({ percentage }) => percentage === 0)
       ?.version_id,
   };
+};
+
+const deployVersions = async (
+  versions: z.infer<typeof cloudflareDeploymentSchema>["versions"],
+  message: string
+) => {
+  const receipt = z
+    .object({ id: z.uuid().optional() })
+    .nullish()
+    .parse(
+      await cloudflare(`scripts/${worker}/deployments`, {
+        annotations: { "workers/message": message },
+        strategy: "percentage",
+        versions,
+      })
+    );
+  const current = versions.find(
+    ({ percentage }) => percentage === 100
+  )?.version_id;
+  const previous = versions.find(
+    ({ percentage }) => percentage === 0
+  )?.version_id;
+  for (let attempt = 0; ; attempt += 1) {
+    const deployed = await getDeployment(worker);
+    if (
+      deployed &&
+      deployed.current === current &&
+      deployed.previous === previous &&
+      (receipt?.id === undefined || deployed.id === receipt.id)
+    ) {
+      return deployed;
+    }
+    if (attempt === 4) {
+      throw new Error("Cloudflare did not report the requested traffic split.");
+    }
+    await setTimeout(1000);
+  }
 };
 
 const requireDeployment = async (id: string, message: string) => {
