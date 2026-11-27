@@ -64,7 +64,6 @@ import {
   WorkspaceHeader,
   WorkspaceSection,
   workspaceGutterClassName,
-  workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
 import { captureException } from "@sentry/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1019,13 +1018,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (selectedView === "labels") {
     mailboxContent = (
-      <m.div
-        key="labels-panel"
-        className={workspaceSectionVariants()}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.08, ease: "linear" }}
-      >
+      <WorkspaceSection key="labels-panel">
         <LabelsWorkspacePanel
           canManage={
             selectedMailboxProvider !== "managed" ||
@@ -1039,7 +1032,7 @@ const MailboxWorkspaceContentInner = ({
           onClose={onCloseSubview}
           onOpenSidebar={onOpenSidebar}
         />
-      </m.div>
+      </WorkspaceSection>
     );
   } else {
     mailboxContent = (

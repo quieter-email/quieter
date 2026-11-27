@@ -713,8 +713,8 @@ export const ThreadMessageList = ({
         setMessageExpansion((current) => ({ ...current, [id]: true }));
       });
     }
-    const content = navigationScope?.contentRef.current;
-    if (content === null || content === undefined) {
+    const content = navigationScope?.content;
+    if (content === undefined) {
       return;
     }
     const cards = [
@@ -747,6 +747,7 @@ export const ThreadMessageList = ({
       {navigationScope === undefined ? null : (
         <ConversationNavigator
           aria-label="Messages in this thread"
+          isLayoutPending={isLoading}
           items={navigationItems}
           prepareItem={prepareMessage}
           scope={navigationScope}
