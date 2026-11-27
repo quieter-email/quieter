@@ -161,8 +161,14 @@ const readPayload = async (row: ScheduledSend) => {
   return scheduledSendPayloadSchema.parse(value);
 };
 
-const notifyMailbox = async (mailboxId: string) => {
-  await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
+const notifyMailbox = async ({
+  mailboxId,
+  userId,
+}: Pick<ScheduledSend, "mailboxId" | "userId">) => {
+  await publishMailUpdate(
+    { mailboxId, type: "mailbox.changed" },
+    { recipientUserIds: [userId] }
+  );
 };
 
 const claimSend = async (row: ScheduledSend) => {
@@ -262,7 +268,7 @@ const finishPreparation = async (row: ScheduledSend) => {
         )
       )
       .returning();
-    await notifyMailbox(row.mailboxId);
+    await notifyMailbox(row);
     return prepared ?? (await getScopedSend(row));
   } catch (error) {
     const expected =
@@ -290,7 +296,7 @@ const finishPreparation = async (row: ScheduledSend) => {
     if (!expected) {
       reportError(error, { operation: "scheduled-send-prepare" });
     }
-    await notifyMailbox(row.mailboxId);
+    await notifyMailbox(row);
     return await getScopedSend(row);
   }
 };
@@ -866,7 +872,7 @@ const restoreCancelledSend = async (
         )
       )
       .returning();
-    await notifyMailbox(row.mailboxId);
+    await notifyMailbox(row);
     return completed ?? (await getScopedSend(row));
   } catch (error) {
     await db
@@ -1096,7 +1102,7 @@ export const dispatchScheduledSend = async (
               eq(scheduledMailSend.leaseToken, token)
             )
           );
-        await notifyMailbox(row.mailboxId);
+        await notifyMailbox(row);
         return { nextWakeAt: null };
       }
       if (
@@ -1122,7 +1128,7 @@ export const dispatchScheduledSend = async (
               eq(scheduledMailSend.leaseToken, token)
             )
           );
-        await notifyMailbox(row.mailboxId);
+        await notifyMailbox(row);
         return { nextWakeAt: null };
       }
       if (receipt.status === "pending" || row.status === "uncertain") {
@@ -1194,7 +1200,7 @@ export const dispatchScheduledSend = async (
           eq(scheduledMailSend.leaseToken, token)
         )
       );
-    await notifyMailbox(row.mailboxId);
+    await notifyMailbox(row);
     return { nextWakeAt: null };
   } catch (error) {
     const errorData: unknown =
@@ -1258,7 +1264,7 @@ export const dispatchScheduledSend = async (
     if (!expected) {
       reportError(error, { operation: "scheduled-send-dispatch" });
     }
-    await notifyMailbox(row.mailboxId);
+    await notifyMailbox(row);
     return { nextWakeAt };
   }
 };

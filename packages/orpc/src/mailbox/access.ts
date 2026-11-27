@@ -3,13 +3,14 @@ import { db } from "@quieter/database/client";
 import type { MailboxGrantRole } from "@quieter/database/schema";
 import {
   mailbox,
+  mailboxChangeHead,
   mailboxDivisionGrant,
   mailboxGrant,
   member,
   organizationDivision,
   organizationDivisionMember,
 } from "@quieter/database/schema";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 
 export const MAILBOX_PROVIDER_GMAIL = "gmail" as const;
 export const MAILBOX_PROVIDER_MANAGED = "managed" as const;
@@ -106,18 +107,26 @@ export const assertOwnedGmailMailbox = async (input: {
 
 export const getAuthorizedManagedMailbox = async (
   input: {
+    includeChangeVersion?: boolean;
     mailboxId: string;
     requiredRoles?: MailboxGrantRole[];
     userId: string;
   },
   database: Pick<typeof db, "select"> = db
 ) => {
+  const mailChangeVersion =
+    input.includeChangeVersion === true
+      ? sql`(select ${mailboxChangeHead.version} from ${mailboxChangeHead} where ${mailboxChangeHead.mailboxId} = ${mailbox.id})`.mapWith(
+          mailboxChangeHead.version
+        )
+      : sql<null>`null`;
   const directRows = await database
     .select({
       contentRevision: mailbox.contentRevision,
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
+      mailChangeVersion,
       organizationId: mailbox.organizationId,
       ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
@@ -148,6 +157,7 @@ export const getAuthorizedManagedMailbox = async (
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
+      mailChangeVersion,
       organizationId: mailbox.organizationId,
       ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,
@@ -203,6 +213,7 @@ export const getAuthorizedManagedMailbox = async (
       displayName: mailbox.displayName,
       emailAddress: mailbox.emailAddress,
       id: mailbox.id,
+      mailChangeVersion,
       organizationId: mailbox.organizationId,
       ownerUserId: mailbox.managedOwnerUserId,
       provider: mailbox.provider,

@@ -1,10 +1,14 @@
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import { user } from "@quieter/database/schema";
+import { MAILBOX_ACCESS_UPDATE_SCOPE } from "@quieter/mail/updates";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { createMailUpdateConnection } from "../../mail-updates";
+import {
+  createMailUpdateConnection,
+  publishMailUpdate,
+} from "../../mail-updates";
 import { deleteManagedMailbox } from "../../mailbox/deletion";
 import {
   createManagedMailbox,
@@ -42,6 +46,24 @@ import {
   mailboxSwitcherOrderSchema,
   protectedProcedure,
 } from "../base";
+
+const notifyMailboxAccess = async (
+  context: { scheduleBackgroundTask?: (task: Promise<unknown>) => void },
+  recipientUserIds: readonly string[]
+) => {
+  if (recipientUserIds.length === 0) {
+    return;
+  }
+  const notification = publishMailUpdate(
+    { mailboxId: MAILBOX_ACCESS_UPDATE_SCOPE, type: "details.changed" },
+    { recipientUserIds }
+  );
+  if (context.scheduleBackgroundTask) {
+    context.scheduleBackgroundTask(notification);
+  } else {
+    await notification;
+  }
+};
 
 export const mailboxProcedures = {
   createManagedMailbox: protectedProcedure
@@ -86,10 +108,14 @@ export const mailboxProcedures = {
     ),
   disconnectMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema }))
-    .handler(
-      async ({ context, input }) =>
-        await disconnectGmailMailbox({ ...input, userId: context.userId })
-    ),
+    .handler(async ({ context, input }) => {
+      const result = await disconnectGmailMailbox({
+        ...input,
+        userId: context.userId,
+      });
+      await notifyMailboxAccess(context, [context.userId]);
+      return result;
+    }),
   dismissGmailUsefulDetail: protectedProcedure
     .input(
       z.object({ id: z.string().trim().min(1), mailboxId: mailboxIdSchema })
@@ -215,13 +241,15 @@ export const mailboxProcedures = {
         mailboxId: mailboxIdSchema,
       })
     )
-    .handler(
-      async ({ context, input }) =>
+    .handler(async ({ context, input }) => {
+      const { affectedUserIds, ...result } =
         await removeManagedMailboxDivisionGrant({
           ...input,
           userId: context.userId,
-        })
-    ),
+        });
+      await notifyMailboxAccess(context, affectedUserIds);
+      return result;
+    }),
   removeManagedMailboxGrant: protectedProcedure
     .input(
       z.object({
@@ -229,14 +257,15 @@ export const mailboxProcedures = {
         userId: z.string().trim().min(1),
       })
     )
-    .handler(
-      async ({ context, input }) =>
-        await removeManagedMailboxGrant({
-          mailboxId: input.mailboxId,
-          targetUserId: input.userId,
-          userId: context.userId,
-        })
-    ),
+    .handler(async ({ context, input }) => {
+      const result = await removeManagedMailboxGrant({
+        mailboxId: input.mailboxId,
+        targetUserId: input.userId,
+        userId: context.userId,
+      });
+      await notifyMailboxAccess(context, [input.userId]);
+      return result;
+    }),
   setDefaultMailbox: protectedProcedure
     .input(z.object({ mailboxId: mailboxIdSchema.nullable() }))
     .handler(async ({ context, input }) => {
@@ -256,6 +285,7 @@ export const mailboxProcedures = {
         .update(user)
         .set({ defaultMailboxId: input.mailboxId, updatedAt: new Date() })
         .where(eq(user.id, context.userId));
+      await notifyMailboxAccess(context, [context.userId]);
       return { defaultMailboxId: input.mailboxId };
     }),
   setGmailAutoLabeling: protectedProcedure
@@ -296,10 +326,14 @@ export const mailboxProcedures = {
         ownerUserId: z.string().trim().min(1).nullish(),
       })
     )
-    .handler(
-      async ({ context, input }) =>
-        await setManagedMailboxAccessMode({ ...input, userId: context.userId })
-    ),
+    .handler(async ({ context, input }) => {
+      const { affectedUserIds, ...result } = await setManagedMailboxAccessMode({
+        ...input,
+        userId: context.userId,
+      });
+      await notifyMailboxAccess(context, affectedUserIds);
+      return result;
+    }),
   setManagedMailboxDivisionGrant: protectedProcedure
     .input(
       z.object({
@@ -308,13 +342,15 @@ export const mailboxProcedures = {
         role: z.enum(["reader", "responder", "manager"]),
       })
     )
-    .handler(
-      async ({ context, input }) =>
+    .handler(async ({ context, input }) => {
+      const { affectedUserIds, ...result } =
         await setManagedMailboxDivisionGrant({
           ...input,
           userId: context.userId,
-        })
-    ),
+        });
+      await notifyMailboxAccess(context, affectedUserIds);
+      return result;
+    }),
   setManagedMailboxGrant: protectedProcedure
     .input(
       z.object({
@@ -323,15 +359,16 @@ export const mailboxProcedures = {
         userId: z.string().trim().min(1),
       })
     )
-    .handler(
-      async ({ context, input }) =>
-        await setManagedMailboxGrant({
-          mailboxId: input.mailboxId,
-          role: input.role,
-          targetUserId: input.userId,
-          userId: context.userId,
-        })
-    ),
+    .handler(async ({ context, input }) => {
+      const result = await setManagedMailboxGrant({
+        mailboxId: input.mailboxId,
+        role: input.role,
+        targetUserId: input.userId,
+        userId: context.userId,
+      });
+      await notifyMailboxAccess(context, [input.userId]);
+      return result;
+    }),
   startGmailConnection: protectedProcedure
     .input(
       z.object({

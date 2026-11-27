@@ -36,7 +36,7 @@ export const mailboxesQueryOptions = (enabled = true) =>
     queryKey: getMailboxesQueryKey(),
     refetchInterval: MAILBOX_ACCOUNT_HEALTH_CHECK_INTERVAL_MS,
     refetchIntervalInBackground: false,
-    refetchOnMount: false,
+    refetchOnMount: true,
     refetchOnReconnect: true,
     refetchOnWindowFocus: true,
     staleTime: MAILBOX_METADATA_STALE_MS,

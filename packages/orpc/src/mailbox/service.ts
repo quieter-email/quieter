@@ -743,6 +743,9 @@ export const assertAccessibleMailbox = async (input: {
       }),
       contentRevision: grantedManagedMailbox.contentRevision,
       id: grantedManagedMailbox.id,
+      mailChangeVersion: includeChangeVersion
+        ? (grantedManagedMailbox.mailChangeVersion ?? 0n)
+        : undefined,
       organizationId: grantedManagedMailbox.organizationId,
       provider: grantedManagedMailbox.provider,
     };

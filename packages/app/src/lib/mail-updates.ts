@@ -1,14 +1,22 @@
 import { demoReminderSession } from "@quieter/app/features/reminders/reminder-query";
 import { isExpectedClientError } from "@quieter/app/lib/client-error-reporting";
 import type { ListMessagesPageResult } from "@quieter/app/lib/mail";
-import { liveMailboxChangeVersions } from "@quieter/app/lib/mail/inbox-query/sync";
+import { subscribeToMailMutationCatchUp } from "@quieter/app/lib/mail-mutations";
+import {
+  liveMailboxChangeVersions,
+  syncCachedMailboxWindows,
+} from "@quieter/app/lib/mail/inbox-query/sync";
 import {
   getGmailUnreadCountsQueryKey,
   getMailboxesQueryKey,
 } from "@quieter/app/lib/mailboxes-query";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { appRuntime } from "@quieter/app/runtime";
-import { mailUpdateSchema } from "@quieter/mail/updates";
+import {
+  ACCOUNT_PREFERENCES_UPDATE_SCOPE,
+  MAILBOX_ACCESS_UPDATE_SCOPE,
+  mailUpdateSchema,
+} from "@quieter/mail/updates";
 import type { MailUpdate } from "@quieter/mail/updates";
 import * as Sentry from "@sentry/react";
 import type { QueryClient } from "@tanstack/react-query";
@@ -34,6 +42,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   const pending = new Map<
     string,
     {
+      localCommand: boolean;
       types: Set<MailUpdate["type"]>;
       version?: string;
       revision?: string;
@@ -311,7 +320,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     refreshing = true;
     liveMailboxChangeVersions.set(queryClient, changeVersions);
     try {
-      await queryClient.invalidateQueries(
+      const invalidate = queryClient.invalidateQueries(
         {
           predicate: ({ queryKey }) => {
             if (partialMatchKey(queryKey, orpc.scheduledSends.list.key())) {
@@ -400,6 +409,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               ) {
                 return false;
               }
+              if (change?.localCommand === true) {
+                return true;
+              }
               return (
                 queryClient.getQueryCache().findAll({
                   predicate: ({ queryKey: key }) =>
@@ -449,6 +461,12 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         },
         { cancelRefetch: changeVersions.size > 0 }
       );
+      await Promise.all([
+        invalidate,
+        ...Array.from(changeVersions.keys(), async (mailboxId) => {
+          await syncCachedMailboxWindows(queryClient, mailboxId);
+        }),
+      ]);
     } finally {
       if (liveMailboxChangeVersions.get(queryClient) === changeVersions) {
         liveMailboxChangeVersions.delete(queryClient);
@@ -457,15 +475,40 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       scheduleRefresh();
     }
   };
-  const requestRefresh = (
+  const requestRefresh = ({
     mailboxId = "*",
-    type: MailUpdate["type"] = "mailbox.changed",
-    revision?: string,
-    threadIds?: string[],
-    typedChange?: MailUpdate["change"]
-  ) => {
+    type = "mailbox.changed",
+    revision,
+    threadIds,
+    typedChange,
+    localCommand = false,
+  }: {
+    mailboxId?: string;
+    type?: MailUpdate["type"];
+    revision?: string;
+    threadIds?: readonly string[];
+    typedChange?: MailUpdate["change"];
+    localCommand?: boolean;
+  } = {}) => {
+    if (type === "details.changed") {
+      if (mailboxId === ACCOUNT_PREFERENCES_UPDATE_SCOPE) {
+        void queryClient.invalidateQueries({
+          queryKey: orpc.accountPreferences.get.key(),
+        });
+        return;
+      }
+      if (mailboxId === MAILBOX_ACCESS_UPDATE_SCOPE) {
+        void queryClient.invalidateQueries({
+          queryKey: getMailboxesQueryKey(),
+          refetchType: "all",
+        });
+        return;
+      }
+    }
     if (
-      (type === "mailbox.changed" && typedChange === undefined) ||
+      (type === "mailbox.changed" &&
+        typedChange === undefined &&
+        !localCommand) ||
       typedChange?.kinds.includes("verification-code.available") === true ||
       typedChange?.kinds.includes("mailbox.reconcile") === true
     ) {
@@ -481,7 +524,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
     if (type === "mailbox.changed") {
       const reason = mailboxId === "*" ? "recovery" : "event";
-      if (typedChange === undefined) {
+      if (typedChange === undefined && !localCommand) {
         mailboxListRefresher.request(reason);
       }
       if (
@@ -496,12 +539,14 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     const change = pending.get(mailboxId);
     if (change === undefined) {
       pending.set(mailboxId, {
+        localCommand,
         revision,
         threadIds: threadIds === undefined ? null : new Set(threadIds),
         types: new Set([type]),
         version: typedChange?.version,
       });
     } else {
+      change.localCommand ||= localCommand;
       if (change.threadIds !== null) {
         if (threadIds === undefined) {
           change.threadIds = null;
@@ -644,13 +689,13 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               event.data.eventId
             );
           }
-          requestRefresh(
-            event.data.mailboxId,
-            event.data.type,
-            event.data.revision,
-            event.data.threadIds,
-            event.data.change
-          );
+          requestRefresh({
+            mailboxId: event.data.mailboxId,
+            revision: event.data.revision,
+            threadIds: event.data.threadIds,
+            type: event.data.type,
+            typedChange: event.data.change,
+          });
         } catch {
           /* Ignore malformed frames. */
         }
@@ -712,6 +757,12 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   window.addEventListener("online", resume);
   window.addEventListener("offline", offline);
   document.addEventListener("visibilitychange", visibilityChanged);
+  const unsubscribeMutations = subscribeToMailMutationCatchUp(
+    queryClient,
+    (mailboxId, threadIds) => {
+      requestRefresh({ localCommand: true, mailboxId, threadIds });
+    }
+  );
   resume();
   const recoveryTimer = setInterval(() => {
     if (
@@ -724,6 +775,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   }, 60_000);
   return () => {
     disposed = true;
+    unsubscribeMutations();
     disconnect();
     clearTimeout(refreshTimer);
     clearTimeout(codeRefreshTimer);

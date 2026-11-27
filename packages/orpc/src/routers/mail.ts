@@ -6,7 +6,7 @@ import { eq } from "drizzle-orm";
 import { z } from "zod";
 
 import { getMailCaptureStatus } from "../mail-capture";
-import { publishMailUpdate, withMailUpdate } from "../mail-updates";
+import { withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
 import type { MailInputs } from "../mail/inputs";
@@ -29,7 +29,11 @@ import { protectedProcedure } from "./base";
 import { mailboxProcedures } from "./mail/mailboxes";
 import { managedOrganizationMailRouter } from "./mail/managed-organization";
 
-const gmailMessageChanges = { trackedByGmail: true };
+const journaledMessageChanges = {
+  trackedByGmail: true,
+  trackedByManaged: true,
+};
+const managedMessageChanges = { trackedByManaged: true };
 
 const dispatchOrdinaryMail = async ({
   context,
@@ -51,11 +55,14 @@ const dispatchOrdinaryMail = async ({
     .limit(1);
   if (preferences?.undoSendEnabled === false) {
     const sendOperationId = message.sendOperationId ?? message.localId;
-    const sent = await composeMailOperations.sendMessage({
+    const sent = await withMailUpdate(
+      composeMailOperations.sendMessage,
+      "mailbox.changed",
+      managedMessageChanges
+    )({
       context,
       input: { mailboxId, message },
     });
-    await publishMailUpdate({ mailboxId, type: "mailbox.changed" });
     return {
       canUndo: false,
       draftId: null,
@@ -81,11 +88,14 @@ export const mailRouter = {
   applyChanges: protectedProcedure.input(mailInputSchemas.applyChanges).handler(
     withMailUpdate(mutationsMailOperations.applyChanges, "mailbox.changed", {
       trackedByGmail: ({ command }) => command.kind !== "set-placement",
+      trackedByManaged: true,
     })
   ),
   applySnooze: protectedProcedure
     .input(mailSnoozeApplySchema)
-    .handler(withMailUpdate(applyMailSnooze)),
+    .handler(
+      withMailUpdate(applyMailSnooze, "mailbox.changed", managedMessageChanges)
+    ),
   createLabel: protectedProcedure
     .input(mailInputSchemas.createLabel)
     .handler(
@@ -93,7 +103,13 @@ export const mailRouter = {
     ),
   deleteDraft: protectedProcedure
     .input(mailInputSchemas.deleteDraft)
-    .handler(withMailUpdate(composeMailOperations.deleteDraft)),
+    .handler(
+      withMailUpdate(
+        composeMailOperations.deleteDraft,
+        "mailbox.changed",
+        managedMessageChanges
+      )
+    ),
   deleteLabel: protectedProcedure
     .input(mailInputSchemas.deleteLabel)
     .handler(
@@ -181,7 +197,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.markMessageAsRead,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   markMessageAsUnread: protectedProcedure
@@ -190,7 +206,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.markMessageAsUnread,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   markThreadAsRead: protectedProcedure
@@ -199,7 +215,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.markThreadAsRead,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   markThreadAsUnread: protectedProcedure
@@ -208,7 +224,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.markThreadAsUnread,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   moveMessageToTrash: protectedProcedure
@@ -217,7 +233,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.moveMessageToTrash,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   moveThreadToTrash: protectedProcedure
@@ -226,7 +242,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.moveThreadToTrash,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   previewUnsubscribe: protectedProcedure
@@ -236,9 +252,36 @@ export const mailRouter = {
       })
     )
     .handler(composeMailOperations.previewUnsubscribe),
+  pullMailboxChanges: protectedProcedure
+    .input(
+      mailInputSchemas.syncMailbox.pick({ mailboxId: true }).extend({
+        windows: z
+          .array(mailInputSchemas.syncMailbox.omit({ mailboxId: true }))
+          .min(1)
+          .max(7),
+      })
+    )
+    .handler(
+      async ({ context, input }) =>
+        await Promise.all(
+          input.windows.map(
+            async (window) =>
+              await queriesMailOperations.syncMailbox({
+                context,
+                input: { ...window, mailboxId: input.mailboxId },
+              })
+          )
+        )
+    ),
   saveDraft: protectedProcedure
     .input(mailInputSchemas.saveDraft)
-    .handler(withMailUpdate(composeMailOperations.saveDraft)),
+    .handler(
+      withMailUpdate(
+        composeMailOperations.saveDraft,
+        "mailbox.changed",
+        managedMessageChanges
+      )
+    ),
   sendDraft: protectedProcedure.input(mailInputSchemas.sendDraft).handler(
     async ({ context, input }) =>
       await dispatchOrdinaryMail({
@@ -274,7 +317,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.untrashMessage,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   untrashThread: protectedProcedure
@@ -283,7 +326,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.untrashThread,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   updateLabel: protectedProcedure
@@ -318,7 +361,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.updateMessageLabels,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
   updateThreadLabels: protectedProcedure
@@ -327,7 +370,7 @@ export const mailRouter = {
       withMailUpdate(
         mutationsMailOperations.updateThreadLabels,
         "mailbox.changed",
-        gmailMessageChanges
+        journaledMessageChanges
       )
     ),
 };

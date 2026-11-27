@@ -1,22 +1,70 @@
 "use client";
 
+import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
 import {
   DateTimePreferencesProvider,
   useDateTimePreferences,
 } from "@quieter/ui/date-time-preferences";
-import { useQuery } from "@tanstack/react-query";
+import {
+  useMutation,
+  useMutationState,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import type { PropsWithChildren } from "react";
+import { z } from "zod";
+
+const preferencePatchSchema = z.object({
+  timeFormat: z.enum(["12h", "24h"]).optional(),
+  undoSendEnabled: z.boolean().optional(),
+  weekStartsOn: z.literal([0, 1, 2, 3, 4, 5, 6]).optional(),
+});
+
+export const useAccountPreferences = (enabled = true) => {
+  const query = useQuery({
+    ...orpc.accountPreferences.get.queryOptions(),
+    enabled,
+  });
+  const pending = useMutationState({
+    filters: {
+      mutationKey: orpc.accountPreferences.update.mutationOptions().mutationKey,
+      status: "pending",
+    },
+    select: ({ state }) => preferencePatchSchema.safeParse(state.variables),
+  });
+  const data = query.data === undefined ? undefined : { ...query.data };
+  if (data !== undefined) {
+    for (const patch of pending) {
+      if (patch.success) {
+        Object.assign(data, patch.data);
+      }
+    }
+  }
+  return { ...query, data };
+};
+
+export const useUpdateAccountPreferences = (boundary: string) => {
+  const queryClient = useQueryClient();
+  const queryKey = orpc.accountPreferences.get.key();
+  return useMutation({
+    ...orpc.accountPreferences.update.mutationOptions(),
+    onError: (error) => {
+      toastError(error, { boundary });
+    },
+    onSuccess: (preferences) => {
+      queryClient.setQueryData(queryKey, preferences);
+    },
+    scope: { id: "account-preferences" },
+  });
+};
 
 export const AccountDateTimeProvider = ({
   children,
   userId,
 }: PropsWithChildren<{ userId: string | undefined }>) => {
   const fallback = useDateTimePreferences();
-  const { data } = useQuery({
-    ...orpc.accountPreferences.get.queryOptions(),
-    enabled: Boolean(userId),
-  });
+  const { data } = useAccountPreferences(Boolean(userId));
 
   return (
     <DateTimePreferencesProvider value={data ?? fallback}>

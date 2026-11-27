@@ -192,24 +192,30 @@ export const withMailUpdate =
       context: TContext;
     }) => Promise<TResult>,
     type: MailUpdate["type"] = "mailbox.changed",
-    options?: { trackedByGmail: boolean | ((input: TInput) => boolean) }
+    options?: {
+      trackedByGmail?: boolean | ((input: TInput) => boolean);
+      trackedByManaged?: boolean;
+    }
   ) =>
   async (request: { input: TInput; context: TContext }) => {
     const result = await handler(request);
     const { mailboxId } = request.input;
-    const tracked = options?.trackedByGmail;
-    if (
+    const gmailRule = options?.trackedByGmail;
+    const trackedByGmail =
       serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true &&
-      (tracked === true ||
-        (typeof tracked === "function" && tracked(request.input)))
-    ) {
+      (gmailRule === true ||
+        (typeof gmailRule === "function" && gmailRule(request.input)));
+    if (trackedByGmail || options?.trackedByManaged === true) {
       try {
-        const [gmail] = await db
-          .select({ id: mailbox.id })
+        const [source] = await db
+          .select({ provider: mailbox.provider })
           .from(mailbox)
-          .where(and(eq(mailbox.id, mailboxId), eq(mailbox.provider, "gmail")))
+          .where(eq(mailbox.id, mailboxId))
           .limit(1);
-        if (gmail !== undefined) {
+        if (
+          (source?.provider === "gmail" && trackedByGmail) ||
+          (source?.provider === "managed" && options?.trackedByManaged === true)
+        ) {
           return result;
         }
       } catch (error) {

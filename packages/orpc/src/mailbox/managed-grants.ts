@@ -19,6 +19,7 @@ import {
 import { and, eq, isNull, sql } from "drizzle-orm";
 
 import { assertDomainBillingAccess } from "../mail-domain/billing";
+import { listMailUpdateRecipients } from "../mail-updates";
 import { assertOrganizationManager } from "../organization/divisions";
 import {
   getAuthorizedManagedMailbox,
@@ -632,6 +633,7 @@ export const setManagedMailboxAccessMode = async (input: {
     ) {
       return {
         accessMode: input.accessMode,
+        affectedUserIds: [],
         mailboxId: input.mailboxId,
         ownerUserId: ownerId,
       };
@@ -670,6 +672,10 @@ export const setManagedMailboxAccessMode = async (input: {
         });
       }
     }
+    const previousRecipients = await listMailUpdateRecipients(
+      input.mailboxId,
+      tx
+    );
     const now = new Date();
     // Clear latent division grants in both directions so changing mode cannot revive access.
     await tx
@@ -712,6 +718,10 @@ export const setManagedMailboxAccessMode = async (input: {
       .where(eq(mailbox.id, input.mailboxId));
     return {
       accessMode: input.accessMode,
+      affectedUserIds: [
+        ...previousRecipients,
+        ...(managerId === null ? [] : [managerId]),
+      ],
       mailboxId: input.mailboxId,
       ownerUserId: ownerId,
     };
@@ -919,6 +929,7 @@ export const setManagedMailboxDivisionGrant = async (input: {
         ],
       });
     return {
+      affectedUserIds: await listMailUpdateRecipients(input.mailboxId, tx),
       divisionId: input.divisionId,
       mailboxId: input.mailboxId,
       role: input.role,
@@ -949,6 +960,7 @@ export const removeManagedMailboxDivisionGrant = async (input: {
         message: "Division access isn't available for private mailboxes.",
       });
     }
+    const affectedUserIds = await listMailUpdateRecipients(input.mailboxId, tx);
     await tx
       .delete(mailboxDivisionGrant)
       .where(
@@ -957,5 +969,5 @@ export const removeManagedMailboxDivisionGrant = async (input: {
           eq(mailboxDivisionGrant.divisionId, input.divisionId)
         )
       );
-    return { removed: true };
+    return { affectedUserIds, removed: true };
   });

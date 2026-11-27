@@ -1,8 +1,10 @@
 import { mailCache } from "@quieter/app/lib/mail-cache";
+import { disposeMailboxMutations } from "@quieter/app/lib/mail-mutations";
 import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "@quieter/app/lib/mail/thread-query";
+import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
 import { CancelledError } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
@@ -13,6 +15,30 @@ import { canPrefetchInBackground } from "./background-prefetch";
 const threadSchema = z.object({
   messages: z.array(z.object({ id: z.string() })),
 });
+const mailboxAccessSchema = z.object({
+  groups: z.array(
+    z.object({ mailboxes: z.array(z.object({ id: z.string() })) })
+  ),
+});
+const mailboxQueryRoots = new Set([
+  "gmail-labels",
+  "label-organization",
+  "label-suggestions",
+  "managed-label-counts",
+  "messages",
+  "reminders",
+  "verification-codes",
+]);
+const readAccessibleMailboxes = (data: unknown) => {
+  const parsed = mailboxAccessSchema.safeParse(data);
+  return parsed.success
+    ? new Set(
+        parsed.data.groups.flatMap(({ mailboxes }) =>
+          mailboxes.map(({ id }) => id)
+        )
+      )
+    : undefined;
+};
 type MailAccessLoss = { mailboxId: string; threadId?: string };
 const accessLossListeners = new WeakMap<
   QueryClient,
@@ -91,6 +117,32 @@ export const bindMailCache = (client: QueryClient) => {
   let scheduled = false;
   const attempted = new Set<string>();
   const blockedMailboxes = new Set<string>();
+  let accessibleMailboxes = readAccessibleMailboxes(
+    client.getQueryData(getMailboxesQueryKey())
+  );
+  const removeMailboxAccess = (mailboxId: string) => {
+    blockedMailboxes.add(mailboxId);
+    disposeMailboxMutations(client, mailboxId);
+    for (const [key, candidate] of candidates) {
+      if (candidate.mailboxId === mailboxId) {
+        candidates.delete(key);
+      }
+    }
+    if (intent?.mailboxId === mailboxId) {
+      clearTimeout(intentTimer);
+      intent = null;
+    }
+    for (const listener of accessLossListeners.get(client) ?? []) {
+      listener({ mailboxId });
+    }
+    client.removeQueries({
+      predicate: ({ queryKey: [root, scope, threadMailbox] }) =>
+        root === "message-thread"
+          ? threadMailbox === mailboxId
+          : scope === mailboxId && mailboxQueryRoots.has(String(root)),
+    });
+    void mailCache.removeMailbox(mailboxId);
+  };
   const pump = async () => {
     scheduled = false;
     if (
@@ -250,6 +302,28 @@ export const bindMailCache = (client: QueryClient) => {
       return;
     }
     const key: readonly unknown[] = rawKey;
+    if (
+      key.length === 1 &&
+      key[0] === "mailboxes" &&
+      event.type === "updated" &&
+      event.action.type === "success"
+    ) {
+      const next = readAccessibleMailboxes(event.query.state.data);
+      if (next !== undefined) {
+        const previous = accessibleMailboxes;
+        accessibleMailboxes = next;
+        for (const mailboxId of previous ?? []) {
+          if (!next.has(mailboxId)) {
+            removeMailboxAccess(mailboxId);
+          }
+        }
+        for (const mailboxId of next) {
+          if (previous?.has(mailboxId) !== true) {
+            blockedMailboxes.delete(mailboxId);
+          }
+        }
+      }
+    }
     const mailboxId = key[0] === "message-thread" ? key[2] : key[1];
     if (
       event.type === "updated" &&
@@ -270,18 +344,8 @@ export const bindMailCache = (client: QueryClient) => {
             z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
               .success))
       ) {
-        blockedMailboxes.add(mailboxId);
-        for (const [candidateKey, candidate] of candidates) {
-          if (candidate.mailboxId === mailboxId) {
-            candidates.delete(candidateKey);
-          }
-        }
-        clearTimeout(intentTimer);
-        intent = null;
-        for (const listener of accessLossListeners.get(client) ?? []) {
-          listener({ mailboxId });
-        }
-        void mailCache.removeMailbox(mailboxId);
+        removeMailboxAccess(mailboxId);
+        void client.invalidateQueries({ queryKey: getMailboxesQueryKey() });
       } else if (
         typeof error === "object" &&
         error !== null &&

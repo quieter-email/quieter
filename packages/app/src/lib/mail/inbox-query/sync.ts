@@ -12,7 +12,10 @@ import type {
   MessageListItem,
   ThreadMessagesResult,
 } from "@quieter/app/lib/mail";
-import { updateMailQueryFromServer } from "@quieter/app/lib/mail-mutations";
+import {
+  getMailMutationVersion,
+  updateMailQueryFromServer,
+} from "@quieter/app/lib/mail-mutations";
 import {
   applySyncDeltaToQueryData,
   mergeRefreshedMailboxPagesIntoQueryData,
@@ -43,6 +46,8 @@ import {
 } from "@quieter/app/lib/sandbox-mailbox";
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 import type { QueryClient, QueryPersister } from "@tanstack/react-query";
+
+import { requestMailboxDelta } from "./sync-request";
 
 // Keep full-refresh fallbacks bounded after an infinite query restores a deep persisted list.
 const GMAIL_MAILBOX_REFRESH_PAGE_LIMIT = 3;
@@ -158,6 +163,7 @@ const beginRefresh = (
   const key = JSON.stringify(queryKey);
   operations.get(key)?.cancel();
   const controller = new AbortController();
+  const mutationVersion = getMailMutationVersion(queryClient, queryKey[1]);
   const query = queryClient
     .getQueryCache()
     .build<unknown, Error, unknown>(queryClient, { queryKey });
@@ -166,7 +172,8 @@ const beginRefresh = (
       operation.signal.throwIfAborted();
       if (
         operations.get(key) !== operation ||
-        queryClient.getQueryCache().get(query.queryHash) !== query
+        queryClient.getQueryCache().get(query.queryHash) !== query ||
+        getMailMutationVersion(queryClient, queryKey[1]) !== mutationVersion
       ) {
         throw new DOMException("Mail refresh superseded", "AbortError");
       }
@@ -453,7 +460,8 @@ export const applyMailboxSyncDelta = async (
   removedMessageIds: readonly string[],
   signal?: AbortSignal,
   refreshThreadIds: readonly string[] = [],
-  replacedThreadIds?: readonly string[]
+  replacedThreadIds?: readonly string[],
+  checkpoint?: { changeVersion?: string; historyId: string }
 ) => {
   signal?.throwIfAborted();
   const threadsNeedingRefresh = new Set(refreshThreadIds);
@@ -471,18 +479,27 @@ export const applyMailboxSyncDelta = async (
   if (
     updatedMessages.length > 0 ||
     removedMessageIds.length > 0 ||
-    (replacedThreadIds?.length ?? 0) > 0
+    (replacedThreadIds?.length ?? 0) > 0 ||
+    checkpoint !== undefined
   ) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
-      (data) =>
-        applySyncDeltaToQueryData(
+      (data) => {
+        const updated = applySyncDeltaToQueryData(
           data,
           updatedMessages,
           removedMessageIds,
           replacedThreadIds
-        )
+        );
+        return checkpoint === undefined
+          ? updated
+          : updateFirstPageHistoryId(
+              updated,
+              checkpoint.historyId,
+              checkpoint.changeVersion
+            );
+      }
     );
   }
 
@@ -615,7 +632,8 @@ const syncOwnedMessages = async (
   ) {
     return currentMessages.pages[0];
   }
-  const syncDelta = await rpc.mail.syncMailbox(
+  const syncDelta = await requestMailboxDelta(
+    queryClient,
     {
       category: mailbox,
       mailboxId,
@@ -623,7 +641,7 @@ const syncOwnedMessages = async (
       startHistoryId,
       targetChangeVersion,
     },
-    { signal }
+    signal
   );
 
   operation.assertCurrent();
@@ -657,6 +675,12 @@ const syncOwnedMessages = async (
     operation.assertCurrent();
   }
 
+  const { changeVersion, historyId } = syncDelta;
+  const checkpoint =
+    historyId &&
+    (historyId !== startHistoryId || changeVersion !== startChangeVersion)
+      ? { changeVersion, historyId }
+      : undefined;
   await applyMailboxSyncDelta(
     queryClient,
     mailboxId,
@@ -665,7 +689,8 @@ const syncOwnedMessages = async (
     syncDelta.removedMessageIds,
     signal,
     syncDelta.refreshThreadIds,
-    syncDelta.replacedThreadIds
+    syncDelta.replacedThreadIds,
+    syncDelta.refreshFirstPage ? undefined : checkpoint
   );
 
   if (syncDelta.refreshFirstPage) {
@@ -683,15 +708,16 @@ const syncOwnedMessages = async (
     );
   }
   operation.assertCurrent();
-  const { changeVersion, historyId } = syncDelta;
-  if (
-    historyId &&
-    (historyId !== startHistoryId || changeVersion !== startChangeVersion)
-  ) {
+  if (syncDelta.refreshFirstPage && checkpoint !== undefined) {
     updateMailQueryFromServer<MessagesQueryData>(
       queryClient,
       messagesQueryKey,
-      (data) => updateFirstPageHistoryId(data, historyId, changeVersion)
+      (data) =>
+        updateFirstPageHistoryId(
+          data,
+          checkpoint.historyId,
+          checkpoint.changeVersion
+        )
     );
     await persistQueryByKey(messagesQueryKey, queryClient);
   }
@@ -726,6 +752,36 @@ export const syncMessages = async (
   } finally {
     operation.finish();
   }
+};
+
+export const syncCachedMailboxWindows = async (
+  queryClient: QueryClient,
+  mailboxId: string
+) => {
+  const windows = getCachedMessagesQueries(queryClient, mailboxId).filter(
+    ({ data, mailbox, searchQuery }) =>
+      searchQuery === undefined &&
+      mailbox !== "later" &&
+      mailbox !== "drafts" &&
+      data?.pages[0]?.historyId !== undefined &&
+      queryClient.getQueryCache().findAll({
+        exact: true,
+        queryKey: getLiveSyncQueryKey(mailboxId, mailbox),
+        type: "active",
+      }).length === 0
+  );
+  await Promise.allSettled(
+    windows.map(async ({ mailbox }) => {
+      const page = await syncMessages(queryClient, mailboxId, mailbox);
+      if (
+        page !== undefined &&
+        queryClient.getQueryData(getMessagesQueryKey(mailboxId, mailbox)) !==
+          undefined
+      ) {
+        queryClient.setQueryData(getLiveSyncQueryKey(mailboxId, mailbox), page);
+      }
+    })
+  );
 };
 
 export const messagesQueryOptions = (
@@ -804,6 +860,10 @@ export const liveSyncQueryOptions = (
       queryClient.getQueryData<MessagesQueryData>(
         getMessagesQueryKey(mailboxId, mailbox, searchQuery)
       )?.pages[0],
+    initialDataUpdatedAt: () =>
+      queryClient.getQueryState(
+        getMessagesQueryKey(mailboxId, mailbox, searchQuery)
+      )?.dataUpdatedAt,
     queryFn: async ({ signal }) =>
       await syncMessages(queryClient, mailboxId, mailbox, searchQuery, signal),
     queryKey: getLiveSyncQueryKey(mailboxId, mailbox, searchQuery),
@@ -813,5 +873,5 @@ export const liveSyncQueryOptions = (
     refetchOnReconnect: false,
     refetchOnWindowFocus: false,
     retry: shouldRetryOrpcError,
-    staleTime: 0,
+    staleTime: GMAIL_QUERY_STALE_TIME_MS,
   });

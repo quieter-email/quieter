@@ -1,7 +1,5 @@
 "use client";
 
-import { toastError } from "@quieter/app/lib/error-toast";
-import { orpc } from "@quieter/app/lib/orpc";
 import {
   Select,
   SelectContent,
@@ -9,8 +7,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@quieter/ui/select";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+import {
+  useAccountPreferences,
+  useUpdateAccountPreferences,
+} from "./account-date-time-provider";
 import {
   SettingsErrorState,
   SettingsRow,
@@ -33,22 +34,12 @@ const WEEK_START_OPTIONS = [
 ] as const;
 
 export const DateTimeSettings = () => {
-  const queryClient = useQueryClient();
-  const options = orpc.accountPreferences.get.queryOptions();
-  const { data, isPending, isError, error, refetch } = useQuery(options);
-  const mutation = useMutation({
-    ...orpc.accountPreferences.update.mutationOptions(),
-    onError: (mutationError) => {
-      toastError(mutationError, { boundary: "date-time-settings" });
-    },
-    onSuccess: (preferences) => {
-      queryClient.setQueryData(options.queryKey, preferences);
-    },
-  });
+  const { data, isError, error, refetch } = useAccountPreferences();
+  const mutation = useUpdateAccountPreferences("date-time-settings");
 
   return (
     <SettingsSection title="Date and time">
-      {isError ? (
+      {isError && data === undefined ? (
         <SettingsErrorState
           message={error.message}
           onRetry={() => {
@@ -63,7 +54,7 @@ export const DateTimeSettings = () => {
               <Select
                 items={TIME_FORMAT_OPTIONS}
                 value={data?.timeFormat ?? null}
-                disabled={isPending || mutation.isPending}
+                disabled={data === undefined}
                 onValueChange={(value) => {
                   const option = TIME_FORMAT_OPTIONS.find(
                     (item) => item.value === value
@@ -77,7 +68,6 @@ export const DateTimeSettings = () => {
                   aria-label="Time format"
                   className="w-44"
                   size="sm"
-                  pending={isPending || mutation.isPending}
                 >
                   <SelectValue placeholder="Time format" />
                 </SelectTrigger>
@@ -97,7 +87,7 @@ export const DateTimeSettings = () => {
               <Select
                 items={WEEK_START_OPTIONS}
                 value={data?.weekStartsOn ?? null}
-                disabled={isPending || mutation.isPending}
+                disabled={data === undefined}
                 onValueChange={(value) => {
                   const option = WEEK_START_OPTIONS.find(
                     (item) => item.value === value
@@ -111,7 +101,6 @@ export const DateTimeSettings = () => {
                   aria-label="Start of week"
                   className="w-44"
                   size="sm"
-                  pending={isPending || mutation.isPending}
                 >
                   <SelectValue placeholder="Start of week" />
                 </SelectTrigger>
