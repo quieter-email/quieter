@@ -37,7 +37,7 @@ export const ContextMenuTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof ContextMenuPrimitive.Trigger>) => (
   <ContextMenuPrimitive.Trigger
-    className={cn(anchoredTriggerClassName, "squircle", className)}
+    className={cn(anchoredTriggerClassName, className)}
     {...props}
   />
 );

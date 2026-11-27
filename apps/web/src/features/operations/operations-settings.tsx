@@ -17,7 +17,7 @@ import { Text } from "@quieter/ui/text";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 const pulseClass =
-  "animate-pulse rounded-md bg-muted not-squircle motion-reduce:animate-none";
+  "animate-pulse rounded-md bg-muted motion-reduce:animate-none";
 
 type SettingsSnapshot = Awaited<ReturnType<typeof rpc.operations.settings>>;
 

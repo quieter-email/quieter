@@ -6,7 +6,6 @@ import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   Dialog,
   DialogBody,
@@ -15,6 +14,8 @@ import {
 } from "@quieter/ui/dialog";
 import { Textarea } from "@quieter/ui/textarea";
 import { useId, useState } from "react";
+
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 export const AutoLabelEditor = ({
   canManage,
@@ -72,13 +73,7 @@ export const AutoLabelEditor = ({
             }}
           >
             <div className="flex min-w-0 items-center gap-2.5">
-              <ColorSwatch
-                color={
-                  label.color?.startsWith("#") === true
-                    ? label.color
-                    : `var(--q-${label.color ?? "gray"})`
-                }
-              />
+              <MailboxLabelSwatch color={label.color} />
               <div className="min-w-0 flex-1">
                 <DialogTitle>
                   <span className="block truncate">

@@ -28,7 +28,7 @@ export const TabsList = ({
             className={cn(
               "inline-flex items-center gap-1 data-[orientation=vertical]:flex-col data-[orientation=vertical]:items-stretch",
               {
-                "min-h-9 rounded-lg border border-border bg-bg p-1 shadow-sm squircle":
+                "min-h-9 rounded-lg border border-border bg-bg p-1 shadow-sm":
                   variant === "default",
               },
               className
@@ -51,7 +51,7 @@ export const TabsTab = ({
   return (
     <TabsPrimitive.Tab
       className={cn(
-        "relative isolate inline-flex min-w-0 items-center justify-center rounded-md text-body-sm text-muted-fg squircle focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden data-active:text-fg data-disabled:pointer-events-none data-disabled:opacity-50 data-[orientation=vertical]:justify-start",
+        "relative isolate inline-flex min-w-0 items-center justify-center rounded-md text-body-sm text-muted-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden data-active:text-fg data-disabled:pointer-events-none data-disabled:opacity-50 data-[orientation=vertical]:justify-start",
         {
           "min-h-7 px-2.5 font-medium": variant === "default",
           "min-h-8 gap-2 px-3 font-normal data-active:font-medium":

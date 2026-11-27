@@ -33,7 +33,7 @@ const CalendarChevron = ({ className, orientation = "left" }: ChevronProps) => (
 );
 
 const calendarNavButtonVariants = cva(
-  "absolute top-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
+  "absolute top-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-muted-fg transition-transform duration-100 ease-out select-none hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] active:bg-control-active disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:size-3.5 [&_svg]:shrink-0",
   {
     compoundVariants: [
       { button: "previous", className: "left-0", navPlacement: "around" },
@@ -91,7 +91,7 @@ export const Calendar = ({
           defaultClassNames.day
         ),
         day_button: cn(
-          "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-body-sm font-normal text-fg transition-transform duration-100 ease-out select-none squircle hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+          "inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-transparent p-0 text-body-sm font-normal text-fg transition-transform duration-100 ease-out select-none hover:bg-muted hover:text-fg focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 motion-reduce:transition-none motion-reduce:active:scale-100 [&_svg]:pointer-events-none [&_svg]:shrink-0",
           defaultClassNames.day_button
         ),
         disabled: cn(

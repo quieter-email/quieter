@@ -7,14 +7,18 @@ import { useLayoutEffect, useRef, useState } from "react";
 import { cn } from "../../lib/cn";
 import { FieldControl } from "./field";
 import { Input } from "./input";
-import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
+import {
+  menuEmptyClassName,
+  menuItemClassName,
+  menuListPaddingClassName,
+  menuSurfaceClassName,
+} from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset } from "./popup-surface";
 
-const autocompletePopupClassName = `${anchoredPopupMotionClassName} ${popupSurfaceClassName} flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) flex-col overflow-hidden rounded-xl`;
+const autocompletePopupClassName = `${anchoredPopupMotionClassName} ${menuSurfaceClassName} flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) flex-col overflow-hidden`;
 
-const autocompleteListClassName =
-  "min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0";
+const autocompleteListClassName = `min-h-0 overflow-y-auto overscroll-contain ${menuListPaddingClassName} empty:p-0`;
 
 export type AutocompleteProps = Pick<
   ComponentProps<typeof Input>,

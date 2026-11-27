@@ -65,7 +65,7 @@ const AuthLastUsedHint = () => (
   <LazyMotion features={domAnimation}>
     <span
       aria-hidden
-      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm squircle *:pointer-events-none"
+      className="pointer-events-none absolute -inset-e-2.5 -top-2.5 isolate overflow-hidden rounded-md p-px shadow-sm *:pointer-events-none"
     >
       <m.span
         animate={{ rotate: 360 }}
@@ -75,7 +75,7 @@ const AuthLastUsedHint = () => (
       />
       <span
         // oxlint-disable-next-line shadcn/no-arbitrary-values -- Inherits the parent badge radius by design.
-        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium text-muted-fg squircle"
+        className="relative block rounded-[inherit] bg-bg-raised px-2 py-1 text-micro font-medium text-muted-fg"
       >
         Last used
       </span>

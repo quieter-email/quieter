@@ -1,0 +1,142 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "56635f2e-66be-449b-b04e-2831b0b97f4c",
+  "prevIds": ["61b66d0b-498e-493b-8543-bf41a7a6659d"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailboxLabelOrganization"],
+      "writes": [
+        "s|tbl|public.mailboxLabelOrganization",
+        "n|tbl|public.mailboxLabelOrganization",
+        "e|tbl|public.mailboxLabelOrganization",
+        "n|rel|public.mailboxLabelOrganization",
+        "n|type|public.mailboxLabelOrganization",
+        "n|rel|public.mailboxLabelOrganization_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "gmailAutoLabelEvent",
+        "suggestedLabelIds"
+      ],
+      "writes": [
+        "s|col|public.gmailAutoLabelEvent.suggestedLabelIds",
+        "n|col|public.gmailAutoLabelEvent.suggestedLabelIds",
+        "e|col|public.gmailAutoLabelEvent.suggestedLabelIds"
+      ],
+      "reads": ["n|tbl|public.gmailAutoLabelEvent", "n|sch|public"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailboxLabelOrganization"],
+      "writes": [
+        "s|fk|public.mailboxLabelOrganization.mailboxLabelOrganization_mailboxId_mailbox_id_fkey",
+        "n|fk|public.mailboxLabelOrganization.mailboxLabelOrganization_mailboxId_mailbox_id_fkey",
+        "e|fk|public.mailboxLabelOrganization.mailboxLabelOrganization_mailboxId_mailbox_id_fkey",
+        "n|con|public.mailboxLabelOrganization.mailboxLabelOrganization_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailboxLabelOrganization",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailboxLabelOrganization.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailboxLabelOrganization",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailAutoLabelEvent",
+        "name": "suggestedLabelIds",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxLabelOrganization",
+        "name": "mailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxLabelOrganization",
+        "name": "organization",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxLabelOrganization",
+        "name": "mailboxLabelOrganization_mailboxId_mailbox_id_fkey",
+        "nameExplicit": false,
+        "columns": ["mailboxId"],
+        "schemaTo": "public",
+        "tableTo": "mailbox",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailboxLabelOrganization",
+        "name": "mailboxLabelOrganization_pkey",
+        "columns": ["mailboxId"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    }
+  ]
+}

@@ -24,7 +24,7 @@ export const DialogTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DialogPrimitive.Trigger>) => (
   <DialogPrimitive.Trigger
-    className={cn("squircle", className, overlayTriggerClassName)}
+    className={cn(className, overlayTriggerClassName)}
     {...props}
   />
 );

@@ -14,6 +14,7 @@ import {
   PopoverTitle,
   PopoverTrigger,
 } from "@quieter/ui/popover";
+import { PopupMenuButton } from "@quieter/ui/popup-menu";
 import {
   Select,
   SelectContent,
@@ -130,9 +131,8 @@ export const ChatContextPicker = ({
             messages.map((message) => {
               const attached = attachedMessageIds.includes(message.id);
               return (
-                <Button
+                <PopupMenuButton
                   aria-label={`Attach ${message.subject?.trim() || "Untitled mail"}`}
-                  className="w-full"
                   disabled={attached || limitReached}
                   key={message.id}
                   onClick={() => {
@@ -144,8 +144,6 @@ export const ChatContextPicker = ({
                     });
                     setOpen(false);
                   }}
-                  size="auto"
-                  variant="ghost"
                 >
                   <Icon aria-hidden icon={Mail01Icon} />
                   <span className="min-w-0 flex-1">
@@ -156,7 +154,7 @@ export const ChatContextPicker = ({
                       {attached ? "Attached" : parseSender(message.from).name}
                     </span>
                   </span>
-                </Button>
+                </PopupMenuButton>
               );
             })
           ) : (

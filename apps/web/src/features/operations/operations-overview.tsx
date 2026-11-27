@@ -34,7 +34,7 @@ type SelectedRange = (typeof ranges)[number];
 
 const chartSkeletonHeights = [42, 68, 51, 84, 60, 47, 76, 55];
 const pulseClass =
-  "animate-pulse rounded-md bg-muted not-squircle motion-reduce:animate-none";
+  "animate-pulse rounded-md bg-muted motion-reduce:animate-none";
 const shortDate = new Intl.DateTimeFormat(undefined, {
   day: "numeric",
   month: "short",

@@ -51,7 +51,7 @@ const SidebarHelpMenu = ({
 
   return (
     <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="relative shrink-0 rounded-md squircle hover:bg-control-hover">
+      <div className="relative shrink-0 rounded-md hover:bg-control-hover">
         <IconButtonTooltip label="Help and legal">
           <DropdownMenuTrigger
             appearance="icon-transparent"

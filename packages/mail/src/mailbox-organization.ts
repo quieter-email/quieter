@@ -40,6 +40,121 @@ export const mailboxLabelSchema = z.object({
 
 export type MailboxLabel = z.infer<typeof mailboxLabelSchema>;
 
+const labelGroupFields = {
+  color: mailboxLabelColorSchema,
+  name: z.string().trim().min(1).max(100),
+  parentId: z.uuid().nullable(),
+};
+
+export const labelOrganizationSchema = z.object({
+  groups: z.array(z.object({ ...labelGroupFields, id: z.uuid() })),
+  labelGroups: z.record(z.string(), z.uuid()),
+});
+
+export type LabelOrganization = z.infer<typeof labelOrganizationSchema>;
+
+export const labelOrganizationActionSchema = z.discriminatedUnion("kind", [
+  z.object({ ...labelGroupFields, kind: z.literal("create-group") }),
+  z.object({
+    ...labelGroupFields,
+    groupId: z.uuid(),
+    kind: z.literal("update-group"),
+  }),
+  z.object({ groupId: z.uuid(), kind: z.literal("delete-group") }),
+  z.object({
+    groupId: z.uuid().nullable(),
+    kind: z.literal("move-label"),
+    labelId: z.string().trim().min(1).max(512),
+  }),
+]);
+
+export type LabelOrganizationAction = z.infer<
+  typeof labelOrganizationActionSchema
+>;
+
+export const emptyLabelOrganization: LabelOrganization = {
+  groups: [],
+  labelGroups: {},
+};
+
+export const applyLabelOrganizationAction = (
+  organization: LabelOrganization,
+  action: LabelOrganizationAction,
+  newGroupId: string
+): LabelOrganization | string => {
+  const groups = new Map(organization.groups.map((group) => [group.id, group]));
+  const labelGroups = new Map(Object.entries(organization.labelGroups));
+  if (action.kind === "move-label") {
+    if (action.groupId === null) {
+      labelGroups.delete(action.labelId);
+    } else if (groups.has(action.groupId)) {
+      labelGroups.set(action.labelId, action.groupId);
+    } else {
+      return "Label group not found.";
+    }
+  } else if (action.kind === "delete-group") {
+    const removed = groups.get(action.groupId);
+    if (removed) {
+      groups.delete(removed.id);
+      for (const group of groups.values()) {
+        if (group.parentId === removed.id) {
+          groups.set(group.id, { ...group, parentId: removed.parentId });
+        }
+      }
+      for (const [labelId, groupId] of labelGroups) {
+        if (groupId === removed.id) {
+          if (removed.parentId === null) {
+            labelGroups.delete(labelId);
+          } else {
+            labelGroups.set(labelId, removed.parentId);
+          }
+        }
+      }
+    }
+  } else {
+    const id = action.kind === "create-group" ? newGroupId : action.groupId;
+    if (action.kind === "update-group" && !groups.has(id)) {
+      return "Label group not found.";
+    }
+    const { color, name, parentId } = action;
+    const ancestors = new Set([id]);
+    let current = parentId;
+    while (current !== null) {
+      if (ancestors.has(current)) {
+        return "A group cannot be moved inside itself or one of its groups.";
+      }
+      const parent = groups.get(current);
+      if (parent === undefined) {
+        return "Parent label group not found.";
+      }
+      ancestors.add(current);
+      current = parent.parentId;
+    }
+    const children = new Map<string, string[]>();
+    for (const group of groups.values()) {
+      if (group.parentId !== null) {
+        const siblings = children.get(group.parentId) ?? [];
+        siblings.push(group.id);
+        children.set(group.parentId, siblings);
+      }
+    }
+    const descendants = [{ depth: ancestors.size, id }];
+    for (const descendant of descendants) {
+      if (descendant.depth > 32) {
+        return "Label groups can be nested up to 32 levels.";
+      }
+      for (const childId of children.get(descendant.id) ?? []) {
+        descendants.push({ depth: descendant.depth + 1, id: childId });
+      }
+    }
+    groups.set(id, { color, id, name, parentId });
+  }
+  return {
+    groups: [...groups.values()],
+    labelGroups: Object.fromEntries(labelGroups),
+  };
+};
+
 export const managedMailboxRuleActionSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.literal("set-read"),

@@ -25,6 +25,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
+
 type MessageLabelsMenuItemsProps = {
   isPending: boolean;
   mailboxId: string;
@@ -100,6 +102,7 @@ const MessageLabelsMenuItems = ({
               void toggleLabel(label.id, checked);
             }}
           >
+            <MailboxLabelSwatch color={label.color} />
             <span className="min-w-0 truncate">{label.name}</span>
           </DropdownMenuCheckboxItem>
         );
@@ -170,7 +173,7 @@ export const MessageLabelsMenu = ({
   >
     {trigger}
 
-    <DropdownMenuContent align="end" className="max-h-72">
+    <DropdownMenuContent align="end" className="max-h-72" side="top">
       <MessageLabelsMenuItems
         isPending={isPending}
         mailboxId={mailboxId}
