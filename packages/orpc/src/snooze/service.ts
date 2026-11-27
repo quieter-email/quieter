@@ -44,7 +44,8 @@ import {
 } from "../mail/placement-admission";
 import { resolvePlacementMessageIds } from "../mail/placement-model";
 import type { PlacementMessage } from "../mail/placement-model";
-import { serializeMailSnoozeState } from "./state";
+import { publishMailboxChange } from "../mailbox-changes";
+import { appendSnoozeContentChange, serializeMailSnoozeState } from "./state";
 import { requestMailSnoozeWake } from "./wake";
 
 const MAX_SNOOZE_DISPATCH_ATTEMPTS = 8;
@@ -58,10 +59,10 @@ const finishSnoozeFailure = async (input: {
   message: string;
   nextWakeAt?: Date | null;
   status: "failed" | "suspended" | "superseded" | "uncertain";
-}) =>
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
+}) => {
+  const result = await db.transaction(async (tx) => {
+    const [selected] = await tx
+      .select({ provider: mailbox.provider })
       .from(mailbox)
       .where(eq(mailbox.id, input.mailboxId))
       .for("update");
@@ -87,18 +88,20 @@ const finishSnoozeFailure = async (input: {
             : eq(mailSnooze.leaseToken, input.leaseToken)
         )
       )
-      .returning({ id: mailSnooze.id });
-    if (changed.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.mailboxId));
+      .returning({ threadId: mailSnooze.threadId });
+    if (changed.length === 0) {
+      return null;
     }
-    return changed.length > 0;
+    const committed = await appendSnoozeContentChange(tx, {
+      mailboxId: input.mailboxId,
+      provider: selected?.provider,
+      threadIds: changed.map(({ threadId }) => threadId),
+    });
+    return { committed };
   });
+  await publishMailboxChange(result?.committed);
+  return result !== null;
+};
 
 const describeSnoozeFailure = (error: unknown) => {
   if (error instanceof ORPCError && typeof error.code === "string") {
@@ -398,7 +401,7 @@ export const applyMailSnooze = async ({
       .for("update");
     const won = await readExisting(tx);
     if (won.length > 0) {
-      return { operations: won, ownedIds: new Set<string>() };
+      return { committed: null, operations: won, ownedIds: new Set<string>() };
     }
     const operations: (typeof mailSnoozeOperation.$inferSelect)[] = [];
     for (const target of input.targets) {
@@ -647,20 +650,21 @@ export const applyMailSnooze = async ({
         operations.push(operation);
       }
     }
-    if (operations.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.mailboxId));
-    }
+    const committed =
+      operations.length > 0
+        ? await appendSnoozeContentChange(tx, {
+            mailboxId: input.mailboxId,
+            provider: selected.provider,
+            threadIds: operations.map(({ threadId }) => threadId),
+          })
+        : null;
     return {
+      committed,
       operations,
       ownedIds: new Set(operations.map((operation) => operation.id)),
     };
   });
+  await publishMailboxChange(reservation.committed);
   if (reservation.ownedIds.size === 0 && reservation.operations.length > 0) {
     return await replaySnoozeOperations({
       mailboxId: input.mailboxId,
@@ -868,7 +872,7 @@ export const applyMailSnooze = async ({
       });
     }
   }
-  if (reservation.operations.length > 0) {
+  if (selected.provider !== "managed" && reservation.operations.length > 0) {
     await publishMailUpdate({
       mailboxId: input.mailboxId,
       type: "mailbox.changed",
@@ -882,10 +886,10 @@ const confirmObservedPlacement = async (input: {
   operation: typeof mailPlacementOperation.$inferSelect;
   phase: "hide" | "return";
   leaseToken: string;
-}) =>
-  await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
+}) => {
+  const result = await db.transaction(async (tx) => {
+    const [selected] = await tx
+      .select({ provider: mailbox.provider })
       .from(mailbox)
       .where(eq(mailbox.id, input.row.mailboxId))
       .for("update");
@@ -1022,28 +1026,32 @@ const confirmObservedPlacement = async (input: {
           )
         );
     }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, current.mailboxId));
-    return true;
+    const committed = await appendSnoozeContentChange(tx, {
+      mailboxId: current.mailboxId,
+      provider: selected?.provider,
+      threadIds: [current.threadId],
+    });
+    return committed ?? true;
   });
+  if (typeof result !== "boolean") {
+    await publishMailboxChange(result);
+  }
+};
 
 export const dispatchMailSnooze = async (
   scope: MailSnoozeScope
 ): Promise<{ nextWakeAt: number | null }> => {
-  const [row] = await db
-    .select()
+  const [selectedSnooze] = await db
+    .select({ provider: mailbox.provider, row: mailSnooze })
     .from(mailSnooze)
+    .innerJoin(mailbox, eq(mailbox.id, mailSnooze.mailboxId))
     .where(
       and(
         eq(mailSnooze.id, scope.id),
         eq(mailSnooze.mailboxId, scope.mailboxId)
       )
     );
+  const row = selectedSnooze?.row;
   if (
     row === undefined ||
     !isMailSnoozeLiveStatus(row.status) ||
@@ -1064,10 +1072,12 @@ export const dispatchMailSnooze = async (
       status: "suspended",
       version: row.version,
     });
-    await publishMailUpdate({
-      mailboxId: scope.mailboxId,
-      type: "mailbox.changed",
-    });
+    if (selectedSnooze.provider !== "managed") {
+      await publishMailUpdate({
+        mailboxId: scope.mailboxId,
+        type: "mailbox.changed",
+      });
+    }
     const [current] = await db
       .select({ nextWakeAt: mailSnooze.nextWakeAt })
       .from(mailSnooze)
@@ -1104,10 +1114,12 @@ export const dispatchMailSnooze = async (
         status: "suspended",
         version: row.version,
       });
-      await publishMailUpdate({
-        mailboxId: scope.mailboxId,
-        type: "mailbox.changed",
-      });
+      if (selectedSnooze.provider !== "managed") {
+        await publishMailUpdate({
+          mailboxId: scope.mailboxId,
+          type: "mailbox.changed",
+        });
+      }
       const [current] = await db
         .select({ nextWakeAt: mailSnooze.nextWakeAt })
         .from(mailSnooze)
@@ -1409,7 +1421,7 @@ export const dispatchMailSnooze = async (
           });
         }
       } else if (dispatchRow.status === "active") {
-        const returning = await db.transaction(async (tx) => {
+        const transition = await db.transaction(async (tx) => {
           await tx
             .select({ id: mailbox.id })
             .from(mailbox)
@@ -1465,8 +1477,18 @@ export const dispatchMailSnooze = async (
             })
             .where(eq(mailSnooze.id, current.id))
             .returning();
-          return updated ?? null;
+          const committed =
+            updated !== undefined && selected.provider === "managed"
+              ? await appendSnoozeContentChange(tx, {
+                  mailboxId: updated.mailboxId,
+                  provider: selected.provider,
+                  threadIds: [updated.threadId],
+                })
+              : null;
+          return { committed, row: updated };
         });
+        await publishMailboxChange(transition?.committed);
+        const returning = transition?.row;
         if (returning && returning.returnRequestId) {
           dispatchRow = returning;
           await applyMailPlacement({
@@ -1611,10 +1633,12 @@ export const dispatchMailSnooze = async (
           eq(mailSnooze.leaseToken, claim.token)
         )
       );
-    await publishMailUpdate({
-      mailboxId: scope.mailboxId,
-      type: "mailbox.changed",
-    });
+    if (selectedSnooze.provider !== "managed") {
+      await publishMailUpdate({
+        mailboxId: scope.mailboxId,
+        type: "mailbox.changed",
+      });
+    }
     return { nextWakeAt: current?.nextWakeAt?.getTime() ?? null };
   } catch (error) {
     const failure = describeSnoozeFailure(error);
@@ -1653,10 +1677,12 @@ export const dispatchMailSnooze = async (
             )
           );
       }
-      await publishMailUpdate({
-        mailboxId: scope.mailboxId,
-        type: "mailbox.changed",
-      });
+      if (selectedSnooze.provider !== "managed") {
+        await publishMailUpdate({
+          mailboxId: scope.mailboxId,
+          type: "mailbox.changed",
+        });
+      }
       const [current] = await db
         .select({ nextWakeAt: mailSnooze.nextWakeAt })
         .from(mailSnooze)
@@ -1696,10 +1722,12 @@ export const dispatchMailSnooze = async (
             )
           );
       }
-      await publishMailUpdate({
-        mailboxId: scope.mailboxId,
-        type: "mailbox.changed",
-      });
+      if (selectedSnooze.provider !== "managed") {
+        await publishMailUpdate({
+          mailboxId: scope.mailboxId,
+          type: "mailbox.changed",
+        });
+      }
       const [current] = await db
         .select({ nextWakeAt: mailSnooze.nextWakeAt })
         .from(mailSnooze)
@@ -1758,33 +1786,53 @@ export const dispatchMailSnooze = async (
       5000 * 2 ** Math.min(dispatchRow.attempts, 6)
     );
     const nextWakeAt = new Date(Date.now() + delay);
-    await db
-      .update(mailSnooze)
-      .set({
-        code: failure.code,
-        ...(nextHideRequestId === undefined
-          ? {}
-          : { hideRequestId: nextHideRequestId }),
-        leaseToken: null,
-        leaseUntil: null,
-        message: failure.message,
-        nextWakeAt,
-        ...(nextReturnRequestId === undefined
-          ? {}
-          : { returnRequestId: nextReturnRequestId }),
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(mailSnooze.id, dispatchRow.id),
-          eq(mailSnooze.version, dispatchRow.version),
-          eq(mailSnooze.leaseToken, claim.token)
+    const committed = await db.transaction(async (tx) => {
+      if (selected.provider === "managed") {
+        await tx
+          .select({ id: mailbox.id })
+          .from(mailbox)
+          .where(eq(mailbox.id, scope.mailboxId))
+          .for("update");
+      }
+      const changed = await tx
+        .update(mailSnooze)
+        .set({
+          code: failure.code,
+          ...(nextHideRequestId === undefined
+            ? {}
+            : { hideRequestId: nextHideRequestId }),
+          leaseToken: null,
+          leaseUntil: null,
+          message: failure.message,
+          nextWakeAt,
+          ...(nextReturnRequestId === undefined
+            ? {}
+            : { returnRequestId: nextReturnRequestId }),
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(mailSnooze.id, dispatchRow.id),
+            eq(mailSnooze.version, dispatchRow.version),
+            eq(mailSnooze.leaseToken, claim.token)
+          )
         )
-      );
-    await publishMailUpdate({
-      mailboxId: scope.mailboxId,
-      type: "mailbox.changed",
+        .returning({ threadId: mailSnooze.threadId });
+      return selected.provider === "managed" && changed.length > 0
+        ? await appendSnoozeContentChange(tx, {
+            mailboxId: scope.mailboxId,
+            provider: selected.provider,
+            threadIds: changed.map(({ threadId }) => threadId),
+          })
+        : null;
     });
+    await publishMailboxChange(committed);
+    if (selectedSnooze.provider !== "managed") {
+      await publishMailUpdate({
+        mailboxId: scope.mailboxId,
+        type: "mailbox.changed",
+      });
+    }
     const [current] = await db
       .select({ nextWakeAt: mailSnooze.nextWakeAt })
       .from(mailSnooze)
@@ -1850,7 +1898,7 @@ export const handleSnoozeInbound = async (input: {
   if (!eligible) {
     return;
   }
-  const changed = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     await tx
       .select({ id: mailbox.id })
       .from(mailbox)
@@ -1871,7 +1919,7 @@ export const handleSnoozeInbound = async (input: {
       !isMailSnoozeLiveStatus(current.status) ||
       current.knownIncomingMessageIds.includes(input.messageId)
     ) {
-      return false;
+      return null;
     }
     await tx
       .update(mailSnooze)
@@ -1886,16 +1934,16 @@ export const handleSnoozeInbound = async (input: {
         version: current.version + 1,
       })
       .where(eq(mailSnooze.id, current.id));
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-    return true;
+    const committed = await appendSnoozeContentChange(tx, {
+      mailboxId: input.mailboxId,
+      provider: selected?.provider,
+      threadIds: [input.threadId],
+    });
+    return { committed };
   });
-  if (changed) {
+  if (result?.committed) {
+    await publishMailboxChange(result.committed);
+  } else if (result !== null) {
     await publishMailUpdate({
       mailboxId: input.mailboxId,
       type: "mailbox.changed",

@@ -24,6 +24,8 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 
+import { publishMailboxChange } from "../../mailbox-changes";
+import { appendManagedMailboxContentChange } from "../changes";
 import { updateManagedMessageLabelAssignments } from "../labels/repository";
 import { readRawMailObject } from "../messages/raw-object";
 import { sendManagedMailboxMessage } from "../messages/send";
@@ -289,8 +291,8 @@ type PendingForward = {
 
 const advanceRuleRun = async (
   run: typeof managedMailRuleRun.$inferSelect
-): Promise<PendingForward | null> =>
-  await db.transaction(async (tx) => {
+): Promise<PendingForward | null> => {
+  const result = await db.transaction(async (tx) => {
     const [message] = await tx
       .select()
       .from(managedMailMessage)
@@ -330,7 +332,8 @@ const advanceRuleRun = async (
     const results = actionResultsSchema.parse(current.actionResults);
     if (
       results.some(
-        (result, index) => result.kind !== definition.actions[index]?.kind
+        (actionResult, index) =>
+          actionResult.kind !== definition.actions[index]?.kind
       )
     ) {
       throw new Error("Stored rule results do not match their definition.");
@@ -427,16 +430,17 @@ const advanceRuleRun = async (
         message.mailboxState = mailboxState;
         changed = true;
       } else if (action.kind === "set-labels") {
-        await updateManagedMessageLabelAssignments({
-          addLabelIds: action.addIds,
-          database: tx,
-          mailboxId: run.mailboxId,
-          messageIds: [message.id],
-          removeLabelIds: action.removeIds,
-          ruleId: run.ruleId,
-          source: "rule",
-        });
-        changed = true;
+        const { changedMessageIds } =
+          await updateManagedMessageLabelAssignments({
+            addLabelIds: action.addIds,
+            database: tx,
+            mailboxId: run.mailboxId,
+            messageIds: [message.id],
+            removeLabelIds: action.removeIds,
+            ruleId: run.ruleId,
+            source: "rule",
+          });
+        changed ||= changedMessageIds.size > 0;
       }
       results.push({ kind: action.kind, status: "applied" });
       if (action.kind === "stop-processing") {
@@ -452,17 +456,23 @@ const advanceRuleRun = async (
         updatedAt: new Date(),
       })
       .where(eq(managedMailRuleRun.id, run.id));
-    if (changed) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
+    const committed = changed
+      ? await appendManagedMailboxContentChange(tx, {
+          changes: [
+            {
+              kind: "message.labels",
+              messageId: message.id,
+              threadId: message.threadId,
+            },
+          ],
+          mailboxId: run.mailboxId,
         })
-        .where(eq(mailbox.id, run.mailboxId));
-    }
-    return forward;
+      : null;
+    return { committed, forward };
   });
+  await publishMailboxChange(result?.committed);
+  return result?.forward ?? null;
+};
 
 export const applyManagedRulesToMessage = async (input: {
   mailboxId: string;

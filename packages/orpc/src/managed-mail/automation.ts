@@ -11,6 +11,7 @@ import { AI_CREDIT_ADMISSION_BUSY_MESSAGE } from "@quieter/billing/ai-credit-err
 import { createMailboxAiBillingContext } from "@quieter/billing/ai-reservation";
 import { hasUserBillingFeature } from "@quieter/billing/entitlements";
 import { db } from "@quieter/database/client";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import {
   gmailAutoLabelEvent,
   mailbox,
@@ -42,6 +43,8 @@ import {
 } from "../mail-automation/auto-label-events";
 import { loadManagedAutomationLabelHistory } from "../mail-automation/history";
 import { reportAutoLabelUsage } from "../mail-automation/usage";
+import { publishMailboxChange } from "../mailbox-changes";
+import { appendManagedMailboxContentChange } from "./changes";
 import { updateManagedMessageLabelAssignments } from "./labels/repository";
 
 const AUTO_LABEL_RETRY_BASE_MS = 1000 * 60 * 5;
@@ -59,7 +62,7 @@ type ManagedAutoLabelContext = {
 const toAutomationMessage = (
   message: typeof managedMailMessage.$inferSelect,
   attachments: { fileName: string; mimeType: string }[]
-): AutomationMailMessage => {
+): AutomationMailMessage & { threadId: string } => {
   const labelsByState = {
     active: [
       MAILBOX_LABELS.inbox,
@@ -233,6 +236,36 @@ const getOrCreateManagedAutoLabelEvent = async (
   return event;
 };
 
+const applyManagedAutoLabels = async (
+  tx: DatabaseTransaction,
+  input: {
+    mailboxId: string;
+    messageId: string;
+    threadId: string;
+    labelIds: string[];
+  }
+) => {
+  const { changedMessageIds } = await updateManagedMessageLabelAssignments({
+    addLabelIds: input.labelIds,
+    database: tx,
+    mailboxId: input.mailboxId,
+    messageIds: [input.messageId],
+    source: "ai_auto_label",
+  });
+  return changedMessageIds.size > 0
+    ? await appendManagedMailboxContentChange(tx, {
+        changes: [
+          {
+            kind: "message.labels",
+            messageId: input.messageId,
+            threadId: input.threadId,
+          },
+        ],
+        mailboxId: input.mailboxId,
+      })
+    : null;
+};
+
 const markManagedAutoLabelEventAppliedWithoutUsage = async (
   eventId: string
 ) => {
@@ -300,12 +333,16 @@ const processManagedAutoLabelMessage = async (input: {
         });
         if (!budgetStatus.allowed) {
           if (deterministicLabelIds.length > 0) {
-            await updateManagedMessageLabelAssignments({
-              addLabelIds: deterministicLabelIds,
-              mailboxId: input.mailboxId,
-              messageIds: [input.messageId],
-              source: "ai_auto_label",
-            });
+            const committed = await db.transaction(
+              async (tx) =>
+                await applyManagedAutoLabels(tx, {
+                  labelIds: deterministicLabelIds,
+                  mailboxId: input.mailboxId,
+                  messageId: input.messageId,
+                  threadId: message.threadId,
+                })
+            );
+            await publishMailboxChange(committed);
           }
           await deferAutoLabelAutomation(event.id, budgetStatus.message);
           return;
@@ -394,16 +431,16 @@ const processManagedAutoLabelMessage = async (input: {
         : null;
 
     const now = new Date();
-    await db.transaction(async (transaction) => {
-      if (labelIds.length > 0 && currentMessage) {
-        await updateManagedMessageLabelAssignments({
-          addLabelIds: labelIds,
-          database: transaction,
-          mailboxId: input.mailboxId,
-          messageIds: [input.messageId],
-          source: "ai_auto_label",
-        });
-      }
+    const committed = await db.transaction(async (transaction) => {
+      const change =
+        labelIds.length > 0 && currentMessage
+          ? await applyManagedAutoLabels(transaction, {
+              labelIds,
+              mailboxId: input.mailboxId,
+              messageId: input.messageId,
+              threadId: currentMessage.threadId,
+            })
+          : null;
       await transaction
         .update(gmailAutoLabelEvent)
         .set({
@@ -414,7 +451,9 @@ const processManagedAutoLabelMessage = async (input: {
           updatedAt: now,
         })
         .where(eq(gmailAutoLabelEvent.id, event.id));
+      return change;
     });
+    await publishMailboxChange(committed);
     await reportAutoLabelUsage({ ...event, userId: input.userId });
   } catch (error) {
     if (isAiCreditAdmissionBusy(error)) {

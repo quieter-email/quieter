@@ -4,7 +4,6 @@ import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
   managedMailLabel,
-  mailbox,
   managedMailMessage,
   managedMailMessageLabel,
 } from "@quieter/database/schema";
@@ -13,9 +12,11 @@ import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import { mailboxLabelColorSchema } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
-import { and, asc, countDistinct, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, countDistinct, eq, inArray } from "drizzle-orm";
 
+import { publishMailboxChange } from "../../mailbox-changes";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
+import { appendManagedMailboxContentChange } from "../changes";
 import { getManagedMessageLabelIds } from "../messages/service";
 import { throwMailboxOrganizationNameConflict } from "../organization/name-conflict";
 import { normalizeManagedOrganizationName } from "../organization/normalize-name";
@@ -120,24 +121,32 @@ export const createManagedLabel = async (input: {
   });
   const name = input.name.replaceAll(/\s+/gu, " ").trim();
   const now = new Date();
-  const [record] = await db
-    .insert(managedMailLabel)
-    .values({
-      autoLabel: input.autoLabel,
-      color: mailboxLabelColorSchema.parse(input.color),
-      createdAt: now,
-      createdByUserId: input.userId,
-      description: input.description ? input.description.trim() : null,
-      id: randomUUID(),
+  const result = await db.transaction(async (tx) => {
+    const [record] = await tx
+      .insert(managedMailLabel)
+      .values({
+        autoLabel: input.autoLabel,
+        color: mailboxLabelColorSchema.parse(input.color),
+        createdAt: now,
+        createdByUserId: input.userId,
+        description: input.description ? input.description.trim() : null,
+        id: randomUUID(),
+        mailboxId: input.mailboxId,
+        name,
+        normalizedName: normalizeManagedOrganizationName(name),
+        updatedAt: now,
+        updatedByUserId: input.userId,
+      })
+      .returning()
+      .catch(throwMailboxOrganizationNameConflict);
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: [{ kind: "mailbox.reconcile" }],
       mailboxId: input.mailboxId,
-      name,
-      normalizedName: normalizeManagedOrganizationName(name),
-      updatedAt: now,
-      updatedByUserId: input.userId,
-    })
-    .returning()
-    .catch(throwMailboxOrganizationNameConflict);
-  return toMailboxLabel(record);
+    });
+    return { committed, record };
+  });
+  await publishMailboxChange(result.committed);
+  return toMailboxLabel(result.record);
 };
 
 export const updateManagedLabel = async (input: {
@@ -156,7 +165,7 @@ export const updateManagedLabel = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [label] = await tx
       .select()
       .from(managedMailLabel)
@@ -209,8 +218,14 @@ export const updateManagedLabel = async (input: {
     if (name && name !== label.name) {
       await updateManagedLabelReferences(tx, label, false);
     }
-    return toMailboxLabel(record);
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: [{ kind: "mailbox.reconcile" }],
+      mailboxId: input.mailboxId,
+    });
+    return { committed, record };
   });
+  await publishMailboxChange(result.committed);
+  return toMailboxLabel(result.record);
 };
 
 export const reorderManagedLabels = async (input: {
@@ -224,7 +239,7 @@ export const reorderManagedLabels = async (input: {
     userId: input.userId,
   });
   const now = new Date();
-  await db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
     const labels =
       input.labelIds.length > 0
         ? await tx
@@ -255,7 +270,14 @@ export const reorderManagedLabels = async (input: {
           )
         );
     }
+    return labels.length === 0
+      ? null
+      : await appendManagedMailboxContentChange(tx, {
+          changes: [{ kind: "mailbox.reconcile" }],
+          mailboxId: input.mailboxId,
+        });
   });
+  await publishMailboxChange(committed);
   return { labelIds: input.labelIds };
 };
 
@@ -269,7 +291,7 @@ export const deleteManagedLabel = async (input: {
     requiredRoles: ["manager"],
     userId: input.userId,
   });
-  return await db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
     const [label] = await tx
       .select()
       .from(managedMailLabel)
@@ -285,8 +307,13 @@ export const deleteManagedLabel = async (input: {
     }
     await updateManagedLabelReferences(tx, label, true);
     await tx.delete(managedMailLabel).where(eq(managedMailLabel.id, label.id));
-    return { id: label.id };
+    return await appendManagedMailboxContentChange(tx, {
+      changes: [{ kind: "mailbox.reconcile" }],
+      mailboxId: input.mailboxId,
+    });
   });
+  await publishMailboxChange(committed);
+  return { id: input.labelId };
 };
 
 export const updateManagedThreadLabels = async (input: {
@@ -302,7 +329,11 @@ export const updateManagedThreadLabels = async (input: {
     userId: input.userId,
   });
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  const { messages, updated } = await db.transaction(async (tx) => {
+  const {
+    committed: change,
+    messages,
+    updated,
+  } = await db.transaction(async (tx) => {
     const lockedMessages = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -338,7 +369,7 @@ export const updateManagedThreadLabels = async (input: {
           )
         );
     }
-    const assignments = await updateManagedMessageLabelAssignments({
+    const { assignments } = await updateManagedMessageLabelAssignments({
       ...input,
       addLabelIds: getCustomLabelIds(input.addLabelIds),
       database: tx,
@@ -346,15 +377,17 @@ export const updateManagedThreadLabels = async (input: {
       removeLabelIds: getCustomLabelIds(input.removeLabelIds),
       source: "manual",
     });
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-    return { messages: lockedMessages, updated: assignments };
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: lockedMessages.map(({ id }) => ({
+        kind: "message.labels",
+        messageId: id,
+        threadId: input.threadId,
+      })),
+      mailboxId: input.mailboxId,
+    });
+    return { committed, messages: lockedMessages, updated: assignments };
   });
+  await publishMailboxChange(change);
   const messagesById = new Map(
     messages.map((message) => [message.id, message])
   );
@@ -392,13 +425,18 @@ export const updateSingleManagedMessageLabels = async (input: {
     userId: input.userId,
   });
   const mailboxState = getMailboxStateFromLabelChanges(input);
-  const { message, updated } = await db.transaction(async (tx) => {
+  const {
+    committed: change,
+    message,
+    updated,
+  } = await db.transaction(async (tx) => {
     const [lockedMessage] = await tx
       .select({
         direction: managedMailMessage.direction,
         id: managedMailMessage.id,
         isRead: managedMailMessage.isRead,
         mailboxState: managedMailMessage.mailboxState,
+        threadId: managedMailMessage.threadId,
       })
       .from(managedMailMessage)
       .where(
@@ -423,7 +461,9 @@ export const updateSingleManagedMessageLabels = async (input: {
           )
         );
     }
-    const [assignment] = await updateManagedMessageLabelAssignments({
+    const {
+      assignments: [assignment],
+    } = await updateManagedMessageLabelAssignments({
       ...input,
       addLabelIds: getCustomLabelIds(input.addLabelIds),
       database: tx,
@@ -431,15 +471,19 @@ export const updateSingleManagedMessageLabels = async (input: {
       removeLabelIds: getCustomLabelIds(input.removeLabelIds),
       source: "manual",
     });
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-    return { message: lockedMessage, updated: assignment };
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: [
+        {
+          kind: "message.labels",
+          messageId: lockedMessage.id,
+          threadId: lockedMessage.threadId,
+        },
+      ],
+      mailboxId: input.mailboxId,
+    });
+    return { committed, message: lockedMessage, updated: assignment };
   });
+  await publishMailboxChange(change);
   return {
     ...updated,
     isUnread: !message.isRead,

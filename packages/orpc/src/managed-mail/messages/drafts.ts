@@ -23,8 +23,10 @@ import { reportError } from "@quieter/observability";
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import type { z } from "zod";
 
+import { publishMailboxChange } from "../../mailbox-changes";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import { hashRequest } from "../../request-hash";
+import { appendManagedMailboxContentChange } from "../changes";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
@@ -399,7 +401,7 @@ export const saveManagedDraft = async (input: {
     toNormalized: normalizeManagedSearchValue(draft.recipients.to),
     updatedAt: now,
   };
-  await db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
     if (existing === undefined) {
       await tx.insert(managedMailMessage).values({
         ...values,
@@ -442,14 +444,23 @@ export const saveManagedDraft = async (input: {
     if (savedAttachments.length > 0) {
       await tx.insert(managedMailAttachment).values(savedAttachments);
     }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: now,
-      })
-      .where(eq(mailbox.id, mailboxId));
+    const affectedThreadIds = new Set([
+      threadId,
+      existing?.threadId ?? threadId,
+    ]);
+    return await appendManagedMailboxContentChange(tx, {
+      changes:
+        existing === undefined
+          ? [{ kind: "message.added", messageId, threadId }]
+          : [...affectedThreadIds].map((affectedThreadId) => ({
+              kind: "capture.changed",
+              threadId: affectedThreadId,
+            })),
+      mailboxId,
+      updatedAt: now,
+    });
   });
+  await publishMailboxChange(committed);
   const previousObject =
     existing === undefined ? null : getRawMailObjectReference(existing);
   if (previousObject) {
@@ -479,7 +490,7 @@ export const deleteManagedDraft = async (input: {
     ...input,
     requiredRoles: ["responder", "manager"],
   });
-  const deleted = await db.transaction(async (tx) => {
+  const { committed: change, deleted } = await db.transaction(async (tx) => {
     const [existing] = await tx
       .select({
         id: managedMailMessage.id,
@@ -549,17 +560,20 @@ export const deleteManagedDraft = async (input: {
         )
       )
       .returning();
-    if (records.length > 0) {
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.mailboxId));
-    }
-    return records[0];
+    const committed =
+      records.length > 0
+        ? await appendManagedMailboxContentChange(tx, {
+            changes: records.map(({ id, threadId }) => ({
+              kind: "message.deleted",
+              messageId: id,
+              threadId,
+            })),
+            mailboxId: input.mailboxId,
+          })
+        : null;
+    return { committed, deleted: records[0] };
   });
+  await publishMailboxChange(change);
   if (deleted !== undefined) {
     const object = getRawMailObjectReference(deleted);
     if (object) {

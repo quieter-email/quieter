@@ -20,7 +20,6 @@ import {
   sql,
 } from "drizzle-orm";
 
-import { publishMailUpdate } from "../../mail-updates";
 import { applyManagedRulesToMessage } from "./evaluator";
 import { managedRuleSnapshotSchema, snapshotManagedRule } from "./snapshot";
 
@@ -186,10 +185,6 @@ export const processManagedRuleBackfills = async () => {
             eq(managedMailRuleBackfill.leaseId, leaseId)
           )
         );
-      await publishMailUpdate({
-        mailboxId: claimed.mailboxId,
-        type: "labels.changed",
-      });
     }
   }
 };

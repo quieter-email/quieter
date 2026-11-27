@@ -92,6 +92,12 @@ const fixture = await vi.hoisted(async () => {
 });
 
 vi.mock("@quieter/database/client", () => ({ db: fixture.database }));
+vi.mock("../src/mailbox-changes", () => ({
+  appendMailboxChange: vi
+    .fn<() => Promise<{ queued: boolean }>>()
+    .mockResolvedValue({ queued: true }),
+  publishMailboxChange: vi.fn<() => Promise<void>>().mockResolvedValue(),
+}));
 vi.mock("@quieter/observability", () => ({
   reportError: vi.fn<(error: unknown) => void>(),
 }));

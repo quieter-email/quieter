@@ -7,12 +7,13 @@ import type {
   ensureMailImportanceWork,
   processPendingMailImportance,
 } from "../src/mail-importance";
-import type { publishMailUpdate } from "../src/mail-updates";
+import type { publishMailboxChange } from "../src/mailbox-changes";
 import type {
   getManagedAutomationOwner,
   loadManagedAutomationMessage,
   processManagedMailAutomation,
 } from "../src/managed-mail/automation";
+import type { appendManagedMailboxContentChange } from "../src/managed-mail/changes";
 import type { inheritManagedThreadLabels } from "../src/managed-mail/labels/repository";
 import { recordInboundManagedMessage } from "../src/managed-mail/messages/ingestion";
 import type { applyManagedRulesToMessage } from "../src/managed-mail/rules/evaluator";
@@ -105,8 +106,12 @@ vi.mock(import("../src/mail-importance"), () => ({
   ensureMailImportanceWork: vi.fn<typeof ensureMailImportanceWork>(),
   processPendingMailImportance: vi.fn<typeof processPendingMailImportance>(),
 }));
-vi.mock(import("../src/mail-updates"), () => ({
-  publishMailUpdate: vi.fn<typeof publishMailUpdate>(),
+vi.mock(import("../src/mailbox-changes"), () => ({
+  publishMailboxChange: vi.fn<typeof publishMailboxChange>(),
+}));
+vi.mock(import("../src/managed-mail/changes"), () => ({
+  appendManagedMailboxContentChange:
+    vi.fn<typeof appendManagedMailboxContentChange>(),
 }));
 vi.mock(import("../src/verification-codes"), () => ({
   processMailVerificationCode: vi.fn<typeof processMailVerificationCode>(),

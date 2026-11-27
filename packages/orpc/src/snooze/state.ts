@@ -1,4 +1,5 @@
 import { db } from "@quieter/database/client";
+import type { DatabaseTransaction } from "@quieter/database/client";
 import {
   mailbox,
   mailPlacementOperation,
@@ -8,7 +9,9 @@ import type { MailSnoozeState } from "@quieter/mail/snooze";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 
 import { publishMailUpdate } from "../mail-updates";
+import { publishMailboxChange } from "../mailbox-changes";
 import { assertAccessibleMailbox } from "../mailbox/service";
+import { appendManagedMailboxContentChange } from "../managed-mail/changes";
 
 export { MAIL_SNOOZE_LIVE_STATUSES } from "@quieter/mail/snooze";
 
@@ -69,6 +72,34 @@ export const getMailSnoozeStates = async (input: {
   );
 };
 
+export const appendSnoozeContentChange = async (
+  tx: DatabaseTransaction,
+  input: {
+    mailboxId: string;
+    provider: string | undefined;
+    threadIds: string[];
+    updatedAt?: Date;
+  }
+) => {
+  if (input.provider === "managed") {
+    return await appendManagedMailboxContentChange(tx, {
+      ...input,
+      changes: [...new Set(input.threadIds)].map((threadId) => ({
+        kind: "capture.changed",
+        threadId,
+      })),
+    });
+  }
+  await tx
+    .update(mailbox)
+    .set({
+      contentRevision: sql`${mailbox.contentRevision} + 1`,
+      updatedAt: input.updatedAt ?? new Date(),
+    })
+    .where(eq(mailbox.id, input.mailboxId));
+  return null;
+};
+
 export const reconcileMailSnoozeSource = async (input: {
   mailboxId: string;
   threadId: string;
@@ -76,8 +107,8 @@ export const reconcileMailSnoozeSource = async (input: {
   inboxIncomingMessageIds: string[];
 }) => {
   const result = await db.transaction(async (tx) => {
-    await tx
-      .select({ id: mailbox.id })
+    const [selected] = await tx
+      .select({ provider: mailbox.provider })
       .from(mailbox)
       .where(eq(mailbox.id, input.mailboxId))
       .for("update");
@@ -142,16 +173,16 @@ export const reconcileMailSnoozeSource = async (input: {
         )
       )
       .returning();
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
-    return { changed: true, row: updated ?? current };
+    const committed = await appendSnoozeContentChange(tx, {
+      mailboxId: input.mailboxId,
+      provider: selected?.provider,
+      threadIds: [input.threadId],
+    });
+    return { changed: true, committed, row: updated ?? current };
   });
-  if (result.changed) {
+  if (result.committed) {
+    await publishMailboxChange(result.committed);
+  } else if (result.changed) {
     await publishMailUpdate({
       mailboxId: input.mailboxId,
       type: "mailbox.changed",

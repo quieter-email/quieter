@@ -14,8 +14,10 @@ import {
 import type { LabelOrganizationAction } from "@quieter/mail/mailbox-organization";
 import { and, eq } from "drizzle-orm";
 
+import { publishMailboxChange } from "../mailbox-changes";
 import { getAuthorizedManagedMailbox } from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
+import { appendManagedMailboxContentChange } from "../managed-mail/changes";
 
 type MailboxActor = { mailboxId: string; userId: string };
 
@@ -37,7 +39,7 @@ export const updateLabelOrganization = async (
   if (managed) {
     await getAuthorizedManagedMailbox({ ...actor, requiredRoles: ["manager"] });
   }
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     if (action.kind === "move-label") {
       const [label] = managed
         ? await tx
@@ -86,6 +88,14 @@ export const updateLabelOrganization = async (
       .update(mailboxLabelOrganization)
       .set({ organization })
       .where(eq(mailboxLabelOrganization.mailboxId, actor.mailboxId));
-    return organization;
+    const committed = managed
+      ? await appendManagedMailboxContentChange(tx, {
+          changes: [{ kind: "mailbox.reconcile" }],
+          mailboxId: actor.mailboxId,
+        })
+      : null;
+    return { committed, organization };
   });
+  await publishMailboxChange(result.committed);
+  return result.organization;
 };

@@ -12,7 +12,6 @@ import {
 import { db } from "@quieter/database/client";
 import { retryIdempotentDatabaseQuery } from "@quieter/database/retry";
 import {
-  mailbox,
   managedMailMessage,
   organization,
   organizationMailSendIdempotency,
@@ -22,10 +21,12 @@ import { serverEnv } from "@quieter/env/server";
 import { assertRawMailSender } from "@quieter/mail/raw-message";
 import type { SendMessageResult } from "@quieter/mail/send";
 import { reportError } from "@quieter/observability";
-import { and, asc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, lt } from "drizzle-orm";
 
 import { captureManagedMessageMemory } from "./ai-memory-capture";
 import { assertLocalMailSend } from "./local-managed-mail";
+import { publishMailboxChange } from "./mailbox-changes";
+import { appendManagedMailboxContentChange } from "./managed-mail/changes";
 import { recordOutboundManagedMessageForSender } from "./managed-mail/messages/outbound";
 import { readRawMailObject } from "./managed-mail/messages/raw-object";
 import { storeRawMailObject } from "./managed-mail/messages/raw-object-lifecycle";
@@ -137,7 +138,8 @@ const completeMailSend = async (operation: MailSend) => {
       source: "sent",
     });
   }
-  await db.transaction(async (tx) => {
+  const committed = await db.transaction(async (tx) => {
+    let draftChange = null;
     if (
       snapshot.mailboxId !== undefined &&
       snapshot.draftId !== undefined &&
@@ -153,15 +155,19 @@ const completeMailSend = async (operation: MailSend) => {
             eq(managedMailMessage.updatedAt, new Date(snapshot.draftUpdatedAt))
           )
         )
-        .returning({ id: managedMailMessage.id });
+        .returning({
+          id: managedMailMessage.id,
+          threadId: managedMailMessage.threadId,
+        });
       if (removed.length > 0) {
-        await tx
-          .update(mailbox)
-          .set({
-            contentRevision: sql`${mailbox.contentRevision} + 1`,
-            updatedAt: new Date(),
-          })
-          .where(eq(mailbox.id, snapshot.mailboxId));
+        draftChange = await appendManagedMailboxContentChange(tx, {
+          changes: removed.map(({ id, threadId }) => ({
+            kind: "message.deleted",
+            messageId: id,
+            threadId,
+          })),
+          mailboxId: snapshot.mailboxId,
+        });
       }
     }
     await tx
@@ -173,7 +179,9 @@ const completeMailSend = async (operation: MailSend) => {
           eq(organizationMailSendIdempotency.status, "accepted")
         )
       );
+    return draftChange;
   });
+  await publishMailboxChange(committed);
 };
 
 export const sendPreparedMail = async (input: {
