@@ -38,7 +38,12 @@ import {
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { rpc } from "@quieter/app/lib/orpc";
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailCommand,
+  MailMutationResult,
+  MailMutationTarget,
+} from "@quieter/mail/data-plane";
+import { isIncomingInboxMessage } from "@quieter/mail/messages";
 import type {
   MailSnoozeApplyInput,
   MailSnoozeCommand,
@@ -178,6 +183,9 @@ export const applySnoozeInMailbox = async (
             leaveInbox(
               (message) =>
                 message.threadId === target.threadId &&
+                (snooze === undefined
+                  ? message.snooze === undefined
+                  : (message.snooze?.version ?? -1) <= snooze.version) &&
                 (target.messageIds === undefined
                   ? requestedMessageIds.has(message.id)
                   : messageIds.has(message.id))
@@ -195,39 +203,31 @@ export const applySnoozeInMailbox = async (
   return result;
 };
 
-type BulkResponse = Awaited<ReturnType<typeof rpc.mail.applyChanges>>;
-type BulkResult = Omit<BulkResponse, "targets"> & {
-  receipt?: {
-    requestId: string;
-    status: "completed" | "pending" | "uncertain";
-  };
-  targets: (BulkResponse["targets"][number] & {
-    appliedMessageIds?: string[];
-    failedMessageIds?: string[];
-    uncertainMessageIds?: string[];
-  })[];
-};
-
 export const applyBulkChangesInMailbox = async (
   queryClient: QueryClient,
   mailboxId: string,
   targets: MailMutationTarget[],
   command: MailCommand
 ) => {
-  let result: BulkResult | undefined;
+  let result: MailMutationResult | undefined;
   const updater = getMailCommandUpdater(command);
   const requestId =
     command.kind === "delete-permanently" ? undefined : crypto.randomUUID();
   const input = { command, mailboxId, requestId, targets };
   const apply = (
     appliedTargets: MailMutationTarget[],
-    outcomes?: ReadonlyMap<string, BulkResult["targets"][number]>
+    outcomes?: ReadonlyMap<string, MailMutationResult["targets"][number]>
   ) => {
     for (const target of appliedTargets) {
       const messageIds = new Set(target.messageIds);
       const wholeThread =
         command.kind === "set-importance" && messageIds.size === 0;
-      const summary = outcomes?.get(target.threadId)?.summary;
+      const outcome = outcomes?.get(target.threadId);
+      const summary = outcome?.summary;
+      const untrashed = new Set(outcome?.untrashedMessageIds);
+      for (const id of outcome?.appliedMessageIds ?? []) {
+        untrashed.delete(id);
+      }
       const threadKey = getThreadQueryKey(mailboxId, target.threadId);
       const listMessages = findMessagesInCachedMailboxQueries(
         queryClient,
@@ -248,9 +248,7 @@ export const applyBulkChangesInMailbox = async (
       const inboxIds = new Set(
         placementRows.flatMap((message) => [
           ...(message.threadInboxIncomingMessageIds ?? []),
-          ...(message.labelIds?.includes(MAILBOX_LABELS.inbox) === true
-            ? [message.id]
-            : []),
+          ...(isIncomingInboxMessage(message) ? [message.id] : []),
         ])
       );
       if (command.kind === "set-placement" && inboxIsKnown) {
@@ -262,7 +260,7 @@ export const applyBulkChangesInMailbox = async (
           for (const message of placementRows) {
             if (
               messageIds.has(message.id) &&
-              updater(message).labelIds?.includes(MAILBOX_LABELS.inbox) === true
+              isIncomingInboxMessage(updater(message))
             ) {
               inboxIds.add(message.id);
             }
@@ -274,10 +272,14 @@ export const applyBulkChangesInMailbox = async (
         (command.kind === "set-placement" && inboxIsKnown) ||
         messageIds.has(message.id);
       const update = (message: MessageListItem) => {
-        const next =
-          wholeThread || messageIds.has(message.id)
-            ? updater(message)
-            : message;
+        let next = message;
+        if (untrashed.has(message.id)) {
+          next = applyMessageLabelChangesLocally(message, {
+            removeLabelIds: [MAILBOX_LABELS.trash],
+          });
+        } else if (wholeThread || messageIds.has(message.id)) {
+          next = updater(message);
+        }
         if (command.kind === "set-placement" && inboxIsKnown) {
           const threadLabelIds = next.threadLabelIds ?? next.labelIds ?? [];
           return {
@@ -320,7 +322,7 @@ export const applyBulkChangesInMailbox = async (
       apply(targets);
     },
     execute: async () => {
-      let confirmed: BulkResult;
+      let confirmed: MailMutationResult;
       try {
         confirmed = await rpc.mail.applyChanges(input);
       } catch (error) {
@@ -329,21 +331,38 @@ export const applyBulkChangesInMailbox = async (
         }
         confirmed = await rpc.mail.applyChanges(input);
       }
+      if (confirmed.receipt?.retryable === true) {
+        try {
+          confirmed = await rpc.mail.applyChanges(input);
+        } catch (error) {
+          if (!(error instanceof TypeError)) {
+            throw error;
+          }
+        }
+      }
       result = confirmed;
       const outcomes = new Map(
         confirmed.targets.map((target) => [target.threadId, target])
       );
       return () => {
+        if (confirmed.receipt?.replayed === true) {
+          return;
+        }
         apply(
           targets.flatMap((target) => {
             const outcome = outcomes.get(target.threadId);
             if (!outcome || outcome.replayed === true) {
               return [];
             }
-            if (outcome.appliedMessageIds !== undefined) {
-              return outcome.appliedMessageIds.length > 0
-                ? [{ ...target, messageIds: outcome.appliedMessageIds }]
-                : [];
+            if (
+              outcome.appliedMessageIds !== undefined ||
+              outcome.untrashedMessageIds !== undefined
+            ) {
+              const messageIds = [
+                ...(outcome.appliedMessageIds ?? []),
+                ...(outcome.untrashedMessageIds ?? []),
+              ];
+              return messageIds.length > 0 ? [{ ...target, messageIds }] : [];
             }
             if (
               outcome.status !== "applied" ||

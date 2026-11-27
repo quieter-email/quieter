@@ -5735,6 +5735,29 @@ export const authRelations = defineRelations(tables, (r) => ({
   },
 }));
 
+export type MailCommandSnoozeVersion = {
+  id: string;
+  threadId: string;
+  version: number;
+};
+
+export type MailCommandFollowUp = {
+  result: MailMutationResult;
+  snoozes: MailCommandSnoozeVersion[];
+} & (
+  | { kind: "retire-snoozes" }
+  | {
+      kind: "restore-inbox";
+      messages: { id: string; wasSpam: boolean }[];
+      validTargetIndexes: number[];
+    }
+);
+
+export type MailCommandExecutionState =
+  | { phase: "preparing"; owner: string }
+  | { phase: "dispatched"; owner: string; partial?: MailMutationResult }
+  | { phase: "follow-up"; owner: string | null; work: MailCommandFollowUp };
+
 export const mailCommandReceipt = pgTable(
   "mailCommandReceipt",
   {
@@ -5743,6 +5766,7 @@ export const mailCommandReceipt = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     claimedAt: timestamp("claimedAt", { withTimezone: true }),
     createdAt: timestamp("createdAt", { withTimezone: true }),
+    executionState: jsonb("executionState").$type<MailCommandExecutionState>(),
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),

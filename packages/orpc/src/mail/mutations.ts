@@ -1,4 +1,8 @@
 import { ORPCError } from "@orpc/server";
+import type {
+  MailCommandFollowUp,
+  MailCommandSnoozeVersion,
+} from "@quieter/database/schema";
 import { serverEnv } from "@quieter/env/server";
 import type { GmailMetadataChange } from "@quieter/gmail";
 import {
@@ -37,13 +41,18 @@ import {
   executeMailCommandWithReceipt,
   isRejectedGmailWrite,
 } from "./command-receipt";
+import type { MailCommandExecution } from "./command-receipt";
 import {
   learnAiMemoryFromGmailAction,
   learnAiMemoryFromMailAction,
   recordLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
-import { applyMailPlacement, supersedePendingMailPlacement } from "./placement";
+import {
+  applyMailPlacement,
+  readMailCommandSnoozes,
+  supersedePendingMailPlacement,
+} from "./placement";
 import { authorizeMailPlacement } from "./placement-access";
 
 type MetadataOperation =
@@ -390,34 +399,146 @@ const mutateThread = async (
   });
 };
 
+const finishMailCommand = async (
+  work: MailCommandFollowUp,
+  execution: MailCommandExecution,
+  context: MailRequestContext,
+  mailboxId: string,
+  gmail?: { accessToken: string; signal?: AbortSignal; resume?: true }
+): Promise<MailMutationResult> => {
+  const retire = async (snoozes: MailCommandSnoozeVersion[]) => {
+    if (snoozes.length > 0) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId,
+        snoozes,
+        threadIds: snoozes.map(({ threadId }) => threadId),
+      });
+    }
+  };
+  if (work.kind !== "restore-inbox") {
+    await retire(work.snoozes);
+    return work.result;
+  }
+  const collectAppliedSnoozes = (result: MailMutationResult) => {
+    const threads = new Set(
+      result.targets.flatMap((target) =>
+        (target.appliedMessageIds?.length ?? 0) +
+          (target.untrashedMessageIds?.length ?? 0) >
+        0
+          ? [target.threadId]
+          : []
+      )
+    );
+    return work.snoozes.filter(({ threadId }) => threads.has(threadId));
+  };
+  await retire(collectAppliedSnoozes(work.result));
+  const restore = async (accessToken: string, signal?: AbortSignal) => {
+    const restored = new Set<string>();
+    let remaining = work.messages.map(({ id }) => id);
+    if (gmail === undefined || gmail.resume === true) {
+      const messages = await getGmailMessageThreadAssociations(
+        accessToken,
+        remaining,
+        signal
+      );
+      const labelsById = new Map(
+        messages.map(({ id, labelIds }) => [id, labelIds ?? []])
+      );
+      remaining = work.messages.flatMap(({ id, wasSpam }) => {
+        const labels = labelsById.get(id);
+        if (labels === undefined || labels.includes("TRASH")) {
+          return [];
+        }
+        if (labels.includes("INBOX") && !labels.includes("SPAM")) {
+          restored.add(id);
+          return [];
+        }
+        return labels.includes("SPAM") === wasSpam ? [id] : [];
+      });
+    }
+    if (remaining.length > 0) {
+      signal?.throwIfAborted();
+      await execution.dispatch(
+        async () =>
+          await batchModifyMessages(
+            accessToken,
+            remaining,
+            { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
+            signal
+          )
+      );
+      for (const id of remaining) {
+        restored.add(id);
+      }
+    }
+    const validTargetIndexes = new Set(work.validTargetIndexes);
+    const result = {
+      ...work.result,
+      targets: work.result.targets.map(
+        (target, index): MailMutationResult["targets"][number] => {
+          if (!validTargetIndexes.has(index)) {
+            return target;
+          }
+          const restoredIds =
+            target.failedMessageIds?.filter((id) => restored.has(id)) ?? [];
+          const failedMessageIds =
+            target.failedMessageIds?.filter((id) => !restored.has(id)) ?? [];
+          return {
+            ...target,
+            appliedMessageIds: [
+              ...(target.appliedMessageIds ?? []),
+              ...restoredIds,
+            ],
+            failedMessageIds,
+            status:
+              failedMessageIds.length +
+                (target.uncertainMessageIds?.length ?? 0) ===
+              0
+                ? "applied"
+                : "failed",
+            untrashedMessageIds: target.untrashedMessageIds?.filter(
+              (id) => !restored.has(id)
+            ),
+          };
+        }
+      ),
+    };
+    const snoozes = collectAppliedSnoozes(result);
+    if (snoozes.length > 0) {
+      await execution.saveFollowUp({ kind: "retire-snoozes", result, snoozes });
+      await retire(snoozes);
+    }
+    return result;
+  };
+  return gmail === undefined
+    ? await callGmail(context, mailboxId, restore)
+    : await restore(gmail.accessToken, gmail.signal);
+};
+
 const applyMailChanges = async ({
   context,
+  execution,
   input,
-  markDispatched,
   selectedMailbox,
 }: {
   context: MailRequestContext;
+  execution?: MailCommandExecution;
   input: MailInputs["applyChanges"];
-  markDispatched?: () => void;
   selectedMailbox: Awaited<ReturnType<typeof assertAccessibleMailbox>>;
 }): Promise<MailMutationResult> => {
-  const dispatch = async <T>(write: () => Promise<T>): Promise<T> => {
-    try {
-      const result = await write();
-      markDispatched?.();
-      return result;
-    } catch (error) {
-      const preconditionFailed =
-        error instanceof ORPCError &&
-        [400, 401, 403, 404, 409, 429].includes(error.status);
-      if (!preconditionFailed && !isRejectedGmailWrite(error)) {
-        markDispatched?.();
-      }
-      throw error;
-    }
-  };
+  if (execution?.followUp !== undefined) {
+    return await finishMailCommand(
+      execution.followUp,
+      execution,
+      context,
+      input.mailboxId
+    );
+  }
+  const dispatch = async <T>(write: () => Promise<T>): Promise<T> =>
+    await (execution === undefined ? write() : execution.dispatch(write));
   const afterWrite = async (work: () => Promise<void>) => {
-    if (markDispatched === undefined) {
+    if (execution === undefined) {
       await work();
       return;
     }
@@ -438,14 +559,47 @@ const applyMailChanges = async ({
       [...input.command.addIds, ...input.command.removeIds].some((label) =>
         ["INBOX", "SPAM", "TRASH"].includes(label)
       ));
-  if (supersedesPlacement) {
-    await supersedePendingMailPlacement({
-      context,
-      mailboxId: input.mailboxId,
-      retireSnoozes: false,
-      threadIds: input.targets.map((target) => target.threadId),
-    });
-  }
+  const targetedThreadIds = input.targets.map(({ threadId }) => threadId);
+  const snoozes =
+    supersedesPlacement && execution !== undefined
+      ? await readMailCommandSnoozes(input.mailboxId, targetedThreadIds)
+      : [];
+  const supersedeBeforeWrite = async (threadIds: string[]) => {
+    if (supersedesPlacement) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        retireSnoozes: false,
+        threadIds,
+      });
+    }
+  };
+  const finishSnoozes = async (
+    result: MailMutationResult,
+    affectedThreadIds: string[]
+  ) => {
+    if (affectedThreadIds.length === 0) {
+      return;
+    }
+    if (execution === undefined) {
+      await supersedePendingMailPlacement({
+        context,
+        mailboxId: input.mailboxId,
+        threadIds: affectedThreadIds,
+      });
+      return;
+    }
+    const affected = new Set(affectedThreadIds);
+    const work: MailCommandFollowUp = {
+      kind: "retire-snoozes",
+      result,
+      snoozes: snoozes.filter(({ threadId }) => affected.has(threadId)),
+    };
+    if (work.snoozes.length > 0) {
+      await execution.saveFollowUp(work);
+      await finishMailCommand(work, execution, context, input.mailboxId);
+    }
+  };
   if (input.command.kind === "set-importance") {
     let { targets } = input;
     if (selectedMailbox.provider === "gmail") {
@@ -521,14 +675,14 @@ const applyMailChanges = async ({
   }
   if (selectedMailbox.provider === "managed") {
     const { command } = input;
-    const result = await dispatch(
-      async () =>
-        await applyManagedMessageChanges({
-          ...input,
-          command,
-          userId: context.userId,
-        })
-    );
+    const result = await dispatch(async () => {
+      await supersedeBeforeWrite(targetedThreadIds);
+      return await applyManagedMessageChanges({
+        ...input,
+        command,
+        userId: context.userId,
+      });
+    });
     const appliedThreadIds = [
       ...new Set(
         input.targets.flatMap((target, index) =>
@@ -536,15 +690,14 @@ const applyMailChanges = async ({
         )
       ),
     ];
+    const outcome = {
+      syncToken: result.revision === null ? undefined : String(result.revision),
+      targets: result.targets,
+    };
+    if (supersedesPlacement) {
+      await finishSnoozes(outcome, appliedThreadIds);
+    }
     await afterWrite(async () => {
-      if (supersedesPlacement && appliedThreadIds.length > 0) {
-        await supersedePendingMailPlacement({
-          context,
-          mailboxId: input.mailboxId,
-          retireSnoozes: true,
-          threadIds: appliedThreadIds,
-        });
-      }
       const messageIds = [
         ...new Set(
           input.targets.flatMap((target, index) =>
@@ -582,16 +735,22 @@ const applyMailChanges = async ({
         );
       }
     });
-    return {
-      syncToken: result.revision === null ? undefined : String(result.revision),
-      targets: result.targets,
-    };
+    return outcome;
   }
 
   return await callGmail(
     context,
     input.mailboxId,
     async (accessToken, signal) => {
+      if (execution?.followUp !== undefined) {
+        return await finishMailCommand(
+          execution.followUp,
+          execution,
+          context,
+          input.mailboxId,
+          { accessToken, resume: true, signal }
+        );
+      }
       const requestedMessageIds = [
         ...new Set(input.targets.flatMap((target) => target.messageIds)),
       ];
@@ -612,29 +771,40 @@ const applyMailChanges = async ({
       const messageIds = [
         ...new Set(validTargets.flatMap((target) => target.messageIds)),
       ];
-      const outcomes = new Map<string, "failed" | "uncertain">();
+      const validThreadIds = validTargets.flatMap((target) =>
+        target.messageIds.length > 0 ? [target.threadId] : []
+      );
+      const outcomes = new Map<string, "failed" | "uncertain" | "restoring">();
+      const untrashed = new Set<string>();
       const validTargetSet = new Set(validTargets);
       const targetResults = () =>
         input.targets.map((target): MailMutationResult["targets"][number] => {
           const appliedMessageIds: string[] = [];
           const failedMessageIds: string[] = [];
           const uncertainMessageIds: string[] = [];
+          const untrashedMessageIds: string[] = [];
           for (const id of new Set(target.messageIds)) {
             const outcome = validTargetSet.has(target)
               ? outcomes.get(id)
               : "failed";
             if (outcome === "uncertain") {
               uncertainMessageIds.push(id);
-            } else if (outcome === "failed") {
+            } else if (outcome === "failed" || outcome === "restoring") {
               failedMessageIds.push(id);
+              if (outcome === "restoring" && untrashed.has(id)) {
+                untrashedMessageIds.push(id);
+              }
             } else {
               appliedMessageIds.push(id);
             }
           }
           return {
-            ...(markDispatched === undefined
+            ...(execution === undefined
               ? {}
               : { appliedMessageIds, failedMessageIds, uncertainMessageIds }),
+            ...(untrashedMessageIds.length === 0
+              ? {}
+              : { untrashedMessageIds }),
             status:
               failedMessageIds.length + uncertainMessageIds.length === 0
                 ? "applied"
@@ -678,24 +848,19 @@ const applyMailChanges = async ({
         });
       } else if (command.kind === "set-labels") {
         const { addIds, removeIds } = command;
-        await dispatch(
-          async () =>
-            await batchModifyMessages(
-              accessToken,
-              messageIds,
-              { addLabelIds: addIds, removeLabelIds: removeIds },
-              signal
-            )
-        );
+        await dispatch(async () => {
+          await supersedeBeforeWrite(validThreadIds);
+          await batchModifyMessages(
+            accessToken,
+            messageIds,
+            { addLabelIds: addIds, removeLabelIds: removeIds },
+            signal
+          );
+        });
+        if (supersedesPlacement) {
+          await finishSnoozes({ targets: targetResults() }, validThreadIds);
+        }
         await afterWrite(async () => {
-          if (supersedesPlacement) {
-            await supersedePendingMailPlacement({
-              context,
-              mailboxId: input.mailboxId,
-              retireSnoozes: true,
-              threadIds: validTargets.map((target) => target.threadId),
-            });
-          }
           await refreshGmailCapturedMessageMetadata({
             accessToken,
             mailboxId: input.mailboxId,
@@ -725,126 +890,155 @@ const applyMailChanges = async ({
         });
       } else if (command.kind === "move") {
         let failedMutation: PromiseRejectedResult | undefined;
+        const restoring: Extract<
+          MailCommandFollowUp,
+          { kind: "restore-inbox" }
+        >["messages"] = [];
         if (command.destination === "spam") {
-          await dispatch(
-            async () =>
-              await batchModifyMessages(
-                accessToken,
-                messageIds,
-                { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
-                signal
-              )
-          );
+          await dispatch(async () => {
+            await supersedeBeforeWrite(validThreadIds);
+            await batchModifyMessages(
+              accessToken,
+              messageIds,
+              { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
+              signal
+            );
+          });
         } else {
           const change = command.destination === "trash" ? "trash" : "untrash";
-          const results = await Promise.allSettled(
-            messageIds.map(
-              async (id) =>
-                await mutateGmailMessage(accessToken, id, change, signal)
-            )
-          );
-          const [first] = results;
-          if (first?.status === "rejected") {
-            const failure: unknown = first.reason;
-            if (
-              isGmailServiceError(failure) &&
-              [401, 403, 429].includes(failure.status) &&
-              results.every(
-                (result) =>
-                  result.status === "rejected" &&
-                  isGmailServiceError(result.reason) &&
-                  result.reason.status === failure.status
+          const results = await dispatch(async () => {
+            await supersedeBeforeWrite(validThreadIds);
+            const settled = await Promise.allSettled(
+              messageIds.map(
+                async (id) =>
+                  await mutateGmailMessage(accessToken, id, change, signal)
               )
-            ) {
-              throw failure;
+            );
+            const [first] = settled;
+            if (first?.status === "rejected") {
+              const error: unknown = first.reason;
+              if (
+                isGmailServiceError(error) &&
+                [401, 403, 429].includes(error.status) &&
+                settled.every(
+                  (result) =>
+                    result.status === "rejected" &&
+                    isGmailServiceError(result.reason) &&
+                    result.reason.status === error.status
+                )
+              ) {
+                throw error;
+              }
             }
-          }
+            return settled;
+          });
           const changedMessageIds: string[] = [];
-          const alreadyInInbox = new Set<string>();
           for (const [index, id] of messageIds.entries()) {
             const result = results[index];
             if (result?.status === "fulfilled") {
-              changedMessageIds.push(id);
+              const { labelIds } = result.value;
               if (
-                result.value.labelIds.includes("INBOX") &&
-                !result.value.labelIds.some((label) =>
-                  ["SPAM", "TRASH"].includes(label)
-                )
+                execution !== undefined &&
+                command.destination === "inbox" &&
+                labelIds.includes("TRASH")
               ) {
-                alreadyInInbox.add(id);
+                outcomes.set(id, "failed");
+                continue;
+              }
+              changedMessageIds.push(id);
+              const inInbox =
+                labelIds.includes("INBOX") && !labelIds.includes("SPAM");
+              if (
+                execution !== undefined &&
+                command.destination === "inbox" &&
+                !inInbox
+              ) {
+                restoring.push({ id, wasSpam: labelIds.includes("SPAM") });
+                outcomes.set(id, "restoring");
+                if (
+                  associationByMessageId
+                    .get(id)
+                    ?.labelIds?.includes("TRASH") === true
+                ) {
+                  untrashed.add(id);
+                }
               }
             } else if (result?.status === "rejected") {
               const error: unknown = result.reason;
               const rejected = isRejectedGmailWrite(error);
               outcomes.set(id, rejected ? "failed" : "uncertain");
               if (!rejected) {
-                markDispatched?.();
                 reportError(error, { operation: "mail-command-gmail-move" });
               }
               failedMutation ??= result;
             }
           }
-          if (changedMessageIds.length > 0) {
-            markDispatched?.();
-            if (command.destination === "inbox") {
-              try {
-                await batchModifyMessages(
-                  accessToken,
-                  changedMessageIds,
-                  { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
-                  signal
-                );
-              } catch (error) {
-                const rejected = isRejectedGmailWrite(error);
-                const incompleteMessageIds = changedMessageIds.filter(
-                  (id) => !alreadyInInbox.has(id)
-                );
-                for (const id of incompleteMessageIds) {
-                  outcomes.set(id, rejected ? "failed" : "uncertain");
-                }
-                await afterWrite(async () => {
-                  const untrashedMessageIds =
-                    markDispatched === undefined
-                      ? changedMessageIds
-                      : incompleteMessageIds;
-                  await refreshGmailCapturedMessageMetadata({
-                    accessToken,
-                    mailboxId: input.mailboxId,
-                    messageIds: untrashedMessageIds,
-                  });
-                  await recordMetadataAction(
-                    { accessToken, context, input },
-                    "untrash",
-                    untrashedMessageIds
-                  );
-                });
-                if (markDispatched === undefined) {
-                  throw error;
-                }
-                if (!rejected) {
-                  reportError(error, { operation: "mail-command-gmail-inbox" });
-                }
-              }
+          if (
+            execution === undefined &&
+            command.destination === "inbox" &&
+            changedMessageIds.length > 0
+          ) {
+            try {
+              await batchModifyMessages(
+                accessToken,
+                changedMessageIds,
+                { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
+                signal
+              );
+            } catch (error) {
+              await refreshGmailCapturedMessageMetadata({
+                accessToken,
+                mailboxId: input.mailboxId,
+                messageIds: changedMessageIds,
+              });
+              await recordMetadataAction(
+                { accessToken, context, input },
+                "untrash",
+                changedMessageIds
+              );
+              throw error;
             }
           }
         }
-        const appliedMessageIds = messageIds.filter((id) => !outcomes.has(id));
-        if (appliedMessageIds.length > 0) {
-          const appliedThreadIds = [
-            ...new Set(
-              appliedMessageIds.flatMap((id) => {
-                const threadId = associationByMessageId.get(id)?.threadId;
-                return threadId === undefined ? [] : [threadId];
-              })
+        let result: MailMutationResult = { targets: targetResults() };
+        if (execution !== undefined && restoring.length > 0) {
+          const work: MailCommandFollowUp = {
+            kind: "restore-inbox",
+            messages: restoring,
+            result,
+            snoozes,
+            validTargetIndexes: input.targets.flatMap((target, index) =>
+              validTargetSet.has(target) ? [index] : []
             ),
-          ];
+          };
+          await execution.saveFollowUp(work);
+          result = await finishMailCommand(
+            work,
+            execution,
+            context,
+            input.mailboxId,
+            { accessToken, signal }
+          );
+        } else {
+          const appliedThreadIds = validTargets.flatMap((target) =>
+            target.messageIds.some((id) => !outcomes.has(id))
+              ? [target.threadId]
+              : []
+          );
+          await finishSnoozes(result, appliedThreadIds);
+        }
+        const appliedMessageIds =
+          execution === undefined
+            ? messageIds.filter((id) => !outcomes.has(id))
+            : [
+                ...new Set(
+                  result.targets.flatMap(
+                    (target) => target.appliedMessageIds ?? []
+                  )
+                ),
+              ];
+        if (appliedMessageIds.length > 0) {
           await afterWrite(async () => {
-            await supersedePendingMailPlacement({
-              context,
-              mailboxId: input.mailboxId,
-              retireSnoozes: true,
-              threadIds: appliedThreadIds,
-            });
             await refreshGmailCapturedMessageMetadata({
               accessToken,
               mailboxId: input.mailboxId,
@@ -857,9 +1051,10 @@ const applyMailChanges = async ({
             );
           });
         }
-        if (markDispatched === undefined && failedMutation) {
+        if (execution === undefined && failedMutation !== undefined) {
           throw failedMutation.reason;
         }
+        return result;
       }
       return { targets: targetResults() };
     }
@@ -892,11 +1087,11 @@ export const mutationsMailOperations = {
     }
     return await executeMailCommandWithReceipt({
       actorUserId: context.userId,
-      execute: async (markDispatched) =>
+      execute: async (execution) =>
         await applyMailChanges({
           context,
+          execution,
           input,
-          markDispatched,
           selectedMailbox,
         }),
       input,

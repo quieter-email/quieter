@@ -8,6 +8,7 @@ import {
   mailSnooze,
   managedMailMessage,
 } from "@quieter/database/schema";
+import type { MailCommandSnoozeVersion } from "@quieter/database/schema";
 import {
   batchModifyMessages,
   getGmailCaptureMetadata,
@@ -50,6 +51,25 @@ export type MailSnoozePlacement = {
       trigger: "due" | "manual";
     }
 );
+
+export const readMailCommandSnoozes = async (
+  mailboxId: string,
+  threadIds: string[]
+) =>
+  await db
+    .select({
+      id: mailSnooze.id,
+      threadId: mailSnooze.threadId,
+      version: mailSnooze.version,
+    })
+    .from(mailSnooze)
+    .where(
+      and(
+        eq(mailSnooze.mailboxId, mailboxId),
+        inArray(mailSnooze.threadId, threadIds),
+        inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES)
+      )
+    );
 
 const lockPlacementSnooze = async (input: {
   database: Pick<typeof db, "select">;
@@ -95,6 +115,7 @@ export const supersedePendingMailPlacement = async (input: {
   messageId?: string;
   messageIds?: string[];
   retireSnoozes?: boolean;
+  snoozes?: readonly MailCommandSnoozeVersion[];
   threadIds?: string[];
 }) => {
   const requestedMessageIds = [
@@ -180,6 +201,16 @@ export const supersedePendingMailPlacement = async (input: {
                 eq(mailSnooze.mailboxId, input.mailboxId),
                 inArray(mailSnooze.threadId, threadIds),
                 inArray(mailSnooze.status, MAIL_SNOOZE_LIVE_STATUSES),
+                input.snoozes === undefined
+                  ? undefined
+                  : (or(
+                      ...input.snoozes.map(({ id, version }) =>
+                        and(
+                          eq(mailSnooze.id, id),
+                          eq(mailSnooze.version, version)
+                        )
+                      )
+                    ) ?? sql`false`),
                 input.matchHiddenMessageIdsOnly === true &&
                   hiddenMessageConditions.length > 0
                   ? or(...hiddenMessageConditions)
@@ -188,23 +219,29 @@ export const supersedePendingMailPlacement = async (input: {
             )
             .returning({ threadId: mailSnooze.threadId })
         : [];
-    const superseded = await tx
-      .update(mailPlacementOperation)
-      .set({
-        code: "newer_intent",
-        message:
-          "A newer action changed this conversation. Refresh to see its current state.",
-        status: "superseded",
-        updatedAt: new Date(),
-      })
-      .where(
-        and(
-          eq(mailPlacementOperation.mailboxId, input.mailboxId),
-          inArray(mailPlacementOperation.status, ["pending", "submitting"]),
-          targetCondition
-        )
-      )
-      .returning({ id: mailPlacementOperation.id });
+    const superseded =
+      input.snoozes === undefined
+        ? await tx
+            .update(mailPlacementOperation)
+            .set({
+              code: "newer_intent",
+              message:
+                "A newer action changed this conversation. Refresh to see its current state.",
+              status: "superseded",
+              updatedAt: new Date(),
+            })
+            .where(
+              and(
+                eq(mailPlacementOperation.mailboxId, input.mailboxId),
+                inArray(mailPlacementOperation.status, [
+                  "pending",
+                  "submitting",
+                ]),
+                targetCondition
+              )
+            )
+            .returning({ id: mailPlacementOperation.id })
+        : [];
     const interrupted =
       selected.provider === "managed" && superseded.length > 0
         ? await tx

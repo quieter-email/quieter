@@ -92,12 +92,15 @@ export type MailMutationTargetResult = {
   summary?: MailThreadSummary;
   operationId?: string;
   replayed?: boolean;
+  untrashedMessageIds?: string[];
   messageIds?: string[];
 };
 
 export type MailMutationResult = {
   receipt?: {
     requestId: string;
+    replayed?: true;
+    retryable?: true;
     status: "completed" | "pending" | "uncertain";
   };
   targets: MailMutationTargetResult[];

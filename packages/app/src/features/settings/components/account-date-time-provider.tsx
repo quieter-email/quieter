@@ -2,7 +2,10 @@
 
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
-import { queryPersister } from "@quieter/app/lib/query-persister";
+import {
+  persistQueryByKey,
+  queryPersister,
+} from "@quieter/app/lib/query-persister";
 import {
   DateTimePreferencesProvider,
   useDateTimePreferences,
@@ -48,14 +51,16 @@ export const useAccountPreferences = (enabled = true) => {
 
 export const useUpdateAccountPreferences = (boundary: string) => {
   const queryClient = useQueryClient();
-  const queryKey = orpc.accountPreferences.get.key();
+  const { queryKey } = orpc.accountPreferences.get.queryOptions();
   return useMutation({
     ...orpc.accountPreferences.update.mutationOptions(),
     onError: (error) => {
       toastError(error, { boundary });
     },
-    onSuccess: (preferences) => {
+    onSuccess: async (preferences) => {
+      await queryClient.cancelQueries({ exact: true, queryKey });
       queryClient.setQueryData(queryKey, preferences);
+      void persistQueryByKey(queryKey, queryClient);
     },
     scope: { id: "account-preferences" },
   });

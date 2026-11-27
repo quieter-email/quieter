@@ -15,7 +15,11 @@ import {
   extractMessageContent,
   findRenderablePart,
 } from "@quieter/mail/message-content";
-import { MAILBOX_LABELS, MAIL_UNREAD_LABEL } from "@quieter/mail/messages";
+import {
+  isIncomingInboxMessage,
+  MAILBOX_LABELS,
+  MAIL_UNREAD_LABEL,
+} from "@quieter/mail/messages";
 import type {
   MessageListItem,
   MessageInspectorResult,
@@ -1884,13 +1888,7 @@ const getThreadListSummaries = async (
       attachmentCount: attachments.length,
       attachmentNames: attachments.map((attachment) => attachment.fileName),
       inboxIncomingMessageIds: threadMessages
-        .filter(
-          (message) =>
-            message.labelIds?.includes("INBOX") === true &&
-            !message.labelIds.some((label) =>
-              ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-            )
-        )
+        .filter(isIncomingInboxMessage)
         .map((message) => message.id),
       labelIds: [
         ...new Set(
@@ -1967,13 +1965,7 @@ const buildMailboxThreadRows = async (
           attachmentCount: attachments.length,
           attachmentNames: attachments.map((attachment) => attachment.fileName),
           inboxIncomingMessageIds: messages
-            .filter(
-              (message) =>
-                message.labelIds?.includes("INBOX") === true &&
-                !message.labelIds.some((label) =>
-                  ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-                )
-            )
+            .filter(isIncomingInboxMessage)
             .map((message) => message.id),
           labelIds: [
             ...new Set(
@@ -2145,13 +2137,7 @@ export const listMessagesForAgent = async (
     if (thread) {
       threadStates.set(thread.id, {
         inboxIncomingMessageIds: (thread.messages ?? [])
-          .filter(
-            (message) =>
-              message.labelIds?.includes("INBOX") === true &&
-              !message.labelIds.some((label) =>
-                ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-              )
-          )
+          .filter(isIncomingInboxMessage)
           .map((message) => message.id),
         labelIds: [
           ...new Set(
@@ -2457,13 +2443,7 @@ export const getThreadWithDetails = async (
     ...new Set(resolvedMessages.flatMap((message) => message.labelIds ?? [])),
   ];
   const threadInboxIncomingMessageIds = resolvedMessages
-    .filter(
-      (message) =>
-        message.labelIds?.includes("INBOX") === true &&
-        !message.labelIds.some((label) =>
-          ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label)
-        )
-    )
+    .filter(isIncomingInboxMessage)
     .map((message) => message.id);
   const snippet = decodeMimeHeaderValue(thread.snippet);
 

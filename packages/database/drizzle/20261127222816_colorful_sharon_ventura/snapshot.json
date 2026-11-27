@@ -1,0 +1,42 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "93827a6c-25f8-4a69-81fa-dde71187ee48",
+  "prevIds": ["9ff7b9bf-774a-4602-b94e-e4152c1a9e90"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "mailCommandReceipt",
+        "executionState"
+      ],
+      "writes": [
+        "s|col|public.mailCommandReceipt.executionState",
+        "n|col|public.mailCommandReceipt.executionState",
+        "e|col|public.mailCommandReceipt.executionState"
+      ],
+      "reads": ["n|tbl|public.mailCommandReceipt", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "executionState",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

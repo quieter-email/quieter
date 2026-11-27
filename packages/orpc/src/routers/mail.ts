@@ -1,7 +1,9 @@
+import { ORPCError } from "@orpc/server";
 import type { db } from "@quieter/database/client";
 import { user } from "@quieter/database/schema";
 import { labelOrganizationActionSchema } from "@quieter/mail/mailbox-organization";
 import { mailSnoozeApplySchema } from "@quieter/mail/snooze";
+import { reportError } from "@quieter/observability";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
@@ -264,13 +266,23 @@ export const mailRouter = {
     .handler(
       async ({ context, input }) =>
         await Promise.all(
-          input.windows.map(
-            async (window) =>
-              await queriesMailOperations.syncMailbox({
+          input.windows.map(async (window) => {
+            try {
+              return await queriesMailOperations.syncMailbox({
                 context,
                 input: { ...window, mailboxId: input.mailboxId },
-              })
-          )
+              });
+            } catch (error) {
+              if (error instanceof ORPCError && error.status < 500) {
+                const serialized: unknown = error.toJSON();
+                return { error: serialized };
+              }
+              if (context.signal?.aborted !== true) {
+                reportError(error, { boundary: "mailbox-sync-window" });
+              }
+              return { error: new ORPCError("INTERNAL_SERVER_ERROR").toJSON() };
+            }
+          })
         )
     ),
   saveDraft: protectedProcedure

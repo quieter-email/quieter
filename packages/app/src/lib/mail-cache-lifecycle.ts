@@ -4,9 +4,13 @@ import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "@quieter/app/lib/mail/thread-query";
-import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
+import {
+  getMailboxesQueryKey,
+  subscribeToConfirmedMailboxes,
+} from "@quieter/app/lib/mailboxes-query";
+import { orpc } from "@quieter/app/lib/orpc";
 import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
-import { CancelledError } from "@tanstack/react-query";
+import { CancelledError, partialMatchKey } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -117,11 +121,14 @@ export const bindMailCache = (client: QueryClient) => {
   let scheduled = false;
   const attempted = new Set<string>();
   const blockedMailboxes = new Set<string>();
+  const revokedMailboxes = new Set<string>();
+  const isPreloadBlocked = (mailboxId: string) =>
+    revokedMailboxes.has(mailboxId) || blockedMailboxes.has(mailboxId);
   let accessibleMailboxes = readAccessibleMailboxes(
     client.getQueryData(getMailboxesQueryKey())
   );
   const removeMailboxAccess = (mailboxId: string) => {
-    blockedMailboxes.add(mailboxId);
+    revokedMailboxes.add(mailboxId);
     disposeMailboxMutations(client, mailboxId);
     for (const [key, candidate] of candidates) {
       if (candidate.mailboxId === mailboxId) {
@@ -135,11 +142,17 @@ export const bindMailCache = (client: QueryClient) => {
     for (const listener of accessLossListeners.get(client) ?? []) {
       listener({ mailboxId });
     }
+    const scheduledSendsKey = orpc.scheduledSends.list.key({
+      input: { mailboxId },
+    });
     client.removeQueries({
-      predicate: ({ queryKey: [root, scope, threadMailbox] }) =>
-        root === "message-thread"
+      predicate: ({ queryKey }) => {
+        const [root, scope, threadMailbox] = queryKey;
+        return root === "message-thread"
           ? threadMailbox === mailboxId
-          : scope === mailboxId && mailboxQueryRoots.has(String(root)),
+          : (scope === mailboxId && mailboxQueryRoots.has(String(root))) ||
+              partialMatchKey(queryKey, scheduledSendsKey);
+      },
     });
     void mailCache.removeMailbox(mailboxId);
   };
@@ -161,12 +174,12 @@ export const bindMailCache = (client: QueryClient) => {
     const intentional = intent;
     intent = null;
     const next =
-      intentional && !blockedMailboxes.has(intentional.mailboxId)
+      intentional && !isPreloadBlocked(intentional.mailboxId)
         ? [intentional]
         : [];
     if (canPrefetchInBackground() && active < 2 && fetching === active) {
       for (const [key, entry] of candidates) {
-        if (!attempted.has(key) && !blockedMailboxes.has(entry.mailboxId)) {
+        if (!attempted.has(key) && !isPreloadBlocked(entry.mailboxId)) {
           next.push(entry);
         }
       }
@@ -250,7 +263,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         clearTimeout(intentTimer);
         intent = null;
-        if (candidate && !blockedMailboxes.has(candidate.mailboxId)) {
+        if (candidate && !isPreloadBlocked(candidate.mailboxId)) {
           intentTimer = setTimeout(() => {
             intent = candidate;
             schedule();
@@ -263,7 +276,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         candidates = new Map(
           next
-            .filter((entry) => !blockedMailboxes.has(entry.mailboxId))
+            .filter((entry) => !isPreloadBlocked(entry.mailboxId))
             .map((entry) => [
               JSON.stringify([
                 entry.mailboxId,
@@ -345,7 +358,13 @@ export const bindMailCache = (client: QueryClient) => {
               .success))
       ) {
         removeMailboxAccess(mailboxId);
-        void client.invalidateQueries({ queryKey: getMailboxesQueryKey() });
+        void (async () => {
+          const manifest = { exact: true, queryKey: getMailboxesQueryKey() };
+          await client.cancelQueries(manifest);
+          if (!disposed) {
+            await client.invalidateQueries(manifest);
+          }
+        })();
       } else if (
         typeof error === "object" &&
         error !== null &&
@@ -403,6 +422,18 @@ export const bindMailCache = (client: QueryClient) => {
     disposed = true;
     clearTimeout(intentTimer);
   });
+  const unsubscribeManifest = subscribeToConfirmedMailboxes(
+    client,
+    (manifest) => {
+      if (!disposed) {
+        for (const { mailboxes } of manifest.groups) {
+          for (const { id } of mailboxes) {
+            revokedMailboxes.delete(id);
+          }
+        }
+      }
+    }
+  );
   return () => {
     disposed = true;
     candidates.clear();
@@ -415,6 +446,7 @@ export const bindMailCache = (client: QueryClient) => {
       connection.removeEventListener("change", schedule);
     }
     unsubscribe();
+    unsubscribeManifest();
     unsubscribeSession();
     for (const key of pinned) {
       mailCache.protect(key, false);

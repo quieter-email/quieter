@@ -9,6 +9,7 @@ import {
 import {
   getGmailUnreadCountsQueryKey,
   getMailboxesQueryKey,
+  mailboxesQueryOptions,
 } from "@quieter/app/lib/mailboxes-query";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { appRuntime } from "@quieter/app/runtime";
@@ -42,9 +43,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
   const pending = new Map<
     string,
     {
-      localCommand: boolean;
+      localThreadIds: Set<string>;
       types: Set<MailUpdate["type"]>;
-      version?: string;
+      version?: string | null;
       revision?: string;
       threadIds: Set<string> | null;
     }
@@ -307,10 +308,11 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     const syncedRevisions = new Set<string>();
     const changeVersions = new Map<string, string>();
     for (const [mailboxId, change] of changes) {
-      if (change.version !== undefined && !changes.has("*")) {
+      if (typeof change.version === "string" && !changes.has("*")) {
         changeVersions.set(mailboxId, change.version);
       }
       if (
+        change.localThreadIds.size === 0 &&
         change.revision !== undefined &&
         isRevisionSynced(mailboxId, change.revision)
       ) {
@@ -318,8 +320,35 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       }
     }
     refreshing = true;
-    liveMailboxChangeVersions.set(queryClient, changeVersions);
+    const targets = new Map(changeVersions);
+    for (const [mailboxId, change] of changes) {
+      if (change.localThreadIds.size > 0) {
+        targets.delete(mailboxId);
+      }
+    }
+    liveMailboxChangeVersions.set(queryClient, targets);
     try {
+      // A search read started before the write can still return the old membership.
+      await queryClient.cancelQueries(
+        {
+          fetchStatus: "fetching",
+          predicate: ({ queryKey }) => {
+            const [root, mailboxId, , search] = queryKey;
+            return (
+              root === "messages" &&
+              queryKey.length === 4 &&
+              typeof search === "string" &&
+              search.length > 0 &&
+              (changes.get(String(mailboxId))?.localThreadIds.size ?? 0) > 0
+            );
+          },
+          type: "active",
+        },
+        { revert: false }
+      );
+      if (disposed || suspended) {
+        return;
+      }
       const invalidate = queryClient.invalidateQueries(
         {
           predicate: ({ queryKey }) => {
@@ -402,15 +431,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
               return false;
             }
             if (root === "message-thread") {
-              const change = changes.get("*") ?? changes.get(mailboxId);
+              const threadId = String(queryKey[3]);
               if (
-                change?.threadIds &&
-                !change.threadIds.has(String(queryKey[3]))
+                changes.get(mailboxId)?.localThreadIds.has(threadId) === true
               ) {
-                return false;
-              }
-              if (change?.localCommand === true) {
                 return true;
+              }
+              const change = changes.get("*") ?? changes.get(mailboxId);
+              if (change?.threadIds && !change.threadIds.has(threadId)) {
+                return false;
               }
               return (
                 queryClient.getQueryCache().findAll({
@@ -468,7 +497,7 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
         }),
       ]);
     } finally {
-      if (liveMailboxChangeVersions.get(queryClient) === changeVersions) {
+      if (liveMailboxChangeVersions.get(queryClient) === targets) {
         liveMailboxChangeVersions.delete(queryClient);
       }
       refreshing = false;
@@ -524,7 +553,17 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
     }
     if (type === "mailbox.changed") {
       const reason = mailboxId === "*" ? "recovery" : "event";
-      if (typedChange === undefined && !localCommand) {
+      if (
+        (typedChange === undefined && !localCommand) ||
+        queryClient
+          .getQueryData(mailboxesQueryOptions().queryKey)
+          ?.groups.some(({ mailboxes }) =>
+            mailboxes.some(
+              (mailbox) =>
+                mailbox.id === mailboxId && mailbox.provider === "managed"
+            )
+          ) === true
+      ) {
         mailboxListRefresher.request(reason);
       }
       if (
@@ -537,16 +576,28 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       }
     }
     const change = pending.get(mailboxId);
+    let version: string | null | undefined = typedChange?.version;
+    if (
+      type === "mailbox.changed" &&
+      typedChange === undefined &&
+      !localCommand
+    ) {
+      version = null;
+    }
     if (change === undefined) {
       pending.set(mailboxId, {
-        localCommand,
+        localThreadIds: new Set(localCommand ? threadIds : []),
         revision,
         threadIds: threadIds === undefined ? null : new Set(threadIds),
         types: new Set([type]),
-        version: typedChange?.version,
+        version,
       });
     } else {
-      change.localCommand ||= localCommand;
+      if (localCommand) {
+        for (const threadId of threadIds ?? []) {
+          change.localThreadIds.add(threadId);
+        }
+      }
       if (change.threadIds !== null) {
         if (threadIds === undefined) {
           change.threadIds = null;
@@ -556,15 +607,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
           }
         }
       }
-      if (type === "mailbox.changed") {
-        if (typedChange === undefined) {
-          change.version = undefined;
-        } else if (
-          !change.types.has(type) ||
-          (change.version !== undefined &&
-            BigInt(typedChange.version) > BigInt(change.version))
+      if (type === "mailbox.changed" && !localCommand) {
+        if (
+          version === null ||
+          (version !== undefined &&
+            change.version !== null &&
+            (change.version === undefined ||
+              BigInt(version) > BigInt(change.version)))
         ) {
-          change.version = typedChange.version;
+          change.version = version;
         }
         change.revision =
           revision !== undefined &&

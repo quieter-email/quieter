@@ -10,6 +10,8 @@ Events contain an ID, mailbox ID, change type, and optional thread IDs. Typed ev
 
 The browser coalesces bursts for 150 ms and deduplicates recent event IDs. Gmail and managed mailbox windows carry their own applied journal version. The authenticated `syncMailbox` RPC replays changes for a window. `pullMailboxChanges` groups up to seven windows for one mailbox into a single request, including recently used views whose cache is still present. Both routes use the same folder projection as the corresponding list read. A gap refreshes the affected window while its cached rows stay visible. Socket hints and command receipts never advance the applied version.
 
+A failed window in a grouped request keeps its current checkpoint and can retry independently. Successful windows in the same response still apply their changes.
+
 Verification-code refreshes run independently of message refreshes, so a slow inbox request cannot delay a newly extracted code. Reconnects, focus, and a foreground 60-second recovery timer also reconcile Gmail history. When a replay gap, expired provider history, or an unsupported search requires reconciliation, the browser reloads a bounded set of list pages. The journal retains 256 versions per mailbox. Replay reads up to 64 versions and reconciles if the changes exceed its limits.
 
 Message views reuse codes already fetched for the same mailbox and message while their own lookup runs. Inline codes in inbox rows and message views remain available after expiry. Only the idle panel filters its current-code suggestions by expiry.
@@ -28,7 +30,9 @@ Reversible actions update visible query data immediately. A per-QueryClient coor
 
 The UI settles after its optimistic change. In-flight reads for affected records are fenced when a command confirms, and other reads continue. A stable request ID allows a lost response to be retried with the same payload and lets the server replay a stored outcome. A definitive failure rolls back the affected optimistic change. Partial Gmail writes keep their confirmed subset. An uncertain write triggers authoritative reconciliation without automatically dispatching a new write. Catch-up runs in the background after the command burst drains.
 
-Command receipts are retained for 30 days. Mail maintenance removes expired receipts in bounded batches and leaves recent in-flight claims alone. Retries are immediate and keep the original request ID within the active command.
+Command receipts record when a write can reach the provider. An expired claim that stopped before dispatch can be reclaimed with the same ID. An ambiguous dispatch requires reconciliation. When the server knows which steps applied, it can resume a recorded follow-up with the original ID, such as adding the Inbox label after untrashing. The client uses the replayed result to settle the command and refreshes affected records for current metadata.
+
+Command receipts are retained for 30 days. Mail maintenance removes expired receipts in bounded batches and leaves recent in-flight claims alone.
 
 Logout or confirmed mailbox access loss disposes the affected coordinator state, rejects unsent work, and ignores late results. Separate devices and collaborators converge through replay. There is no persisted offline write queue or distributed last-click-wins guarantee. Destructive actions retain their existing pending guards.
 
@@ -62,6 +66,6 @@ Keep shared Gmail in `observe` mode with production watch ownership. Real Gmail 
 
 ## Rollout
 
-Apply the additive journal, command receipt, and Gmail metadata migrations through the protected workflow before releasing the readers that use them. Deploy journal-producing Workers before switching web clients to managed replay wherever possible. During mixed versions, a legacy managed content revision without the corresponding journal entry triggers a window refresh. Existing clients keep the single-window endpoint and the compatible `mailbox.changed` envelope. Keep legacy transport available during rolling releases.
+Apply the additive journal, command receipt (including execution state), and Gmail metadata migrations through the protected workflow before releasing the readers that use them. Deploy journal-producing Workers before switching web clients to managed replay wherever possible. During mixed versions, a legacy managed content revision without the corresponding journal entry triggers a window refresh. Existing clients keep the single-window endpoint and the compatible `mailbox.changed` envelope. Keep legacy transport available during rolling releases.
 
 Measure warm launch, view switching, thread opening, and label-picker readiness separately from first use on a fresh device. Check connected-device propagation and replay recovery independently of time spent waiting for external Gmail notifications. Exercise older desktop clients against the new server before cutting over the web client.

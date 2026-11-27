@@ -1,3 +1,4 @@
+import { createORPCErrorFromJson, isORPCErrorJson } from "@orpc/client";
 import { rpc } from "@quieter/app/lib/orpc";
 import type { MailboxSyncDelta } from "@quieter/mail/messages";
 import type { QueryClient } from "@tanstack/react-query";
@@ -64,6 +65,12 @@ const pullMailboxChanges = async (requests: readonly SyncRequest[]) => {
       const delta = deltas[index];
       if (delta === undefined) {
         request.reject(new Error("Mailbox sync omitted a requested view."));
+      } else if ("error" in delta) {
+        request.reject(
+          isORPCErrorJson(delta.error)
+            ? createORPCErrorFromJson(delta.error)
+            : new Error("Could not synchronize the requested mailbox view.")
+        );
       } else {
         request.resolve(delta);
       }
