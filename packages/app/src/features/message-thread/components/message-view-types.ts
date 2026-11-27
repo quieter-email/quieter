@@ -1,6 +1,5 @@
 "use client";
 
-import type { ConversationNavigationScope } from "@quieter/app/components/conversation-navigator";
 import type { ComposeSenderMailbox } from "@quieter/app/features/compose/components/compose-workspace";
 import type {
   MailboxActions,
@@ -9,6 +8,7 @@ import type {
 import type { CorrespondentHistoryActionProps } from "@quieter/app/features/message-thread/components/correspondent-history-action";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import type { RefObject } from "react";
 
 export type MessageViewProps = {
   activeMailbox: MailboxCategory;
@@ -21,7 +21,7 @@ export type MessageViewProps = {
   composeSignature?: { html: string | null; text: string | null };
   focusOnOpen?: boolean;
   currentUserEmail?: string | null;
-  navigationScope?: ConversationNavigationScope;
+  navigationInteractionRef?: RefObject<HTMLElement | null>;
   mailboxId: string;
   mailboxProvider: "api" | "gmail" | "managed";
   mailboxActions: MailboxActions;
