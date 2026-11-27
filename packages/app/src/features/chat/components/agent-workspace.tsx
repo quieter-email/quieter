@@ -431,7 +431,6 @@ export const AgentWorkspaceProvider = ({
         const revealsMailContent =
           opensMailContent &&
           (selected.isComposeMailbox ||
-            selected.isScheduledMailbox ||
             selected.isSnippetMailbox ||
             selected.view === "labels" ||
             selected.view === "rules");
@@ -618,8 +617,6 @@ export const AgentWorkspaceProvider = ({
         let view: string = selected.activeMailbox;
         if (selected.isComposeMailbox) {
           view = "compose";
-        } else if (selected.isScheduledMailbox) {
-          view = "scheduled";
         } else if (selected.isSnippetMailbox) {
           view = "snippets";
         } else if (

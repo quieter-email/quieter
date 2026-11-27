@@ -82,7 +82,7 @@ export const showHeldSendToast = ({
         toast.success(
           undone.status === "abandoned"
             ? "Send undone. Check Drafts for your message."
-            : "Send undone. Open Scheduled to restore your message."
+            : "Send undone. Open Sent to restore your message."
         );
         return;
       }

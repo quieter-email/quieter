@@ -133,13 +133,6 @@ export const KEYBOARD_SHORTCUTS = [
     sequence: ["G", "L"],
   },
   {
-    category: "Navigation",
-    id: "go-scheduled",
-    label: "Go to Scheduled",
-    scope: "mailbox",
-    sequence: ["G", "C"],
-  },
-  {
     category: "Message list",
     id: "list-next-conversation",
     keys: ["J"],

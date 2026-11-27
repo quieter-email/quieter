@@ -36,7 +36,6 @@ const mailboxSearchCategories = [
   "sent",
   "trash",
   "drafts",
-  "scheduled",
   "snippets",
   "compose",
 ] as const;
@@ -46,6 +45,10 @@ const parseMailboxSearchCategory = (
 ): (typeof mailboxSearchCategories)[number] => {
   if (typeof value !== "string") {
     return "inbox";
+  }
+  // Scheduled messages now lead the Sent list; keep older links working.
+  if (value === "scheduled") {
+    return "sent";
   }
   for (const category of mailboxSearchCategories) {
     if (value === category) {

@@ -98,6 +98,7 @@ export const createHeldSendDatabase = async () => {
         "sendAt" timestamptz NOT NULL,
         "sendOperationId" text NOT NULL,
         "sentAt" timestamptz,
+        "sentMessageId" text,
         "sourceDraftId" text,
         "sourceLocalId" text NOT NULL,
         status text NOT NULL,

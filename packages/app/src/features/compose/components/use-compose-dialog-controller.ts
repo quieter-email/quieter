@@ -618,15 +618,15 @@ export const useComposeDialogController = ({
         {
           message:
             scheduled.errorMessage ??
-            "Scheduling needs attention. Open Scheduled to review this message.",
+            "Scheduling needs attention. Open Sent to review this message.",
           status: 400,
         },
         { boundary: "compose-schedule-preparation" }
       );
     } else if (scheduled.status === "preparing") {
-      toast("Message saved in Scheduled. Scheduling is still being confirmed.");
+      toast("Message saved in Sent. Scheduling is still being confirmed.");
     } else if (scheduled.status === "uncertain") {
-      toast("Delivery is being confirmed. Check Scheduled or Sent.");
+      toast("Delivery is being confirmed. Check Sent.");
     } else if (scheduled.status === "sent") {
       toast.success("This message has been sent.");
     } else if (scheduled.status === "sending") {

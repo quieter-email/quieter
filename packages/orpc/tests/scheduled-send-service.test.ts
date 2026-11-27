@@ -115,6 +115,7 @@ describe("scheduled send execution", () => {
       sendAt: new Date(Date.now() + 86_400_000),
       sendOperationId: "18cba911-a53c-4555-a8bd-c03394db8335",
       sentAt: null,
+      sentMessageId: null,
       sourceDraftId: "draft",
       sourceLocalId: "local",
       status: "scheduled",

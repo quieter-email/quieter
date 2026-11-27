@@ -4,7 +4,6 @@ import {
   AlarmClockIcon,
   Calendar03Icon,
   CheckmarkCircle02Icon,
-  Clock01Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -34,23 +33,19 @@ const mailboxDestinations = [
   { icon: AlarmClockIcon, mailbox: "later", shortcutId: "go-later" },
   { icon: Mail01Icon, mailbox: "unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, mailbox: "sent", shortcutId: "go-sent" },
-  { icon: Clock01Icon, mailbox: "scheduled", shortcutId: "go-scheduled" },
   { icon: Edit01Icon, mailbox: "drafts", shortcutId: "go-drafts" },
   { icon: Delete01Icon, mailbox: "trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, mailbox: "spam", shortcutId: "go-spam" },
 ] as const satisfies readonly {
   icon: IconSvgElement;
-  mailbox: MailboxCategory | "scheduled";
+  mailbox: MailboxCategory;
   shortcutId: KeyboardShortcutId;
 }[];
 
 export const isMailboxSupportedByProvider = (
   provider: "api" | "gmail" | "managed" | null,
-  mailbox: MailboxCategory | "scheduled"
+  mailbox: MailboxCategory
 ) => {
-  if (mailbox === "scheduled") {
-    return provider === "gmail" || provider === "managed";
-  }
   if (provider === "api") {
     return mailbox === "sent";
   }
@@ -62,7 +57,6 @@ export const useMailboxCommands = ({
   canCompose,
   isComposeMailbox,
   isMailWorkspace,
-  isScheduledMailbox,
   isSnippetMailbox,
   isWorkspaceReady,
   mailboxes,
@@ -81,7 +75,6 @@ export const useMailboxCommands = ({
   canCompose: boolean;
   isComposeMailbox: boolean;
   isMailWorkspace: boolean;
-  isScheduledMailbox: boolean;
   isSnippetMailbox: boolean;
   isWorkspaceReady: boolean;
   mailboxes: ReturnType<typeof useMailboxSelection>["mailboxes"];
@@ -89,7 +82,7 @@ export const useMailboxCommands = ({
   onManageSnippets: () => void;
   onOpenCalendar: () => void | Promise<void>;
   onOpenMail: () => void | Promise<void>;
-  onSelectMailbox: (mailbox: MailboxCategory | "scheduled") => void;
+  onSelectMailbox: (mailbox: MailboxCategory) => void;
   onSelectMailboxId: (mailboxId: string) => void;
   onSelectView: (view: MailboxWorkspaceView) => void;
   selectedMailboxId: string | null;
@@ -137,12 +130,7 @@ export const useMailboxCommands = ({
   if (allInboxesReason === null) {
     if (!hasNonApiMailbox) {
       allInboxesReason = "Connect a mailbox to view its Inbox.";
-    } else if (
-      allInboxesActive &&
-      !isComposeMailbox &&
-      !isSnippetMailbox &&
-      !isScheduledMailbox
-    ) {
+    } else if (allInboxesActive && !isComposeMailbox && !isSnippetMailbox) {
       allInboxesReason = "Already viewing All inboxes.";
     }
   }
@@ -191,13 +179,10 @@ export const useMailboxCommands = ({
       }
       const { icon, mailbox, shortcutId } = destination;
       const isViewingDestination =
-        mailbox === "scheduled"
-          ? isScheduledMailbox && view === "inbox"
-          : !isComposeMailbox &&
-            !isSnippetMailbox &&
-            !isScheduledMailbox &&
-            (view === "inbox" || view === "all-inboxes") &&
-            mailbox === activeMailbox;
+        !isComposeMailbox &&
+        !isSnippetMailbox &&
+        (view === "inbox" || view === "all-inboxes") &&
+        mailbox === activeMailbox;
       let reason = mailboxReason;
       if (reason === null) {
         if (!isMailboxSupportedByProvider(effectiveViewProvider, mailbox)) {
@@ -307,7 +292,6 @@ export const useMailboxCommands = ({
       activeMailbox,
       isComposeMailbox,
       isSnippetMailbox,
-      isScheduledMailbox,
     ])
   );
 };

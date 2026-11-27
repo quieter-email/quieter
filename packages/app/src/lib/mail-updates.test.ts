@@ -24,7 +24,10 @@ vi.mock("@quieter/app/features/reminders/reminder-query", () => ({
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- These mocks intentionally replace only the transport contracts used here.
 vi.mock("@quieter/app/lib/orpc", () => ({
-  orpc: { mailAgent: { threadResults: { key: () => ["thread-results"] } } },
+  orpc: {
+    mailAgent: { threadResults: { key: () => ["thread-results"] } },
+    scheduledSends: { list: { key: () => ["scheduled-sends"] } },
+  },
   rpc: { mail: { createUpdateConnection: mocks.createConnection } },
 }));
 // oxlint-disable-next-line vitest/prefer-import-in-mock -- These mocks intentionally replace only the transport contracts used here.

@@ -55,9 +55,11 @@ export const workspaceViewSchema = z.enum([
   "compose",
   "calendar",
 ]);
+// Scheduled messages now lead Sent; "scheduled" stays readable for older clients.
 export const navigableWorkspaceViewSchema = workspaceViewSchema.exclude([
   "compose",
   "calendar",
+  "scheduled",
 ]);
 
 const optionalText = z.string().trim().max(10_000).optional();

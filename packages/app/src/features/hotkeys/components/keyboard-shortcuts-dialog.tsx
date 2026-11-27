@@ -57,7 +57,6 @@ const SHORTCUT_VIEW_SECTIONS: readonly ShortcutViewSection[] = [
       { id: "go-done", label: "Done" },
       { id: "go-later", label: "Later" },
       { id: "go-sent", label: "Sent" },
-      { id: "go-scheduled", label: "Scheduled" },
       { id: "go-drafts", label: "Drafts" },
       { id: "go-unread", label: "Unread" },
       { id: "go-spam", label: "Spam" },

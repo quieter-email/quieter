@@ -364,8 +364,8 @@ const createScheduledSendWithinLock = async (
       throw new ORPCError("CONFLICT", {
         message:
           input.deliveryKind === "undo"
-            ? "This message already has a pending send. Open Scheduled to check it."
-            : "This message already has a schedule. Open Scheduled to change it.",
+            ? "This message already has a pending send. Open Sent to check it."
+            : "This message already has a schedule. Open Sent to change it.",
       });
     }
     const current =
@@ -539,8 +539,8 @@ const createScheduledSendWithinLock = async (
       throw new ORPCError("CONFLICT", {
         message:
           input.deliveryKind === "undo"
-            ? "This draft already has a pending send. Open Scheduled to check it."
-            : "This draft already has a scheduled send. Open Scheduled to change it.",
+            ? "This draft already has a pending send. Open Sent to check it."
+            : "This draft already has a scheduled send. Open Sent to change it.",
       });
     }
     if (
@@ -1071,6 +1071,8 @@ export const dispatchScheduledSend = async (
             nextWakeAt: null,
             payloadRetiredAt: new Date(),
             sentAt: new Date(),
+            sentMessageId:
+              row.deliveryKind === "scheduled" ? (receipt.id ?? null) : null,
             status: "sent",
             updatedAt: new Date(),
           })
@@ -1154,7 +1156,7 @@ export const dispatchScheduledSend = async (
       return { nextWakeAt: Date.now() + LEASE_MS };
     }
     submissionStarted = true;
-    await composeMailOperations.sendMessage({
+    const sent = await composeMailOperations.sendMessage({
       context: { userId: row.userId },
       input: { mailboxId: row.mailboxId, message },
       scheduledSendId: row.id,
@@ -1168,6 +1170,7 @@ export const dispatchScheduledSend = async (
         nextWakeAt: null,
         payloadRetiredAt: new Date(),
         sentAt: new Date(),
+        sentMessageId: row.deliveryKind === "scheduled" ? sent.id : null,
         status: "sent",
         updatedAt: new Date(),
       })

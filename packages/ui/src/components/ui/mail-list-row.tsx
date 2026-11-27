@@ -17,6 +17,7 @@ export const mailListRowFrameVariants = cva(
   {
     defaultVariants: {
       layout: "stacked",
+      lines: "two",
     },
     variants: {
       accent: {
@@ -26,6 +27,10 @@ export const mailListRowFrameVariants = cva(
       layout: {
         adaptive: "@3xl:h-12",
         stacked: "",
+      },
+      lines: {
+        three: "h-21",
+        two: "",
       },
     },
   }
@@ -142,10 +147,15 @@ export const MailListRowMetadata = ({
   );
 };
 
-type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
+type MailListRowDetailsProps = Pick<
+  VariantProps<typeof mailListRowFrameVariants>,
+  "layout"
+> & {
   actions?: ReactNode;
   active?: boolean;
   badge?: ReactNode;
+  /** A compact third line; pair it with a `lines: "three"` stacked frame. */
+  footer?: ReactNode;
   metadata?: ReactNode;
   sender: string;
   senderEmail?: string;
@@ -160,6 +170,7 @@ export const MailListRowDetails = ({
   actions,
   active = false,
   badge,
+  footer,
   layout = "stacked",
   metadata,
   sender,
@@ -288,6 +299,11 @@ export const MailListRowDetails = ({
           {subjectTrailing}
         </div>
       </div>
+      {footer !== undefined && footer !== null && (
+        <div className="flex w-full min-w-0 items-center gap-1 text-caption text-muted-fg">
+          {footer}
+        </div>
+      )}
     </div>
   </div>
 );

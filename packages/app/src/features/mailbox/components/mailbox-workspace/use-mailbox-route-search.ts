@@ -184,7 +184,6 @@ const MAILBOX_ROUTE_CATEGORIES = [
   "sent",
   "trash",
   "drafts",
-  "scheduled",
   "snippets",
   "compose",
 ] as const;
@@ -453,11 +452,8 @@ export const useMailWorkspaceRouteSearch = () => {
   });
   const isSnippetMailbox = routeMailbox === "snippets";
   const isComposeMailbox = routeMailbox === "compose";
-  const isScheduledMailbox = routeMailbox === "scheduled";
   const activeMailbox =
-    routeMailbox === "snippets" ||
-    routeMailbox === "compose" ||
-    routeMailbox === "scheduled"
+    routeMailbox === "snippets" || routeMailbox === "compose"
       ? "inbox"
       : routeMailbox;
   const chatId = inboxRouteApi.useSearch({
@@ -495,7 +491,6 @@ export const useMailWorkspaceRouteSearch = () => {
     compose,
     gmailLink,
     isComposeMailbox,
-    isScheduledMailbox,
     isSnippetMailbox,
     mailboxId,
     mailto,

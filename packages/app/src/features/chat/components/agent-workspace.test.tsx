@@ -23,7 +23,6 @@ vi.mock(
       compose: undefined,
       gmailLink: undefined,
       isComposeMailbox: false,
-      isScheduledMailbox: false,
       isSnippetMailbox: false,
       mailboxId: "fixture-mailbox",
       mailto: undefined,
