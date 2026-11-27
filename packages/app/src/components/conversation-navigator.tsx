@@ -3,13 +3,13 @@
 import { toastError } from "@quieter/app/lib/error-toast";
 import { ThreadRail } from "@quieter/ui/thread-rail";
 import type { ThreadRailItem } from "@quieter/ui/thread-rail";
-import { useEffect, useEffectEvent, useRef, useState } from "react";
+import { useEffectEvent, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import { createPortal } from "react-dom";
 
 export type ConversationNavigationScope = {
   viewportRef: RefObject<HTMLElement | null>;
-  contentRef: RefObject<HTMLElement | null>;
+  content: HTMLElement;
   gutterRef: RefObject<HTMLElement | null>;
   interactionRef: RefObject<HTMLElement | null>;
 };
@@ -19,6 +19,7 @@ type ConversationNavigatorProps = {
   scope: ConversationNavigationScope;
   items: readonly ThreadRailItem[];
   enabled?: boolean;
+  isLayoutPending?: boolean;
   itemExtent?: "element" | "until-next";
   onNavigateStart?: () => void;
   prepareItem?: (id: string) => void | Promise<void>;
@@ -37,13 +38,14 @@ type NavigationGeometry =
 export const ConversationNavigator = ({
   "aria-label": label,
   enabled = true,
+  isLayoutPending = false,
   itemExtent = "element",
   items,
   onNavigateStart,
   prepareItem,
   scope,
 }: ConversationNavigatorProps) => {
-  const { contentRef, gutterRef, interactionRef, viewportRef } = scope;
+  const { content, gutterRef, interactionRef, viewportRef } = scope;
   const [geometry, setGeometry] = useState<NavigationGeometry>({
     kind: "hidden",
   });
@@ -51,15 +53,13 @@ export const ConversationNavigator = ({
   const readItems = useEffectEvent(() => items);
   const itemIds = JSON.stringify(items.map((item) => item.id));
 
-  useEffect((): (() => void) | undefined => {
+  useLayoutEffect((): (() => void) | undefined => {
     const viewport = viewportRef.current;
-    const content = contentRef.current;
     const host = gutterRef.current;
     const view = viewport?.ownerDocument.defaultView;
     if (
       !enabled ||
       viewport === null ||
-      content === null ||
       host === null ||
       view === null ||
       view === undefined
@@ -143,7 +143,11 @@ export const ConversationNavigator = ({
     observer.observe(viewport);
     observer.observe(content);
     viewport.addEventListener("scroll", scheduleMeasure, { passive: true });
-    scheduleMeasure();
+    if (isLayoutPending) {
+      scheduleMeasure();
+    } else {
+      measure();
+    }
     return () => {
       observer.disconnect();
       viewport.removeEventListener("scroll", scheduleMeasure);
@@ -152,7 +156,15 @@ export const ConversationNavigator = ({
       }
       navigationRequest.current += 1;
     };
-  }, [contentRef, enabled, gutterRef, itemExtent, itemIds, viewportRef]);
+  }, [
+    content,
+    enabled,
+    gutterRef,
+    isLayoutPending,
+    itemExtent,
+    itemIds,
+    viewportRef,
+  ]);
 
   const navigate = async (id: string) => {
     navigationRequest.current += 1;
@@ -164,14 +176,8 @@ export const ConversationNavigator = ({
         return;
       }
       const viewport = viewportRef.current;
-      const content = contentRef.current;
       const view = viewport?.ownerDocument.defaultView;
-      if (
-        viewport === null ||
-        content === null ||
-        view === null ||
-        view === undefined
-      ) {
+      if (viewport === null || view === null || view === undefined) {
         return;
       }
       const anchor = [
