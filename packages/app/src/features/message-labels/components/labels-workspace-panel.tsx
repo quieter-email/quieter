@@ -110,6 +110,7 @@ import { LabelGroupRow } from "./label-group-row";
 import { LabelGroupSelect } from "./label-group-select";
 import type { LabelGroupOption } from "./label-group-select";
 import { getLabelUpdates } from "./label-update-mutation";
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 type LabelsWorkspacePanelProps = {
   canManage: boolean;
@@ -310,6 +311,7 @@ export const LabelsWorkspacePanel = ({
   const addGroupOptions = (parentId: string | null) => {
     for (const group of childGroupsByParentId.get(parentId) ?? []) {
       groupOptions.push({
+        color: group.color,
         id: group.id,
         label: labelGroupTree.getGroupPath(group.id) ?? group.name,
       });
@@ -806,23 +808,27 @@ export const LabelsWorkspacePanel = ({
                   Move to group
                 </DropdownMenuSubmenuTrigger>
                 <DropdownMenuSubmenuContent>
-                  {[{ id: null, label: "No group" }, ...groupOptions].map(
-                    (option) => (
-                      <DropdownMenuCheckboxItem
-                        checked={
-                          labelGroupTree.getLabelGroupId(label.id) === option.id
-                        }
-                        closeOnSelect
-                        disabled={areGroupActionsDisabled}
-                        key={option.id ?? "none"}
-                        onCheckedChange={() => {
-                          void moveLabel(label, option.id);
-                        }}
-                      >
-                        {option.label}
-                      </DropdownMenuCheckboxItem>
-                    )
-                  )}
+                  {[
+                    { color: null, id: null, label: "No group" },
+                    ...groupOptions,
+                  ].map((option) => (
+                    <DropdownMenuCheckboxItem
+                      checked={
+                        labelGroupTree.getLabelGroupId(label.id) === option.id
+                      }
+                      closeOnSelect
+                      disabled={areGroupActionsDisabled}
+                      key={option.id ?? "none"}
+                      onCheckedChange={() => {
+                        void moveLabel(label, option.id);
+                      }}
+                    >
+                      {option.id === null ? null : (
+                        <MailboxLabelSwatch color={option.color} kind="group" />
+                      )}
+                      <span className="min-w-0 truncate">{option.label}</span>
+                    </DropdownMenuCheckboxItem>
+                  ))}
                 </DropdownMenuSubmenuContent>
               </DropdownMenuSubmenu>
             ) : null}

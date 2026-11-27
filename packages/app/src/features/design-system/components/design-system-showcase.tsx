@@ -1669,6 +1669,12 @@ export const DesignSystemShowcase = () => {
               trigger="swatch"
               value={labelColor}
             />
+            <MailboxColorPicker
+              label="Example group color"
+              onChange={setLabelColor}
+              swatchShape="circle"
+              value={labelColor}
+            />
           </Row>
           <Row label="Search input">
             <InputGroup className="w-64">

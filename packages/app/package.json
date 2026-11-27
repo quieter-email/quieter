@@ -111,6 +111,7 @@
     "./features/message-labels/components/conversation-labels": "./src/features/message-labels/components/conversation-labels.tsx",
     "./features/message-labels/components/labels-workspace-panel": "./src/features/message-labels/components/labels-workspace-panel.tsx",
     "./features/message-labels/components/mailbox-color-picker": "./src/features/message-labels/components/mailbox-color-picker.tsx",
+    "./features/message-labels/components/mailbox-label-swatch": "./src/features/message-labels/components/mailbox-label-swatch.tsx",
     "./features/message-labels/components/message-labels-menu": "./src/features/message-labels/components/message-labels-menu.tsx",
     "./features/message-labels/domain/auto-label-prompt": "./src/features/message-labels/domain/auto-label-prompt.ts",
     "./features/message-labels/domain/conversation-label-picker": "./src/features/message-labels/domain/conversation-label-picker.ts",

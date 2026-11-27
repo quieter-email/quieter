@@ -1,5 +1,6 @@
 "use client";
 
+import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import {
   Select,
   SelectContent,
@@ -8,7 +9,13 @@ import {
   SelectValue,
 } from "@quieter/ui/select";
 
-export type LabelGroupOption = { id: string; label: string };
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
+
+export type LabelGroupOption = {
+  color: MailboxLabelColor;
+  id: string;
+  label: string;
+};
 
 const noGroupValue = "none";
 
@@ -26,27 +33,37 @@ export const LabelGroupSelect = ({
   onChange: (groupId: string | null) => void;
   options: readonly LabelGroupOption[];
   value: string | null;
-}) => (
-  <Select
-    items={[
-      { label: noneLabel, value: noGroupValue },
-      ...options.map((option) => ({ label: option.label, value: option.id })),
-    ]}
-    onValueChange={(next) => {
-      onChange(next === null || next === noGroupValue ? null : next);
-    }}
-    value={value ?? noGroupValue}
-  >
-    <SelectTrigger disabled={disabled} id={id}>
-      <SelectValue />
-    </SelectTrigger>
-    <SelectContent align="start">
-      <SelectItem value={noGroupValue}>{noneLabel}</SelectItem>
-      {options.map((option) => (
-        <SelectItem key={option.id} value={option.id}>
-          {option.label}
-        </SelectItem>
-      ))}
-    </SelectContent>
-  </Select>
-);
+}) => {
+  const selectedGroup = options.find((option) => option.id === value);
+
+  return (
+    <Select
+      items={[
+        { label: noneLabel, value: noGroupValue },
+        ...options.map((option) => ({ label: option.label, value: option.id })),
+      ]}
+      onValueChange={(next) => {
+        onChange(next === null || next === noGroupValue ? null : next);
+      }}
+      value={value ?? noGroupValue}
+    >
+      <SelectTrigger disabled={disabled} id={id}>
+        {selectedGroup ? (
+          <MailboxLabelSwatch color={selectedGroup.color} kind="group" />
+        ) : null}
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent align="start">
+        <SelectItem value={noGroupValue}>{noneLabel}</SelectItem>
+        {options.map((option) => (
+          <SelectItem key={option.id} value={option.id}>
+            <span className="flex min-w-0 items-center gap-2">
+              <MailboxLabelSwatch color={option.color} kind="group" />
+              <span className="min-w-0 truncate">{option.label}</span>
+            </span>
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};

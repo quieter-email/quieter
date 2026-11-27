@@ -2,6 +2,7 @@
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { MailboxLabelSwatch } from "@quieter/app/features/message-labels/components/mailbox-label-swatch";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   computeEffectiveHiddenLabelIds,
@@ -21,9 +22,7 @@ import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery } from "@tanstack/react-query";
@@ -43,21 +42,6 @@ type SidebarLabelNavProps = {
   searchQuery: string;
   selectedMailbox: MailboxCategory | null;
 };
-
-const ManagedLabelColorDot = ({
-  className,
-  color,
-}: {
-  className?: string;
-  color: MailboxLabel["color"] | null | undefined;
-}) => (
-  <ColorSwatch
-    className={className}
-    color={
-      color?.startsWith("#") === true ? color : `var(--q-${color ?? "gray"})`
-    }
-  />
-);
 
 const SidebarLabelEntrance = ({
   animateEntrance,
@@ -260,7 +244,7 @@ export const SidebarLabelNav = ({
             variant="ghost"
           >
             <span className="flex size-3.5 shrink-0 items-center justify-center">
-              <ManagedLabelColorDot color={label.color} />
+              <MailboxLabelSwatch color={label.color} />
             </span>
             <span className="min-w-0 truncate">{label.name}</span>
             {mailboxProvider === "managed" ? (

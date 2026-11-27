@@ -15,11 +15,9 @@ import { labelSuggestionsQueryOptions } from "@quieter/app/lib/mail/label-sugges
 import type {
   LabelOrganization,
   MailboxLabel,
-  MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { CommandMenu } from "@quieter/ui/command-menu";
 import type { CommandMenuItem } from "@quieter/ui/command-menu";
 import {
@@ -38,6 +36,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { createLabelGroupTree } from "../domain/label-group-tree";
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 export type ConversationLabelChanges = {
   addLabelIds: string[];
@@ -87,23 +86,6 @@ const closedPicker: PickerState = {
   ready: false,
   suggestionIds: [],
 };
-
-const LabelMarker = ({
-  color,
-  shape,
-}: {
-  color: MailboxLabelColor | null;
-  shape: "circle" | "square";
-}) => (
-  <span className="flex size-4 items-center justify-center">
-    <ColorSwatch
-      color={
-        color?.startsWith("#") === true ? color : `var(--q-${color ?? "gray"})`
-      }
-      shape={shape}
-    />
-  </span>
-);
 
 export const ConversationLabels = ({
   appliedLabelIds,
@@ -296,7 +278,9 @@ export const ConversationLabels = ({
           ? {
               action: { groupId: entry.group.id, kind: "group" },
               group: section.title,
-              icon: <LabelMarker color={entry.group.color} shape="circle" />,
+              icon: (
+                <MailboxLabelSwatch color={entry.group.color} kind="group" />
+              ),
               id: `group:${entry.group.id}`,
               label: entry.group.name,
               shortcut: (
@@ -314,7 +298,7 @@ export const ConversationLabels = ({
                   ? (entry.path ?? undefined)
                   : undefined,
               group: section.title,
-              icon: <LabelMarker color={entry.label.color} shape="square" />,
+              icon: <MailboxLabelSwatch color={entry.label.color} />,
               id: `label:${entry.label.id}`,
               label: entry.label.name,
             }

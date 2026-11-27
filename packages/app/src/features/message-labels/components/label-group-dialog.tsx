@@ -94,6 +94,7 @@ export const LabelGroupDialog = ({
                 disabled={disabled}
                 label="Group color"
                 onChange={setColor}
+                swatchShape="circle"
                 value={color}
               />
             </Field>

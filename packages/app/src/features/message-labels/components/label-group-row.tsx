@@ -11,7 +11,6 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -26,6 +25,7 @@ import { Text } from "@quieter/ui/text";
 import type { ReactNode } from "react";
 
 import type { LabelGroup } from "../domain/label-group-tree";
+import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 export const LabelGroupRow = ({
   actionsDisabled,
@@ -103,13 +103,7 @@ export const LabelGroupRow = ({
               type="button"
               variant="ghost"
             >
-              <ColorSwatch
-                color={
-                  group.color.startsWith("#")
-                    ? group.color
-                    : `var(--q-${group.color})`
-                }
-              />
+              <MailboxLabelSwatch color={group.color} kind="group" />
             </Button>
           </IconButtonTooltip>
           <Text as="span" className="min-w-0 flex-1" truncate>

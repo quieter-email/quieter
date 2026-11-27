@@ -5,7 +5,7 @@ import {
   Cancel01Icon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import type { IconSvgElement } from "@hugeicons/react";
+import { MailboxLabelSwatch } from "@quieter/app/features/message-labels/components/mailbox-label-swatch";
 import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import type { searchFilterOptions } from "@quieter/app/features/message-search/components/message-list-search-filter-options";
 import { normalizeLabelSelectionKey } from "@quieter/app/features/message-search/state/message-list-search-state";
@@ -88,7 +88,7 @@ const SearchDropdownRow = ({
   customColor?: string;
   highlighted?: boolean;
   hint?: string;
-  icon: IconSvgElement;
+  icon: ReactNode;
   label: string;
   onClick: () => void;
 }) => {
@@ -115,13 +115,7 @@ const SearchDropdownRow = ({
       style={rowStyle}
       type="button"
     >
-      <Icon
-        aria-hidden
-        size={14}
-        tone="muted"
-
-        icon={icon}
-      />
+      {icon}
       <span className="min-w-0 flex-1 truncate">{label}</span>
       {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
     </button>
@@ -363,7 +357,7 @@ export const MessageListSearchDropdown = ({
                 highlightedItemKey ===
                 `label:${normalizeLabelSelectionKey(label.name)}`
               }
-              icon={Tag01Icon}
+              icon={<MailboxLabelSwatch color={label.color} />}
               key={label.id}
               label={
                 selectionState === "exclude" ? `Not ${label.name}` : label.name
@@ -506,7 +500,14 @@ export const MessageListSearchDropdown = ({
                               ? `-${option.hint}`
                               : option.hint
                           }
-                          icon={option.icon}
+                          icon={
+                            <Icon
+                              aria-hidden
+                              icon={option.icon}
+                              size={14}
+                              tone="muted"
+                            />
+                          }
                           key={`${option.filter.type}:${option.filter.value}`}
                           label={
                             selectionState === "exclude"
