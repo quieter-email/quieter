@@ -23,6 +23,7 @@ import type { MessagesQueryData } from "@quieter/app/lib/mail/inbox-query/data";
 import {
   getLiveSyncQueryKey,
   getMessagesQueryKey,
+  getSidebarMailCountQueryKey,
   normalizeSearchQuery,
   parsePageToken,
 } from "@quieter/app/lib/mail/inbox-query/keys";
@@ -77,15 +78,23 @@ type RefreshLoadedMessagesPagesOptions = {
   signal?: AbortSignal;
 };
 
-const fetchMessagesPage = async (
-  mailboxId: string,
-  mailbox: MailboxCategory,
-  pageToken: string | undefined,
-  searchQuery?: string | null,
-  signal?: AbortSignal
-) => {
-  const maxResults =
-    pageToken === undefined ? MESSAGE_PAGE_SIZE : OTHER_MESSAGE_PAGE_SIZE;
+export const fetchMessagesPage = async ({
+  mailboxId,
+  mailbox,
+  pageToken,
+  searchQuery,
+  signal,
+  maxResults = pageToken === undefined
+    ? MESSAGE_PAGE_SIZE
+    : OTHER_MESSAGE_PAGE_SIZE,
+}: {
+  mailboxId: string;
+  mailbox: MailboxCategory;
+  pageToken?: string;
+  searchQuery?: string | null;
+  signal?: AbortSignal;
+  maxResults?: number;
+}) => {
   if (isManagedSandboxMailboxId(mailboxId)) {
     return listManagedDemoMessages({
       category: mailbox,
@@ -312,13 +321,13 @@ const refreshMessagesPages = async (
   try {
     for (let pageIndex = 0; pageIndex < refreshedPageCount; pageIndex += 1) {
       operation.assertCurrent();
-      const refreshedPage = await fetchMessagesPage(
-        mailboxId,
+      const refreshedPage = await fetchMessagesPage({
         mailbox,
+        mailboxId,
         pageToken,
         searchQuery,
-        operation.signal
-      );
+        signal: operation.signal,
+      });
       operation.assertCurrent();
       if (pageIndex === 0) {
         await queryClient.cancelQueries({
@@ -418,22 +427,22 @@ export const refreshCachedMailboxQueries = async (
     (cachedQuery) => cachedQuery.mailbox === mailbox
   );
 
-  if (cachedQueries.length === 0) {
-    await refreshLoadedMessagesPages(queryClient, mailboxId, mailbox);
-    return;
-  }
-
-  await Promise.all(
-    cachedQueries.map(
-      async (cachedQuery) =>
-        await refreshLoadedMessagesPages(
-          queryClient,
-          mailboxId,
-          mailbox,
-          cachedQuery.searchQuery
-        )
-    )
-  );
+  await Promise.all([
+    queryClient.invalidateQueries({
+      queryKey: getSidebarMailCountQueryKey(mailboxId, mailbox),
+    }),
+    ...(cachedQueries.length === 0
+      ? [refreshLoadedMessagesPages(queryClient, mailboxId, mailbox)]
+      : cachedQueries.map(
+          async (cachedQuery) =>
+            await refreshLoadedMessagesPages(
+              queryClient,
+              mailboxId,
+              mailbox,
+              cachedQuery.searchQuery
+            )
+        )),
+  ]);
 };
 
 export const applyMailboxSyncDelta = async (
@@ -763,13 +772,13 @@ export const messagesQueryOptions = (
     meta: { ownsMailLiveSync: ownsLiveSync },
     persister,
     queryFn: async ({ pageParam, signal }) =>
-      await fetchMessagesPage(
-        mailboxId,
+      await fetchMessagesPage({
         mailbox,
-        parsePageToken(pageParam),
+        mailboxId,
+        pageToken: parsePageToken(pageParam),
         searchQuery,
-        signal
-      ),
+        signal,
+      }),
     queryKey: getMessagesQueryKey(mailboxId, mailbox, searchQuery),
     refetchOnMount:
       mailbox === "drafts" || mailbox === "later" ? "always" : false,

@@ -10,6 +10,7 @@ import {
   getGmailConversationListRows,
   isGmailServiceError,
   listDraftsWithDetails,
+  listGmailMailboxRowIds,
   listMessagesWithDetails,
   listLabels,
 } from "@quieter/gmail";
@@ -689,6 +690,58 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     return { ...result, messages, snooze: messages[0]?.snooze };
+  },
+  listMailboxRowIds: async ({
+    context,
+    input,
+  }: {
+    context: MailRequestContext;
+    input: MailInputs["listMailboxRowIds"];
+  }) => {
+    const { category, mailboxId } = input;
+    if (
+      !isOrganizationApiMailboxId(mailboxId) &&
+      category !== "important" &&
+      category !== "later"
+    ) {
+      const mailbox = await assertAccessibleMailbox({
+        mailboxId,
+        userId: context.userId,
+      });
+      if (mailbox.provider === "gmail") {
+        const page = await callGmail(
+          context,
+          mailboxId,
+          async (accessToken, signal) =>
+            await listGmailMailboxRowIds(accessToken, {
+              ...input,
+              mailbox: category,
+              signal,
+            })
+        );
+        if (category !== "done") {
+          return page;
+        }
+        const visible = await filterMailSnoozeVisibility({
+          category,
+          mailboxId,
+          threadIds: page.ids,
+          userId: context.userId,
+        });
+        return { ...page, ids: [...visible] };
+      }
+    }
+
+    const page: ListMessagesPageResult =
+      await queriesMailOperations.listThreads({ context, input });
+    return {
+      ids: page.messages.map((message) =>
+        category === "drafts"
+          ? (message.draftId ?? message.id)
+          : message.threadId
+      ),
+      nextPageToken: page.nextPageToken,
+    };
   },
   listMessageDeliveryStatuses: async ({
     context,

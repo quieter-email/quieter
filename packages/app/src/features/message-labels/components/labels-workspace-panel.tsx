@@ -41,16 +41,6 @@ import type {
   MailboxLabel,
   MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
-import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogCloseButton,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -85,6 +75,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import { useCallback, useEffect, useId, useReducer, useState } from "react";
 
+import { DeleteMailboxLabelDialog } from "./delete-mailbox-label-dialog";
 import { getLabelUpdates } from "./label-update-mutation";
 
 type LabelsWorkspacePanelProps = {
@@ -202,9 +193,6 @@ export const LabelsWorkspacePanel = ({
     orpc.mail.createLabel.mutationOptions()
   );
   const updateLabelMutation = useMutation(labelUpdates.options);
-  const deleteLabelMutation = useMutation(
-    orpc.mail.deleteLabel.mutationOptions()
-  );
   const updateLabelDetailsMutation = useMutation(
     orpc.mail.updateLabelDetails.mutationOptions()
   );
@@ -393,38 +381,6 @@ export const LabelsWorkspacePanel = ({
       }
       return current;
     });
-  };
-
-  const deleteLabel = async (label: MailboxLabel) => {
-    if (!isNonemptyMailboxId(mailboxId)) {
-      return;
-    }
-
-    try {
-      if (isSandboxMailboxId(mailboxId)) {
-        const current = getDemoLabelAutomation(mailboxId);
-        saveDemoLabelAutomation(mailboxId, {
-          ...current,
-          deletedLabelIds: [...current.deletedLabelIds, label.id],
-        });
-      } else {
-        await deleteLabelMutation.mutateAsync({ labelId: label.id, mailboxId });
-      }
-      if (labelEdit?.labelId === label.id) {
-        setLabelEdit(null);
-      }
-      setMailboxHiddenLabelIds((current) => {
-        current.delete(label.id);
-        return current;
-      });
-      await invalidateLabels();
-      setDeletingLabel(null);
-    } catch (error) {
-      toastError(error, {
-        boundary: "labels-panel",
-        fallback: "Could not delete label.",
-      });
-    }
   };
 
   let labelsContent: React.ReactNode;
@@ -773,46 +729,22 @@ export const LabelsWorkspacePanel = ({
         />
       ) : null}
 
-      <AlertDialog
+      <DeleteMailboxLabelDialog
+        label={deletingLabel}
+        mailboxId={mailboxId ?? ""}
+        mailboxProvider={mailboxProvider}
+        onDeleted={(labelId) => {
+          if (labelEdit?.labelId === labelId) {
+            setLabelEdit(null);
+          }
+        }}
         onOpenChange={(open) => {
           if (!open) {
             setDeletingLabel(null);
           }
         }}
-        open={!!deletingLabel}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete label</AlertDialogTitle>
-            <AlertDialogDescription>
-              This removes the label from conversations and automatic rules.
-              Rules left without usable settings will be disabled.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogBody>
-            <p className="text-body text-fg">
-              Delete{" "}
-              {deletingLabel?.name ? `"${deletingLabel.name}"` : "this label"}?
-            </p>
-          </AlertDialogBody>
-          <AlertDialogFooter>
-            <AlertDialogCloseButton variant="secondary">
-              Cancel
-            </AlertDialogCloseButton>
-            <Button
-              disabled={deleteLabelMutation.isPending || !deletingLabel}
-              onClick={() => {
-                if (deletingLabel) {
-                  void deleteLabel(deletingLabel);
-                }
-              }}
-              variant="destructive"
-            >
-              Delete
-            </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
+        open={deletingLabel !== null && isNonemptyMailboxId(mailboxId)}
+      />
     </div>
   );
 };

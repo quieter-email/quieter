@@ -1710,7 +1710,8 @@ export const getGmailThreadMessageCount = async (
 const getGmailThreadsListMetadata = async (
   accessToken: string,
   threadIds: readonly string[],
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  fields = GMAIL_THREAD_LIST_METADATA_FIELDS
 ) => {
   const uniqueThreadIds = [...new Set(threadIds)];
   const threads: (z.infer<typeof gmailThreadSchema> | null)[] = [];
@@ -1722,7 +1723,7 @@ const getGmailThreadsListMetadata = async (
       ...(await getGmailMetadataBatch(
         "thread",
         gmailThreadSchema,
-        GMAIL_THREAD_LIST_METADATA_FIELDS,
+        fields,
         accessToken,
         batchThreadIds,
         signal
@@ -1730,6 +1731,46 @@ const getGmailThreadsListMetadata = async (
     );
   }
   return threads;
+};
+
+export const listGmailMailboxRowIds = async (
+  accessToken: string,
+  options: {
+    mailbox: Exclude<MailboxCategory, "important" | "later">;
+    maxResults: number;
+    pageToken?: string;
+    signal?: AbortSignal;
+  }
+) => {
+  if (options.mailbox === "drafts") {
+    const list = await listDrafts(accessToken, options);
+    return {
+      ids: list.drafts.flatMap((draft) =>
+        draft.message?.id && draft.message.threadId ? [draft.id] : []
+      ),
+      nextPageToken: list.nextPageToken,
+    };
+  }
+
+  const list = await listThreads(accessToken, options);
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    list.threads.map((thread) => thread.id),
+    options.signal,
+    "id,messages(id,threadId,labelIds)"
+  );
+  return {
+    ids: threads.flatMap((thread) =>
+      thread &&
+      getThreadMailboxMessages({
+        mailbox: options.mailbox,
+        messages: thread.messages ?? [],
+      }).length > 0
+        ? [thread.id]
+        : []
+    ),
+    nextPageToken: list.nextPageToken,
+  };
 };
 
 const getThreadListSummaries = async (

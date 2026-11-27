@@ -419,6 +419,9 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             ) {
               return false;
             }
+            if (root === "messages" && queryKey[4] === "sidebar-count") {
+              return changes.has("*") || types.has("mailbox.changed");
+            }
             if (root === "gmail-labels") {
               return changes.has("*") || types.has("labels.changed");
             }
