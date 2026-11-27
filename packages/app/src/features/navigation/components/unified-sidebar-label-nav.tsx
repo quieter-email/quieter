@@ -4,6 +4,7 @@ import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import type { MailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
 import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
+import { MailboxLabelSwatch } from "@quieter/app/features/message-labels/components/mailbox-label-swatch";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   SIDEBAR_LABEL_VISIBILITY_STORAGE_KEY,
@@ -23,7 +24,6 @@ import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -42,6 +42,7 @@ import type { SidebarEntry } from "../domain/sidebar-preferences";
 import { SidebarContextMenu } from "./sidebar-context-menu";
 import {
   SidebarLabelDialogs,
+  useSidebarLabelFilterReplacement,
   useSidebarSearchNavigation,
 } from "./sidebar-label-actions";
 import type { SidebarLabelDialogState } from "./sidebar-label-actions";
@@ -67,6 +68,7 @@ export const UnifiedSidebarLabelNav = ({
 }) => {
   const preferences = useUnifiedInboxPreferences(userId);
   const navigateSearch = useSidebarSearchNavigation();
+  const replaceLabelFilters = useSidebarLabelFilterReplacement();
   const [labelDialog, setLabelDialog] =
     useState<SidebarLabelDialogState | null>(null);
   const [, refreshHiddenLabels] = useState(0);
@@ -78,6 +80,16 @@ export const UnifiedSidebarLabelNav = ({
         mailbox.connectionStatus === "connected" &&
         !preferences.excludedIds.includes(mailbox.id)
     );
+  if (
+    labelDialog !== null &&
+    !mailboxes.some(
+      (mailbox) =>
+        mailbox.id === labelDialog.request.mailboxId &&
+        (mailbox.provider === "gmail" || mailbox.grantRole === "manager")
+    )
+  ) {
+    setLabelDialog(null);
+  }
   const labelQueries = useQueries({
     queries: mailboxes.map((mailbox) => labelsQueryOptions(mailbox.id)),
   });
@@ -365,13 +377,7 @@ export const UnifiedSidebarLabelNav = ({
                 variant="ghost"
               >
                 <span className="flex size-3.5 shrink-0 items-center justify-center">
-                  <ColorSwatch
-                    color={
-                      label.color?.startsWith("#") === true
-                        ? label.color
-                        : `var(--q-${label.color ?? "gray"})`
-                    }
-                  />
+                  <MailboxLabelSwatch color={label.color} />
                 </span>
                 <span className="min-w-0 truncate">{label.name}</span>
               </SidebarMailboxNavItem>
@@ -417,25 +423,24 @@ export const UnifiedSidebarLabelNav = ({
       </nav>
       <SidebarLabelDialogs
         onDeleted={(request) => {
-          const key = normalizeLabelSelectionKey(request.label.name);
-          if (selectedMailbox === null || !selectedLabelKeys.has(key)) {
+          if (selectedMailbox === null) {
             return;
           }
-          navigateSearch({
-            messageId: null,
-            query: serializeStructuredSearchState({
-              ...search,
-              filters: search.filters.filter(
-                (filter) =>
-                  filter.type !== "label" ||
-                  normalizeLabelSelectionKey(filter.value) !== key
-              ),
-            }),
-            threadId: null,
+          replaceLabelFilters({
+            inScope: (route) => route.view === "all-inboxes",
+            nextName: null,
+            previousNames: [request.label.name],
           });
         }}
         onOpenChange={(open) => {
           setLabelDialog((current) => current && { ...current, open });
+        }}
+        onRenamed={(request, label) => {
+          replaceLabelFilters({
+            inScope: (route) => route.view === "all-inboxes",
+            nextName: label.name,
+            previousNames: [request.label.name],
+          });
         }}
         state={labelDialog}
       />

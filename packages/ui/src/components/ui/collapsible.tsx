@@ -26,7 +26,7 @@ export const CollapsibleTrigger = ({
             buttonVariants({ size: "text", variant: "link" }),
             "group/text-disclosure justify-start text-disclosure-fg no-underline hover:text-fg",
           ]
-        : ["squircle", overlayTriggerClassName],
+        : overlayTriggerClassName,
       className
     )}
     {...props}

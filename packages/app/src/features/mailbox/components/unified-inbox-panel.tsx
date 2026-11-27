@@ -19,7 +19,10 @@ import type {
 } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
 import { MessageList } from "@quieter/app/features/message-list/components/message-list";
-import type { MessageListMailboxContext } from "@quieter/app/features/message-list/components/message-list-types";
+import type {
+  MessageListMailboxContext,
+  MessageListProps,
+} from "@quieter/app/features/message-list/components/message-list-types";
 import { ReminderDueStrip } from "@quieter/app/features/reminders/reminder-due-strip";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
@@ -70,6 +73,7 @@ type UnifiedInboxPanelProps = {
   userId: string;
   searchQuery: string;
   onSearch: (query: string) => void;
+  onFilterByLabel: MessageListProps["onFilterByLabel"];
   onOpenSidebar: () => void;
   onSelectMessage: (
     mailboxId: string,
@@ -184,6 +188,7 @@ export const UnifiedInboxPanel = ({
   activeThreadId,
   mailboxes,
   onDeactivateActiveMessage,
+  onFilterByLabel,
   onKeyboardOpenMessage,
   onOpenDraft,
   onOpenSidebar,
@@ -782,6 +787,7 @@ export const UnifiedInboxPanel = ({
               }
             }}
             onDeactivateActiveMessage={onDeactivateActiveMessage}
+            onFilterByLabel={onFilterByLabel}
             onKeyboardOpenMessage={onKeyboardOpenMessage}
             onLoadMore={() => {
               void loadMore();

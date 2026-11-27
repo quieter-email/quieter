@@ -8,4 +8,4 @@ export const inputControlSizeVariants = {
 } as const;
 
 export const ghostInputClassName =
-  "squircle min-w-0 rounded-md border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:bg-muted focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:bg-destructive/10";
+  "min-w-0 rounded-md border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:bg-muted focus-visible:ring-0 focus-visible:ring-offset-0 aria-invalid:bg-destructive/10";

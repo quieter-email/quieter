@@ -17,6 +17,7 @@ import {
 import type { ThreadPreloadCandidate } from "@quieter/app/lib/mail-cache-lifecycle";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
@@ -33,8 +34,8 @@ import {
   useRef,
 } from "react";
 
-const MESSAGE_ROW_HEIGHT_PX = 68;
-const MESSAGE_ROW_GAP_PX = 0;
+const MESSAGE_ROW_HEIGHT_PX = 60;
+const SELECTION_TRAY_CLEARANCE_PX = 72;
 const MESSAGE_LIST_OVERSCAN = 12;
 const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
 const MESSAGE_LIST_SKELETON_ROW_IDS = [
@@ -55,6 +56,7 @@ type MessageListScrollPaneProps = {
   onKeyboardOpenMessage?: () => void;
   onThreadSnooze: (thread: ThreadListEntry) => void;
   selection: ReturnType<typeof useMessageListSelection>;
+  showSelectionTray: boolean;
   threadedMessages: ThreadListEntry[];
 };
 
@@ -117,12 +119,12 @@ const loadMoreIfNeeded = ({
 };
 
 const MessageListLoadingSkeleton = () => (
-  <div aria-live="polite" className="block space-y-0.5">
+  <div aria-live="polite" className="flex flex-col gap-px">
     <span className="sr-only">Loading messages…</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-17 animate-pulse items-center gap-2 rounded-xl px-2 @sm:gap-3 @sm:px-3"
+        className="flex h-15 animate-pulse items-center gap-3 rounded-xl px-4"
         key={rowId}
       >
         <div className="size-9.5 shrink-0 rounded-lg bg-muted" />
@@ -163,8 +165,10 @@ export const MessageListScrollPane = ({
   onKeyboardOpenMessage,
   onThreadSnooze,
   selection,
+  showSelectionTray,
   threadedMessages,
 }: MessageListScrollPaneProps) => {
+  const { onFilterByLabel: handleFilterByLabel } = list;
   const queryClient = useQueryClient();
   const flattenedMessages = list.messages.flatMap((page) => page.messages);
   const activeThreadId =
@@ -341,7 +345,7 @@ export const MessageListScrollPane = ({
   const messageVirtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
     count: threadedMessages.length,
     estimateSize: () => rowHeightEstimateRef.current,
-    gap: MESSAGE_ROW_GAP_PX,
+    gap: 1,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
     measureElement: (element, entry, instance) => {
@@ -371,6 +375,7 @@ export const MessageListScrollPane = ({
         : (cachedHeight ?? rowHeightEstimateRef.current);
     },
     overscan: MESSAGE_LIST_OVERSCAN,
+    scrollPaddingEnd: showSelectionTray ? SELECTION_TRAY_CLEARANCE_PX : 0,
   });
   useLayoutEffect(() => {
     const element = selection.scrollRef.current;
@@ -715,7 +720,10 @@ export const MessageListScrollPane = ({
 
   return (
     <div
-      className={mailListRowParts.viewport}
+      className={cn(mailListRowParts.viewport, {
+        "pb-18": showSelectionTray,
+      })}
+      data-message-list-viewport
       onScrollCapture={(event) => {
         if (
           pendingLayoutRef.current &&
@@ -751,6 +759,7 @@ export const MessageListScrollPane = ({
         });
       }}
       ref={selection.scrollRef}
+      tabIndex={-1}
     >
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
@@ -816,6 +825,7 @@ export const MessageListScrollPane = ({
                 offsetY={virtualItem.start}
                 onThreadFocus={handleThreadFocus}
                 onThreadIntent={handleThreadIntent}
+                onFilterByLabel={handleFilterByLabel}
                 onOpenDraft={handleOpenDraft}
                 onKeyboardOpen={onKeyboardOpenMessage}
                 onThreadPress={selection.handleThreadPress}

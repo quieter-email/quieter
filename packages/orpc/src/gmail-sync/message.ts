@@ -444,6 +444,7 @@ const processAutoLabelMessage = async ({
         }
         recordStage(null);
         let aiLabelIds: string[] = [];
+        let suggestedLabelIds: string[] = [];
         if (aiLabels.length > 0) {
           recordStage("classificationBillingContext");
           const billing = await createMailboxAiBillingContext({
@@ -464,6 +465,9 @@ const processAutoLabelMessage = async ({
                 : serializeAiAgentContext(memoryContext),
             message,
             model: autoLabelContext.model,
+            onSuggestions: (labelIds) => {
+              suggestedLabelIds = labelIds;
+            },
             onUsage: (reportedUsage) => {
               usage = reportedUsage;
             },
@@ -486,6 +490,7 @@ const processAutoLabelMessage = async ({
             lastError: null,
             model: aiLabels.length > 0 ? autoLabelContext.model : null,
             promptTokens: usage.promptTokens,
+            suggestedLabelIds,
             updatedAt: now,
             // Unreportable usage is terminal; only retryable reporting failures
             // keep usageReportedAt unset.
@@ -524,6 +529,7 @@ const processAutoLabelMessage = async ({
         return { status: "complete" };
       }
 
+      let appliedLabelIds = labelIds;
       if (labelIds.length > 0) {
         try {
           recordStage("apply");
@@ -538,6 +544,7 @@ const processAutoLabelMessage = async ({
           if (!isGmailServiceError(error) || error.status !== 404) {
             throw error;
           }
+          appliedLabelIds = [];
         }
       }
 
@@ -547,6 +554,7 @@ const processAutoLabelMessage = async ({
         .update(gmailAutoLabelEvent)
         .set({
           appliedAt: now,
+          labelIds: appliedLabelIds,
           lastError: null,
           nextAttemptAt: null,
           updatedAt: now,

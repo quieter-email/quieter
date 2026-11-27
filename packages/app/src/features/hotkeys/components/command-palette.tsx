@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  Cancel01Icon,
-  Mail01Icon,
-  Search01Icon,
-} from "@hugeicons/core-free-icons";
+import { Cancel01Icon, Mail01Icon } from "@hugeicons/core-free-icons";
 import { APP_SHORTCUT_BLOCKING_OVERLAY_SELECTOR } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { Button } from "@quieter/ui/button";
@@ -20,6 +16,7 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Kbd } from "@quieter/ui/kbd";
+import { PopupMenuSearch } from "@quieter/ui/popup-menu";
 import { toast } from "@quieter/ui/toast";
 import { detectPlatform } from "@tanstack/hotkeys";
 import type { RegisterableHotkey } from "@tanstack/react-hotkeys";
@@ -214,15 +211,14 @@ const CommandPaletteBody = ({
 
   return (
     <>
-      <div className="border-b border-fg/10">
+      <div>
         {contextLabel === undefined ? null : (
           <div className="flex min-w-0 items-center gap-1.5 px-4 pt-3 text-caption text-muted-fg">
             <Icon icon={Mail01Icon} size={14} />
             <span className="truncate">{contextLabel}</span>
           </div>
         )}
-        <div className="flex items-center gap-2.5 pr-3 pl-4">
-          <Icon icon={Search01Icon} tone="muted" />
+        <PopupMenuSearch>
           <Input
             aria-activedescendant={
               filtered.length > 0 ? `${menuId}-${highlightedIndex}` : undefined
@@ -290,7 +286,7 @@ const CommandPaletteBody = ({
           <DialogClose aria-label="Close commands" className="sm:hidden">
             Close
           </DialogClose>
-        </div>
+        </PopupMenuSearch>
       </div>
       <CommandMenu
         activeIndex={highlightedIndex}
@@ -322,7 +318,7 @@ const CommandPaletteBody = ({
                         {keyIndex > 0 ? (
                           <span className="text-micro text-muted-fg">→</span>
                         ) : null}
-                        <Kbd size="sm">{key}</Kbd>
+                        <Kbd variant="hint">{key}</Kbd>
                       </span>
                     )
                   )}

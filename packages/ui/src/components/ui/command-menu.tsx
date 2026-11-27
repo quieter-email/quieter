@@ -1,19 +1,22 @@
 "use client";
 
-import { Search01Icon } from "@hugeicons/core-free-icons";
 import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
-import { Icon } from "./icon";
+import { CheckIcon } from "./icons";
 import { Kbd } from "./kbd";
 import {
   menuEmptyClassName,
   menuGroupLabelClassName,
   menuItemClassName,
+  menuListPaddingClassName,
+  menuSurfaceClassName,
 } from "./menu-chrome";
-import { popupSurfaceClassName } from "./popup-surface";
+import { PopupMenuSearch } from "./popup-menu";
 
 export type CommandMenuItem = {
+  /** Set for multi-select lists; checked items show a trailing check. */
+  checked?: boolean;
   description?: string;
   disabledReason?: string;
   group: string;
@@ -69,26 +72,23 @@ export const CommandMenu = ({
     <div
       className={cn(
         "overflow-hidden",
-        chrome === "popup" ? popupSurfaceClassName : undefined,
+        chrome === "popup" ? menuSurfaceClassName : undefined,
         {
           "w-full": chrome === "dialog",
-          "z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col rounded-xl":
+          "z-50 flex w-72 max-w-[calc(100vw-2rem)] flex-col":
             chrome === "popup",
         }
       )}
       data-blocking-overlay={chrome === "popup" ? "" : undefined}
     >
       {search === undefined ? null : (
-        <div className="flex shrink-0 items-center gap-2 border-b border-fg/10 px-3.5">
-          <Icon aria-hidden icon={Search01Icon} tone="muted" />
-          {search}
-        </div>
+        <PopupMenuSearch>{search}</PopupMenuSearch>
       )}
       <div
         aria-label={label}
-        className={cn("overflow-y-auto", {
-          "max-h-64 p-1": chrome === "popup",
-          "max-h-[min(24rem,56dvh)] overscroll-contain p-1.5": isDialog,
+        className={cn("overflow-y-auto", menuListPaddingClassName, {
+          "max-h-64": chrome === "popup",
+          "max-h-[min(24rem,56dvh)] overscroll-contain": isDialog,
         })}
         id={id}
         // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Suggestions keep editor focus and support rich options.
@@ -128,14 +128,14 @@ export const CommandMenu = ({
                 </div>
                 {section.entries.map(({ index, item }) => (
                   <button
+                    aria-checked={item.checked}
                     aria-disabled={
                       item.disabledReason === undefined ? undefined : true
                     }
                     aria-selected={index === activeIndex}
                     className={cn(menuItemClassName, "group/command w-full", {
-                      "active:scale-100 data-disabled:pointer-events-auto":
+                      "data-disabled:pointer-events-auto":
                         item.disabledReason !== undefined,
-                      "min-h-9 gap-2.5 rounded-lg px-2.5 py-2": isDialog,
                       "text-destructive":
                         item.tone === "destructive" &&
                         item.disabledReason === undefined,
@@ -189,6 +189,9 @@ export const CommandMenu = ({
                       ) : null}
                     </span>
                     {item.shortcut}
+                    {item.checked === true ? (
+                      <CheckIcon className="size-3.5 shrink-0" />
+                    ) : null}
                   </button>
                 ))}
               </div>
@@ -199,7 +202,7 @@ export const CommandMenu = ({
       {showFooter && isDialog ? (
         <div
           className={cn(
-            "flex items-center justify-between gap-4 border-t border-fg/10 bg-section/60 px-4 py-2.5 text-micro text-muted-fg",
+            "flex items-center justify-between gap-4 border-t border-fg/10 px-4 py-2.5 text-micro text-muted-fg",
             { "max-sm:hidden": !footerStatus }
           )}
         >

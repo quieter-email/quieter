@@ -9,6 +9,7 @@ import {
   saveDemoLabelAutomation,
 } from "@quieter/app/lib/demo-mail/label-automation";
 import { toastError } from "@quieter/app/lib/error-toast";
+import { labelOrganizationQueryOptions } from "@quieter/app/lib/mail/label-organization-query";
 import { getLabelsQueryKey } from "@quieter/app/lib/mail/labels-query";
 import { getManagedLabelCountsQueryKey } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { rpc } from "@quieter/app/lib/orpc";
@@ -60,6 +61,9 @@ export const DeleteMailboxLabelDialog = ({
         writeHiddenLabelIds(mailboxId, hiddenLabelIds);
       }
       await Promise.all([
+        queryClient.invalidateQueries({
+          queryKey: labelOrganizationQueryOptions(mailboxId).queryKey,
+        }),
         queryClient.invalidateQueries({
           queryKey: getLabelsQueryKey(mailboxId),
         }),

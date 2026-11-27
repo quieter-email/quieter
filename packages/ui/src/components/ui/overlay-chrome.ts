@@ -1,3 +1,5 @@
+import { popupSurfaceClassName } from "./popup-surface";
+
 export const overlayTriggerClassName =
   "transition-transform duration-100 ease-(--app-motion-ease-out) focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100";
 
@@ -16,7 +18,7 @@ export const overlayPopupClassName = `${overlaySurfaceClassName} fixed top-1/2 l
 
 // Keyboard palettes sit in the upper third so the search field stays put while
 // results change height, and open near-instantly.
-export const overlayCommandPopupClassName = `border border-fg/10 bg-panel text-fg shadow-2xl fixed top-[8vh] left-1/2 z-50 w-[min(94vw,38rem)] -translate-x-1/2 overflow-hidden rounded-panel duration-100 sm:top-[min(14vh,8rem)] ${overlayPopupMotionClassName}`;
+export const overlayCommandPopupClassName = `${popupSurfaceClassName} fixed top-[8vh] left-1/2 z-50 w-[min(94vw,38rem)] -translate-x-1/2 overflow-hidden rounded-panel duration-100 sm:top-[min(14vh,8rem)] ${overlayPopupMotionClassName}`;
 
 export const overlayTitleClassName = "truncate text-body-lg font-medium";
 

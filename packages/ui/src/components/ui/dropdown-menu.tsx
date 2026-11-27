@@ -184,7 +184,6 @@ type DropdownMenuItemProps = Omit<
   "closeOnClick" | "onClick"
 > & {
   closeOnSelect?: boolean;
-  highlight?: "default" | "subtle";
   onSelect?: (event: MouseEvent<HTMLElement>) => void;
   tone?: "default" | "destructive";
 };
@@ -192,7 +191,6 @@ type DropdownMenuItemProps = Omit<
 export const DropdownMenuItem = ({
   className,
   closeOnSelect = true,
-  highlight = "default",
   onSelect,
   tone = "default",
   ...props
@@ -205,7 +203,6 @@ export const DropdownMenuItem = ({
         menuItemClassName,
         { [menuCompactItemClassName]: size === "compact" },
         {
-          "data-highlighted:bg-fg/8": highlight === "subtle",
           "text-destructive": tone === "destructive",
         },
         className
@@ -279,8 +276,7 @@ export const DropdownMenuSubmenuTrigger = ({
     <MenuPrimitive.SubmenuTrigger
       className={cn(
         menuItemClassName,
-        anchoredTriggerClassName,
-        "squircle",
+        "data-popup-open:bg-popover-highlight",
         { [menuCompactItemClassName]: size === "compact" },
         className
       )}

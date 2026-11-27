@@ -22,7 +22,7 @@ export const DrawerTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Trigger>) => (
   <DrawerPrimitive.Trigger
-    className={cn("squircle", className, overlayTriggerClassName)}
+    className={cn(className, overlayTriggerClassName)}
     {...props}
   />
 );
@@ -42,10 +42,7 @@ export const DrawerHandle = ({
   ...props
 }: ComponentPropsWithoutRef<typeof DrawerPrimitive.Handle>) => (
   <DrawerPrimitive.Handle
-    className={cn(
-      "mx-auto my-2 h-1.5 w-12 rounded-full bg-border not-squircle",
-      className
-    )}
+    className={cn("mx-auto my-2 h-1.5 w-12 rounded-full bg-border", className)}
     {...props}
   />
 );

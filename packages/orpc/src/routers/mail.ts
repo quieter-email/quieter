@@ -1,13 +1,20 @@
 import type { db } from "@quieter/database/client";
 import { user } from "@quieter/database/schema";
+import { labelOrganizationActionSchema } from "@quieter/mail/mailbox-organization";
 import { mailSnoozeApplySchema } from "@quieter/mail/snooze";
 import { eq } from "drizzle-orm";
+import { z } from "zod";
 
 import { getMailCaptureStatus } from "../mail-capture";
 import { publishMailUpdate, withMailUpdate } from "../mail-updates";
 import { composeMailOperations } from "../mail/compose";
 import { mailInputSchemas } from "../mail/inputs";
 import type { MailInputs } from "../mail/inputs";
+import {
+  getLabelOrganization,
+  updateLabelOrganization,
+} from "../mail/label-organization";
+import { listLabelSuggestions } from "../mail/label-suggestions";
 import { labelsMailOperations } from "../mail/labels";
 import { mutationsMailOperations } from "../mail/mutations";
 import { queriesMailOperations } from "../mail/queries";
@@ -111,6 +118,12 @@ export const mailRouter = {
       async ({ context, input }) =>
         await getHeldSend({ ...input, userId: context.userId })
     ),
+  getLabelOrganization: protectedProcedure
+    .input(mailInputSchemas.listLabels)
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await getLabelOrganization({ ...input, userId: context.userId });
+    }),
   getMailCaptureStatus: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.getMailCaptureStatus)
@@ -130,6 +143,16 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.getThread)
     .handler(queriesMailOperations.getThread),
+  listLabelSuggestions: protectedProcedure
+    .input(
+      mailInputSchemas.listLabels.extend({
+        messageIds: z.array(z.string().trim().min(1).max(512)).min(1).max(100),
+      })
+    )
+    .handler(async ({ context, input }) => {
+      context.resHeaders?.set("Cache-Control", "private, no-store");
+      return await listLabelSuggestions({ ...input, userId: context.userId });
+    }),
   listLabels: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.listLabels)
@@ -272,6 +295,22 @@ export const mailRouter = {
     .input(mailInputSchemas.updateLabelDetails)
     .handler(
       withMailUpdate(labelsMailOperations.updateLabelDetails, "labels.changed")
+    ),
+  updateLabelOrganization: protectedProcedure
+    .input(
+      mailInputSchemas.listLabels.extend({
+        action: labelOrganizationActionSchema,
+      })
+    )
+    .handler(
+      withMailUpdate(
+        async ({ context, input }) =>
+          await updateLabelOrganization(
+            { mailboxId: input.mailboxId, userId: context.userId },
+            input.action
+          ),
+        "labels.changed"
+      )
     ),
   updateMessageLabels: protectedProcedure
     .input(mailInputSchemas.updateMessageLabels)
