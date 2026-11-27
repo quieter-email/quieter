@@ -1216,7 +1216,7 @@ export const LabelsWorkspacePanel = ({
   }
   return (
     <LazyMotion features={domAnimation}>
-      <div className="flex h-full min-h-0 w-full flex-col">
+      <div className="@container flex h-full min-h-0 w-full flex-col">
         <WorkspaceHeader>
           <MailSubviewHeader
             closeAction={{ label: "Close labels", onClick: onClose }}
