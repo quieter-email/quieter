@@ -3,6 +3,7 @@ import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import {
   applyLabelOrganizationAction,
   emptyLabelOrganization,
+  flattenLabelOrganization,
   labelOrganizationActionSchema,
   labelOrganizationSchema,
 } from "@quieter/mail/mailbox-organization";
@@ -14,7 +15,9 @@ const readDemoOrganization = (mailboxId: string) => {
   const stored = globalThis.window?.localStorage.getItem(storageKey);
   if (stored) {
     try {
-      return labelOrganizationSchema.parse(JSON.parse(stored));
+      return flattenLabelOrganization(
+        labelOrganizationSchema.parse(JSON.parse(stored))
+      );
     } catch {
       globalThis.window?.localStorage.removeItem(storageKey);
     }

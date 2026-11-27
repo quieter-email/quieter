@@ -10,9 +10,10 @@ import {
 import {
   applyLabelOrganizationAction,
   emptyLabelOrganization,
+  flattenLabelOrganization,
 } from "@quieter/mail/mailbox-organization";
 import type { LabelOrganizationAction } from "@quieter/mail/mailbox-organization";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { getAuthorizedManagedMailbox } from "../mailbox/access";
 import { assertAccessibleMailbox } from "../mailbox/service";
@@ -25,7 +26,9 @@ export const getLabelOrganization = async (actor: MailboxActor) => {
     .select({ organization: mailboxLabelOrganization.organization })
     .from(mailboxLabelOrganization)
     .where(eq(mailboxLabelOrganization.mailboxId, actor.mailboxId));
-  return record?.organization ?? emptyLabelOrganization;
+  return flattenLabelOrganization(
+    record?.organization ?? emptyLabelOrganization
+  );
 };
 
 export const updateLabelOrganization = async (
@@ -38,15 +41,25 @@ export const updateLabelOrganization = async (
     await getAuthorizedManagedMailbox({ ...actor, requiredRoles: ["manager"] });
   }
   return await db.transaction(async (tx) => {
+    let scopedAction = action;
     if (action.kind === "move-label") {
-      const [label] = managed
+      const requestedIds = new Set([
+        ...(action.labelOrder ?? []),
+        action.labelId,
+      ]);
+      const beforeLabelId = action.beforeLabelId ?? null;
+      if (beforeLabelId !== null) {
+        requestedIds.add(beforeLabelId);
+      }
+      const labelIds = [...requestedIds];
+      const matchingLabels = managed
         ? await tx
             .select({ id: managedMailLabel.id })
             .from(managedMailLabel)
             .where(
               and(
                 eq(managedMailLabel.mailboxId, actor.mailboxId),
-                eq(managedMailLabel.id, action.labelId)
+                inArray(managedMailLabel.id, labelIds)
               )
             )
         : await tx
@@ -55,12 +68,22 @@ export const updateLabelOrganization = async (
             .where(
               and(
                 eq(gmailLabel.mailboxId, actor.mailboxId),
-                eq(gmailLabel.labelId, action.labelId)
+                inArray(gmailLabel.labelId, labelIds)
               )
             );
-      if (label === undefined) {
+      const matchingIds = new Set(matchingLabels.map(({ id }) => id));
+      if (!matchingIds.has(action.labelId)) {
         throw new ORPCError("NOT_FOUND", { message: "Label not found." });
       }
+      if (beforeLabelId !== null && !matchingIds.has(beforeLabelId)) {
+        throw new ORPCError("NOT_FOUND", {
+          message: "Destination label not found.",
+        });
+      }
+      scopedAction = {
+        ...action,
+        labelOrder: action.labelOrder?.filter((id) => matchingIds.has(id)),
+      };
     }
     await tx
       .insert(mailboxLabelOrganization)
@@ -76,7 +99,7 @@ export const updateLabelOrganization = async (
       .for("update");
     const organization = applyLabelOrganizationAction(
       record.organization,
-      action,
+      scopedAction,
       randomUUID()
     );
     if (typeof organization === "string") {

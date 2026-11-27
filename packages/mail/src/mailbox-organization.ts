@@ -43,28 +43,43 @@ export type MailboxLabel = z.infer<typeof mailboxLabelSchema>;
 const labelGroupFields = {
   color: mailboxLabelColorSchema,
   name: z.string().trim().min(1).max(100),
-  parentId: z.uuid().nullable(),
 };
 
+const labelIdSchema = z.string().trim().min(1).max(512);
+
 export const labelOrganizationSchema = z.object({
-  groups: z.array(z.object({ ...labelGroupFields, id: z.uuid() })),
+  groups: z.array(
+    z.object({
+      ...labelGroupFields,
+      id: z.uuid(),
+      parentId: z.uuid().nullable(),
+    })
+  ),
   labelGroups: z.record(z.string(), z.uuid()),
+  labelOrder: z.array(labelIdSchema).optional(),
 });
 
 export type LabelOrganization = z.infer<typeof labelOrganizationSchema>;
 
+const topLevelGroupFields = {
+  ...labelGroupFields,
+  parentId: z.null().optional(),
+};
+
 export const labelOrganizationActionSchema = z.discriminatedUnion("kind", [
-  z.object({ ...labelGroupFields, kind: z.literal("create-group") }),
+  z.object({ ...topLevelGroupFields, kind: z.literal("create-group") }),
   z.object({
-    ...labelGroupFields,
+    ...topLevelGroupFields,
     groupId: z.uuid(),
     kind: z.literal("update-group"),
   }),
   z.object({ groupId: z.uuid(), kind: z.literal("delete-group") }),
   z.object({
+    beforeLabelId: labelIdSchema.nullable().optional(),
     groupId: z.uuid().nullable(),
     kind: z.literal("move-label"),
-    labelId: z.string().trim().min(1).max(512),
+    labelId: labelIdSchema,
+    labelOrder: z.array(labelIdSchema).max(10_000).optional(),
   }),
 ]);
 
@@ -77,14 +92,47 @@ export const emptyLabelOrganization: LabelOrganization = {
   labelGroups: {},
 };
 
+export const flattenLabelOrganization = (
+  organization: LabelOrganization
+): LabelOrganization => ({
+  ...organization,
+  groups: organization.groups.map((group) => ({ ...group, parentId: null })),
+});
+
+export const orderMailboxLabels = <TLabel extends Pick<MailboxLabel, "id">>(
+  labels: readonly TLabel[],
+  labelOrder: readonly string[] = []
+): TLabel[] => {
+  const ranks = new Map(labelOrder.map((id, rank) => [id, rank]));
+  return labels.toSorted(
+    (left, right) =>
+      (ranks.get(left.id) ?? labelOrder.length) -
+      (ranks.get(right.id) ?? labelOrder.length)
+  );
+};
+
 export const applyLabelOrganizationAction = (
   organization: LabelOrganization,
   action: LabelOrganizationAction,
   newGroupId: string
 ): LabelOrganization | string => {
-  const groups = new Map(organization.groups.map((group) => [group.id, group]));
+  const flatOrganization = flattenLabelOrganization(organization);
+  const groups = new Map(
+    flatOrganization.groups.map((group) => [group.id, group])
+  );
   const labelGroups = new Map(Object.entries(organization.labelGroups));
+  let { labelOrder } = organization;
   if (action.kind === "move-label") {
+    const beforeLabelId = action.beforeLabelId ?? null;
+    if (beforeLabelId === action.labelId) {
+      return flatOrganization;
+    }
+    if (
+      beforeLabelId !== null &&
+      (labelGroups.get(beforeLabelId) ?? null) !== action.groupId
+    ) {
+      return "The destination label is in another group.";
+    }
     if (action.groupId === null) {
       labelGroups.delete(action.labelId);
     } else if (groups.has(action.groupId)) {
@@ -92,22 +140,29 @@ export const applyLabelOrganizationAction = (
     } else {
       return "Label group not found.";
     }
-  } else if (action.kind === "delete-group") {
-    const removed = groups.get(action.groupId);
-    if (removed) {
-      groups.delete(removed.id);
-      for (const group of groups.values()) {
-        if (group.parentId === removed.id) {
-          groups.set(group.id, { ...group, parentId: removed.parentId });
-        }
+    if (
+      action.labelOrder !== undefined ||
+      beforeLabelId !== null ||
+      labelOrder !== undefined
+    ) {
+      const order = new Set([
+        ...(labelOrder ?? []),
+        ...(action.labelOrder ?? []),
+      ]);
+      order.delete(action.labelId);
+      if (beforeLabelId === null) {
+        labelOrder = [...order, action.labelId];
+      } else {
+        order.add(beforeLabelId);
+        labelOrder = [...order];
+        labelOrder.splice(labelOrder.indexOf(beforeLabelId), 0, action.labelId);
       }
+    }
+  } else if (action.kind === "delete-group") {
+    if (groups.delete(action.groupId)) {
       for (const [labelId, groupId] of labelGroups) {
-        if (groupId === removed.id) {
-          if (removed.parentId === null) {
-            labelGroups.delete(labelId);
-          } else {
-            labelGroups.set(labelId, removed.parentId);
-          }
+        if (groupId === action.groupId) {
+          labelGroups.delete(labelId);
         }
       }
     }
@@ -116,42 +171,13 @@ export const applyLabelOrganizationAction = (
     if (action.kind === "update-group" && !groups.has(id)) {
       return "Label group not found.";
     }
-    const { color, name, parentId } = action;
-    const ancestors = new Set([id]);
-    let current = parentId;
-    while (current !== null) {
-      if (ancestors.has(current)) {
-        return "A group cannot be moved inside itself or one of its groups.";
-      }
-      const parent = groups.get(current);
-      if (parent === undefined) {
-        return "Parent label group not found.";
-      }
-      ancestors.add(current);
-      current = parent.parentId;
-    }
-    const children = new Map<string, string[]>();
-    for (const group of groups.values()) {
-      if (group.parentId !== null) {
-        const siblings = children.get(group.parentId) ?? [];
-        siblings.push(group.id);
-        children.set(group.parentId, siblings);
-      }
-    }
-    const descendants = [{ depth: ancestors.size, id }];
-    for (const descendant of descendants) {
-      if (descendant.depth > 32) {
-        return "Label groups can be nested up to 32 levels.";
-      }
-      for (const childId of children.get(descendant.id) ?? []) {
-        descendants.push({ depth: descendant.depth + 1, id: childId });
-      }
-    }
-    groups.set(id, { color, id, name, parentId });
+    const { color, name } = action;
+    groups.set(id, { color, id, name, parentId: null });
   }
   return {
     groups: [...groups.values()],
     labelGroups: Object.fromEntries(labelGroups),
+    labelOrder,
   };
 };
 

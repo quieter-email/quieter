@@ -11,16 +11,18 @@ import {
 } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
-import { SettingsInsetRow } from "@quieter/ui/settings-layout";
+import { cn } from "@quieter/ui/cn";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
 export const AutoLabelSwitch = ({
   canManage,
+  className,
   mailboxId,
 }: {
   canManage: boolean;
+  className?: string;
   mailboxId: string;
 }) => {
   const id = useId();
@@ -63,21 +65,23 @@ export const AutoLabelSwitch = ({
   };
 
   return (
-    <SettingsInsetRow>
-      <label className="min-w-0 flex-1 cursor-default" htmlFor={id}>
-        <span className="block text-body text-fg">Auto-label new mail</span>
+    <div className={cn("flex items-center gap-2", className)}>
+      <label className="cursor-default truncate" htmlFor={id}>
+        Auto-label new mail
       </label>
-      <Switch
-        checked={enabled}
-        disabled={!canManage || isPending || (!isDemo && areMailboxesPending)}
-        id={id}
-        onCheckedChange={(nextEnabled) => {
-          void toggleAutoLabeling(nextEnabled);
-        }}
-        size="sm"
-      >
-        <SwitchThumb />
-      </Switch>
-    </SettingsInsetRow>
+      <span className="flex w-9 shrink-0 justify-center">
+        <Switch
+          checked={enabled}
+          disabled={!canManage || isPending || (!isDemo && areMailboxesPending)}
+          id={id}
+          onCheckedChange={(nextEnabled) => {
+            void toggleAutoLabeling(nextEnabled);
+          }}
+          size="sm"
+        >
+          <SwitchThumb />
+        </Switch>
+      </span>
+    </div>
   );
 };

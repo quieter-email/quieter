@@ -1,9 +1,11 @@
 "use client";
 
-import { ArrowDown01Icon } from "@hugeicons/core-free-icons";
+import { Add01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { useId, useRef, useState } from "react";
 import { HexColorInput, HexColorPicker } from "react-colorful";
 
+import { cn } from "../../lib/cn";
+import { ActionFooter } from "./action-footer";
 import { Button } from "./button";
 import { ColorSwatch } from "./color-swatch";
 import { Icon } from "./icon";
@@ -11,11 +13,11 @@ import { IconButtonTooltip } from "./icon-button-tooltip";
 import { inputVariants } from "./input";
 import {
   Popover,
+  PopoverClose,
   PopoverContent,
   PopoverTitle,
   PopoverTrigger,
 } from "./popover";
-import { Separator } from "./separator";
 
 type ColorPickerPreset = {
   color: string;
@@ -47,7 +49,7 @@ export const ColorPicker = ({
 }: {
   disabled?: boolean;
   label: string;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (open: boolean, outsidePress: boolean) => void;
   onValueChange: (color: string) => void;
   open?: boolean;
   presets?: readonly ColorPickerPreset[];
@@ -58,6 +60,10 @@ export const ColorPicker = ({
   const id = useId();
   const swatchRef = useRef<HTMLSpanElement>(null);
   const [pickerColor, setPickerColor] = useState("#888888");
+  const [showCustom, setShowCustom] = useState(false);
+  const hasPresets = (presets?.length ?? 0) > 0;
+  const isCustomValue =
+    hasPresets && !(presets ?? []).some((preset) => preset.color === value);
 
   const changeColor = (color: string) => {
     const hex =
@@ -77,7 +83,7 @@ export const ColorPicker = ({
       aria-label={label}
       className={
         trigger === "swatch"
-          ? "inline-flex size-3 shrink-0 items-center justify-center rounded-xs focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none disabled:opacity-50"
+          ? "inline-flex size-5 shrink-0 items-center justify-center rounded-sm hover:bg-accent focus-visible:bg-accent focus-visible:outline-hidden disabled:pointer-events-none data-popup-open:bg-accent"
           : undefined
       }
       disabled={disabled}
@@ -96,11 +102,12 @@ export const ColorPicker = ({
 
   return (
     <Popover
-      onOpenChange={(isOpen) => {
-        onOpenChange?.(isOpen);
+      onOpenChange={(isOpen, details) => {
+        onOpenChange?.(isOpen, details.reason === "outside-press");
         if (!isOpen) {
           return;
         }
+        setShowCustom(false);
         if (value.startsWith("#")) {
           setPickerColor(value);
           return;
@@ -117,65 +124,107 @@ export const ColorPicker = ({
       ) : (
         pickerTrigger
       )}
-      <PopoverContent align="start" className="w-64">
+      <PopoverContent
+        align="start"
+        className={hasPresets ? undefined : "w-48"}
+        size="compact"
+      >
         <PopoverTitle className="sr-only">{label}</PopoverTitle>
-        <div className="flex flex-col gap-4" inert={disabled}>
-          <HexColorPicker
-            className="q-color-picker"
-            color={pickerColor}
-            onChange={changeColor}
-          />
-          <div className="flex items-center gap-3">
-            <ColorSwatch color={pickerColor} shape={swatchShape} size="lg" />
-            <label className="sr-only" htmlFor={`${id}-hex`}>
-              Hex color
-            </label>
-            <HexColorInput
-              className={inputVariants({ size: "sm" })}
-              color={pickerColor}
-              disabled={disabled}
-              id={`${id}-hex`}
-              onChange={changeColor}
-              prefixed
-              spellCheck={false}
-            />
-          </div>
-          {presets && presets.length > 0 ? (
-            <>
-              <Separator />
-              <div
-                aria-label="Preset colors"
-                className="grid grid-cols-[repeat(auto-fit,1.5rem)] justify-between gap-3"
-              >
-                {presets.map((preset) => (
-                  <IconButtonTooltip key={preset.value} label={preset.label}>
-                    <Button
-                      aria-label={preset.label}
-                      aria-pressed={preset.color === value}
-                      disabled={disabled}
-                      onClick={(event) => {
-                        const color = readSwatchColor(
-                          event.currentTarget.firstElementChild
-                        );
-                        if (color) {
-                          setPickerColor(color);
-                        }
-                        onValueChange(preset.value);
-                      }}
-                      size="icon-xs"
-                      variant="ghost"
-                    >
-                      <ColorSwatch
-                        color={preset.color}
-                        shape={swatchShape}
-                        size="lg"
-                      />
-                    </Button>
-                  </IconButtonTooltip>
-                ))}
-              </div>
-            </>
+        <div
+          className={cn("flex flex-col gap-2", {
+            // Five 28px swatch buttons and their gaps.
+            "w-37": hasPresets,
+            "w-full": !hasPresets,
+          })}
+          inert={disabled}
+        >
+          {hasPresets ? (
+            <div className="grid grid-cols-5 gap-0.5">
+              {presets?.map((preset) => (
+                <IconButtonTooltip key={preset.value} label={preset.label}>
+                  <Button
+                    aria-label={preset.label}
+                    aria-pressed={preset.color === value}
+                    disabled={disabled}
+                    onClick={(event) => {
+                      const color = readSwatchColor(
+                        event.currentTarget.firstElementChild
+                      );
+                      if (color) {
+                        setPickerColor(color);
+                      }
+                      onValueChange(preset.value);
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <ColorSwatch
+                      color={preset.color}
+                      selected={preset.color === value}
+                      shape={swatchShape}
+                      size="lg"
+                    />
+                  </Button>
+                </IconButtonTooltip>
+              ))}
+              <IconButtonTooltip label="Custom color">
+                <Button
+                  aria-expanded={showCustom}
+                  aria-label="Custom color"
+                  aria-pressed={isCustomValue}
+                  onClick={() => {
+                    setShowCustom((shown) => !shown);
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  {isCustomValue ? (
+                    <ColorSwatch
+                      color={value}
+                      selected
+                      shape={swatchShape}
+                      size="lg"
+                    />
+                  ) : (
+                    <Icon aria-hidden icon={Add01Icon} />
+                  )}
+                </Button>
+              </IconButtonTooltip>
+            </div>
           ) : null}
+          {(!hasPresets || showCustom) && (
+            <div className="flex flex-col gap-2">
+              <HexColorPicker
+                className="q-color-picker"
+                color={pickerColor}
+                onChange={changeColor}
+              />
+              <div className="flex items-center gap-2">
+                <ColorSwatch
+                  color={pickerColor}
+                  shape={swatchShape}
+                  size="lg"
+                />
+                <label className="sr-only" htmlFor={`${id}-hex`}>
+                  Hex color
+                </label>
+                <HexColorInput
+                  className={inputVariants({ size: "sm" })}
+                  color={pickerColor}
+                  disabled={disabled}
+                  id={`${id}-hex`}
+                  onChange={changeColor}
+                  prefixed
+                  spellCheck={false}
+                />
+              </div>
+              <ActionFooter>
+                <PopoverClose render={<Button size="compact" />}>
+                  Done
+                </PopoverClose>
+              </ActionFooter>
+            </div>
+          )}
         </div>
       </PopoverContent>
     </Popover>

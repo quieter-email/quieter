@@ -23,6 +23,11 @@ export const inputVariants = cva(inputControlClassName, {
       className: "h-5 min-w-0 p-0 text-body",
     },
     {
+      chrome: "inline",
+      className: "text-body-sm",
+      size: "sm",
+    },
+    {
       chrome: "command",
       className: "h-12 min-w-0 p-0 text-body",
     },
@@ -47,8 +52,9 @@ export const inputVariants = cva(inputControlClassName, {
       default:
         "rounded-md border border-border bg-input shadow-none read-only:cursor-default read-only:bg-input dark:border-transparent",
       ghost: ghostInputClassName,
+      // Text edited in place inside a row: the caret and the row mark focus.
       inline:
-        "rounded-none border-0 bg-transparent shadow-none read-only:bg-transparent",
+        "rounded-none border-0 bg-transparent shadow-none read-only:bg-transparent focus-visible:ring-0",
     },
     size: inputControlSizeVariants,
   },

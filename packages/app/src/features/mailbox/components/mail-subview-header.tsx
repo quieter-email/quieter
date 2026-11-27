@@ -16,6 +16,7 @@ export const MailSubviewHeader = ({
   onOpenSidebar,
   title,
   titleAccessory,
+  titleClassName,
   titleSize = "lg",
 }: {
   children?: ReactNode;
@@ -28,6 +29,7 @@ export const MailSubviewHeader = ({
   onOpenSidebar?: () => void;
   title: string;
   titleAccessory?: ReactNode;
+  titleClassName?: string;
   titleSize?: ComponentProps<typeof Text>["size"];
 }) => {
   const handleClose = closeAction?.onClick;
@@ -63,7 +65,13 @@ export const MailSubviewHeader = ({
         </div>
       ) : null}
       <div className="flex min-w-0 flex-1 items-baseline gap-2">
-        <Text as="h1" size={titleSize} truncate weight="medium">
+        <Text
+          as="h1"
+          className={titleClassName}
+          size={titleSize}
+          truncate
+          weight="medium"
+        >
           {title}
         </Text>
         {titleAccessory}
