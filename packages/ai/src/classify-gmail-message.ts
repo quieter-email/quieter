@@ -17,6 +17,8 @@ import type { AiUsageReport } from "./chat-usage";
 import { AI_PROMPT_SECURITY_POLICY } from "./prompt-security";
 
 export const AUTO_LABEL_MODEL = "liquid/d1.2-ultra";
+const autoApplyThreshold = 0.65;
+const suggestionThreshold = 0.6;
 
 export type AutomationMailMessage = {
   otpToken?: OtpToken;
@@ -213,6 +215,7 @@ export const classifyMailMessage = async ({
   message,
   model = AUTO_LABEL_MODEL,
   billing,
+  onSuggestions,
   onUsage,
 }: {
   labelHistory?: MailAutoLabelHistory | null;
@@ -221,6 +224,7 @@ export const classifyMailMessage = async ({
   message: AutomationMailMessage;
   model?: string;
   billing: AiBillingContext;
+  onSuggestions?: (labelIds: string[]) => void;
   onUsage?: (usage: AiUsageReport) => void;
 }) => {
   if (labels.length === 0) {
@@ -286,12 +290,26 @@ export const classifyMailMessage = async ({
   if (categoryLabels.length > 0 && selected === undefined) {
     throw new Error("Label classification returned an unknown label.");
   }
-  const additional = labels.flatMap((label, index) => {
+  const labelScores = labels.map((label, index) => {
     const match = answers[`label${index}`];
     if (match?.type !== "noul") {
       throw new Error("Label classification returned an incomplete decision.");
     }
-    return match.noul >= 0.65 ? [label.id] : [];
+    return { id: label.id, score: match.noul };
   });
-  return [...new Set([...(selected ? [selected.id] : []), ...additional])];
+  const applied = new Set(selected === undefined ? [] : [selected.id]);
+  for (const { id, score } of labelScores) {
+    if (score >= autoApplyThreshold) {
+      applied.add(id);
+    }
+  }
+  onSuggestions?.(
+    labelScores
+      .filter(
+        ({ id, score }) => !applied.has(id) && score >= suggestionThreshold
+      )
+      .toSorted((left, right) => right.score - left.score)
+      .map(({ id }) => id)
+  );
+  return [...applied];
 };

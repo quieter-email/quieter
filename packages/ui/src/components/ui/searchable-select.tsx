@@ -9,7 +9,11 @@ import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Input } from "./input";
 import { InputAddon, InputGroup } from "./input-group";
-import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
+import {
+  menuEmptyClassName,
+  menuItemClassName,
+  menuListPaddingClassName,
+} from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
 import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
 import { selectTriggerVariants } from "./select";
@@ -133,7 +137,12 @@ export const SearchableSelect = ({
             <ComboboxPrimitive.Empty>
               <p className={menuEmptyClassName}>{emptyMessage}</p>
             </ComboboxPrimitive.Empty>
-            <ComboboxPrimitive.List className="min-h-0 overflow-y-auto overscroll-contain p-1 empty:p-0">
+            <ComboboxPrimitive.List
+              className={cn(
+                "min-h-0 overflow-y-auto overscroll-contain empty:p-0",
+                menuListPaddingClassName
+              )}
+            >
               {(option: SearchableSelectOption) => (
                 <ComboboxPrimitive.Item
                   className={cn(menuItemClassName, "pr-8")}

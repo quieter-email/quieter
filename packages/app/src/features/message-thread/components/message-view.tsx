@@ -6,12 +6,12 @@ import {
   CheckmarkCircle02Icon,
   InboxIcon,
   Edit01Icon,
-  Flag01Icon,
-  FlagOffIcon,
   Loading03Icon,
   MailReply02Icon,
   MailReplyAll02Icon,
   SparklesIcon,
+  StarIcon,
+  StarOffIcon,
 } from "@hugeicons/core-free-icons";
 import type { InlineComposeBridge } from "@quieter/app/features/chat/components/agent-workspace";
 import { AssistantSidebarTrigger } from "@quieter/app/features/chat/components/assistant-sidebar-context";
@@ -25,7 +25,8 @@ import {
 } from "@quieter/app/features/compose/domain/compose-actions";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
-import { MessageLabels } from "@quieter/app/features/message-labels/components/message-labels";
+import { ConversationLabels } from "@quieter/app/features/message-labels/components/conversation-labels";
+import { ConversationPlacementAction } from "@quieter/app/features/message-thread/components/conversation-placement-action";
 import { CorrespondentHistoryAction } from "@quieter/app/features/message-thread/components/correspondent-history-action";
 import { createMailboxThreadMessageActionHandlers } from "@quieter/app/features/message-thread/components/message-action-handlers";
 import { MessageActionsDropdown } from "@quieter/app/features/message-thread/components/message-actions";
@@ -141,6 +142,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     message,
     navigationScope,
     onBackToList,
+    onFilterByLabel,
     onOpenConversation,
     onManageSnippets,
     pendingActions,
@@ -346,6 +348,17 @@ const MessageViewContent = (props: MessageViewContentProps) => {
         );
       }
     : undefined;
+  // Label changes are thread mutations: managed readers cannot make them, and
+  // mailbox capabilities express that through placement.
+  const canEditLabels =
+    mailboxProvider !== "api" &&
+    mailboxActions.canSetPlacement &&
+    threadActions.onUpdateLabels !== undefined &&
+    activeMailbox !== "drafts" &&
+    !message.draftId;
+  const labelSuggestionMessageIds = threadMessages
+    .filter((item) => !item.draftId)
+    .map((item) => item.id);
   const canSetReminder =
     mailboxProvider !== "api" && activeMailbox !== "drafts";
   const showInlineCompose = canComposeFromMailbox && activeMailbox !== "drafts";
@@ -359,7 +372,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     currentUserEmail,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
-    importanceIcon: threadIsImportant ? FlagOffIcon : Flag01Icon,
+    importanceIcon: threadIsImportant ? StarOffIcon : StarIcon,
     importanceLabel,
     isActionPending,
     mailboxActions,
@@ -522,24 +535,22 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           )}
           <div className="flex shrink-0 items-center gap-1 empty:hidden">
             {toggleThreadPlacement && (
-              <IconButtonTooltip label={placementLabel}>
-                <Button
-                  chrome="toolbar"
-                  aria-label={placementLabel}
-                  disabled={isActionPending}
-                  onClick={toggleThreadPlacement}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Icon
-                    aria-hidden
-                    icon={
-                      returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon
-                    }
-                  />
-                </Button>
-              </IconButtonTooltip>
+              <ConversationPlacementAction
+                disabled={isActionPending}
+                icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
+                label={placementLabel}
+                onToggle={toggleThreadPlacement}
+                snooze={
+                  returnThreadToInbox ||
+                  snoozeAction === null ||
+                  threadActions.onApplySnooze === undefined
+                    ? undefined
+                    : {
+                        label: `${snoozeAction === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
+                        onOpen: openSnooze,
+                      }
+                }
+              />
             )}
             {mailboxProvider !== "api" &&
             !isSandboxMailboxId(mailboxId) &&
@@ -559,6 +570,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               <div className="-me-2.25 shrink-0">
                 <MessageActionsDropdown
                   actions={threadActions}
+                  inlineImportance={canSetThreadImportance}
+                  inlineLabels={canEditLabels}
                   isMessageActionPending={pendingActions.isMessageActionPending(
                     message.id
                   )}
@@ -597,14 +610,45 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           />
         </div>
 
-        <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 empty:hidden">
-          <MessageLabels labelIds={threadLabelIds} labels={gmailLabels} />
-          {toggleThreadImportance && threadIsImportant ? (
-            <span className="inline-flex items-center gap-1 text-caption text-muted-fg">
-              <Icon aria-hidden icon={Flag01Icon} size={14} />
-              Important
-            </span>
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 empty:hidden">
+          {toggleThreadImportance ? (
+            <IconButtonTooltip label={importanceLabel}>
+              <Button
+                aria-label="Important"
+                aria-pressed={threadIsImportant}
+                className="-ms-1.5"
+                disabled={isActionPending}
+                onClick={toggleThreadImportance}
+                size="icon-xs"
+                type="button"
+                variant="ghost"
+              >
+                <Icon
+                  aria-hidden
+                  fill={threadIsImportant ? "currentColor" : "none"}
+                  icon={StarIcon}
+                  tone={threadIsImportant ? "default" : undefined}
+                />
+              </Button>
+            </IconButtonTooltip>
           ) : null}
+          <ConversationLabels
+            appliedLabelIds={threadLabelIds}
+            labels={gmailLabels}
+            mailboxId={mailboxId}
+            messageIds={labelSuggestionMessageIds}
+            onFilterByLabel={onFilterByLabel}
+            onUpdateLabels={
+              canEditLabels
+                ? async (changes) => {
+                    await threadActions.onUpdateLabels?.(
+                      message.threadId,
+                      changes
+                    );
+                  }
+                : undefined
+            }
+          />
           {canSetReminder ? (
             <MessageReminderStatus
               mailboxId={mailboxId}

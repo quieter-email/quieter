@@ -5,15 +5,19 @@ import type { ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
 import { Icon } from "./icon";
+import { CheckIcon } from "./icons";
 import { Kbd } from "./kbd";
 import {
   menuEmptyClassName,
   menuGroupLabelClassName,
   menuItemClassName,
+  menuListPaddingClassName,
 } from "./menu-chrome";
 import { popupSurfaceClassName } from "./popup-surface";
 
 export type CommandMenuItem = {
+  /** Set for multi-select lists; checked items show a trailing check. */
+  checked?: boolean;
   description?: string;
   disabledReason?: string;
   group: string;
@@ -86,9 +90,9 @@ export const CommandMenu = ({
       )}
       <div
         aria-label={label}
-        className={cn("overflow-y-auto", {
-          "max-h-64 p-1": chrome === "popup",
-          "max-h-[min(24rem,56dvh)] overscroll-contain p-1.5": isDialog,
+        className={cn("overflow-y-auto", menuListPaddingClassName, {
+          "max-h-64": chrome === "popup",
+          "max-h-[min(24rem,56dvh)] overscroll-contain": isDialog,
         })}
         id={id}
         // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- Suggestions keep editor focus and support rich options.
@@ -128,6 +132,7 @@ export const CommandMenu = ({
                 </div>
                 {section.entries.map(({ index, item }) => (
                   <button
+                    aria-checked={item.checked}
                     aria-disabled={
                       item.disabledReason === undefined ? undefined : true
                     }
@@ -189,6 +194,9 @@ export const CommandMenu = ({
                       ) : null}
                     </span>
                     {item.shortcut}
+                    {item.checked === true ? (
+                      <CheckIcon className="size-3.5 shrink-0" />
+                    ) : null}
                   </button>
                 ))}
               </div>

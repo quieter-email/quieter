@@ -2,7 +2,7 @@
 
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
-import type { ComponentPropsWithoutRef, CSSProperties } from "react";
+import type { ComponentPropsWithoutRef, CSSProperties, Ref } from "react";
 
 import { cn } from "../../lib/cn";
 
@@ -63,6 +63,41 @@ export const Pill = ({
         className
       )}
       style={pillStyle}
+      {...props}
+    />
+  );
+};
+
+/**
+ * A pill that opens or edits what it shows, e.g. a conversation label. The
+ * hover tint layers over the tone fill, so custom label colors keep their hue.
+ */
+export const PillButton = ({
+  className,
+  customColor,
+  ref,
+  size = "sm",
+  tone = "gray",
+  style,
+  ...props
+}: Omit<ComponentPropsWithoutRef<"button">, "type"> &
+  VariantProps<typeof pillVariants> & {
+    customColor?: string;
+    ref?: Ref<HTMLButtonElement>;
+  }) => {
+  const pillStyle: CSSProperties & { "--selected-color": string | undefined } =
+    { "--selected-color": customColor, ...style };
+  return (
+    <button
+      className={cn(
+        pillVariants({ size, tone }),
+        "cursor-default bg-linear-to-r from-fg/0 to-fg/0 transition-transform duration-100 ease-(--app-motion-ease-out) select-none hover:from-fg/8 hover:to-fg/8 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] aria-expanded:from-fg/8 aria-expanded:to-fg/8 motion-reduce:transition-none motion-reduce:active:scale-100",
+        { "q-custom-color-surface text-fg": !!customColor },
+        className
+      )}
+      ref={ref}
+      style={pillStyle}
+      type="button"
       {...props}
     />
   );

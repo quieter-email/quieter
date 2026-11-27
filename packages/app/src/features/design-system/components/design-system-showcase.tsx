@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   CheckmarkCircle02Icon,
   Delete01Icon,
   Delete02Icon,
@@ -107,7 +108,7 @@ import {
   mailListRowFrameVariants,
 } from "@quieter/ui/mail-list-row";
 import { entranceMotionVariants } from "@quieter/ui/motion";
-import { Pill } from "@quieter/ui/pill";
+import { Pill, PillButton } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import {
   Popover,
@@ -2093,6 +2094,29 @@ export const DesignSystemShowcase = () => {
               </PopoverContent>
             </Popover>
           </Row>
+          <Row label="Hover action strip">
+            <Popover>
+              <PopoverTrigger
+                aria-label="Mark conversation Done"
+                delay={500}
+                openOnHover
+                render={
+                  <Button chrome="toolbar" size="icon-sm" variant="ghost" />
+                }
+              >
+                <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+              </PopoverTrigger>
+              <PopoverContent align="end" size="compact">
+                <span className="ps-2 text-caption text-muted-fg">
+                  Mark conversation Done
+                </span>
+                <Button size="xs" variant="secondary">
+                  <Icon aria-hidden icon={AlarmClockIcon} />
+                  Snooze
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </Row>
           <Row label="Vertical tabs">
             <Tabs defaultValue="account" orientation="vertical">
               <TabsList aria-label="Example vertical settings tabs">
@@ -2205,6 +2229,16 @@ export const DesignSystemShowcase = () => {
             <Pill size="xs" tone="blue">
               Compact
             </Pill>
+          </Row>
+          <Row label="Interactive">
+            <Popover>
+              <PopoverTrigger render={<PillButton tone="purple" />}>
+                Product
+              </PopoverTrigger>
+              <PopoverContent>
+                <PopoverTitle>Product label</PopoverTitle>
+              </PopoverContent>
+            </Popover>
           </Row>
         </Section>
 

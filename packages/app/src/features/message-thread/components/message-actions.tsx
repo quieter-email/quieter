@@ -57,6 +57,8 @@ import type { MailSnoozeAction } from "../../mailbox/domain/mail-snooze";
 
 type MessageActionsSharedProps = {
   actions: ThreadActionHandlers;
+  inlineImportance?: boolean;
+  inlineLabels?: boolean;
   mailboxId: string;
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   message: MessageListItem;
@@ -462,13 +464,16 @@ const createMessageActionEntries = ({
     pending.optimistic,
     isUnread
   );
-  const labelsEntry = createLabelsEntry(props, pending.optimistic);
+  const labelsEntry =
+    props.inlineLabels === true
+      ? null
+      : createLabelsEntry(props, pending.optimistic);
   const folderEntries = createFolderEntries(props, pending, sharedPlacement);
 
   if (readStateEntry !== null) {
     entries.push(readStateEntry);
   }
-  if (props.actions.onSetImportance) {
+  if (props.actions.onSetImportance && props.inlineImportance !== true) {
     const important =
       props.message.threadIsImportant ?? props.message.isImportant ?? false;
     entries.push({

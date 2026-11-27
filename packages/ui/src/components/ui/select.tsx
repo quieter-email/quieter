@@ -16,6 +16,7 @@ import {
   menuCompactPopupClassName,
   menuGroupLabelClassName,
   menuItemClassName,
+  menuListPaddingClassName,
 } from "./menu-chrome";
 import {
   anchoredPopupMotionClassName,
@@ -151,7 +152,8 @@ export const SelectContent = ({
           className={cn(
             anchoredPopupMotionClassName,
             popupSurfaceClassName,
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl p-1 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            menuListPaddingClassName,
             { [menuCompactPopupClassName]: size === "compact" },
             className
           )}
@@ -200,7 +202,7 @@ export const SelectList = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.List>) => (
   <SelectPrimitive.List
     className={cn(
-      "max-h-[min(18rem,var(--available-height))] scroll-py-7 overflow-y-auto overscroll-contain",
+      "max-h-[min(18rem,var(--available-height))] scroll-py-9 overflow-y-auto overscroll-contain",
       className
     )}
     {...props}

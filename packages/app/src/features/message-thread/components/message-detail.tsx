@@ -37,6 +37,7 @@ type MessageDetailProps = {
   onConversationOpened?: MessageViewProps["onConversationOpened"];
   onOpenConversation?: MessageViewProps["onOpenConversation"];
   onBackToList?: () => void;
+  onFilterByLabel?: MessageViewProps["onFilterByLabel"];
   onAutoFocusComplete?: () => void;
   onManageSnippets?: () => void;
   pendingActions: MailboxPendingActions;
@@ -59,6 +60,7 @@ export const MessageDetail = ({
   onConversationOpened,
   onOpenConversation,
   onBackToList,
+  onFilterByLabel,
   onAutoFocusComplete,
   onManageSnippets,
   pendingActions,
@@ -124,6 +126,7 @@ export const MessageDetail = ({
           onConversationOpened={onConversationOpened}
           onOpenConversation={onOpenConversation}
           onBackToList={onBackToList}
+          onFilterByLabel={onFilterByLabel}
           onAutoFocusComplete={onAutoFocusComplete}
           onManageSnippets={onManageSnippets}
           pendingActions={pendingActions}

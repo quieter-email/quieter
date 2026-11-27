@@ -23,6 +23,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
+import { serializeStructuredSearchState } from "@quieter/mail/search";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -247,6 +248,26 @@ export const MailboxMessagesPanel = ({
     onSearchQueryChange(normalizedQuery);
   };
 
+  const filterByLabel: NonNullable<MessageViewProps["onFilterByLabel"]> = (
+    label
+  ) => {
+    setShouldFocusMessageView(false);
+    onFocusRequestComplete?.();
+    resetListSelection();
+    void setMailboxSearch({
+      mailbox: "inbox",
+      mailboxId,
+      messageId: null,
+      query: serializeStructuredSearchState({
+        filters: [{ type: "label", value: label.name }],
+        text: "",
+      }),
+      threadId: null,
+      view: "inbox",
+      workspace: null,
+    });
+  };
+
   const backToList = () => {
     setShouldFocusMessageView(false);
     onFocusRequestComplete?.();
@@ -359,6 +380,7 @@ export const MailboxMessagesPanel = ({
             pendingActions={pendingActions}
             isPending={messagesPending}
             onBackToList={backToList}
+            onFilterByLabel={filterByLabel}
             onAutoFocusComplete={() => {
               setShouldFocusMessageView(false);
               onFocusRequestComplete?.();

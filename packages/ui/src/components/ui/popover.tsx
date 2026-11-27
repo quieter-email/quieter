@@ -27,6 +27,7 @@ export const PopoverTrigger = ({
 export const PopoverContent = ({
   align = "center",
   alignOffset = 0,
+  anchor,
   children,
   chrome = "default",
   className,
@@ -39,17 +40,24 @@ export const PopoverContent = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Popup> &
   Pick<
     ComponentPropsWithoutRef<typeof PopoverPrimitive.Positioner>,
-    "align" | "alignOffset" | "collisionPadding" | "side" | "sideOffset"
+    | "align"
+    | "alignOffset"
+    | "anchor"
+    | "collisionPadding"
+    | "side"
+    | "sideOffset"
   > & {
     /** `bare` holds a child that owns its popup surface, such as CommandMenu. */
     chrome?: "bare" | "default";
-    size?: "default" | "sm";
+    /** `compact` is a one-row action strip, e.g. Snooze beside Done. */
+    size?: "compact" | "default" | "sm";
     scrollable?: boolean;
   }) => (
   <PopoverPortal>
     <PopoverPrimitive.Positioner
       align={align}
       alignOffset={alignOffset}
+      anchor={anchor}
       className="isolate z-50"
       collisionPadding={collisionPadding}
       side={side}
@@ -60,11 +68,12 @@ export const PopoverContent = ({
           anchoredPopupMotionClassName,
           "z-50 rounded-xl",
           {
-            [`${popupSurfaceClassName} max-w-sm min-w-52 p-4`]:
-              chrome === "default",
+            "flex items-center gap-2 p-1.5": size === "compact",
             "flex max-h-(--available-height) flex-col outline-none":
               chrome === "bare",
             "max-h-(--available-height) overflow-y-auto": scrollable,
+            "max-w-sm min-w-52 p-4": chrome === "default" && size !== "compact",
+            [popupSurfaceClassName]: chrome === "default",
             "w-80 max-w-(--available-width)": size === "sm",
           },
           className

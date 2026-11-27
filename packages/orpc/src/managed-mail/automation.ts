@@ -335,6 +335,7 @@ const processManagedAutoLabelMessage = async (input: {
               provider: "managed",
             }),
       ]);
+      let suggestedLabelIds: string[] = [];
       const aiLabelIds =
         aiLabels.length === 0
           ? []
@@ -353,6 +354,9 @@ const processManagedAutoLabelMessage = async (input: {
                   : serializeAiAgentContext(memoryContext),
               message,
               model: input.autoLabelContext.model,
+              onSuggestions: (labelIds) => {
+                suggestedLabelIds = labelIds;
+              },
               onUsage: (reportedUsage) => {
                 usage = reportedUsage;
               },
@@ -369,6 +373,7 @@ const processManagedAutoLabelMessage = async (input: {
           lastError: null,
           model: aiLabels.length > 0 ? input.autoLabelContext.model : null,
           promptTokens: usage.promptTokens,
+          suggestedLabelIds,
           updatedAt: new Date(),
           // Unreportable usage is terminal; only retryable reporting failures
           // keep usageReportedAt unset.
@@ -403,6 +408,7 @@ const processManagedAutoLabelMessage = async (input: {
         .update(gmailAutoLabelEvent)
         .set({
           appliedAt: now,
+          labelIds: currentMessage === null ? [] : labelIds,
           lastError: null,
           nextAttemptAt: null,
           updatedAt: now,
