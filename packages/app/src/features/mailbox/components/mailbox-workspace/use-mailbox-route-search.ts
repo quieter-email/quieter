@@ -214,9 +214,10 @@ export type MailboxSearchPatch = {
 
 export const getLabelSearchPatch = (
   mailboxId: string,
-  labelName: string
+  labelName: string,
+  mailbox: MailboxRouteCategory
 ): MailboxSearchPatch => ({
-  mailbox: "inbox",
+  mailbox,
   mailboxId,
   messageId: null,
   query: serializeStructuredSearchState({

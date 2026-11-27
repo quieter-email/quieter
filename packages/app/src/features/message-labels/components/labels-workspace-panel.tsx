@@ -43,7 +43,10 @@ import {
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
-import { emptyLabelOrganization } from "@quieter/mail/mailbox-organization";
+import {
+  emptyLabelOrganization,
+  mailboxLabelNamedColorSchema,
+} from "@quieter/mail/mailbox-organization";
 import type {
   LabelOrganizationAction,
   MailboxLabel,
@@ -252,6 +255,12 @@ export const LabelsWorkspacePanel = ({
     )
   );
   const organization = organizationData ?? emptyLabelOrganization;
+  const defaultGroupColor =
+    mailboxLabelNamedColorSchema.options.find(
+      (color) =>
+        color !== "gray" &&
+        !organization.groups.some((group) => group.color === color)
+    ) ?? "blue";
   const organizationMutation = useMutation({
     mutationFn: async (input: {
       action: LabelOrganizationAction;
@@ -981,7 +990,7 @@ export const LabelsWorkspacePanel = ({
     <div className="flex h-full min-h-0 flex-col overflow-y-auto">
       <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
         <MailSubviewHeader
-          className="mb-6"
+          className="mb-4"
           closeAction={{ label: "Close labels", onClick: onClose }}
           onOpenSidebar={onOpenSidebar}
           title="Labels"
@@ -1018,14 +1027,14 @@ export const LabelsWorkspacePanel = ({
         </MailSubviewHeader>
 
         <SettingsCard>
-          <SettingsInsetRows>
-            {isNonemptyMailboxId(mailboxId) ? (
-              <AutoLabelSwitch
-                canManage={canManage}
-                key={mailboxId}
-                mailboxId={mailboxId}
-              />
-            ) : null}
+          {isNonemptyMailboxId(mailboxId) ? (
+            <AutoLabelSwitch
+              canManage={canManage}
+              key={mailboxId}
+              mailboxId={mailboxId}
+            />
+          ) : null}
+          <SettingsInsetRows density="compact">
             {labelsContent}
           </SettingsInsetRows>
         </SettingsCard>
@@ -1122,6 +1131,7 @@ export const LabelsWorkspacePanel = ({
       {groupDialog ? (
         <LabelGroupDialog
           canManage={canManage}
+          defaultColor={defaultGroupColor}
           group={groupDialog.kind === "edit" ? groupDialog.group : null}
           groupOptions={
             groupDialog.kind === "edit"

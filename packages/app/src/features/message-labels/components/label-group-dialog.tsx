@@ -25,6 +25,7 @@ export type LabelGroupDraft = Omit<LabelGroup, "id">;
 
 export const LabelGroupDialog = ({
   canManage,
+  defaultColor,
   group,
   groupOptions,
   initialParentId,
@@ -33,6 +34,7 @@ export const LabelGroupDialog = ({
   onSubmit,
 }: {
   canManage: boolean;
+  defaultColor: MailboxLabelColor;
   group: LabelGroup | null;
   groupOptions: readonly LabelGroupOption[];
   initialParentId: string | null;
@@ -42,7 +44,7 @@ export const LabelGroupDialog = ({
 }) => {
   const id = useId();
   const [name, setName] = useState(group?.name ?? "");
-  const [color, setColor] = useState<MailboxLabelColor>(group?.color ?? "gray");
+  const [color, setColor] = useState(group?.color ?? defaultColor);
   const [parentId, setParentId] = useState(group?.parentId ?? initialParentId);
 
   const disabled = !canManage || isPending;

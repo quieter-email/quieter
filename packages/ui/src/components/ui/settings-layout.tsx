@@ -125,12 +125,16 @@ export const SettingsCard = ({
 export const SettingsInsetRows = ({
   children,
   className,
+  density = "default",
 }: {
   children: ReactNode;
   className?: string;
+  density?: "default" | "compact";
 }) => (
   <div
-    className={cn(settingsSurfaceVariants({ variant: "divide" }), className)}
+    className={cn(settingsSurfaceVariants({ variant: "divide" }), className, {
+      "[--settings-row-padding:--spacing(1.5)]": density === "compact",
+    })}
   >
     {children}
   </div>

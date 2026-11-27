@@ -254,7 +254,9 @@ export const MailboxMessagesPanel = ({
     setShouldFocusMessageView(false);
     onFocusRequestComplete?.();
     resetListSelection();
-    void setMailboxSearch(getLabelSearchPatch(mailboxId, label.name));
+    void setMailboxSearch(
+      getLabelSearchPatch(mailboxId, label.name, activeMailbox)
+    );
   };
 
   const backToList = () => {

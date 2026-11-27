@@ -93,13 +93,25 @@ export const LabelGroupRow = ({
               />
             </Button>
           </IconButtonTooltip>
-          <ColorSwatch
-            color={
-              group.color.startsWith("#")
-                ? group.color
-                : `var(--q-${group.color})`
-            }
-          />
+          <IconButtonTooltip label={`Edit color for ${group.name}`}>
+            <Button
+              aria-label={`Edit color for ${group.name}`}
+              className="-mx-1.5"
+              disabled={actionsDisabled}
+              onClick={onEdit}
+              size="icon-xs"
+              type="button"
+              variant="ghost"
+            >
+              <ColorSwatch
+                color={
+                  group.color.startsWith("#")
+                    ? group.color
+                    : `var(--q-${group.color})`
+                }
+              />
+            </Button>
+          </IconButtonTooltip>
           <Text as="span" className="min-w-0 flex-1" truncate>
             {group.name}
           </Text>

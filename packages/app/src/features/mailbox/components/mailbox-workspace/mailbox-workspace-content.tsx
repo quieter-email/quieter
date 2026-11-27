@@ -906,7 +906,7 @@ const MailboxWorkspaceContentInner = ({
             pendingKeyboardOpenRef.current = false;
             setCombinedFocusTarget(null);
             void setMailboxSearch(
-              getLabelSearchPatch(sourceMailboxId, label.name)
+              getLabelSearchPatch(sourceMailboxId, label.name, activeMailbox)
             );
           }}
           onKeyboardOpenMessage={() => {

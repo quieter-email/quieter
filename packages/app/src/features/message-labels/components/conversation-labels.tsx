@@ -236,9 +236,8 @@ export const ConversationLabels = ({
       labels,
       organization,
       ready:
-        !isRow ||
-        (organization !== undefined &&
-          (suggestionIds !== undefined || messageIds.length === 0)),
+        organization !== undefined &&
+        (suggestionIds !== undefined || messageIds.length === 0),
       suggestionIds: suggestionIds ?? [],
     });
     restorePickerFocusRef.current = true;

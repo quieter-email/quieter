@@ -130,6 +130,8 @@ import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import {
   SettingsCard,
   SettingsFieldRow,
+  SettingsInsetRow,
+  SettingsInsetRows,
   SettingsNavigationRow,
   SettingsPageHeader,
   SettingsSectionLayout,
@@ -1083,6 +1085,7 @@ export const DesignSystemShowcase = () => {
               })}
             >
               <MailListRowDetails
+                inset="balanced"
                 layout="stacked"
                 metadata={
                   <Pill size="xs" tone="neutral">
@@ -1125,6 +1128,7 @@ export const DesignSystemShowcase = () => {
                   </IconButtonTooltip>
                 }
                 active
+                inset="balanced"
                 metadata={
                   <MailListRowMetadata
                     attachmentCount={2}
@@ -2282,6 +2286,23 @@ export const DesignSystemShowcase = () => {
                   }}
                   title="Mailbox access"
                 />
+              </SettingsCard>
+            </SettingsSectionLayout>
+            <SettingsSectionLayout title="Compact rows">
+              <SettingsCard>
+                <SettingsInsetRows density="compact">
+                  <SettingsInsetRow>
+                    <Text className="flex-1">Product updates</Text>
+                    <Switch
+                      aria-label="Product updates"
+                      checked={checked}
+                      onCheckedChange={setChecked}
+                      size="sm"
+                    >
+                      <SwitchThumb />
+                    </Switch>
+                  </SettingsInsetRow>
+                </SettingsInsetRows>
               </SettingsCard>
             </SettingsSectionLayout>
           </div>

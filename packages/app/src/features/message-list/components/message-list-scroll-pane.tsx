@@ -124,7 +124,7 @@ const MessageListLoadingSkeleton = () => (
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-16 animate-pulse items-center gap-3 rounded-xl px-3 @sm:gap-4 @sm:px-4"
+        className="flex h-16 animate-pulse items-center gap-3 rounded-xl px-4.5"
         key={rowId}
       >
         <div className="size-9.5 shrink-0 rounded-lg bg-muted" />

@@ -40,7 +40,7 @@ export const mailListRowParts = {
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
-    "relative z-10 ml-3 flex h-full shrink-0 items-center justify-center @sm:ml-4",
+    "relative z-10 ms-3.25 flex h-full shrink-0 items-center justify-center",
   trigger:
     "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:
@@ -149,6 +149,7 @@ type MailListRowDetailsProps = VariantProps<typeof mailListRowFrameVariants> & {
   actions?: ReactNode;
   active?: boolean;
   badge?: ReactNode;
+  inset?: "default" | "balanced";
   metadata?: ReactNode;
   sender: string;
   senderEmail?: string;
@@ -163,6 +164,7 @@ export const MailListRowDetails = ({
   actions,
   active = false,
   badge,
+  inset = "default",
   layout = "stacked",
   metadata,
   sender,
@@ -173,7 +175,15 @@ export const MailListRowDetails = ({
   timestamp,
   unread = false,
 }: MailListRowDetailsProps) => (
-  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 pr-5 pl-3 @sm:gap-3 @sm:pr-6 @sm:pl-4">
+  <div
+    className={cn(
+      "pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 @sm:gap-3",
+      {
+        "ps-3 pe-5 @sm:ps-4 @sm:pe-6": inset === "default",
+        "py-2.5 ps-2.5 pe-4.5": inset === "balanced",
+      }
+    )}
+  >
     <div
       className={cn(
         "flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-x-clip",

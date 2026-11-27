@@ -315,6 +315,7 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
+    inset="balanced"
     actions={actions}
     active={isActive}
     badge={badge}
