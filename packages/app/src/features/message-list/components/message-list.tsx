@@ -28,10 +28,6 @@ import type {
 } from "@quieter/app/features/message-list/components/message-list-types";
 import { useMessageListSelection } from "@quieter/app/features/message-list/components/use-message-list-selection";
 import { MessageListSearch } from "@quieter/app/features/message-search/components/message-list-search";
-import {
-  appEaseOut,
-  appMotionDuration,
-} from "@quieter/app/features/motion/app-motion";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { ThreadListEntry } from "@quieter/app/lib/gmail/thread-list";
@@ -45,7 +41,6 @@ import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { UseHotkeyDefinition } from "@tanstack/react-hotkeys";
 import { useQueries } from "@tanstack/react-query";
-import { m, useReducedMotion } from "motion/react";
 import { useRef, useState } from "react";
 
 import { MailSnoozeDialog } from "../../mailbox/components/mail-snooze-dialog";
@@ -957,7 +952,6 @@ const useMessageListInteractions = ({
 };
 
 export const MessageList = (props: MessageListProps) => {
-  const reducedMotion = useReducedMotion();
   const mailboxSources = new Map<string, MessageListProps["mailboxProvider"]>();
   if (props.mailboxContextsByThreadId) {
     for (const context of props.mailboxContextsByThreadId.values()) {
@@ -1132,31 +1126,7 @@ export const MessageList = (props: MessageListProps) => {
         </div>
       )}
 
-      <m.div
-        animate={{
-          filter: "blur(0px)",
-          opacity: 1,
-          transform: "translate3d(0, 0, 0)",
-        }}
-        className="flex min-h-0 flex-1 flex-col"
-        initial={
-          reducedMotion === true
-            ? { opacity: 0 }
-            : {
-                filter: "blur(4px)",
-                opacity: 0.55,
-                transform: "translate3d(0, 4px, 0)",
-              }
-        }
-        key={scrollPaneKey}
-        transition={{
-          duration:
-            reducedMotion === true
-              ? appMotionDuration.feedback
-              : appMotionDuration.layout,
-          ease: appEaseOut,
-        }}
-      >
+      <div className="flex min-h-0 flex-1 flex-col" key={scrollPaneKey}>
         <MessageListScrollPane
           gmailLabels={gmailLabels}
           gmailLabelsByMailboxId={labelsByMailboxId}
@@ -1167,12 +1137,16 @@ export const MessageList = (props: MessageListProps) => {
           showSelectionTray={isSelecting}
           threadedMessages={threadedMessages}
         />
-      </m.div>
+      </div>
 
       <MessageListSelectionTray>
         {isSelecting ? (
           <MessageListSelectionToolbar
             actions={bulkActions}
+            areTargetsReady={
+              selection.selectedThreads.length ===
+              selection.selectedThreadIds.size
+            }
             allSelected={selection.allSelected}
             disabled={false}
             indeterminate={selection.selectionIndeterminate}

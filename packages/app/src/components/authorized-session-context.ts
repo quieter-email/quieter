@@ -1,6 +1,6 @@
 import { createContext } from "react";
 
-export const AuthorizedSessionContext = createContext<{
-  sessionId: string | undefined;
-  userId: string | undefined;
-} | null>(null);
+export const AuthorizedSessionContext = createContext<
+  | { kind: "authorized"; sessionId: string; userId: string }
+  | { kind: "unavailable" }
+>({ kind: "unavailable" });

@@ -1,33 +1,26 @@
-export type SessionUser = {
-  email: string;
-  emailVerified: boolean;
-  id: string;
-  image: string | null;
-  name: string;
-  needsOnboarding: boolean;
-  sessionId: string;
-};
+import { z } from "zod";
+
+const sessionUserSchema = z.object({
+  email: z.string(),
+  emailVerified: z.boolean(),
+  id: z.string(),
+  image: z.string().nullable(),
+  name: z.string(),
+  needsOnboarding: z.boolean(),
+  sessionId: z.string().min(1),
+});
+export type SessionUser = z.infer<typeof sessionUserSchema>;
+
+const isSessionUser = (value: unknown): value is SessionUser =>
+  sessionUserSchema.safeParse(value).success;
 
 let cachedSessionUser: SessionUser | undefined;
 let pendingSessionLoad: Promise<SessionUser | null> | undefined;
 let sessionLoadGeneration = 0;
+let liveSessionId: string | undefined;
 let revocationVersion = 0;
 const revokedSessionIds = new Set<string>();
 const revocationListeners = new Set<() => void>();
-
-export const isSessionUser = (value: unknown): value is SessionUser =>
-  typeof value === "object" &&
-  value !== null &&
-  typeof Reflect.get(value, "email") === "string" &&
-  typeof Reflect.get(value, "emailVerified") === "boolean" &&
-  typeof Reflect.get(value, "id") === "string" &&
-  (Reflect.get(value, "image") === null ||
-    typeof Reflect.get(value, "image") === "string") &&
-  typeof Reflect.get(value, "name") === "string" &&
-  typeof Reflect.get(value, "needsOnboarding") === "boolean" &&
-  "sessionId" in value &&
-  typeof value.sessionId === "string" &&
-  value.sessionId.length > 0;
 
 export const extractRouteSessionUser = (
   matches: readonly { loaderData?: unknown }[]
@@ -72,11 +65,16 @@ export const syncAuthorizedSessionUser = (live: {
   name?: string;
   sessionId: string;
 }) => {
-  if (typeof window === "undefined" || !cachedSessionUser) {
+  if (typeof window === "undefined") {
     return;
   }
+  if (liveSessionId !== live.sessionId) {
+    liveSessionId = live.sessionId;
+    sessionLoadGeneration += 1;
+    pendingSessionLoad = undefined;
+  }
   if (
-    cachedSessionUser.id === live.id &&
+    cachedSessionUser?.id === live.id &&
     cachedSessionUser.sessionId === live.sessionId
   ) {
     cachedSessionUser = {
@@ -88,9 +86,7 @@ export const syncAuthorizedSessionUser = (live: {
     };
     return;
   }
-  sessionLoadGeneration += 1;
   cachedSessionUser = undefined;
-  pendingSessionLoad = undefined;
 };
 
 export const purgeAuthorizedSessionUser = (sessionId?: string) => {
@@ -103,7 +99,14 @@ export const purgeAuthorizedSessionUser = (sessionId?: string) => {
   if (sessionId) {
     revokedSessionIds.add(sessionId);
   }
-  if (sessionId === undefined || cachedSessionUser?.sessionId === sessionId) {
+  if (sessionId === undefined || liveSessionId === sessionId) {
+    liveSessionId = undefined;
+  }
+  if (
+    sessionId === undefined ||
+    cachedSessionUser?.sessionId === sessionId ||
+    (cachedSessionUser === undefined && liveSessionId === undefined)
+  ) {
     sessionLoadGeneration += 1;
     cachedSessionUser = undefined;
     pendingSessionLoad = undefined;
@@ -134,20 +137,28 @@ export const loadFreshSessionUser = async (
   if (typeof window === "undefined") {
     return await fetcher();
   }
-  sessionLoadGeneration += 1;
+  if (pendingSessionLoad !== undefined) {
+    return await pendingSessionLoad;
+  }
   const generation = sessionLoadGeneration;
-  cachedSessionUser = undefined;
   const request = (async () => {
     const user = await fetcher();
     if (generation !== sessionLoadGeneration) {
-      return cachedSessionUser ?? null;
+      return liveSessionId === undefined
+        ? null
+        : await loadFreshSessionUser(fetcher);
     }
-    if (user === null || revokedSessionIds.has(user.sessionId)) {
+    if (user === null) {
+      const expiredSessionId = liveSessionId ?? cachedSessionUser?.sessionId;
+      if (expiredSessionId !== undefined) {
+        purgeAuthorizedSessionUser(expiredSessionId);
+      }
       return null;
     }
-    if (!user.needsOnboarding) {
-      cachedSessionUser = user;
+    if (revokedSessionIds.has(user.sessionId)) {
+      return null;
     }
+    cachedSessionUser = user.needsOnboarding ? undefined : user;
     return user;
   })();
   pendingSessionLoad = request;
@@ -161,7 +172,8 @@ export const loadFreshSessionUser = async (
 };
 
 export const loadAuthorizedSessionUser = async (
-  fetcher: () => Promise<SessionUser | null>
+  fetcher: () => Promise<SessionUser | null>,
+  { revalidate = false }: { revalidate?: boolean } = {}
 ): Promise<SessionUser | null> => {
   if (typeof window === "undefined") {
     return await fetcher();
@@ -171,7 +183,23 @@ export const loadAuthorizedSessionUser = async (
     !cachedSessionUser.needsOnboarding &&
     !revokedSessionIds.has(cachedSessionUser.sessionId)
   ) {
-    return cachedSessionUser;
+    const user = cachedSessionUser;
+    if (revalidate) {
+      void (async () => {
+        try {
+          const current = await loadFreshSessionUser(fetcher);
+          if (
+            current?.sessionId !== user.sessionId &&
+            !revokedSessionIds.has(user.sessionId)
+          ) {
+            purgeAuthorizedSessionUser(user.sessionId);
+          }
+        } catch {
+          // The session observer can retry a temporary connection failure.
+        }
+      })();
+    }
+    return user;
   }
   if (pendingSessionLoad) {
     return await pendingSessionLoad;

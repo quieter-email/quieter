@@ -28,11 +28,14 @@ import { useQueries } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+export type MessageBodyLoadState =
+  | { kind: "ready" }
+  | { kind: "loading" }
+  | { kind: "paused" }
+  | { kind: "error"; error: unknown };
+
 type MessageBodyProps = {
-  error?: unknown;
-  isError?: boolean;
-  isLoading?: boolean;
-  isPaused?: boolean;
+  bodyLoadState?: MessageBodyLoadState;
   loadExternalImages?: boolean;
   mailboxId: string;
   message: Pick<
@@ -452,10 +455,7 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
 };
 
 export const MessageBody = ({
-  error,
-  isError,
-  isLoading,
-  isPaused,
+  bodyLoadState,
   loadExternalImages,
   mailboxId,
   message,
@@ -472,15 +472,15 @@ export const MessageBody = ({
   );
 
   if (!htmlBody && !fallbackText) {
-    if (isError === true) {
+    if (bodyLoadState?.kind === "error") {
       return (
         <div
           className="flex flex-wrap items-center justify-between gap-3 py-4 text-body-sm"
           role="alert"
         >
           <p className="text-destructive">
-            {error instanceof Error
-              ? error.message
+            {bodyLoadState.error instanceof Error
+              ? bodyLoadState.error.message
               : "Could not load message content."}
           </p>
           {onRetry === undefined ? null : (
@@ -496,14 +496,14 @@ export const MessageBody = ({
         </div>
       );
     }
-    if (isPaused === true) {
+    if (bodyLoadState?.kind === "paused") {
       return (
         <p aria-live="polite" className="py-4 text-body-sm text-muted-fg">
           Waiting for a connection to load this message…
         </p>
       );
     }
-    if (isLoading === true) {
+    if (bodyLoadState?.kind === "loading") {
       return (
         <p aria-live="polite" className="py-4 text-body-sm text-muted-fg">
           Loading message…

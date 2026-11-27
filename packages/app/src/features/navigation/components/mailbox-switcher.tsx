@@ -31,6 +31,7 @@ import {
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
 import { warmSettingsDestination } from "@quieter/app/lib/background-prefetch";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -608,8 +609,10 @@ export const MailboxSwitcherDropdown = ({
   const currentSecondaryLabel = loadingEmpty
     ? "Loading mailboxes…"
     : selectionDescription;
+  const preview = usePreviewPersona();
   const warmMailboxSettings = () => {
     void warmSettingsDestination({
+      isSandboxMode: preview !== null,
       queryClient,
       router,
       tab: "mailboxes",

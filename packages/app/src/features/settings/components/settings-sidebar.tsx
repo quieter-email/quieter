@@ -130,13 +130,13 @@ export const SettingsSidebar = ({
       nativeButton={false}
       onClick={onRequestClose}
       onFocus={() => {
-        void warmSettingsTab(queryClient, destination.tab);
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       onMouseEnter={() => {
-        void warmSettingsTab(queryClient, destination.tab);
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       onPointerDown={() => {
-        void warmSettingsTab(queryClient, destination.tab);
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
       role="link"

@@ -47,10 +47,7 @@ import {
 } from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
-import {
-  hasRenderableMessageBody,
-  MAILBOX_LABELS,
-} from "@quieter/app/lib/mail";
+import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
@@ -142,13 +139,12 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     isBodyRefreshPending,
     isSingleMessageThread,
     isThreadActionPending,
-    isThreadLoadError,
-    isThreadLoadPaused,
+    bodyLoadState,
     mailboxActions,
     mailboxId,
     mailboxProvider,
     message,
-    navigationScope,
+    navigationInteractionRef,
     onBackToList,
     onFilterByLabel,
     onOpenConversation,
@@ -157,7 +153,6 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     refetchThread,
     subject,
     threadAttachments,
-    threadError,
     threadIsUnread,
     threadLabelIds,
     threadMessages,
@@ -165,7 +160,28 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     viewRef,
     visibleMessages,
   } = props;
-  const { contentRef, gutterRef, viewportRef } = navigationScope ?? {};
+  const gutterRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
+  const [navigationContent, setNavigationContent] =
+    useState<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const gutter = gutterRef.current;
+    if (
+      gutter === null ||
+      isBodyRefreshPending ||
+      Object.hasOwn(gutter.dataset, "animateThreadRail")
+    ) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      // Commit the opening width before enabling transitions for later changes.
+      gutter.getBoundingClientRect();
+      gutter.dataset.animateThreadRail = "";
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+    };
+  }, [isBodyRefreshPending]);
   const [inlineDraft, setInlineDraft] = useState<ComposeDraftState | null>(
     null
   );
@@ -702,33 +718,25 @@ const MessageViewContent = (props: MessageViewContentProps) => {
       </WorkspaceHeader>
 
       <div className="flex min-h-0 flex-1">
-        {navigationScope === undefined ? null : (
+        {navigationInteractionRef === undefined ? null : (
           <div
             // oxlint-disable-next-line shadcn/no-arbitrary-values -- Animate the measured rail gutter's layout space and visibility, not unrelated properties.
-            className="flex w-14 shrink-0 items-center justify-center overflow-x-clip py-4 pl-4 transition-[width,padding-left,opacity] duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) empty:w-0 empty:pl-0 empty:opacity-0 motion-reduce:transition-none pointer-coarse:w-16 pointer-coarse:empty:w-0"
-            ref={(element) => {
-              if (gutterRef !== undefined) {
-                gutterRef.current = element;
-              }
-            }}
+            className="flex w-14 shrink-0 items-center justify-center overflow-x-clip py-4 pl-4 transition-none duration-(--app-motion-duration-feedback) ease-(--app-motion-ease-out) empty:w-0 empty:pl-0 empty:opacity-0 motion-safe:data-animate-thread-rail:transition-[width,padding-left,opacity] pointer-coarse:w-16 pointer-coarse:empty:w-0"
+            ref={gutterRef}
           />
         )}
         <div
           className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto"
           data-message-detail-scroll-container
-          ref={(element) => {
-            if (viewportRef !== undefined) {
-              viewportRef.current = element;
-            }
-          }}
+          ref={viewportRef}
         >
           <div
             className="@container min-h-full min-w-0"
-            ref={(element) => {
-              if (contentRef !== undefined) {
-                contentRef.current = element;
-              }
-            }}
+            ref={
+              navigationInteractionRef === undefined
+                ? undefined
+                : setNavigationContent
+            }
           >
             {mailboxProvider !== "api" &&
             composeDemoMode !== true &&
@@ -749,10 +757,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             ) : null}
 
-            {isThreadLoadError &&
-            visibleMessages.every((entry) =>
-              hasRenderableMessageBody(entry)
-            ) ? (
+            {bodyLoadState.kind === "error" ? (
               <div
                 className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
                 role="alert"
@@ -776,10 +781,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             {isSingleMessageThread ? (
               visibleMessages.map((threadMessage) => (
                 <SingleMessageCard
-                  error={threadError}
-                  isError={isThreadLoadError}
-                  isLoading={isBodyRefreshPending}
-                  isPaused={isThreadLoadPaused}
+                  bodyLoadState={bodyLoadState}
                   isActionPending={pendingActions.isMessageActionPending(
                     threadMessage.id
                   )}
@@ -812,16 +814,23 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             ) : (
               <ThreadMessageList
                 allThreadMessages={threadMessages}
-                error={threadError}
-                isError={isThreadLoadError}
-                isLoading={isBodyRefreshPending}
+                bodyLoadState={bodyLoadState}
                 isMessageActionPending={pendingActions.isMessageActionPending}
-                isPaused={isThreadLoadPaused}
                 key={`${mailboxId}:${message.threadId}`}
                 mailboxId={mailboxId}
                 mailboxProvider={mailboxProvider}
                 messages={visibleMessages}
-                navigationScope={navigationScope}
+                navigationScope={
+                  navigationInteractionRef === undefined ||
+                  navigationContent === null
+                    ? undefined
+                    : {
+                        content: navigationContent,
+                        gutterRef,
+                        interactionRef: navigationInteractionRef,
+                        viewportRef,
+                      }
+                }
                 onComposeDraftRequested={
                   canComposeFromMailbox ? openInlineCompose : undefined
                 }

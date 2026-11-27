@@ -160,6 +160,9 @@ export const ConversationLabels = ({
           labelSuggestionsQueryOptions(mailboxId, messageIds).queryKey
         )
       : undefined);
+  const canHydrateOrganization =
+    !picker.locked ||
+    (picker.query.trim() !== "" && picker.highlightedId === null);
   if (open && !picker.ready && isCatalogReady) {
     setPicker({
       ...picker,
@@ -173,18 +176,25 @@ export const ConversationLabels = ({
   } else if (
     open &&
     picker.ready &&
-    !picker.locked &&
-    ((picker.organization === undefined && organization !== undefined) ||
-      (!picker.suggestionsHydrated && suggestionIds !== undefined))
+    ((picker.organization === undefined &&
+      organization !== undefined &&
+      canHydrateOrganization) ||
+      (!picker.locked &&
+        !picker.suggestionsHydrated &&
+        suggestionIds !== undefined))
   ) {
     setPicker({
       ...picker,
-      organization: picker.organization ?? organization,
-      suggestionIds: picker.suggestionsHydrated
-        ? picker.suggestionIds
-        : (suggestionIds ?? picker.suggestionIds),
+      organization: canHydrateOrganization
+        ? (picker.organization ?? organization)
+        : picker.organization,
+      suggestionIds:
+        picker.locked || picker.suggestionsHydrated
+          ? picker.suggestionIds
+          : (suggestionIds ?? picker.suggestionIds),
       suggestionsHydrated:
-        picker.suggestionsHydrated || suggestionIds !== undefined,
+        picker.suggestionsHydrated ||
+        (!picker.locked && suggestionIds !== undefined),
     });
   }
   useEffect((): (() => void) | undefined => {

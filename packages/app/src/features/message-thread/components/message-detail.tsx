@@ -7,12 +7,7 @@ import type {
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import { MessageView } from "@quieter/app/features/message-thread/components/message-view";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
-import {
-  appEaseOut,
-  appMotionDuration,
-} from "@quieter/app/features/motion/app-motion";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
-import { m, useReducedMotion } from "motion/react";
 import { useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
@@ -65,11 +60,7 @@ export const MessageDetail = ({
   mailboxId,
   mailboxProvider,
 }: MessageDetailProps) => {
-  const reducedMotion = useReducedMotion();
   const detailRef = useRef<HTMLElement>(null);
-  const viewportRef = useRef<HTMLDivElement | null>(null);
-  const contentRef = useRef<HTMLDivElement | null>(null);
-  const gutterRef = useRef<HTMLDivElement | null>(null);
   useLayoutEffect(() => {
     if (focusOnOpen === true) {
       detailRef.current?.focus({ preventScroll: true });
@@ -109,12 +100,7 @@ export const MessageDetail = ({
         mailboxId={mailboxId}
         mailboxProvider={mailboxProvider}
         message={selectedMessage}
-        navigationScope={{
-          contentRef,
-          gutterRef,
-          interactionRef: detailRef,
-          viewportRef,
-        }}
+        navigationInteractionRef={detailRef}
         onConversationOpened={onConversationOpened}
         onOpenConversation={onOpenConversation}
         onBackToList={onBackToList}
@@ -134,33 +120,12 @@ export const MessageDetail = ({
       ref={detailRef}
       tabIndex={focusOnOpen === true ? -1 : undefined}
     >
-      <m.div
-        animate={{
-          filter: "blur(0px)",
-          opacity: 1,
-          transform: "translate3d(0, 0, 0)",
-        }}
+      <div
         className="flex min-h-0 min-w-0 flex-1 flex-col"
-        initial={
-          reducedMotion === true
-            ? { opacity: 0 }
-            : {
-                filter: "blur(4px)",
-                opacity: 0.55,
-                transform: "translate3d(8px, 0, 0)",
-              }
-        }
         key={`${mailboxId}:${selectedMessage?.id ?? (isPending === true ? "loading" : "empty")}`}
-        transition={{
-          duration:
-            reducedMotion === true
-              ? appMotionDuration.feedback
-              : appMotionDuration.layout,
-          ease: appEaseOut,
-        }}
       >
         {messageContent}
-      </m.div>
+      </div>
     </section>
   );
 };

@@ -88,25 +88,27 @@ export const warmComposeDestination = async ({
 
 export const warmCalendarDestination = async ({
   isSandboxMode = false,
-  prefetchEvents = false,
+  eventScope,
   queryClient,
-  route,
-  signal,
   userId,
 }: {
   isSandboxMode?: boolean;
-  prefetchEvents?: boolean;
+  eventScope?: {
+    route: ReturnType<typeof mailboxSearchSchema.parse>;
+    signal: AbortSignal;
+  };
   queryClient: QueryClient;
-  route?: ReturnType<typeof mailboxSearchSchema.parse>;
-  signal?: AbortSignal;
   userId?: string | null;
 }) => {
-  const [{ loadCalendarWorkspace }, { calendarAccountsQueryOptions }] =
-    await Promise.all([
-      import("@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders"),
-      import("@quieter/app/lib/calendar-query"),
-    ]);
-  if (signal?.aborted ?? false) {
+  const [workspace, accounts] = await Promise.allSettled([
+    import("@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders"),
+    import("@quieter/app/lib/calendar-query"),
+  ]);
+  if (
+    eventScope?.signal.aborted === true ||
+    workspace.status === "rejected" ||
+    accounts.status === "rejected"
+  ) {
     return;
   }
   const canWarmData =
@@ -114,20 +116,16 @@ export const warmCalendarDestination = async ({
     typeof userId === "string" &&
     userId.length > 0 &&
     userId !== "preview";
-  if (prefetchEvents && canWarmData && route && signal) {
-    const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
-    if (!signal.aborted) {
-      await prefetchCalendarWorkspace(queryClient, {
-        route,
-        signal,
-        userId,
-      });
-    }
-    return;
-  }
+  const { loadCalendarWorkspace } = workspace.value;
+  const { calendarAccountsQueryOptions } = accounts.value;
   await Promise.allSettled([
-    loadCalendarWorkspace(),
-    canWarmData
+    (async () => {
+      const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
+      if (canWarmData && eventScope && !eventScope.signal.aborted) {
+        await prefetchCalendarWorkspace(queryClient, { ...eventScope, userId });
+      }
+    })(),
+    canWarmData && eventScope === undefined
       ? queryClient.query(calendarAccountsQueryOptions(userId))
       : undefined,
   ]);
@@ -148,9 +146,9 @@ export const warmInboxDestination = async ({
   signal?: AbortSignal;
   userId?: string | null;
 }) => {
-  const chunkPromise = loadRouteChunkByPath(router, "/");
+  const chunkPromise = Promise.allSettled([loadRouteChunkByPath(router, "/")]);
   if (isSandboxMode || (signal?.aborted ?? false)) {
-    await Promise.allSettled([chunkPromise]);
+    await chunkPromise;
     return;
   }
   let route = mailboxSearchSchema.parse({});
@@ -171,11 +169,9 @@ export const warmInboxDestination = async ({
     await Promise.allSettled([
       chunkPromise,
       warmCalendarDestination({
+        eventScope: signal === undefined ? undefined : { route, signal },
         isSandboxMode,
-        prefetchEvents: signal !== undefined,
         queryClient,
-        route,
-        signal,
         userId,
       }),
     ]);
@@ -203,12 +199,12 @@ export const warmInboxDestination = async ({
     try {
       mailboxesData = await queryClient.query(mailboxesOptions);
     } catch {
-      await Promise.allSettled([chunkPromise]);
+      await chunkPromise;
       return;
     }
   }
   if (signal?.aborted ?? false) {
-    await Promise.allSettled([chunkPromise]);
+    await chunkPromise;
     return;
   }
   const mailboxes = mailboxesData.groups.flatMap((group) => group.mailboxes);

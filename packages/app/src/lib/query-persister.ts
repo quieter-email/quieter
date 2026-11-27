@@ -123,6 +123,13 @@ const deserializePersistedQuery = (value: string): PersistedQuery => {
 let persistenceUser: string | undefined;
 let persistenceGeneration = 0;
 let persistenceSession: string | undefined;
+const mailboxCacheRevocations = new WeakMap<QueryClient, Set<string>>();
+
+export const getMailboxCacheRevocations = (client: QueryClient) => {
+  const revoked = mailboxCacheRevocations.get(client) ?? new Set<string>();
+  mailboxCacheRevocations.set(client, revoked);
+  return revoked;
+};
 let persistenceInitialized = false;
 let persistenceClient: QueryClient | undefined;
 
@@ -435,7 +442,7 @@ const updatePersistenceOwner = (
 export const setQueryPersistenceUser = (
   userId: string | null | undefined,
   client?: QueryClient,
-  sessionId = userId ?? undefined
+  sessionId?: string
 ) => {
   if (
     typeof window === "undefined" ||
@@ -628,6 +635,7 @@ const hydrateWarmBatch = (
         )
       : []
   );
+  const revoked = getMailboxCacheRevocations(client);
   const currentTime = Date.now();
   notifyManager.batch(() => {
     for (const [storageKey, raw] of batch) {
@@ -662,7 +670,8 @@ const hydrateWarmBatch = (
             "label-organization",
             "managed-label-counts",
           ].includes(String(stored.queryKey[0])) &&
-          !authorized.has(stored.queryKey[1])) ||
+          (!authorized.has(stored.queryKey[1]) ||
+            revoked.has(stored.queryKey[1]))) ||
         (stored.queryKey[0] === "calendar" && stored.queryKey[1] !== userId) ||
         (isSidebarMailCountQueryKey(stored.queryKey) &&
           stored.queryKey[5] !== userId)
@@ -746,7 +755,7 @@ export const restoreWarmWorkspaceQueries = async (
   const requestedCategory =
     rawMailbox === "scheduled"
       ? "sent"
-      : rawMailbox || startupSearch?.mailbox || "inbox";
+      : (startupSearch?.mailbox ?? (rawMailbox || "inbox"));
   const hotCategory = PERSISTABLE_MAIL_CATEGORIES.has(requestedCategory)
     ? requestedCategory
     : "inbox";

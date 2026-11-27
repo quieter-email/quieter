@@ -48,6 +48,7 @@ import { chatQueryOptions } from "@quieter/app/lib/chat-query";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button, LinkButton } from "@quieter/ui/button";
@@ -65,7 +66,6 @@ import {
   WorkspaceHeader,
   WorkspaceSection,
   workspaceGutterClassName,
-  workspaceSectionVariants,
 } from "@quieter/ui/workspace-section";
 import { captureException } from "@sentry/react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -325,8 +325,13 @@ const NoMailboxWorkspace = ({
   const [setupMode, setSetupMode] = useState<"choice" | "managed">("choice");
   const queryClient = useQueryClient();
   const router = useRouter();
+  const preview = usePreviewPersona();
   const warmSettings = () => {
-    void warmSettingsDestination({ queryClient, router });
+    void warmSettingsDestination({
+      isSandboxMode: preview !== null,
+      queryClient,
+      router,
+    });
   };
 
   return (
@@ -1084,13 +1089,7 @@ const MailboxWorkspaceContentInner = ({
     );
   } else if (selectedView === "labels") {
     mailboxContent = (
-      <m.div
-        key="labels-panel"
-        className={workspaceSectionVariants()}
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
-        transition={{ duration: 0.08, ease: "linear" }}
-      >
+      <WorkspaceSection key="labels-panel">
         <LabelsWorkspacePanel
           canManage={
             selectedMailboxProvider !== "managed" ||
@@ -1104,7 +1103,7 @@ const MailboxWorkspaceContentInner = ({
           onClose={onCloseSubview}
           onOpenSidebar={onOpenSidebar}
         />
-      </m.div>
+      </WorkspaceSection>
     );
   } else {
     mailboxContent = (

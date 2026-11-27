@@ -2,6 +2,7 @@
 
 import { findLinkedDraftForMessage } from "@quieter/app/features/compose/domain/compose-actions";
 import type { MailboxPendingActions } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
+import type { MessageBodyLoadState } from "@quieter/app/features/message-thread/components/message-body";
 import { ApiSourceAction } from "@quieter/app/features/message-thread/components/message-inspector-panel";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import { toastError } from "@quieter/app/lib/error-toast";
@@ -239,7 +240,8 @@ export const useMessageViewData = ({
   const hasReadySingleMessage =
     !isDraftMessage(message) &&
     hasRenderableMessageBody(message) &&
-    (message.threadMessageCount ?? 1) <= 1;
+    (message.threadMessageCount ?? 1) <= 1 &&
+    (threadData?.messages.every((entry) => entry.id === message.id) ?? true);
   const hasReadyThreadContent =
     hasCompleteCachedThread || hasReadySingleMessage;
   const isBodyRefreshPending =
@@ -248,6 +250,14 @@ export const useMessageViewData = ({
     !hasCompleteCachedThread && isThreadError && !isThreadFetching;
   const isThreadLoadPaused =
     !hasReadyThreadContent && isThreadPaused && !isThreadLoadError;
+  let bodyLoadState: MessageBodyLoadState = { kind: "ready" };
+  if (isThreadLoadError) {
+    bodyLoadState = { error: threadError, kind: "error" };
+  } else if (isThreadLoadPaused) {
+    bodyLoadState = { kind: "paused" };
+  } else if (isBodyRefreshPending) {
+    bodyLoadState = { kind: "loading" };
+  }
   useEffect(() => {
     if (openedPrefetchedThread) {
       void Promise.allSettled([
@@ -341,6 +351,7 @@ export const useMessageViewData = ({
     areLabelsError,
     areLabelsPaused,
     areLabelsPending,
+    bodyLoadState,
     canComposeFromMailbox,
     gmailLabels,
     hotkeyLinkedDraftMessage,
@@ -348,12 +359,9 @@ export const useMessageViewData = ({
     isBodyRefreshPending,
     isSingleMessageThread,
     isThreadActionPending,
-    isThreadLoadError,
-    isThreadLoadPaused,
     refetchThread,
     subject,
     threadAttachments,
-    threadError,
     threadIsUnread,
     threadLabelIds,
     threadMessages,

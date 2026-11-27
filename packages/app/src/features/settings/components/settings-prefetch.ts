@@ -87,9 +87,11 @@ export const loadSettingsTabPanel = async (tab: SettingsTab) => {
     case "reading":
     case "shortcuts": {
       await loadPreferenceSettingsPanels();
-      break;
+      return;
     }
     default: {
+      const _exhaustive: never = tab;
+      void _exhaustive;
       break;
     }
   }
@@ -154,11 +156,12 @@ export const prefetchSettingsTab = async (
 
 export const warmSettingsTab = async (
   queryClient: QueryClient,
-  tab: SettingsTab
+  tab: SettingsTab,
+  isSandboxMode: boolean
 ) => {
   await Promise.allSettled([
     loadSettingsTabPanel(tab),
-    prefetchSettingsTab(queryClient, tab),
+    isSandboxMode ? undefined : prefetchSettingsTab(queryClient, tab),
   ]);
 };
 

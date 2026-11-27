@@ -9,7 +9,10 @@ import {
   subscribeToConfirmedMailboxes,
 } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
-import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
+import {
+  getMailboxCacheRevocations,
+  subscribeQuerySessionInvalidation,
+} from "@quieter/app/lib/query-persister";
 import { CancelledError, partialMatchKey } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
@@ -121,7 +124,7 @@ export const bindMailCache = (client: QueryClient) => {
   let scheduled = false;
   const attempted = new Set<string>();
   const blockedMailboxes = new Set<string>();
-  const revokedMailboxes = new Set<string>();
+  const revokedMailboxes = getMailboxCacheRevocations(client);
   const isPreloadBlocked = (mailboxId: string) =>
     revokedMailboxes.has(mailboxId) || blockedMailboxes.has(mailboxId);
   let accessibleMailboxes = readAccessibleMailboxes(
@@ -344,7 +347,8 @@ export const bindMailCache = (client: QueryClient) => {
       (key[0] === "message-thread" ||
         key[0] === "messages" ||
         key[0] === "verification-codes" ||
-        key[0] === "gmail-labels") &&
+        key[0] === "gmail-labels" ||
+        key[0] === "label-organization") &&
       typeof mailboxId === "string"
     ) {
       const error: unknown = event.action.error;

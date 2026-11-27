@@ -961,7 +961,8 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const isCompletingGmailConnection =
     gmailLink === "complete" && !isSandboxMode;
-  const hasAuthorizedSession = session?.userId === user.id && Boolean(user.id);
+  const hasAuthorizedSession =
+    session.kind === "authorized" && session.userId === user.id;
   const isMailboxesPending =
     !isSandboxMode && (mailboxesQuery.isPending || isCompletingGmailConnection);
   const isMailboxesError =
@@ -970,8 +971,10 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     browserPreferencesReady &&
     hasAuthorizedSession &&
     (isSandboxMode || (!isMailboxesPending && !isMailboxesError));
-  const sessionUserId = session?.userId;
-  const sessionId = session?.sessionId;
+  const sessionUserId =
+    session.kind === "authorized" ? session.userId : undefined;
+  const sessionId =
+    session.kind === "authorized" ? session.sessionId : undefined;
   const writableMailboxes = mailboxes.filter(
     (mailbox) =>
       mailbox.connectionStatus === "connected" &&
@@ -1020,11 +1023,12 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     return enabled
       ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
           await warmCalendarDestination({
+            eventScope: {
+              route: mailboxSearchSchema.parse(router.state.location.search),
+              signal,
+            },
             isSandboxMode: previewPersona !== null,
-            prefetchEvents: true,
             queryClient,
-            route: mailboxSearchSchema.parse(router.state.location.search),
-            signal,
             userId: sessionUserId,
           });
         })

@@ -17,6 +17,7 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { MessageDeliveryStatus } from "@quieter/app/features/message-delivery/components/message-delivery-status";
 import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/domain/message-delivery-support";
 import { MessageBody } from "@quieter/app/features/message-thread/components/message-body";
+import type { MessageBodyLoadState } from "@quieter/app/features/message-thread/components/message-body";
 import { MessageInspectorPanel } from "@quieter/app/features/message-thread/components/message-inspector-panel";
 import {
   getMessageUnsubscribeTarget,
@@ -368,20 +369,14 @@ const MessageHeaderActions = ({
 };
 
 const ThreadMessageBody = ({
-  error,
+  bodyLoadState,
   expanded,
-  isError,
-  isLoading,
-  isPaused,
   mailboxId,
   message,
   onRetry,
 }: {
-  error?: unknown;
+  bodyLoadState?: MessageBodyLoadState;
   expanded: boolean;
-  isError?: boolean;
-  isLoading?: boolean;
-  isPaused?: boolean;
   mailboxId: string;
   message: MessageListItem;
   onRetry?: () => void;
@@ -394,6 +389,7 @@ const ThreadMessageBody = ({
   return (
     <div
       aria-hidden={!expanded}
+      inert={!expanded}
       // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
       className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
       data-conversation-expansion
@@ -417,10 +413,7 @@ const ThreadMessageBody = ({
         >
           {hasExpanded && (
             <MessageBody
-              error={error}
-              isError={isError}
-              isLoading={isLoading}
-              isPaused={isPaused}
+              bodyLoadState={bodyLoadState}
               mailboxId={mailboxId}
               message={message}
               onRetry={onRetry}
@@ -462,11 +455,8 @@ const MessageExpandButton = ({
 );
 
 const ThreadMessageCard = ({
-  error,
+  bodyLoadState,
   expanded,
-  isError,
-  isLoading,
-  isPaused,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
@@ -478,11 +468,8 @@ const ThreadMessageCard = ({
   isActionPending,
   verificationCode,
 }: {
-  error?: unknown;
+  bodyLoadState?: MessageBodyLoadState;
   expanded: boolean;
-  isError?: boolean;
-  isLoading?: boolean;
-  isPaused?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
@@ -562,11 +549,8 @@ const ThreadMessageCard = ({
             </div>
           )}
           <ThreadMessageBody
-            error={error}
+            bodyLoadState={bodyLoadState}
             expanded={expanded}
-            isError={isError}
-            isLoading={isLoading}
-            isPaused={isPaused}
             mailboxId={mailboxId}
             message={message}
             onRetry={onRetry}
@@ -586,10 +570,7 @@ const ThreadMessageCard = ({
 };
 
 export const SingleMessageCard = ({
-  error,
-  isError,
-  isLoading,
-  isPaused,
+  bodyLoadState,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
@@ -600,10 +581,7 @@ export const SingleMessageCard = ({
   isActionPending,
   verificationCode,
 }: {
-  error?: unknown;
-  isError?: boolean;
-  isLoading?: boolean;
-  isPaused?: boolean;
+  bodyLoadState?: MessageBodyLoadState;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
@@ -666,10 +644,7 @@ export const SingleMessageCard = ({
           </div>
         )}
         <MessageBody
-          error={error}
-          isError={isError}
-          isLoading={isLoading}
-          isPaused={isPaused}
+          bodyLoadState={bodyLoadState}
           mailboxId={mailboxId}
           message={message}
           onRetry={onRetry}
@@ -689,11 +664,8 @@ export const SingleMessageCard = ({
 
 export const ThreadMessageList = ({
   allThreadMessages,
-  error,
-  isError,
-  isLoading,
+  bodyLoadState,
   isMessageActionPending,
-  isPaused,
   mailboxId,
   mailboxProvider,
   messages,
@@ -705,11 +677,8 @@ export const ThreadMessageList = ({
   verificationCodes,
 }: {
   allThreadMessages: MessageListItem[];
-  error?: unknown;
-  isError?: boolean;
-  isLoading?: boolean;
+  bodyLoadState?: MessageBodyLoadState;
   isMessageActionPending?: (messageId: string) => boolean;
-  isPaused?: boolean;
   isActionPending?: boolean;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
@@ -759,8 +728,8 @@ export const ThreadMessageList = ({
         setMessageExpansion((current) => ({ ...current, [id]: true }));
       });
     }
-    const content = navigationScope?.contentRef.current;
-    if (content === null || content === undefined) {
+    const content = navigationScope?.content;
+    if (content === undefined) {
       return;
     }
     const cards = [
@@ -793,6 +762,7 @@ export const ThreadMessageList = ({
       {navigationScope === undefined ? null : (
         <ConversationNavigator
           aria-label="Messages in this thread"
+          isLayoutPending={bodyLoadState?.kind === "loading"}
           items={navigationItems}
           prepareItem={prepareMessage}
           scope={navigationScope}
@@ -807,11 +777,8 @@ export const ThreadMessageList = ({
 
         return (
           <ThreadMessageCard
-            error={error}
+            bodyLoadState={bodyLoadState}
             expanded={isExpanded}
-            isError={isError}
-            isLoading={isLoading}
-            isPaused={isPaused}
             isActionPending={
               isMessageActionPending
                 ? isMessageActionPending(threadMessage.id)

@@ -17,7 +17,9 @@ export const Route = createFileRoute("/_app/settings")({
   loaderDeps: ({ search }) => ({ gmail: search.gmail }),
   ssr: "data-only",
   loader: async ({ deps }) => {
-    const user = await loadAuthorizedSessionUser(getSessionUser);
+    const user = await loadAuthorizedSessionUser(getSessionUser, {
+      revalidate: true,
+    });
 
     if (!user) {
       throw redirect({

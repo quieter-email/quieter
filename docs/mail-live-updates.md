@@ -44,6 +44,8 @@ The cache holds at most five pages per unfiltered message-list query. The active
 
 The protected route's authenticated session initializes the workspace QueryClient. The restore reads the mailbox catalog, unread counts, and account preferences together, then loads bounded windows and label catalogs for mailboxes in the current access list. Unfiltered Drafts and Later lists use the same cache and revalidate on open. The catalog revalidates in the background on mount and reconnect. Access hints and authoritative read failures remove revoked mailbox data from memory and disk while other mailboxes stay available. Unseen mail and unsupported search filters still require an authoritative read.
 
+An access failure also blocks warm restoration for that mailbox until the server confirms renewed access. Settings revalidates a warm session in the background. A confirmed expiry retires that session, and responses from superseded session loads cannot repopulate its cache.
+
 Records are scoped to the signed-in user and mailbox. Account changes fence in-flight cache operations and remove other users' records; logout clears the cache. Authorization/not-found failures purge the affected mailbox's disk cache. As with any local cache, access changes cannot erase an offline browser immediately. IndexedDB is a performance cache, never an authorization source.
 
 ## Local verification

@@ -156,6 +156,7 @@ const MessageListBulkActionsMenu = ({
 
 export const MessageListSelectionToolbar = ({
   actions,
+  areTargetsReady,
   allSelected,
   disabled,
   indeterminate,
@@ -167,6 +168,7 @@ export const MessageListSelectionToolbar = ({
   selectedCount,
 }: {
   actions: readonly MessageListBulkAction[];
+  areTargetsReady: boolean;
   allSelected: boolean;
   disabled: boolean;
   indeterminate: boolean;
@@ -180,7 +182,7 @@ export const MessageListSelectionToolbar = ({
   const inlineActions = actions
     .filter((action) => action.promoted === true)
     .slice(0, INLINE_ACTION_LIMIT);
-  const actionsDisabled = disabled || selectedCount === 0;
+  const actionsDisabled = disabled || !areTargetsReady || selectedCount === 0;
   const hasEnabledActions = actions.some((action) => action.disabled !== true);
 
   return (

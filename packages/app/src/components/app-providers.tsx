@@ -211,7 +211,13 @@ export const AppProviders = ({
         <AccountDateTimeProvider userId={userId}>
           <KeyboardShortcutsProvider>
             <MailtoProtocolHandler />
-            <AuthorizedSessionContext value={{ sessionId, userId }}>
+            <AuthorizedSessionContext
+              value={
+                userId && sessionId && !sessionUnresolved
+                  ? { kind: "authorized", sessionId, userId }
+                  : { kind: "unavailable" }
+              }
+            >
               {initialUser === undefined || initialUser.id === userId ? (
                 children
               ) : (

@@ -731,19 +731,19 @@ export const MessageListScrollPane = ({
       } else {
         lastFocusedRowRef.current = null;
       }
-    } else if (threadId) {
-      const currentIndex = threadedMessages.findIndex(
-        (thread) => thread.threadId === threadId
-      );
-      if (currentIndex !== -1) {
-        lastFocusedRowRef.current = { index: currentIndex, threadId };
-      }
-    } else if (
-      document.activeElement !== null &&
-      document.activeElement !== document.body &&
-      !element.contains(document.activeElement)
-    ) {
-      lastFocusedRowRef.current = null;
+    } else {
+      const focusedRow =
+        document.activeElement?.closest<HTMLElement>("li[data-thread-id]");
+      const focusedThreadId = focusedRow?.dataset.threadId;
+      const currentIndex = element.contains(focusedRow ?? null)
+        ? threadedMessages.findIndex(
+            (thread) => thread.threadId === focusedThreadId
+          )
+        : -1;
+      lastFocusedRowRef.current =
+        focusedThreadId !== undefined && currentIndex !== -1
+          ? { index: currentIndex, threadId: focusedThreadId }
+          : null;
     }
 
     const focus = pendingFocusRef.current;

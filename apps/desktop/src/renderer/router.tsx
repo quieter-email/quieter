@@ -128,7 +128,9 @@ const settingsRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadAuthorizedSessionUser(loadUser);
+    const user = await loadAuthorizedSessionUser(loadUser, {
+      revalidate: true,
+    });
     if (!user) {
       throw redirect({ to: "/auth" });
     }
