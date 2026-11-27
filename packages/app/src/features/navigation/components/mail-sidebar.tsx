@@ -311,11 +311,7 @@ const SidebarInboxSection = ({
       />
     ),
     id: SIDEBAR_MAIL,
-    items: getSidebarMailItems({
-      embedded: embedded === true,
-      mailboxId: selectedMailboxId,
-      mailboxProvider: selectedMailboxProvider,
-    }),
+    items: getSidebarMailItems(selectedMailboxProvider),
     label: "Mail",
     orderKey: SIDEBAR_MAIL,
   });

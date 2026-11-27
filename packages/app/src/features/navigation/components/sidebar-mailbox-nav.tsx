@@ -10,7 +10,6 @@ import {
   Mail01Icon,
   MailSend02Icon,
   Flag01Icon,
-  Clock01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
@@ -18,7 +17,6 @@ import type { KeyboardShortcutId } from "@quieter/app/features/hotkeys/domain/ke
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
-import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { Icon } from "@quieter/ui/icon";
 
 import { useSidebarMailCounts } from "../domain/sidebar-mail-counts";
@@ -26,7 +24,7 @@ import { orderSidebarEntries } from "../domain/sidebar-preferences";
 import { SidebarContextMenu } from "./sidebar-context-menu";
 
 const SIDEBAR_MAILBOX_ITEMS: readonly {
-  id: MailboxCategory | "scheduled";
+  id: MailboxCategory;
   icon: IconSvgElement;
   label: string;
   shortcutId?: KeyboardShortcutId;
@@ -52,30 +50,16 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   },
   { icon: Mail01Icon, id: "unread", label: "Unread", shortcutId: "go-unread" },
   { icon: MailSend02Icon, id: "sent", label: "Sent", shortcutId: "go-sent" },
-  {
-    icon: Clock01Icon,
-    id: "scheduled",
-    label: "Scheduled",
-    shortcutId: "go-scheduled",
-  },
   { icon: Edit01Icon, id: "drafts", label: "Drafts", shortcutId: "go-drafts" },
   { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },
 ];
-export const getSidebarMailItems = ({
-  embedded,
-  mailboxId,
-  mailboxProvider,
-}: Pick<
-  SidebarMailboxNavProps,
-  "embedded" | "mailboxId" | "mailboxProvider"
->) =>
-  SIDEBAR_MAILBOX_ITEMS.filter((item) =>
-    mailboxProvider === "api"
-      ? item.id === "sent"
-      : item.id !== "scheduled" ||
-        (!embedded && mailboxId !== null && mailboxProvider !== null)
-  );
+export const getSidebarMailItems = (
+  mailboxProvider: SidebarMailboxNavProps["mailboxProvider"]
+) =>
+  mailboxProvider === "api"
+    ? SIDEBAR_MAILBOX_ITEMS.filter((item) => item.id === "sent")
+    : SIDEBAR_MAILBOX_ITEMS;
 
 type SidebarMailboxNavProps = {
   allInboxesActive: boolean;
@@ -108,14 +92,7 @@ export const SidebarMailboxNav = ({
   onSelectMailbox,
   selectedMailbox,
 }: SidebarMailboxNavProps) => {
-  const isScheduledMailbox = inboxRouteApi.useSearch({
-    select: (search) => search.mailbox === "scheduled",
-  });
-  const mailboxItems = getSidebarMailItems({
-    embedded,
-    mailboxId,
-    mailboxProvider,
-  });
+  const mailboxItems = getSidebarMailItems(mailboxProvider);
   const countableIds =
     !embedded && (mailboxId !== null || allInboxesActive)
       ? mailboxItems.map((item) => item.id)
@@ -167,10 +144,7 @@ export const SidebarMailboxNav = ({
       {orderSidebarEntries(mailboxItems, order).map((item, index) => {
         const showCount = enabledCounts.includes(item.id);
         const count = counts.get(item.id);
-        const isActive =
-          item.id === "scheduled"
-            ? isScheduledMailbox
-            : !isScheduledMailbox && selectedMailbox === item.id;
+        const isActive = selectedMailbox === item.id;
 
         return (
           <SidebarEntrance
@@ -203,17 +177,13 @@ export const SidebarMailboxNav = ({
                         mailbox: item.id,
                         mailboxId,
                         messageId: null,
-                        query: item.id === "scheduled" ? null : undefined,
                         threadId: null,
-                        view:
-                          item.id !== "scheduled" && allInboxesActive
-                            ? "all-inboxes"
-                            : "inbox",
+                        view: allInboxesActive ? "all-inboxes" : "inbox",
                         workspace: null,
                       }
                 }
                 onClick={() => {
-                  if (embedded && item.id !== "scheduled") {
+                  if (embedded) {
                     onSelectMailbox(item.id);
                   }
                   onRequestClose?.();

@@ -1,6 +1,10 @@
 "use client";
 
-import { CheckmarkCircle02Icon, InboxIcon } from "@hugeicons/core-free-icons";
+import {
+  CheckmarkCircle02Icon,
+  Clock01Icon,
+  InboxIcon,
+} from "@hugeicons/core-free-icons";
 import {
   DELIVERY_PILL_TONES,
   getDeliveryStatusLabel,
@@ -361,6 +365,9 @@ const MessageRowDetails = ({
     }
     subjectTrailing={
       <>
+        {thread.anchorMessage.scheduledSend !== undefined && (
+          <Icon icon={Clock01Icon} size={12} tone="muted" />
+        )}
         {thread.anchorMessage.snooze !== undefined &&
         isMailSnoozeLiveStatus(thread.anchorMessage.snooze.status) ? (
           <MailSnoozeRowStatus snooze={thread.anchorMessage.snooze} />
@@ -461,6 +468,14 @@ const MessageRowSurface = ({
   unread,
   verificationCode,
 }: MessageRowSurfaceProps) => {
+  const { scheduledSend } = anchorMessage;
+  const scheduledLabel = scheduledSend
+    ? `Scheduled for ${new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+        timeStyle: "short",
+        timeZone: scheduledSend.timeZone,
+      }).format(new Date(scheduledSend.sendAt))}, ${scheduledSend.timeZone}`
+    : undefined;
   const {
     handleRowBlurCapture,
     handleRowClick,
@@ -618,9 +633,11 @@ const MessageRowSurface = ({
           triggerClassName="relative flex h-full min-w-0 flex-1 active:scale-100"
         >
           <button
-            aria-label={`${openAriaLabel}${thread.isImportant ? ", Important" : ""}${liveSnooze === undefined ? "" : `, ${getMailSnoozeStatusText(liveSnooze)}`}`}
+            aria-label={`${openAriaLabel}${thread.isImportant ? ", Important" : ""}${liveSnooze === undefined ? "" : `, ${getMailSnoozeStatusText(liveSnooze)}`}${scheduledLabel === undefined ? "" : `, ${scheduledLabel}`}`}
             title={
-              badge !== undefined && badge !== null ? openAriaLabel : undefined
+              badge !== undefined && badge !== null
+                ? [openAriaLabel, scheduledLabel].filter(Boolean).join(", ")
+                : scheduledLabel
             }
             aria-current={isActive ? "true" : undefined}
             className={mailListRowParts.trigger}

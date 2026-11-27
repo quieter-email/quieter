@@ -333,7 +333,7 @@
     "./features/reminders/reminders-panel": "./src/features/reminders/reminders-panel.tsx",
     "./features/reminders/reminder-due-strip": "./src/features/reminders/reminder-due-strip.tsx",
     "./features/compose/components/schedule-send-picker": "./src/features/compose/components/schedule-send-picker.tsx",
-    "./features/scheduled-send/components/scheduled-messages-workspace": "./src/features/scheduled-send/components/scheduled-messages-workspace.tsx"
+    "./features/scheduled-send/components/scheduled-sent-rows": "./src/features/scheduled-send/components/scheduled-sent-rows.tsx"
   },
   "dependencies": {
     "@ai-sdk/provider-utils": "5.0.83",

@@ -464,7 +464,6 @@ const useMailboxWorkspaceRouteEffects = ({
 const useMailboxWorkspaceActions = ({
   activeMailbox,
   isComposeMailbox,
-  isScheduledMailbox,
   isSnippetMailbox,
   mailboxes,
   openComposeWorkspace,
@@ -477,7 +476,6 @@ const useMailboxWorkspaceActions = ({
 }: {
   activeMailbox: MailboxCategory;
   isComposeMailbox: boolean;
-  isScheduledMailbox: boolean;
   isSnippetMailbox: boolean;
   mailboxes: { id: string; provider: Exclude<MailboxProvider, null> }[];
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
@@ -502,13 +500,12 @@ const useMailboxWorkspaceActions = ({
   const applySearch = (nextQuery: string) => {
     const normalizedQuery = nextQuery.trim();
 
-    if (!isScheduledMailbox && normalizedQuery === (query ?? "").trim()) {
+    if (normalizedQuery === (query ?? "").trim()) {
       void setMailboxSearch({ messageId: null });
       return;
     }
 
     void setMailboxSearch({
-      mailbox: isScheduledMailbox ? "inbox" : undefined,
       messageId: null,
       query: normalizedQuery === "" ? null : normalizedQuery,
     });
@@ -518,7 +515,6 @@ const useMailboxWorkspaceActions = ({
     if (
       !isSnippetMailbox &&
       !isComposeMailbox &&
-      !isScheduledMailbox &&
       mailbox === activeMailbox &&
       view === "inbox"
     ) {
@@ -533,17 +529,11 @@ const useMailboxWorkspaceActions = ({
 
   const selectView = (nextView: MailboxWorkspaceView) => {
     const resolvedView = nextView;
-    if (
-      resolvedView === view &&
-      !isComposeMailbox &&
-      !isSnippetMailbox &&
-      !isScheduledMailbox
-    ) {
+    if (resolvedView === view && !isComposeMailbox && !isSnippetMailbox) {
       return;
     }
     void setMailboxSearch({
       mailbox:
-        isScheduledMailbox ||
         resolvedView === "all-inboxes" ||
         resolvedView === "labels" ||
         resolvedView === "rules"
@@ -560,29 +550,13 @@ const useMailboxWorkspaceActions = ({
     });
   };
 
-  const selectMailboxFromHotkey = (mailbox: MailboxCategory | "scheduled") => {
+  const selectMailboxFromHotkey = (mailbox: MailboxCategory) => {
     const effectiveProvider =
       allInboxesActive && selectedMailboxProvider === "api"
         ? (mailboxes.find((item) => item.provider !== "api")?.provider ??
           selectedMailboxProvider)
         : selectedMailboxProvider;
     if (!isMailboxSupportedByProvider(effectiveProvider, mailbox)) {
-      return;
-    }
-    if (mailbox === "scheduled") {
-      void setMailboxSearch({
-        mailbox: "scheduled",
-        mailboxId:
-          allInboxesActive && selectedMailboxProvider === "api"
-            ? (mailboxes.find((item) => item.provider !== "api")?.id ??
-              selectedMailboxId)
-            : undefined,
-        messageId: null,
-        query: null,
-        threadId: null,
-        view: "inbox",
-        workspace: null,
-      });
       return;
     }
     selectMailbox(mailbox);
@@ -719,7 +693,7 @@ const useMailboxWorkspaceHotkeys = ({
 }: {
   isWorkspaceReady: boolean;
   openComposeWorkspace: (draft: ComposeDraftState | null) => void;
-  selectMailboxFromHotkey: (mailbox: MailboxCategory | "scheduled") => void;
+  selectMailboxFromHotkey: (mailbox: MailboxCategory) => void;
   selectedMailboxId: string | null;
   selectedMailboxProvider: MailboxProvider;
 }) => {
@@ -817,15 +791,6 @@ const useMailboxWorkspaceHotkeys = ({
     (event) => {
       if (!shouldIgnoreAppShortcut(event)) {
         selectMailboxFromHotkey("later");
-      }
-    },
-    { enabled, ignoreInputs: true }
-  );
-  useHotkey(
-    ["G", "C"],
-    (event) => {
-      if (!shouldIgnoreAppShortcut(event)) {
-        selectMailboxFromHotkey("scheduled");
       }
     },
     { enabled, ignoreInputs: true }
@@ -968,7 +933,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     compose,
     gmailLink,
     isComposeMailbox,
-    isScheduledMailbox,
     isSnippetMailbox,
     mailboxId,
     mailto,
@@ -1144,7 +1108,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const workspaceActions = useMailboxWorkspaceActions({
     activeMailbox,
     isComposeMailbox,
-    isScheduledMailbox,
     isSnippetMailbox,
     mailboxes,
     openComposeWorkspace: composeWorkspace.openComposeWorkspace,
@@ -1191,7 +1154,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     canCompose: canComposeNew,
     isComposeMailbox,
     isMailWorkspace: workspace !== "calendar",
-    isScheduledMailbox,
     isSnippetMailbox,
     isWorkspaceReady,
     mailboxes,

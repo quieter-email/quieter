@@ -45,7 +45,13 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@quieter/ui/popover";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
-import { useCallback, useEffect, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useState } from "react";
+
+const ScheduledSentRows = lazy(async () => {
+  const { ScheduledSentRows: Component } =
+    await import("@quieter/app/features/scheduled-send/components/scheduled-sent-rows");
+  return { default: Component };
+});
 
 type SourceState = {
   messages: MessageListItem[];
@@ -763,6 +769,37 @@ export const UnifiedInboxPanel = ({
             isFetchingNextPage={isFetchingMore}
             isPending={pending}
             isRefreshing={isRefreshing}
+            leadingRows={
+              activeMailbox === "sent" && normalizedSearch === "" ? (
+                <Suspense fallback={null}>
+                  <ScheduledSentRows
+                    sources={connectedMailboxes.map((mailbox) => {
+                      const color =
+                        preferences.colors[mailbox.id] ??
+                        defaultMailboxColor(mailbox.id);
+                      return {
+                        badge: (
+                          <ColorSwatch
+                            color={
+                              color.startsWith("#")
+                                ? color
+                                : `var(--q-${color})`
+                            }
+                            shape="square"
+                            size="sm"
+                          />
+                        ),
+                        demo:
+                          isGmailSandboxMailboxId(mailbox.id) ||
+                          isManagedSandboxMailboxId(mailbox.id),
+                        emailAddress: mailbox.emailAddress,
+                        mailboxId: mailbox.id,
+                      };
+                    })}
+                  />
+                </Suspense>
+              ) : undefined
+            }
             listNotices={listNotices}
             mailboxActions={adapter.mailboxActions}
             mailboxContextsByThreadId={mailboxContextsByThreadId}

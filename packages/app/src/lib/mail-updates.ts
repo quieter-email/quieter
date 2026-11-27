@@ -314,6 +314,21 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
       await queryClient.invalidateQueries(
         {
           predicate: ({ queryKey }) => {
+            if (partialMatchKey(queryKey, orpc.scheduledSends.list.key())) {
+              for (const [mailboxId, change] of changes) {
+                if (
+                  change.types.has("mailbox.changed") &&
+                  (mailboxId === "*" ||
+                    partialMatchKey(
+                      queryKey,
+                      orpc.scheduledSends.list.key({ input: { mailboxId } })
+                    ))
+                ) {
+                  return true;
+                }
+              }
+              return false;
+            }
             if (partialMatchKey(queryKey, orpc.mailAgent.threadResults.key())) {
               for (const [mailboxId, change] of changes) {
                 if (

@@ -29,8 +29,21 @@ import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { useRouter } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useState,
+} from "react";
 import type { ReactNode } from "react";
+
+const ScheduledSentRows = lazy(async () => {
+  const { ScheduledSentRows: Component } =
+    await import("@quieter/app/features/scheduled-send/components/scheduled-sent-rows");
+  return { default: Component };
+});
 
 type MailboxMessagesPanelProps = {
   detailOnly?: boolean;
@@ -285,6 +298,22 @@ export const MailboxMessagesPanel = ({
         >
           <MessageList
             headerAddon={headerAddon}
+            leadingRows={
+              activeMailbox === "sent" &&
+              mailboxProvider !== "api" &&
+              normalizedSearchQuery === "" ? (
+                <Suspense fallback={null}>
+                  <ScheduledSentRows
+                    sources={[
+                      {
+                        demo: isDemoMode || isManagedDemoMode,
+                        mailboxId,
+                      },
+                    ]}
+                  />
+                </Suspense>
+              ) : undefined
+            }
             listNotices={
               mailboxProvider === "api" ? null : (
                 <ReminderDueStrip

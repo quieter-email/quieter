@@ -319,6 +319,7 @@ const createInitialDemoState = (): DemoMailState => ({
       date: daysAgo(0.8),
       from: DEMO_EMAIL_ADDRESS,
       labelIds: [MAILBOX_LABELS.sent],
+      scheduledSend: { sendAt: daysAgo(0.8), timeZone: "UTC" },
       snippet:
         "Thanks, I pushed the final assets into the shared folder and noted the two places that still need legal copy.",
       subject: "Re: Launch checklist",

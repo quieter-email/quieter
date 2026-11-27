@@ -101,7 +101,6 @@ export const executeWorkspaceTool = async (
           current.workspace !== "mail" ||
           current.view === "labels" ||
           current.view === "rules" ||
-          current.view === "scheduled" ||
           current.view === "snippets" ||
           current.view === "compose" ||
           current.selectedMessageId !== undefined ||

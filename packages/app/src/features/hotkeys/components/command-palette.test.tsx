@@ -115,7 +115,6 @@ const WorkspaceFixture = ({
     canCompose: true,
     isComposeMailbox: false,
     isMailWorkspace: true,
-    isScheduledMailbox: false,
     isSnippetMailbox: false,
     isWorkspaceReady: true,
     mailboxes: [],

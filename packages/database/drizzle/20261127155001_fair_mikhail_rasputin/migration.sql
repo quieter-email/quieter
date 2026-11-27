@@ -1,0 +1,1 @@
+ALTER TABLE "scheduledMailSend" ADD COLUMN "sentMessageId" text;

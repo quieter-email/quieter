@@ -66,6 +66,7 @@ import {
   parseOrganizationApiMailboxId,
 } from "../organization-api-mail";
 import { loadDraftReminderIntent } from "../reminders/draft-state";
+import { attachScheduledSendMetadata } from "../scheduled-send/sent-metadata";
 import {
   attachMailSnoozeStates,
   countVisibleMailSnoozes,
@@ -223,7 +224,15 @@ const projectSnoozableGmailRows = async (input: {
     threadIds: messages.map((message) => message.threadId),
     userId: context.userId,
   });
-  return messages.filter((message) => visible.has(message.threadId));
+  const filtered = messages.filter((message) => visible.has(message.threadId));
+  return category === "sent"
+    ? await attachScheduledSendMetadata({
+        mailboxId,
+        messages: filtered,
+        source: { provider: "gmail" },
+        userId: context.userId,
+      })
+    : filtered;
 };
 
 const replayGmailMailbox = async ({
@@ -842,7 +851,21 @@ export const queriesMailOperations = {
           page.nextPageToken === undefined ||
           pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
         ) {
-          return { ...page, messages: filtered };
+          return {
+            ...page,
+            messages:
+              category === "sent" && selectedMailbox.organizationId !== null
+                ? await attachScheduledSendMetadata({
+                    mailboxId: input.mailboxId,
+                    messages: filtered,
+                    source: {
+                      organizationId: selectedMailbox.organizationId,
+                      provider: "managed",
+                    },
+                    userId: context.userId,
+                  })
+                : filtered,
+          };
         }
         pageToken = page.nextPageToken;
       }

@@ -9,11 +9,9 @@ import {
 import { fetchMessagesPage } from "@quieter/app/lib/mail/inbox-query/sync";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
-import { queryOptions, useQueries, useQuery } from "@tanstack/react-query";
+import { queryOptions, useQueries } from "@tanstack/react-query";
 
 import { getDemoScheduledMessages } from "../../scheduled-send/domain/demo-scheduled-messages";
-
-type MailView = MailboxCategory | "scheduled";
 
 const COUNT_CAP = 100;
 
@@ -78,14 +76,14 @@ export const useSidebarMailCounts = ({
   userId,
 }: {
   allInboxesActive: boolean;
-  entries: readonly MailView[];
+  entries: readonly MailboxCategory[];
   mailboxId: string | null;
   mailboxes: readonly Pick<
     UnifiedInboxMailbox,
     "id" | "provider" | "connectionStatus"
   >[];
   userId: string;
-}): ReadonlyMap<MailView, number> => {
+}): ReadonlyMap<MailboxCategory, number> => {
   const { excludedIds } = useUnifiedInboxPreferences(userId);
   const selectedMailbox = mailboxes.find((mailbox) => mailbox.id === mailboxId);
   const sources = mailboxes.filter(
@@ -96,9 +94,7 @@ export const useSidebarMailCounts = ({
         ? mailbox.provider !== "api" && !excludedIds.includes(mailbox.id)
         : mailbox.id === mailboxId)
   );
-  const mailEntries = [...new Set(entries)].filter(
-    (entry) => entry !== "scheduled"
-  );
+  const mailEntries = [...new Set(entries)];
   const sourceQueries = mailEntries.flatMap((entry) =>
     sources.flatMap((mailbox) =>
       mailbox.provider === "api" && entry !== "sent"
@@ -110,37 +106,33 @@ export const useSidebarMailCounts = ({
     queries: sourceQueries.map(mailboxCountOptions),
   });
 
-  const scheduledMailboxId =
-    entries.includes("scheduled") && selectedMailbox?.provider !== "api"
-      ? selectedMailbox?.id
-      : undefined;
-  const scheduledDemo =
-    scheduledMailboxId !== undefined && isSandboxMailboxId(scheduledMailboxId);
-  const scheduledInput = {
-    mailboxId: scheduledMailboxId ?? "",
-  };
-  const scheduled = useQuery(
-    orpc.scheduledSends.count.queryOptions({
-      enabled:
-        scheduledMailboxId !== undefined && !scheduledDemo && userId !== "",
-      input: scheduledInput,
-      queryKey: [
-        ...orpc.scheduledSends.list.queryKey({ input: scheduledInput }),
-        "sidebar-count",
-        userId,
-      ],
-      refetchInterval: GMAIL_QUERY_STALE_TIME_MS,
-      staleTime: GMAIL_QUERY_STALE_TIME_MS,
-    })
-  );
+  const scheduledSources = entries.includes("sent")
+    ? sources.filter((mailbox) => mailbox.provider !== "api")
+    : [];
+  const scheduledCounts = useQueries({
+    queries: scheduledSources.map(({ id }) => {
+      const input = { mailboxId: id };
+      return orpc.scheduledSends.count.queryOptions({
+        enabled: !isSandboxMailboxId(id),
+        input,
+        queryKey: [
+          ...orpc.scheduledSends.list.queryKey({ input }),
+          "sidebar-count",
+          userId,
+        ],
+        refetchInterval: GMAIL_QUERY_STALE_TIME_MS,
+        staleTime: GMAIL_QUERY_STALE_TIME_MS,
+      });
+    }),
+  });
 
-  const counts = new Map<MailView, number>();
+  const counts = new Map<MailboxCategory, number>();
   if (allInboxesActive && selectedMailbox !== undefined) {
     for (const entry of mailEntries) {
       counts.set(entry, 0);
     }
   }
-  const incomplete = new Set<MailView>();
+  const incomplete = new Set<MailboxCategory>();
   for (const [index, { entry }] of sourceQueries.entries()) {
     const result = results[index];
     const data = result?.isSuccess ? result.data : undefined;
@@ -152,22 +144,23 @@ export const useSidebarMailCounts = ({
       Math.min(COUNT_CAP, (counts.get(entry) ?? 0) + (data ?? 0))
     );
   }
+  for (const [index, { id }] of scheduledSources.entries()) {
+    const result = scheduledCounts[index];
+    const count = isSandboxMailboxId(id)
+      ? getDemoScheduledMessages().length
+      : result?.data;
+    if (count === undefined) {
+      incomplete.add("sent");
+    }
+    counts.set(
+      "sent",
+      Math.min(COUNT_CAP, (counts.get("sent") ?? 0) + (count ?? 0))
+    );
+  }
   for (const entry of incomplete) {
     if (counts.get(entry) !== COUNT_CAP) {
       counts.delete(entry);
     }
-  }
-  if (scheduledDemo) {
-    counts.set(
-      "scheduled",
-      Math.min(COUNT_CAP, getDemoScheduledMessages().length)
-    );
-  } else if (
-    scheduledMailboxId !== undefined &&
-    userId !== "" &&
-    scheduled.isSuccess
-  ) {
-    counts.set("scheduled", scheduled.data);
   }
   return counts;
 };

@@ -4604,6 +4604,7 @@ export const scheduledMailSend = pgTable(
     sendAt: timestamp("sendAt", { withTimezone: true }).notNull(),
     sendOperationId: text("sendOperationId").notNull(),
     sentAt: timestamp("sentAt", { withTimezone: true }),
+    sentMessageId: text("sentMessageId"),
     sourceDraftId: text("sourceDraftId"),
     sourceLocalId: text("sourceLocalId").notNull(),
     status: text("status").$type<ScheduledSendStatus>().notNull(),

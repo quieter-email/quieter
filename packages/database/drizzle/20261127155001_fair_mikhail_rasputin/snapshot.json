@@ -1,0 +1,42 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "c9231b01-d953-429d-ab18-2abd716d4251",
+  "prevIds": ["61b66d0b-498e-493b-8543-bf41a7a6659d"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "scheduledMailSend",
+        "sentMessageId"
+      ],
+      "writes": [
+        "s|col|public.scheduledMailSend.sentMessageId",
+        "n|col|public.scheduledMailSend.sentMessageId",
+        "e|col|public.scheduledMailSend.sentMessageId"
+      ],
+      "reads": ["n|tbl|public.scheduledMailSend", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "scheduledMailSend",
+        "name": "sentMessageId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

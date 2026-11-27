@@ -3,6 +3,7 @@
 import {
   AlarmClockIcon,
   CheckmarkCircle02Icon,
+  Clock01Icon,
   Delete01Icon,
   Delete02Icon,
   FileAttachmentIcon,
@@ -1071,7 +1072,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section
-          description="Stacked rows keep two lines. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
+          description="Stacked rows keep two lines, or three with a compact footer. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
           title="Mail list rows"
         >
           <div className="@container space-y-px">
@@ -1172,6 +1173,26 @@ export const DesignSystemShowcase = () => {
                   </Pill>
                 }
                 timestamp="10:42"
+              />
+            </div>
+            <div className={mailListRowFrameVariants({ lines: "three" })}>
+              <MailListRowDetails
+                footer={
+                  <>
+                    <Icon
+                      aria-hidden
+                      icon={Clock01Icon}
+                      size={12}
+                      tone="muted"
+                    />
+                    <span className="truncate">Dec 4, 2026, 9:00 AM</span>
+                  </>
+                }
+                sender="Alex Morgan"
+                senderEmail="alex@example.test"
+                senderPrefix="To "
+                subject="Scheduled rows add a compact send time line"
+                timestamp="Dec 4"
               />
             </div>
           </div>

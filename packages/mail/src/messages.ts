@@ -30,6 +30,7 @@ export type MessagePart = {
 };
 
 export type MessageListItem = {
+  scheduledSend?: { sendAt: string; timeZone: string };
   snooze?: MailSnoozeState;
   otpToken?: OtpToken;
   isImportant?: boolean;

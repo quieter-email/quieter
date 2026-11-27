@@ -32,6 +32,7 @@ import {
   useLayoutEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 
 const MESSAGE_ROW_HEIGHT_PX = 60;
@@ -72,12 +73,13 @@ const getScrollAnchor = (
   const paddingTop = Number(
     getComputedStyle(element).paddingTop.replace("px", "")
   );
-  const anchor = virtualizer.getVirtualItemForOffset(scrollOffset - paddingTop);
-  return anchor
+  const offset = scrollOffset - paddingTop;
+  const anchor = virtualizer.getVirtualItemForOffset(offset);
+  return anchor && anchor.start <= offset
     ? {
         index: anchor.index,
         key: anchor.key,
-        offsetWithinRow: scrollOffset - paddingTop - anchor.start,
+        offsetWithinRow: offset - anchor.start,
       }
     : null;
 };
@@ -325,6 +327,25 @@ export const MessageListScrollPane = ({
     return (seenTimestamps.get(compositeKey) ?? 0) > now - 2000;
   });
 
+  const leadingRowsRef = useRef<HTMLDivElement>(null);
+  const [leadingRowsHeight, setLeadingRowsHeight] = useState(0);
+  const hasLeadingRows =
+    list.leadingRows !== undefined && list.leadingRows !== null;
+  useLayoutEffect((): (() => void) | undefined => {
+    const element = leadingRowsRef.current;
+    if (!element) {
+      setLeadingRowsHeight(0);
+      return undefined;
+    }
+    const observer = new ResizeObserver(() => {
+      setLeadingRowsHeight(element.offsetHeight);
+    });
+    observer.observe(element);
+    setLeadingRowsHeight(element.offsetHeight);
+    return () => {
+      observer.disconnect();
+    };
+  }, [hasLeadingRows]);
   const rowHeightEstimateRef = useRef(MESSAGE_ROW_HEIGHT_PX);
   const measuredWidthRef = useRef(0);
   const pendingLayoutRef = useRef<{ animation: Animation | null } | null>(null);
@@ -334,7 +355,10 @@ export const MessageListScrollPane = ({
     () => threadedMessages.map((thread) => thread.threadId).join("\u0000"),
     [threadedMessages]
   );
-  const previousThreadOrderRef = useRef<string | null>(null);
+  const previousLayoutRef = useRef<{
+    leadingRowsHeight: number;
+    threadOrderKey: string;
+  } | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
   const pendingFocusRef = useRef<{
     threadId: string;
@@ -375,18 +399,26 @@ export const MessageListScrollPane = ({
         : (cachedHeight ?? rowHeightEstimateRef.current);
     },
     overscan: MESSAGE_LIST_OVERSCAN,
+    scrollMargin: leadingRowsHeight,
     scrollPaddingEnd: showSelectionTray ? SELECTION_TRAY_CLEARANCE_PX : 0,
   });
   useLayoutEffect(() => {
     const element = selection.scrollRef.current;
-    const previousOrder = previousThreadOrderRef.current;
-    previousThreadOrderRef.current = threadOrderKey;
+    const previousLayout = previousLayoutRef.current;
+    previousLayoutRef.current = { leadingRowsHeight, threadOrderKey };
     if (
       !element ||
-      previousOrder === null ||
-      previousOrder === threadOrderKey ||
+      previousLayout === null ||
       element.scrollTop <= 1 ||
       pendingAnchorRef.current
+    ) {
+      return;
+    }
+    const leadingRowsResized =
+      previousLayout.leadingRowsHeight !== leadingRowsHeight;
+    if (
+      previousLayout.threadOrderKey === threadOrderKey &&
+      !leadingRowsResized
     ) {
       return;
     }
@@ -404,7 +436,7 @@ export const MessageListScrollPane = ({
       );
       return;
     }
-    if (nextIndex === anchor.index) {
+    if (nextIndex === anchor.index && !leadingRowsResized) {
       return;
     }
     const offset = messageVirtualizer.getOffsetForIndex(nextIndex, "start");
@@ -420,6 +452,7 @@ export const MessageListScrollPane = ({
     }
     lastScrollAnchorRef.current = { ...anchor, index: nextIndex };
   }, [
+    leadingRowsHeight,
     messageVirtualizer,
     selection.scrollRef,
     threadOrderKey,
@@ -761,6 +794,8 @@ export const MessageListScrollPane = ({
       ref={selection.scrollRef}
       tabIndex={-1}
     >
+      {hasLeadingRows && <div ref={leadingRowsRef}>{list.leadingRows}</div>}
+
       {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
 
       {threadedMessages.length > 0 && (
@@ -822,7 +857,7 @@ export const MessageListScrollPane = ({
                 mailboxProvider={
                   context?.mailboxProvider ?? list.mailboxProvider
                 }
-                offsetY={virtualItem.start}
+                offsetY={virtualItem.start - leadingRowsHeight}
                 onThreadFocus={handleThreadFocus}
                 onThreadIntent={handleThreadIntent}
                 onFilterByLabel={handleFilterByLabel}
@@ -856,6 +891,7 @@ export const MessageListScrollPane = ({
 
       {!isLoadingEmptyMessages &&
         !list.isError &&
+        leadingRowsHeight === 0 &&
         threadedMessages.length === 0 && (
           <p className="px-2 py-8 text-center text-body text-muted-fg">
             {emptyMessageLabel}

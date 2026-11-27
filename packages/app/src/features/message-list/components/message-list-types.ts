@@ -49,6 +49,8 @@ export type MessageListProps = {
   mailboxContextsByThreadId?: ReadonlyMap<string, MessageListMailboxContext>;
   messages: ListMessagesPageResult[];
   listNotices?: ReactNode;
+  /** Rows shown before conversations in the same scroll area, outside selection and thread actions. */
+  leadingRows?: ReactNode;
   onActivateMessage: (messageId: string, threadId?: string | null) => void;
   /** Plain row click on the already-open thread closes the reading pane (same as back). */
   onDeactivateActiveMessage: () => void;
