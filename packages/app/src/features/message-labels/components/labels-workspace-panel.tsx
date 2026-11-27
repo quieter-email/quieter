@@ -1222,6 +1222,8 @@ export const LabelsWorkspacePanel = ({
             closeAction={{ label: "Close labels", onClick: onClose }}
             onOpenSidebar={onOpenSidebar}
             title="Labels"
+            titleClassName="ms-1"
+            titleSize="body"
           >
             <Button
               chrome="toolbar"
