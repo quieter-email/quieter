@@ -300,7 +300,7 @@ export const MailListRowDetails = ({
         </div>
       </div>
       {footer !== undefined && footer !== null && (
-        <div className="flex w-full min-w-0 items-center gap-1 text-caption text-muted-fg">
+        <div className="flex w-full min-w-0 items-center gap-1 text-body-sm/4.5 text-muted-fg">
           {footer}
         </div>
       )}
