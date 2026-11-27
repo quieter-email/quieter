@@ -31,7 +31,7 @@ export const ConversationPlacementAction = ({
 }: ConversationPlacementActionProps) => {
   const [open, setOpen] = useState(false);
   const snoozeButtonRef = useRef<HTMLButtonElement>(null);
-  const snoozeOpenedRef = useRef(false);
+  const keyboardFocusRef = useRef(false);
 
   if (snooze === undefined) {
     return (
@@ -53,6 +53,9 @@ export const ConversationPlacementAction = ({
   return (
     <Popover
       onOpenChange={(nextOpen) => {
+        if (nextOpen) {
+          keyboardFocusRef.current = false;
+        }
         setOpen(nextOpen);
       }}
       open={open}
@@ -64,8 +67,9 @@ export const ConversationPlacementAction = ({
         delay={500}
         disabled={disabled}
         onClick={(event) => {
-          // The button marks the conversation Done; only hover opens the strip.
+          // The trigger's primary action is Done.
           event.preventBaseUIHandler();
+          keyboardFocusRef.current = false;
           setOpen(false);
           onToggle();
         }}
@@ -74,6 +78,7 @@ export const ConversationPlacementAction = ({
             return;
           }
           event.preventDefault();
+          keyboardFocusRef.current = true;
           if (open) {
             snoozeButtonRef.current?.focus();
           } else {
@@ -87,12 +92,10 @@ export const ConversationPlacementAction = ({
       </PopoverTrigger>
       <PopoverContent
         align="end"
-        finalFocus={() => {
-          const snoozeOpened = snoozeOpenedRef.current;
-          snoozeOpenedRef.current = false;
-          return !snoozeOpened;
-        }}
-        initialFocus={snoozeButtonRef}
+        finalFocus={() => keyboardFocusRef.current}
+        initialFocus={() =>
+          keyboardFocusRef.current ? snoozeButtonRef.current : false
+        }
         size="compact"
       >
         <PopoverTitle className="sr-only">{label}</PopoverTitle>
@@ -101,7 +104,7 @@ export const ConversationPlacementAction = ({
         </span>
         <Button
           onClick={() => {
-            snoozeOpenedRef.current = true;
+            keyboardFocusRef.current = false;
             setOpen(false);
             snooze.onOpen();
           }}

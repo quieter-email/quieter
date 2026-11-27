@@ -1,9 +1,6 @@
-import type {
-  LabelOrganization,
-  MailboxLabel,
-} from "@quieter/mail/mailbox-organization";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 
-type LabelGroup = LabelOrganization["groups"][number];
+import type { LabelGroup, createLabelGroupTree } from "./label-group-tree";
 
 export type LabelPickerEntry =
   | { kind: "group"; group: LabelGroup; labelCount: number }
@@ -31,54 +28,13 @@ const normalizeSearchText = (value: string) =>
     .replaceAll(/\p{Diacritic}/gu, "")
     .toLocaleLowerCase();
 
-export const createLabelGroupTree = (
-  organization: LabelOrganization | undefined
-) => {
-  const groups = new Map(
-    (organization?.groups ?? []).map((group) => [group.id, group])
-  );
-
-  /** Outermost group first; stops at missing or cyclic parents. */
-  const getAncestry = (groupId: string | null) => {
-    const chain: LabelGroup[] = [];
-    const seen = new Set<string>();
-    let current = groupId;
-    while (current !== null && !seen.has(current)) {
-      const group = groups.get(current);
-      if (group === undefined) {
-        break;
-      }
-      seen.add(current);
-      chain.unshift(group);
-      current = group.parentId;
-    }
-    return chain;
-  };
-
-  const getLabelAncestry = (labelId: string) =>
-    getAncestry(organization?.labelGroups[labelId] ?? null);
-
-  return {
-    getAncestry,
-    getGroup: (groupId: string) => groups.get(groupId),
-    getLabelAncestry,
-    getLabelPath: (labelId: string) => {
-      const chain = getLabelAncestry(labelId);
-      return chain.length === 0
-        ? null
-        : chain.map((group) => group.name).join(" / ");
-    },
-  };
-};
-
 export const buildLabelPickerSections = (
   labels: readonly MailboxLabel[],
-  organization: LabelOrganization | undefined,
+  tree: ReturnType<typeof createLabelGroupTree>,
   view: LabelPickerView
 ): LabelPickerSection[] => {
   const userLabels = labels.filter((label) => label.type === "user");
   const labelsById = new Map(userLabels.map((label) => [label.id, label]));
-  const tree = createLabelGroupTree(organization);
   const applied = new Set(view.appliedIds);
   const appliedLabels = userLabels.filter((label) => applied.has(label.id));
   const suggestedLabels = [...new Set(view.suggestionIds)]
@@ -95,7 +51,7 @@ export const buildLabelPickerSections = (
   const toLabelEntry = (label: MailboxLabel): LabelPickerEntry => ({
     kind: "label",
     label,
-    path: tree.getLabelPath(label.id),
+    path: tree.getGroupPath(tree.getLabelGroupId(label.id)),
   });
 
   const words = normalizeSearchText(view.query)
@@ -105,7 +61,7 @@ export const buildLabelPickerSections = (
   if (words.length > 0) {
     const matches = (label: MailboxLabel) => {
       const text = normalizeSearchText(
-        `${label.name} ${tree.getLabelPath(label.id) ?? ""}`
+        `${label.name} ${tree.getGroupPath(tree.getLabelGroupId(label.id)) ?? ""}`
       );
       return words.every((word) => text.includes(word));
     };
@@ -171,10 +127,7 @@ export const buildLabelPickerSections = (
     return [
       {
         entries: getEntriesUnder(group.id, userLabels),
-        title: tree
-          .getAncestry(group.id)
-          .map(({ name }) => name)
-          .join(" / "),
+        title: tree.getGroupPath(group.id) ?? group.name,
       },
     ];
   }

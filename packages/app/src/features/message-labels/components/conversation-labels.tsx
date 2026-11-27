@@ -7,10 +7,7 @@ import {
   FilterHorizontalIcon,
   PlusSignIcon,
 } from "@hugeicons/core-free-icons";
-import {
-  buildLabelPickerSections,
-  createLabelGroupTree,
-} from "@quieter/app/features/message-labels/domain/conversation-label-picker";
+import { buildLabelPickerSections } from "@quieter/app/features/message-labels/domain/conversation-label-picker";
 import { mailboxLabelPillToneByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { labelOrganizationQueryOptions } from "@quieter/app/lib/mail/label-organization-query";
@@ -38,6 +35,8 @@ import { Popover, PopoverContent, PopoverTitle } from "@quieter/ui/popover";
 import { useQuery } from "@tanstack/react-query";
 import { useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
+
+import { createLabelGroupTree } from "../domain/label-group-tree";
 
 export type ConversationLabelChanges = {
   addLabelIds: string[];
@@ -119,6 +118,7 @@ export const ConversationLabels = ({
   );
   const rowRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const restorePickerFocusRef = useRef(true);
   const removedLabelIdRef = useRef<string | null>(null);
   const { data: organization } = useQuery(
     labelOrganizationQueryOptions(mailboxId, canEdit)
@@ -162,6 +162,7 @@ export const ConversationLabels = ({
       organization,
       suggestionIds: suggestionIds ?? [],
     });
+    restorePickerFocusRef.current = true;
     setOpen(true);
   };
 
@@ -180,16 +181,12 @@ export const ConversationLabels = ({
   const userLabelCount = picker.labels.filter(
     (label) => label.type === "user"
   ).length;
-  const sections = buildLabelPickerSections(
-    picker.labels,
-    picker.organization,
-    {
-      appliedIds: picker.appliedIds,
-      groupId: picker.groupId,
-      query: picker.query,
-      suggestionIds: picker.suggestionIds,
-    }
-  );
+  const sections = buildLabelPickerSections(picker.labels, tree, {
+    appliedIds: picker.appliedIds,
+    groupId: picker.groupId,
+    query: picker.query,
+    suggestionIds: picker.suggestionIds,
+  });
   const currentGroup =
     picker.groupId === null || picker.query.trim() !== ""
       ? undefined
@@ -360,7 +357,15 @@ export const ConversationLabels = ({
     }
 
     return (
-      <ContextMenu key={label.id}>
+      <ContextMenu
+        key={label.id}
+        onOpenChange={(nextOpen) => {
+          if (nextOpen) {
+            restorePickerFocusRef.current = false;
+            setOpen(false);
+          }
+        }}
+      >
         <ContextMenuTrigger render={<span className="inline-flex min-w-0" />}>
           {pill}
         </ContextMenuTrigger>
@@ -457,7 +462,10 @@ export const ConversationLabels = ({
             chrome="bare"
             collisionPadding={16}
             finalFocus={(closeType) =>
-              closeType === "keyboard" || closeType === "" ? anchor : false
+              restorePickerFocusRef.current &&
+              (closeType === "keyboard" || closeType === "")
+                ? anchor
+                : false
             }
             initialFocus={inputRef}
           >

@@ -2,8 +2,6 @@
 
 import {
   Add01Icon,
-  ArrowDown01Icon,
-  ArrowRight01Icon,
   Delete01Icon,
   Edit01Icon,
   FolderAddIcon,
@@ -63,7 +61,6 @@ import {
 } from "@quieter/ui/alert-dialog";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
   Dialog,
   DialogBody,
@@ -103,8 +100,10 @@ import { useSelector } from "@tanstack/react-store";
 import { useCallback, useEffect, useId, useReducer, useState } from "react";
 import type { ReactNode } from "react";
 
+import { createLabelGroupTree } from "../domain/label-group-tree";
+import type { LabelGroup } from "../domain/label-group-tree";
 import { LabelGroupDialog } from "./label-group-dialog";
-import type { LabelGroup } from "./label-group-dialog";
+import { LabelGroupRow } from "./label-group-row";
 import { LabelGroupSelect } from "./label-group-select";
 import type { LabelGroupOption } from "./label-group-select";
 import { getLabelUpdates } from "./label-update-mutation";
@@ -275,15 +274,14 @@ export const LabelsWorkspacePanel = ({
     organizationData === undefined ||
     organizationMutation.isPending;
 
-  const groupById = new Map(
-    organization.groups.map((group) => [group.id, group])
-  );
+  const labelGroupTree = createLabelGroupTree(organization);
   const childGroupsByParentId = new Map<string | null, LabelGroup[]>();
   for (const group of organization.groups.toSorted((first, second) =>
     first.name.localeCompare(second.name)
   )) {
     const parentId =
-      group.parentId !== null && groupById.has(group.parentId)
+      group.parentId !== null &&
+      labelGroupTree.getGroup(group.parentId) !== undefined
         ? group.parentId
         : null;
     childGroupsByParentId.set(parentId, [
@@ -292,26 +290,24 @@ export const LabelsWorkspacePanel = ({
     ]);
   }
   const labelsByGroupId = new Map<string | null, MailboxLabel[]>();
-  const groupIdByLabelId = new Map<string, string>();
   for (const label of userLabels) {
-    const groupId = organization.labelGroups[label.id];
-    const key =
-      groupId !== undefined && groupById.has(groupId) ? groupId : null;
-    if (key !== null) {
-      groupIdByLabelId.set(label.id, key);
-    }
-    labelsByGroupId.set(key, [...(labelsByGroupId.get(key) ?? []), label]);
+    const groupId = labelGroupTree.getLabelGroupId(label.id);
+    labelsByGroupId.set(groupId, [
+      ...(labelsByGroupId.get(groupId) ?? []),
+      label,
+    ]);
   }
   const groupOptions: LabelGroupOption[] = [];
-  const addGroupOptions = (parentId: string | null, parentPath: string) => {
+  const addGroupOptions = (parentId: string | null) => {
     for (const group of childGroupsByParentId.get(parentId) ?? []) {
-      const path =
-        parentPath === "" ? group.name : `${parentPath} / ${group.name}`;
-      groupOptions.push({ id: group.id, label: path });
-      addGroupOptions(group.id, path);
+      groupOptions.push({
+        id: group.id,
+        label: labelGroupTree.getGroupPath(group.id) ?? group.name,
+      });
+      addGroupOptions(group.id);
     }
   };
-  addGroupOptions(null, "");
+  addGroupOptions(null);
 
   const setMailboxHiddenLabelIds = (
     updater: (current: Set<string>) => Set<string>
@@ -434,7 +430,7 @@ export const LabelsWorkspacePanel = ({
     }
     if (
       newLabelGroupId !== null &&
-      groupById.has(newLabelGroupId) &&
+      labelGroupTree.getGroup(newLabelGroupId) !== undefined &&
       (await runOrganizationAction(
         { groupId: newLabelGroupId, kind: "move-label", labelId },
         "Label created, but it could not be added to the group. Use Move to group to try again."
@@ -604,7 +600,7 @@ export const LabelsWorkspacePanel = ({
 
   const moveLabel = async (label: MailboxLabel, groupId: string | null) => {
     if (
-      (groupIdByLabelId.get(label.id) ?? null) !== groupId &&
+      labelGroupTree.getLabelGroupId(label.id) !== groupId &&
       (await runOrganizationAction(
         { groupId, kind: "move-label", labelId: label.id },
         "Could not move label."
@@ -805,7 +801,7 @@ export const LabelsWorkspacePanel = ({
                     (option) => (
                       <DropdownMenuCheckboxItem
                         checked={
-                          (groupIdByLabelId.get(label.id) ?? null) === option.id
+                          labelGroupTree.getLabelGroupId(label.id) === option.id
                         }
                         closeOnSelect
                         disabled={areGroupActionsDisabled}
@@ -841,126 +837,9 @@ export const LabelsWorkspacePanel = ({
   const deletingGroupParent =
     deletingGroup?.parentId === null || deletingGroup === null
       ? undefined
-      : groupById.get(deletingGroup.parentId);
+      : labelGroupTree.getGroup(deletingGroup.parentId);
   const searchQuery = labelSearch.trim().toLocaleLowerCase();
   const isSearching = searchQuery !== "";
-
-  const renderGroupRow = (
-    group: LabelGroup,
-    isExpanded: boolean,
-    children: ReactNode[]
-  ) => {
-    let groupContent: ReactNode = null;
-    if (isExpanded && children.length > 0) {
-      groupContent = (
-        <ul className="ms-7 border-s border-border">{children}</ul>
-      );
-    } else if (isExpanded) {
-      groupContent = (
-        <p
-          className={cn(
-            "ms-7 border-s border-border text-body-sm text-muted-fg",
-            settingsSurfaceVariants({ variant: "padding" })
-          )}
-        >
-          No labels in this group.
-        </p>
-      );
-    }
-
-    return (
-      <li key={group.id}>
-        <div className={settingsSurfaceVariants({ variant: "insetRow" })}>
-          <div className="flex min-w-0 flex-1 items-center gap-2">
-            <IconButtonTooltip
-              label={
-                isExpanded ? `Collapse ${group.name}` : `Expand ${group.name}`
-              }
-            >
-              <Button
-                aria-expanded={isExpanded}
-                aria-label={
-                  isExpanded ? `Collapse ${group.name}` : `Expand ${group.name}`
-                }
-                className="-ms-1"
-                disabled={isSearching}
-                onClick={() => {
-                  toggleGroup(group.id);
-                }}
-                size="icon-xs"
-                type="button"
-                variant="ghost"
-              >
-                <Icon
-                  aria-hidden
-                  icon={isExpanded ? ArrowDown01Icon : ArrowRight01Icon}
-                />
-              </Button>
-            </IconButtonTooltip>
-            <ColorSwatch
-              color={
-                group.color.startsWith("#")
-                  ? group.color
-                  : `var(--q-${group.color})`
-              }
-            />
-            <Text as="span" className="min-w-0 flex-1" truncate>
-              {group.name}
-            </Text>
-          </div>
-          <DropdownMenu>
-            <IconButtonTooltip label={`Options for ${group.name}`}>
-              <DropdownMenuTrigger
-                appearance="icon"
-                aria-label={`Options for ${group.name}`}
-                className="-me-2"
-                disabled={areGroupActionsDisabled}
-              >
-                <Icon aria-hidden icon={MoreVerticalIcon} />
-              </DropdownMenuTrigger>
-            </IconButtonTooltip>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => {
-                  openNewLabelDialog(group.id);
-                }}
-              >
-                <Icon aria-hidden icon={Add01Icon} />
-                New label here
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setGroupDialog({ kind: "create", parentId: group.id });
-                }}
-              >
-                <Icon aria-hidden icon={FolderAddIcon} />
-                New group inside
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => {
-                  setGroupDialog({ group, kind: "edit" });
-                }}
-              >
-                <Icon aria-hidden icon={Edit01Icon} />
-                Edit group
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuItem
-                onSelect={() => {
-                  setDeletingGroup(group);
-                }}
-                tone="destructive"
-              >
-                <Icon aria-hidden icon={Delete01Icon} />
-                Delete group
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        {groupContent}
-      </li>
-    );
-  };
 
   const renderBranch = (
     parentId: string | null,
@@ -973,7 +852,32 @@ export const LabelsWorkspacePanel = ({
       const isExpanded = isSearching || !collapsedGroupIds.has(group.id);
       const children = isExpanded ? renderBranch(group.id, groupMatches) : [];
       if (!isSearching || groupMatches || children.length > 0) {
-        nodes.push(renderGroupRow(group, isExpanded, children));
+        nodes.push(
+          <LabelGroupRow
+            actionsDisabled={areGroupActionsDisabled}
+            group={group}
+            isExpanded={isExpanded}
+            isSearching={isSearching}
+            key={group.id}
+            onCreateGroup={() => {
+              setGroupDialog({ kind: "create", parentId: group.id });
+            }}
+            onCreateLabel={() => {
+              openNewLabelDialog(group.id);
+            }}
+            onDelete={() => {
+              setDeletingGroup(group);
+            }}
+            onEdit={() => {
+              setGroupDialog({ group, kind: "edit" });
+            }}
+            onToggle={() => {
+              toggleGroup(group.id);
+            }}
+          >
+            {children}
+          </LabelGroupRow>
+        );
       }
     }
     for (const label of labelsByGroupId.get(parentId) ?? []) {
@@ -1219,8 +1123,16 @@ export const LabelsWorkspacePanel = ({
         <LabelGroupDialog
           canManage={canManage}
           group={groupDialog.kind === "edit" ? groupDialog.group : null}
-          groupOptions={groupOptions}
-          groups={organization.groups}
+          groupOptions={
+            groupDialog.kind === "edit"
+              ? groupOptions.filter(
+                  ({ id: optionGroupId }) =>
+                    !labelGroupTree
+                      .getAncestry(optionGroupId)
+                      .some((group) => group.id === groupDialog.group.id)
+                )
+              : groupOptions
+          }
           initialParentId={
             groupDialog.kind === "create" ? groupDialog.parentId : null
           }

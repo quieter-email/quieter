@@ -4,7 +4,6 @@ import {
   AlarmClockIcon,
   CancelCircleIcon,
   CheckmarkCircle02Icon,
-  Flag01Icon,
   Delete01Icon,
   Delete02Icon,
   Edit01Icon,
@@ -12,6 +11,7 @@ import {
   Mail01Icon,
   MailOpen02Icon,
   MoreVerticalIcon,
+  StarIcon,
   NotificationOff01Icon,
 } from "@hugeicons/core-free-icons";
 import type { IconSvgElement } from "@hugeicons/react";
@@ -478,7 +478,7 @@ const createMessageActionEntries = ({
       props.message.threadIsImportant ?? props.message.isImportant ?? false;
     entries.push({
       disabled: pending.thread,
-      icon: Flag01Icon,
+      icon: StarIcon,
       id: "toggle-importance",
       label: important ? "Mark as not important" : "Mark as important",
       onAction: () => {

@@ -1,10 +1,7 @@
 "use client";
 
 import { MailboxColorPicker } from "@quieter/app/features/message-labels/components/mailbox-color-picker";
-import type {
-  LabelOrganization,
-  MailboxLabelColor,
-} from "@quieter/mail/mailbox-organization";
+import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -20,10 +17,9 @@ import { Input } from "@quieter/ui/input";
 import { Text } from "@quieter/ui/text";
 import { useId, useState } from "react";
 
+import type { LabelGroup } from "../domain/label-group-tree";
 import { LabelGroupSelect } from "./label-group-select";
 import type { LabelGroupOption } from "./label-group-select";
-
-export type LabelGroup = LabelOrganization["groups"][number];
 
 export type LabelGroupDraft = Omit<LabelGroup, "id">;
 
@@ -31,7 +27,6 @@ export const LabelGroupDialog = ({
   canManage,
   group,
   groupOptions,
-  groups,
   initialParentId,
   isPending,
   onCancel,
@@ -40,7 +35,6 @@ export const LabelGroupDialog = ({
   canManage: boolean;
   group: LabelGroup | null;
   groupOptions: readonly LabelGroupOption[];
-  groups: readonly LabelGroup[];
   initialParentId: string | null;
   isPending: boolean;
   onCancel: () => void;
@@ -51,24 +45,6 @@ export const LabelGroupDialog = ({
   const [color, setColor] = useState<MailboxLabelColor>(group?.color ?? "gray");
   const [parentId, setParentId] = useState(group?.parentId ?? initialParentId);
 
-  const excludedGroupIds = new Set<string>();
-  if (group) {
-    excludedGroupIds.add(group.id);
-    let added = true;
-    while (added) {
-      added = false;
-      for (const candidate of groups) {
-        if (
-          candidate.parentId !== null &&
-          excludedGroupIds.has(candidate.parentId) &&
-          !excludedGroupIds.has(candidate.id)
-        ) {
-          excludedGroupIds.add(candidate.id);
-          added = true;
-        }
-      }
-    }
-  }
   const disabled = !canManage || isPending;
   const trimmedName = name.trim();
 
@@ -126,9 +102,7 @@ export const LabelGroupDialog = ({
                 id={`${id}-parent`}
                 noneLabel="Top level"
                 onChange={setParentId}
-                options={groupOptions.filter(
-                  (option) => !excludedGroupIds.has(option.id)
-                )}
+                options={groupOptions}
                 value={parentId}
               />
             </Field>

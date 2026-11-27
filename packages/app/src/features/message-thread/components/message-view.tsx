@@ -634,6 +634,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           ) : null}
           <ConversationLabels
             appliedLabelIds={threadLabelIds}
+            key={`${mailboxId}:${message.threadId}`}
             labels={gmailLabels}
             mailboxId={mailboxId}
             messageIds={labelSuggestionMessageIds}
