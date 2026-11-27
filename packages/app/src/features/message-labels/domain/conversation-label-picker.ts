@@ -119,7 +119,18 @@ export const buildLabelPickerSections = (
         existing.labelCount += 1;
       }
     }
-    return entries;
+    if (tree.groupOrder === undefined) {
+      return entries;
+    }
+    const orderedGroups = orderMailboxLabels(
+      [...groupEntries].map(([id, entry]) => ({ entry, id })),
+      tree.groupOrder
+    ).values();
+    return entries.map((entry) =>
+      entry.kind === "group"
+        ? (orderedGroups.next().value?.entry ?? entry)
+        : entry
+    );
   };
 
   const group = view.groupId === null ? undefined : tree.getGroup(view.groupId);

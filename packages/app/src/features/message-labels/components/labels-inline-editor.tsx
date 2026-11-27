@@ -107,7 +107,6 @@ export const LabelsInlineEditor = ({
       ) : null}
       <Input
         aria-label={nameLabel}
-        chrome="inline"
         className="min-w-0 flex-1"
         maxLength={kind === "group" ? 100 : 225}
         onChange={(event) => {

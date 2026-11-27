@@ -48,6 +48,7 @@ const labelGroupFields = {
 const labelIdSchema = z.string().trim().min(1).max(512);
 
 export const labelOrganizationSchema = z.object({
+  groupOrder: z.array(z.uuid()).optional(),
   groups: z.array(
     z.object({
       ...labelGroupFields,
@@ -74,6 +75,11 @@ export const labelOrganizationActionSchema = z.discriminatedUnion("kind", [
     kind: z.literal("update-group"),
   }),
   z.object({ groupId: z.uuid(), kind: z.literal("delete-group") }),
+  z.object({
+    beforeGroupId: z.uuid().nullable(),
+    groupId: z.uuid(),
+    kind: z.literal("move-group"),
+  }),
   z.object({
     beforeLabelId: labelIdSchema.nullable().optional(),
     groupId: z.uuid().nullable(),
@@ -111,6 +117,16 @@ export const orderMailboxLabels = <TLabel extends Pick<MailboxLabel, "id">>(
   );
 };
 
+export const orderLabelGroups = (
+  organization: LabelOrganization | undefined
+): LabelOrganization["groups"] =>
+  orderMailboxLabels(
+    (organization?.groups ?? []).toSorted((first, second) =>
+      first.name.localeCompare(second.name)
+    ),
+    organization?.groupOrder
+  );
+
 export const applyLabelOrganizationAction = (
   organization: LabelOrganization,
   action: LabelOrganizationAction,
@@ -121,8 +137,27 @@ export const applyLabelOrganizationAction = (
     flatOrganization.groups.map((group) => [group.id, group])
   );
   const labelGroups = new Map(Object.entries(organization.labelGroups));
-  let { labelOrder } = organization;
-  if (action.kind === "move-label") {
+  let { groupOrder, labelOrder } = organization;
+  if (action.kind === "move-group") {
+    const { beforeGroupId, groupId } = action;
+    if (
+      !groups.has(groupId) ||
+      (beforeGroupId !== null && !groups.has(beforeGroupId))
+    ) {
+      return "Label group not found.";
+    }
+    if (beforeGroupId === groupId) {
+      return flatOrganization;
+    }
+    groupOrder = orderLabelGroups(flatOrganization)
+      .map(({ id }) => id)
+      .filter((id) => id !== groupId);
+    const index =
+      beforeGroupId === null
+        ? groupOrder.length
+        : groupOrder.indexOf(beforeGroupId);
+    groupOrder.splice(index, 0, groupId);
+  } else if (action.kind === "move-label") {
     const beforeLabelId = action.beforeLabelId ?? null;
     if (beforeLabelId === action.labelId) {
       return flatOrganization;
@@ -160,6 +195,7 @@ export const applyLabelOrganizationAction = (
     }
   } else if (action.kind === "delete-group") {
     if (groups.delete(action.groupId)) {
+      groupOrder = groupOrder?.filter((groupId) => groupId !== action.groupId);
       for (const [labelId, groupId] of labelGroups) {
         if (groupId === action.groupId) {
           labelGroups.delete(labelId);
@@ -175,6 +211,7 @@ export const applyLabelOrganizationAction = (
     groups.set(id, { color, id, name, parentId: null });
   }
   return {
+    groupOrder,
     groups: [...groups.values()],
     labelGroups: Object.fromEntries(labelGroups),
     labelOrder,

@@ -584,10 +584,6 @@ export const Schedule = ({
           "group/event @container/event-card relative z-10 flex w-full min-w-0 flex-col overflow-hidden rounded-sm bg-[color-mix(in_oklab,var(--schedule-event-color)_20%,var(--section))] px-2 py-1 text-left text-body-sm leading-4 text-[color-mix(in_oklab,var(--schedule-event-color)_62%,var(--fg))] transition-colors duration-150 ease-out focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden focus-visible:ring-inset enabled:hover:bg-[color-mix(in_oklab,var(--schedule-event-color)_27%,var(--section))] data-dragging:opacity-35 data-selected:bg-[color-mix(in_oklab,var(--schedule-event-color)_38%,var(--section))] motion-reduce:transition-none",
           !externalColor && toneClasses[item.tone ?? "primary"],
           {
-            "cursor-grab active:cursor-grabbing":
-              Boolean(onEventMove) &&
-              !item.preview &&
-              presentation !== "agenda",
             "h-full": !compact,
             "py-0.5": !compact && !item.allDay && duration < 60,
             "py-1 text-caption": compact,

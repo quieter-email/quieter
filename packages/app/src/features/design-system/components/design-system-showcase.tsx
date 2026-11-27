@@ -1843,6 +1843,15 @@ export const DesignSystemShowcase = () => {
               placeholder="Placeholder"
             />
           </Row>
+          <Row label="Inline textarea">
+            <Textarea
+              aria-label="Inline prompt"
+              className="w-64"
+              placeholder="Describe which emails belong here"
+              rows={1}
+              variant="inline"
+            />
+          </Row>
           <Row label="Growing textarea">
             <Textarea
               aria-label="Example growing prompt"
