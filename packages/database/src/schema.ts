@@ -10,6 +10,7 @@ import type {
   DeliveryStatus,
   RecipientSuppression,
 } from "@quieter/mail/delivery";
+import type { LabelOrganization } from "@quieter/mail/mailbox-organization";
 import type {
   FollowUpReminderIntent,
   Reminder,
@@ -1669,6 +1670,7 @@ export const gmailAutoLabelEvent = pgTable(
     model: text("model"),
     nextAttemptAt: timestamp("nextAttemptAt"),
     promptTokens: integer("promptTokens"),
+    suggestedLabelIds: jsonb("suggestedLabelIds").$type<string[]>(),
     updatedAt: timestamp("updatedAt").notNull(),
     usageReportedAt: timestamp("usageReportedAt"),
   },
@@ -1688,6 +1690,13 @@ export const gmailAutoLabelEvent = pgTable(
     ),
   ]
 );
+
+export const mailboxLabelOrganization = pgTable("mailboxLabelOrganization", {
+  mailboxId: text("mailboxId")
+    .primaryKey()
+    .references(() => mailbox.id, { onDelete: "cascade" }),
+  organization: jsonb("organization").$type<LabelOrganization>().notNull(),
+});
 
 export const gmailUsefulDetailSettings = pgTable("gmailUsefulDetailSettings", {
   createdAt: timestamp("createdAt").notNull(),
