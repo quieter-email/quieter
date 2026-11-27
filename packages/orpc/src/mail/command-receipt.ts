@@ -46,6 +46,7 @@ export const executeMailCommandWithReceipt = async ({
     .values({
       actorUserId,
       claimedAt: sql`now()`,
+      createdAt: sql`now()`,
       mailboxId,
       requestHash,
       requestId,

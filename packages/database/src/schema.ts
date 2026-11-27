@@ -5742,6 +5742,7 @@ export const mailCommandReceipt = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
     claimedAt: timestamp("claimedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }),
     mailboxId: text("mailboxId")
       .notNull()
       .references(() => mailbox.id, { onDelete: "cascade" }),
@@ -5754,6 +5755,7 @@ export const mailCommandReceipt = pgTable(
       columns: [table.actorUserId, table.mailboxId, table.requestId],
     }),
     index("mail_command_receipt_mailbox_idx").on(table.mailboxId),
+    index("mail_command_receipt_created_at_idx").on(table.createdAt),
   ]
 );
 

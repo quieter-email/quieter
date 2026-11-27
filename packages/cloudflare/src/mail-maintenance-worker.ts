@@ -13,6 +13,7 @@ import {
   drainMailAgentRuns,
   reportPendingMailAgentUsage,
 } from "@quieter/orpc/mail-agent";
+import { cleanupMailCommandReceipts } from "@quieter/orpc/mail-command-retention";
 import {
   backfillMissingMailImportanceWork,
   processPendingMailImportance,
@@ -193,6 +194,7 @@ export default withSentryReporting({
             : undefined,
           purgeExpiredAiGeneratedMailBodies(),
           cleanupGmailComposeOperations(),
+          cleanupMailCommandReceipts(),
           backfillGmailCapturedBodies(),
           cleanupMailObjects(),
           cleanupRateLimitBuckets(),

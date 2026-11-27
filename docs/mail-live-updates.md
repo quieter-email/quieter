@@ -28,6 +28,8 @@ Reversible actions update visible query data immediately. A per-QueryClient coor
 
 The UI settles after its optimistic change. In-flight reads for affected records are fenced when a command confirms, and other reads continue. A stable request ID allows a lost response to be retried with the same payload and lets the server replay a stored outcome. A definitive failure rolls back the affected optimistic change. Partial Gmail writes keep their confirmed subset. An uncertain write triggers authoritative reconciliation without automatically dispatching a new write. Catch-up runs in the background after the command burst drains.
 
+Command receipts are retained for 30 days. Mail maintenance removes expired receipts in bounded batches and leaves recent in-flight claims alone. Retries are immediate and keep the original request ID within the active command.
+
 Logout or confirmed mailbox access loss disposes the affected coordinator state, rejects unsent work, and ignores late results. Separate devices and collaborators converge through replay. There is no persisted offline write queue or distributed last-click-wins guarantee. Destructive actions retain their existing pending guards.
 
 ## IndexedDB cache
