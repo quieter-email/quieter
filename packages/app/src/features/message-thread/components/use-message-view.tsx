@@ -84,9 +84,11 @@ export const useMessageViewData = ({
   pendingActions: MailboxPendingActions;
 }) => {
   const queryClient = useQueryClient();
-  const { data: gmailLabels = [] } = useQuery(
-    labelsQueryOptions(mailboxId, mailboxProvider !== "api")
-  );
+  const {
+    data: gmailLabels = [],
+    isPaused: areLabelsPaused,
+    isPending: areLabelsPending,
+  } = useQuery(labelsQueryOptions(mailboxId, mailboxProvider !== "api"));
   const includeDraftsInThreadCount =
     (mailboxProvider !== "gmail" && !isSandboxMailboxId(mailboxId)) ||
     isDraftMessage(message);
@@ -323,6 +325,8 @@ export const useMessageViewData = ({
   return {
     apiSource,
     apiSourceAction,
+    areLabelsPaused,
+    areLabelsPending,
     canComposeFromMailbox,
     gmailLabels,
     hotkeyLinkedDraftMessage,

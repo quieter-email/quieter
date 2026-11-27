@@ -121,6 +121,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     activeMailbox,
     apiSource,
     apiSourceAction,
+    areLabelsPaused,
+    areLabelsPending,
     canComposeFromMailbox,
     composeDemoMode,
     composeManagedDemoMode,
@@ -634,6 +636,8 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           ) : null}
           <ConversationLabels
             appliedLabelIds={threadLabelIds}
+            areLabelsPaused={areLabelsPaused}
+            areLabelsPending={areLabelsPending}
             key={`${mailboxId}:${message.threadId}`}
             labels={gmailLabels}
             mailboxId={mailboxId}

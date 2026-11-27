@@ -45,6 +45,8 @@ export type ConversationLabelChanges = {
 
 type ConversationLabelsProps = {
   appliedLabelIds: readonly string[];
+  areLabelsPaused?: boolean;
+  areLabelsPending?: boolean;
   labels: readonly MailboxLabel[];
   layout?: "header" | "stacked" | "adaptive";
   mailboxId: string;
@@ -89,6 +91,8 @@ const closedPicker: PickerState = {
 
 export const ConversationLabels = ({
   appliedLabelIds,
+  areLabelsPaused = false,
+  areLabelsPending = false,
   labels,
   layout = "header",
   mailboxId,
@@ -128,11 +132,13 @@ export const ConversationLabels = ({
   const organization = organizationQuery?.data;
   const suggestionIds = suggestionsQuery?.data;
   const isWaitingForDetails =
+    areLabelsPending ||
     organizationQuery?.isPending === true ||
     (messageIds.length > 0 && suggestionsQuery?.isPending === true);
   if (open && !picker.ready && !isWaitingForDetails) {
     setPicker({
       ...picker,
+      labels,
       organization,
       ready: true,
       suggestionIds: suggestionIds ?? [],
@@ -214,10 +220,11 @@ export const ConversationLabels = ({
       ...closedPicker,
       anchorElement,
       anchorLabelId,
-      appliedIds: appliedLabels.map((label) => label.id),
+      appliedIds: appliedLabelIds,
       labels,
       organization,
       ready:
+        !areLabelsPending &&
         organization !== undefined &&
         (suggestionIds !== undefined || messageIds.length === 0),
       suggestionIds: suggestionIds ?? [],
@@ -392,6 +399,7 @@ export const ConversationLabels = ({
   let status: string | undefined;
   if (!picker.ready) {
     status =
+      areLabelsPaused ||
       organizationQuery?.isPaused === true ||
       suggestionsQuery?.isPaused === true
         ? "Waiting for a connection…"
