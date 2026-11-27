@@ -4,7 +4,6 @@ import {
   Add01Icon,
   AiMagicIcon,
   ArrowDown02Icon,
-  ArrowRight01Icon,
   ArrowUp02Icon,
   Delete01Icon,
   FolderTransferIcon,
@@ -76,7 +75,7 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
+import { ChevronRightIcon, EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
@@ -138,12 +137,16 @@ type ColorEdit = {
 
 const rowClassName =
   "relative flex min-h-9 w-full items-center gap-2 rounded-lg px-2";
-const gutterCellClassName = "flex w-6 shrink-0 justify-center";
-const caretCellClassName = "flex w-4 shrink-0 items-center justify-center";
+// The 24px drag handle overflows the narrower gutter into the row padding so
+// the group caret can sit closer to it without the two targets overlapping.
+const gutterCellClassName = "flex w-4 shrink-0 justify-center";
+const caretCellClassName =
+  "me-0.5 flex w-3 shrink-0 items-center justify-center";
 const nameCellClassName =
   "flex min-w-0 flex-1 items-center gap-1.5 self-stretch @sm:w-1/3 @sm:flex-none";
 const promptCellClassName = "hidden min-w-0 flex-1 items-center @sm:flex";
-const switchCellClassName = "flex w-9 shrink-0 justify-center";
+const switchCellClassName =
+  "flex w-16 shrink-0 justify-center whitespace-nowrap";
 const menuCellClassName = "flex w-6 shrink-0 justify-center";
 
 const isNonemptyMailboxId = (
@@ -163,7 +166,7 @@ const renderDelete = ({
   onCancel: () => void;
   onDelete: () => void;
 }) => (
-  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5 ps-10 pe-2">
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5 ps-8 pe-2">
     <Text as="p" className="min-w-0 flex-1" size="sm" tone="muted">
       Delete <span className="text-fg">{name}</span>?{" "}
       {kind === "group"
@@ -796,6 +799,7 @@ export const LabelsWorkspacePanel = ({
       editor.id === label.id;
     const editingPrompt = automationLabelId === label.id;
     const prompt = getAutoLabelPrompt(label);
+    const autoLabelEnabled = label.autoLabel?.enabled !== false;
     return (
       <Fragment key={label.id}>
         <LabelDragRow
@@ -860,7 +864,7 @@ export const LabelsWorkspacePanel = ({
                 onClick={() => {
                   setEditor({ id: label.id, kind: "label", mode: "rename" });
                 }}
-                size="text"
+                size="inline-field"
                 variant="inline-edit"
               >
                 <span className="truncate">{label.name}</span>
@@ -874,7 +878,7 @@ export const LabelsWorkspacePanel = ({
           </div>
           <div
             className={cn({
-              "order-last flex w-full min-w-0 ps-8 pb-2 @sm:order-none @sm:w-auto @sm:flex-1 @sm:py-1 @sm:ps-0":
+              "order-last flex w-full min-w-0 ps-6 pb-2 @sm:order-none @sm:w-auto @sm:flex-1 @sm:py-0.5 @sm:ps-0":
                 editingPrompt,
               [promptCellClassName]: !editingPrompt,
             })}
@@ -904,7 +908,7 @@ export const LabelsWorkspacePanel = ({
                 onClick={() => {
                   setAutomationLabelId(label.id);
                 }}
-                size="text"
+                size="inline-field"
                 variant="inline-edit"
               >
                 <Text as="span" size="sm" tone="muted" truncate>
@@ -914,10 +918,12 @@ export const LabelsWorkspacePanel = ({
             )}
           </div>
           <div className={switchCellClassName}>
-            <IconButtonTooltip label={`Auto-label ${label.name}`}>
+            <IconButtonTooltip
+              label={`${autoLabelEnabled ? "Disable" : "Enable"} auto-label for ${label.name}`}
+            >
               <Switch
                 aria-label={`Auto-label ${label.name}`}
-                checked={label.autoLabel?.enabled !== false}
+                checked={autoLabelEnabled}
                 disabled={areLabelActionsDisabled}
                 onCheckedChange={(enabled) => {
                   void saveLabelAutomation(label, {
@@ -933,7 +939,7 @@ export const LabelsWorkspacePanel = ({
                     enabled,
                   });
                 }}
-                size="sm"
+                size="xs"
               >
                 <SwitchThumb />
               </Switch>
@@ -1188,7 +1194,7 @@ export const LabelsWorkspacePanel = ({
                           onClick={() => {
                             toggleGroup(group.id);
                           }}
-                          size="icon-xs"
+                          size="icon-2xs"
                           className="shrink-0"
                           variant="ghost"
                         >
@@ -1198,7 +1204,7 @@ export const LabelsWorkspacePanel = ({
                               { "rotate-90": showChildren }
                             )}
                           >
-                            <Icon aria-hidden icon={ArrowRight01Icon} />
+                            <ChevronRightIcon viewBox="-4 -4 24 24" />
                           </span>
                         </Button>
                       </IconButtonTooltip>
@@ -1264,7 +1270,7 @@ export const LabelsWorkspacePanel = ({
                             mode: "rename",
                           });
                         }}
-                        size="text"
+                        size="inline-field"
                         variant="inline-edit"
                       >
                         <span className="truncate">{group.name}</span>
@@ -1478,10 +1484,10 @@ export const LabelsWorkspacePanel = ({
               <span aria-hidden="true" className={caretCellClassName} />
               Name
             </span>
-            <span className="hidden min-w-0 flex-1 truncate @sm:block">
+            <span className="hidden min-w-0 flex-1 truncate ps-2.25 @sm:block">
               Auto-label prompt
             </span>
-            <span aria-hidden="true" className={switchCellClassName} />
+            <span className={switchCellClassName}>Auto-label</span>
             <span aria-hidden="true" className={menuCellClassName} />
           </div>
           <LabelDragProvider onMove={moveLabel} onMoveGroup={moveGroup}>
@@ -1507,7 +1513,7 @@ export const LabelsWorkspacePanel = ({
               </>
             )}
             {listStatus === null ? null : (
-              <div className="py-2 ps-10">
+              <div className="py-2 ps-8">
                 <Text as="p" size="caption" tone="muted">
                   {listStatus}
                 </Text>

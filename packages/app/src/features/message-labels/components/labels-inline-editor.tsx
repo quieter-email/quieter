@@ -73,7 +73,7 @@ export const LabelsInlineEditor = ({
     <form
       aria-label={creating ? `New ${kind}` : `Rename ${kind}`}
       aria-busy={isSaving}
-      className="flex min-w-0 flex-1 items-center gap-2.5"
+      className="flex min-w-0 flex-1 items-center gap-1.5"
       inert={!isPresent}
       onBlur={(event) => {
         if (

@@ -22,6 +22,7 @@ export const buttonVariants = cva(
         size: [
           "compact",
           "icon",
+          "icon-2xs",
           "icon-lg",
           "icon-sm",
           "icon-xs",
@@ -89,7 +90,12 @@ export const buttonVariants = cva(
       {
         className:
           "text-body-sm focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-100",
-        size: "text",
+        size: ["inline-field", "text"],
+        variant: "inline-edit",
+      },
+      {
+        className: "h-auto min-h-7 rounded-md border px-2 py-1",
+        size: "inline-field",
         variant: "inline-edit",
       },
     ],
@@ -118,9 +124,16 @@ export const buttonVariants = cva(
         default: "h-8 px-3 text-body-sm [&_svg]:size-4",
         field: "h-10 px-3 text-body-sm [&_svg]:size-4",
         icon: "size-8 p-0 [&_svg]:size-4",
+        // Dense row control sized like the color swatch trigger beside it.
+        "icon-2xs": "size-5 p-0 [&_svg]:size-3.5",
         "icon-lg": "size-9 p-0 [&_svg]:size-4.5",
         "icon-sm": "size-7 p-0 [&_svg]:size-3.5",
         "icon-xs": "size-6 p-0 [&_svg]:size-3.5",
+        // Text that opens a small bordered input or inline textarea in place.
+        // It shares that editor's border and padding, so the text keeps its
+        // position when the editor replaces it.
+        "inline-field":
+          "h-auto min-h-7 border px-2 py-1 text-body-sm font-normal",
         lg: "h-10 px-5 text-body-lg [&_svg]:size-4.5",
         sm: "h-7 px-2.5 text-body-sm [&_svg]:size-3.5",
         text: "h-auto min-h-4 p-0 text-caption font-normal",

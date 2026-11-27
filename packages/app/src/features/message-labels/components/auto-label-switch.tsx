@@ -69,7 +69,7 @@ export const AutoLabelSwitch = ({
       <label className="cursor-default truncate" htmlFor={id}>
         Auto-label new mail
       </label>
-      <span className="flex w-9 shrink-0 justify-center">
+      <span className="flex w-8 shrink-0 justify-center">
         <Switch
           checked={enabled}
           disabled={!canManage || isPending || (!isDemo && areMailboxesPending)}
@@ -77,7 +77,7 @@ export const AutoLabelSwitch = ({
           onCheckedChange={(nextEnabled) => {
             void toggleAutoLabeling(nextEnabled);
           }}
-          size="sm"
+          size="xs"
         >
           <SwitchThumb />
         </Switch>

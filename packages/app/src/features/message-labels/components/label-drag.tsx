@@ -266,17 +266,17 @@ const LabelDropPreview = ({
   preview ? (
     <li
       aria-hidden
-      className="pointer-events-none rounded-lg bg-selection/50 ps-10 pe-2 text-body-sm text-muted-fg"
+      className="pointer-events-none rounded-lg bg-selection/50 ps-8 pe-2 text-body-sm text-muted-fg"
       data-label-drop-preview=""
       ref={previewRef}
     >
       <div className="flex min-h-9 items-center gap-1.5">
-        <span className="w-4 shrink-0" />
+        <span className="me-0.5 w-3 shrink-0" />
         {grouped ? <span className="w-5 shrink-0" /> : null}
         <span className="flex w-5 shrink-0 justify-center">
           <MailboxLabelSwatch color={preview.color} kind={preview.kind} />
         </span>
-        <span className="min-w-0 truncate">{preview.name}</span>
+        <span className="min-w-0 truncate ps-2.25">{preview.name}</span>
       </div>
     </li>
   ) : null;
@@ -388,7 +388,7 @@ export const LabelDragRow = ({
         layout={isDragSource ? false : "position"}
         transition={layoutTransition}
       >
-        <span className="flex w-6 shrink-0 justify-center">{handle}</span>
+        <span className="flex w-4 shrink-0 justify-center">{handle}</span>
         {children}
       </m.div>
     )}
