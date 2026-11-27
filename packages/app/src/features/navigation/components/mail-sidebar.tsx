@@ -166,7 +166,8 @@ const SidebarInboxSection = ({
           items.every(
             (item, index) =>
               item.id === previous[index]?.id &&
-              item.label === previous[index]?.label
+              item.label === previous[index]?.label &&
+              item.color === previous[index]?.color
           )
         ) {
           return current;
@@ -217,6 +218,7 @@ const SidebarInboxSection = ({
           Snippets
         </SidebarMailboxNavItem>
       ),
+      icon: NoteEditIcon,
       id: "snippets",
       label: "Snippets",
     },
@@ -243,6 +245,7 @@ const SidebarInboxSection = ({
                 Organize mailbox
               </SidebarMailboxNavItem>
             ),
+            icon: Sorting05Icon,
             id: "rules",
             label: "Organize mailbox",
           },
@@ -284,6 +287,7 @@ const SidebarInboxSection = ({
           </SidebarMailboxNavItem>
         </SidebarEntrance>
       ),
+      icon: Calendar03Icon,
       id: "calendar",
       label: "Calendar",
     });
@@ -452,29 +456,21 @@ const SidebarInboxSection = ({
             ? handleSetCounts
             : undefined
         }
-        onMove={(key, items, id, offset) => {
+        onMove={({ group, ids, id, targetId }) => {
           updatePreferences((current) => {
             const next = moveSidebarEntry(
-              items,
-              current.order[key],
+              ids,
+              current.order[group],
               id,
-              offset
+              targetId
             );
             return next === undefined
               ? current
               : {
                   ...current,
-                  order: { ...current.order, [key]: next },
+                  order: { ...current.order, [group]: next },
                 };
           });
-        }}
-        onReset={(keys) => {
-          updatePreferences((current) => ({
-            ...current,
-            order: Object.fromEntries(
-              Object.entries(current.order).filter(([key]) => !keys.has(key))
-            ),
-          }));
         }}
       />
     </>

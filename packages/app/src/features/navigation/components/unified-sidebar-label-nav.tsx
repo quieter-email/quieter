@@ -38,6 +38,7 @@ import type { ComponentProps } from "react";
 import { useEffect, useEffectEvent, useState } from "react";
 
 import { orderSidebarEntries } from "../domain/sidebar-preferences";
+import type { SidebarEntry } from "../domain/sidebar-preferences";
 import { SidebarContextMenu } from "./sidebar-context-menu";
 import {
   SidebarLabelDialogs,
@@ -60,7 +61,7 @@ export const UnifiedSidebarLabelNav = ({
   userId: string;
   searchQuery: string;
   selectedMailbox: MailboxCategory | null;
-  onItemsChange?: (items: readonly { id: string; label: string }[]) => void;
+  onItemsChange?: (items: readonly SidebarEntry[]) => void;
   onRequestClose?: () => void;
   order?: readonly string[];
 }) => {
@@ -150,7 +151,11 @@ export const UnifiedSidebarLabelNav = ({
   const labels = [...labelsByName.entries()]
     .toSorted(([left], [right]) => left.localeCompare(right))
     .map(([nameKey, label]) => ({ ...label, id: nameKey }));
-  const navItems = labels.map((label) => ({ id: label.id, label: label.name }));
+  const navItems = labels.map((label) => ({
+    color: label.color,
+    id: label.id,
+    label: label.name,
+  }));
   const manageLinks = mailboxes.flatMap(
     (mailbox): { key: string; label: string; patch: MailboxSearchPatch }[] => [
       ...(mailbox.provider === "gmail" || mailbox.grantRole === "manager"

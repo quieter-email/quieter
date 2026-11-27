@@ -35,6 +35,7 @@ import { useEffect, useEffectEvent, useReducer, useState } from "react";
 
 import { getLabelUpdates } from "../../message-labels/components/label-update-mutation";
 import { orderSidebarEntries } from "../domain/sidebar-preferences";
+import type { SidebarEntry } from "../domain/sidebar-preferences";
 import { SidebarContextMenu } from "./sidebar-context-menu";
 import {
   SidebarLabelDialogs,
@@ -48,7 +49,7 @@ type SidebarLabelNavProps = {
   embedded: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
-  onItemsChange?: (items: readonly { id: string; label: string }[]) => void;
+  onItemsChange?: (items: readonly SidebarEntry[]) => void;
   onManageLabels: () => void;
   onRequestClose?: () => void;
   onSearch: (query: string) => void;
@@ -210,7 +211,11 @@ export const SidebarLabelNav = ({
   const showsLabelRows =
     !areLabelsPending && !labelsUnavailable && visibleUserLabels.length > 0;
   const navItems = showsLabelRows
-    ? visibleUserLabels.map((label) => ({ id: label.id, label: label.name }))
+    ? visibleUserLabels.map((label) => ({
+        color: label.color,
+        id: label.id,
+        label: label.name,
+      }))
     : [];
   const manageLabelsPatch: MailboxSearchPatch = {
     mailbox: "inbox",

@@ -1,9 +1,15 @@
 "use client";
 
+import type { IconSvgElement } from "@hugeicons/react";
 import { useSyncExternalStore } from "react";
 import { z } from "zod";
 
-export type SidebarEntry = { id: string; label: string };
+export type SidebarEntry = {
+  id: string;
+  label: string;
+  icon?: IconSvgElement;
+  color?: string | null;
+};
 export type SidebarSection = SidebarEntry & {
   orderKey?: string;
   items?: readonly SidebarEntry[];
@@ -116,27 +122,23 @@ export const orderSidebarEntries = <T extends { id: string }>(
 };
 
 export const moveSidebarEntry = (
-  entries: readonly SidebarEntry[],
+  ids: readonly string[],
   previousOrder: readonly string[] | undefined,
   id: string,
-  offset: -1 | 1
+  targetId: string
 ): string[] | undefined => {
-  const ordered = orderSidebarEntries(entries, previousOrder);
-  const from = ordered.findIndex((entry) => entry.id === id);
-  const to = from + offset;
-  const entry = ordered[from];
-  if (entry === undefined || to < 0 || to >= ordered.length) {
+  const visible = new Set(ids);
+  const slots = [...new Set([...(previousOrder ?? []), ...ids])];
+  const ordered = slots.filter((slot) => visible.has(slot));
+  const from = ordered.indexOf(id);
+  const to = ordered.indexOf(targetId);
+  if (from === -1 || to === -1 || from === to) {
     return undefined;
   }
   ordered.splice(from, 1);
-  ordered.splice(to, 0, entry);
-  const visible = new Set(ordered.map((item) => item.id));
-  const slots = new Set([
-    ...(previousOrder ?? []),
-    ...entries.map((item) => item.id),
-  ]);
-  const next = ordered.map((item) => item.id).values();
-  return [...slots].map((slot) =>
+  ordered.splice(to, 0, id);
+  const next = ordered.values();
+  return slots.map((slot) =>
     visible.has(slot) ? (next.next().value ?? slot) : slot
   );
 };
