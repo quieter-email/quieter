@@ -282,6 +282,30 @@ const createPersister = (generation: number) => {
 
 let currentPersister = createPersister(persistenceGeneration);
 
+const pendingPersistenceBindings = new WeakMap<
+  QueryClient,
+  {
+    promise: Promise<void>;
+    settle: () => void;
+    timeout?: ReturnType<typeof setTimeout>;
+  }
+>();
+
+export const expectQueryPersistence = (client: QueryClient) => {
+  if (typeof window === "undefined" || pendingPersistenceBindings.has(client)) {
+    return;
+  }
+  const { promise, resolve } = Promise.withResolvers<undefined>();
+  pendingPersistenceBindings.set(client, {
+    promise,
+    settle: () => {
+      clearTimeout(pendingPersistenceBindings.get(client)?.timeout);
+      pendingPersistenceBindings.delete(client);
+      resolve(undefined);
+    },
+  });
+};
+
 export const queryPersister: ReturnType<
   typeof experimental_createQueryPersister
 > = {
@@ -296,6 +320,13 @@ export const queryPersister: ReturnType<
     }
   },
   persisterFn: async (queryFn, context, query) => {
+    if (context.client !== persistenceClient) {
+      const binding = pendingPersistenceBindings.get(context.client);
+      if (binding !== undefined) {
+        binding.timeout ??= setTimeout(binding.settle, 150);
+        await binding.promise;
+      }
+    }
     if (context.client !== persistenceClient) {
       return await queryFn(context);
     }
@@ -384,6 +415,9 @@ const updatePersistenceOwner = (
   persistenceUser = userId;
   persistenceSession = sessionId;
   persistenceClient = client;
+  if (client) {
+    pendingPersistenceBindings.get(client)?.settle();
+  }
   persistenceGeneration += 1;
   currentPersister = createPersister(persistenceGeneration);
   try {

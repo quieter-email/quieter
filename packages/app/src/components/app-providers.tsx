@@ -13,6 +13,7 @@ import { useMailUpdates } from "@quieter/app/lib/mail-updates";
 import { shouldRetryOrpcError } from "@quieter/app/lib/orpc-errors";
 import {
   clearQueryPersistence,
+  expectQueryPersistence,
   restoreWarmWorkspaceQueries,
   setQueryPersistenceUser,
 } from "@quieter/app/lib/query-persister";
@@ -48,18 +49,21 @@ const SessionQueryProvider = ({
 }>) => {
   // The client is owned for this provider lifetime and is never replaced by a setter.
   // oxlint-disable-next-line react/hook-use-state
-  const [queryClient] = useState(
-    () =>
-      new QueryClient({
-        defaultOptions: {
-          mutations: { retry: false },
-          queries: {
-            gcTime: 1000 * 60 * 30,
-            retry: shouldRetryOrpcError,
-          },
+  const [queryClient] = useState(() => {
+    const client = new QueryClient({
+      defaultOptions: {
+        mutations: { retry: false },
+        queries: {
+          gcTime: 1000 * 60 * 30,
+          retry: shouldRetryOrpcError,
         },
-      })
-  );
+      },
+    });
+    if (userId && !sessionUnresolved) {
+      expectQueryPersistence(client);
+    }
+    return client;
+  });
   const lifetime = useRef(0);
 
   useMailUpdates(queryClient, userId);
