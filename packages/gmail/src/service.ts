@@ -46,8 +46,16 @@ const headerSchema = z.object({
   value: z.string(),
 });
 
+const messagePartFields = {
+  filename: z.string().optional(),
+  headers: z.array(headerSchema).optional(),
+  mimeType: z.string().optional(),
+  partId: z.string().optional(),
+};
+
 const messagePartSchema: z.ZodType<MessagePart> = z.lazy(() =>
   z.object({
+    ...messagePartFields,
     body: z
       .object({
         attachmentId: z.string().optional(),
@@ -55,11 +63,25 @@ const messagePartSchema: z.ZodType<MessagePart> = z.lazy(() =>
         size: z.number().optional(),
       })
       .optional(),
-    filename: z.string().optional(),
-    headers: z.array(headerSchema).optional(),
-    mimeType: z.string().optional(),
-    partId: z.string().optional(),
     parts: z.array(messagePartSchema).optional(),
+  })
+);
+
+type ListMessagePart = Omit<MessagePart, "body" | "parts"> & {
+  body?: Omit<NonNullable<MessagePart["body"]>, "data">;
+  parts?: ListMessagePart[];
+};
+
+const listMessagePartSchema: z.ZodType<ListMessagePart> = z.lazy(() =>
+  z.object({
+    ...messagePartFields,
+    body: z
+      .object({
+        attachmentId: z.string().optional(),
+        size: z.number().optional(),
+      })
+      .optional(),
+    parts: z.array(listMessagePartSchema).optional(),
   })
 );
 
@@ -86,6 +108,36 @@ const gmailThreadSchema = z.object({
   messages: z.array(gmailMessageSchema).optional(),
   snippet: z.string().optional(),
 });
+
+const gmailThreadListMetadataSchema = gmailThreadSchema.extend({
+  messages: z
+    .array(
+      gmailMessageSchema
+        .omit({ raw: true })
+        .extend({ payload: listMessagePartSchema.optional() })
+    )
+    .optional(),
+});
+
+const MAX_GMAIL_REPLAY_THREADS = 100;
+export const gmailThreadChangeFactsSchema = z
+  .object({
+    threadIds: z.array(z.string()).max(MAX_GMAIL_REPLAY_THREADS),
+    threads: z
+      .array(gmailThreadListMetadataSchema.nullable())
+      .max(MAX_GMAIL_REPLAY_THREADS),
+  })
+  .refine(
+    ({ threadIds, threads }) =>
+      threadIds.length === threads.length &&
+      threads.every(
+        (thread, index) => thread === null || thread.id === threadIds[index]
+      )
+  );
+
+export type GmailThreadChangeFacts = z.infer<
+  typeof gmailThreadChangeFactsSchema
+>;
 
 const gmailThreadLabelsSchema = z.object({
   id: z.string(),
@@ -1722,7 +1774,7 @@ const getGmailThreadsListMetadata = async (
   signal?: AbortSignal
 ) => {
   const uniqueThreadIds = [...new Set(threadIds)];
-  const threads: (z.infer<typeof gmailThreadSchema> | null)[] = [];
+  const threads: GmailThreadChangeFacts["threads"] = [];
   for (const batchThreadIds of chunkArray(
     uniqueThreadIds,
     GMAIL_BATCH_MESSAGE_CHUNK_SIZE
@@ -1730,7 +1782,7 @@ const getGmailThreadsListMetadata = async (
     threads.push(
       ...(await getGmailMetadataBatch(
         "thread",
-        gmailThreadSchema,
+        gmailThreadListMetadataSchema,
         GMAIL_THREAD_LIST_METADATA_FIELDS,
         accessToken,
         batchThreadIds,
@@ -3210,13 +3262,62 @@ export const listGmailCaptureHistoryPage = async (
   }
 };
 
+const loadGmailThreadChangeFacts = async (
+  accessToken: string,
+  {
+    affectedMessageThreads,
+    affectedThreadIds,
+    signal,
+  }: {
+    affectedMessageThreads: ReadonlyMap<string, string | undefined>;
+    affectedThreadIds: ReadonlySet<string>;
+    signal?: AbortSignal;
+  }
+): Promise<GmailThreadChangeFacts | null> => {
+  const threadIdsToLoad = new Set(affectedThreadIds);
+  const unknownMessageIds: string[] = [];
+  for (const [messageId, threadId] of affectedMessageThreads) {
+    if (threadId) {
+      threadIdsToLoad.add(threadId);
+    } else {
+      unknownMessageIds.push(messageId);
+    }
+  }
+  if (unknownMessageIds.length > 0) {
+    const messages = await getGmailMessagesMetadata(
+      accessToken,
+      unknownMessageIds,
+      signal
+    );
+    for (const message of messages) {
+      if (message === null) {
+        return null;
+      }
+      threadIdsToLoad.add(message.threadId);
+    }
+  }
+  if (threadIdsToLoad.size > MAX_GMAIL_REPLAY_THREADS) {
+    return null;
+  }
+  const threadIds = [...threadIdsToLoad];
+  const threads = await getGmailThreadsListMetadata(
+    accessToken,
+    threadIds,
+    signal
+  );
+  return { threadIds, threads };
+};
+
 export const getGmailThreadChangeDelta = async (
   accessToken: string,
   options: {
-    affectedMessageThreads: Map<string, string | undefined>;
-    affectedThreadIds: Set<string>;
+    affectedMessageThreads: ReadonlyMap<string, string | undefined>;
+    affectedThreadIds: ReadonlySet<string>;
     mailbox: MailboxCategory;
     reconcileProvider: boolean;
+    reuseRecordedFacts?: (
+      load: () => Promise<GmailThreadChangeFacts | null>
+    ) => Promise<GmailThreadChangeFacts | null>;
     signal?: AbortSignal;
     startHistoryId: string;
   }
@@ -3228,8 +3329,8 @@ export const getGmailThreadChangeDelta = async (
     requiresFullRefresh: true,
     updatedMessages: [],
   };
-  const { affectedMessageThreads, affectedThreadIds, signal, startHistoryId } =
-    options;
+  const { affectedThreadIds, signal, startHistoryId } = options;
+  const affectedMessageThreads = new Map(options.affectedMessageThreads);
   let historyId = startHistoryId;
   if (options.reconcileProvider) {
     let pageToken: string | undefined;
@@ -3247,7 +3348,7 @@ export const getGmailThreadChangeDelta = async (
           messageId,
           threadId ?? affectedMessageThreads.get(messageId)
         );
-        if (affectedMessageThreads.size > 100) {
+        if (affectedMessageThreads.size > MAX_GMAIL_REPLAY_THREADS) {
           return fallback;
         }
       }
@@ -3262,36 +3363,20 @@ export const getGmailThreadChangeDelta = async (
     }
   }
 
-  const unknownMessageIds: string[] = [];
-  for (const [messageId, threadId] of affectedMessageThreads) {
-    if (threadId) {
-      affectedThreadIds.add(threadId);
-    } else {
-      unknownMessageIds.push(messageId);
-    }
-  }
-  if (unknownMessageIds.length > 0) {
-    const messages = await getGmailMessagesMetadata(
-      accessToken,
-      unknownMessageIds,
-      signal
-    );
-    for (const message of messages) {
-      if (message === null) {
-        return fallback;
-      }
-      affectedThreadIds.add(message.threadId);
-    }
-  }
-  if (affectedThreadIds.size > 100) {
+  const load = async () =>
+    await loadGmailThreadChangeFacts(accessToken, {
+      affectedMessageThreads,
+      affectedThreadIds,
+      signal,
+    });
+  const facts =
+    !options.reconcileProvider && options.reuseRecordedFacts !== undefined
+      ? await options.reuseRecordedFacts(load)
+      : await load();
+  if (facts === null) {
     return fallback;
   }
-  const threadIds = [...affectedThreadIds];
-  const threads = await getGmailThreadsListMetadata(
-    accessToken,
-    threadIds,
-    signal
-  );
+  const { threadIds, threads } = facts;
   return {
     hasChanges: threadIds.length > 0,
     historyId,

@@ -5756,3 +5756,27 @@ export const mailCommandReceipt = pgTable(
     index("mail_command_receipt_mailbox_idx").on(table.mailboxId),
   ]
 );
+
+export const gmailReplayMetadata = pgTable(
+  "gmailReplayMetadata",
+  {
+    coverageKey: text("coverageKey").notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    headVersion: bigint("headVersion", { mode: "bigint" }).notNull(),
+    leaseToken: text("leaseToken"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    sealedFacts: text("sealedFacts"),
+  },
+  (table) => [
+    check(
+      "gmail_replay_metadata_payload_size",
+      sql`octet_length(${table.sealedFacts}) <= 524288`
+    ),
+    check(
+      "gmail_replay_metadata_lease_or_payload",
+      sql`(${table.leaseToken} is null) <> (${table.sealedFacts} is null)`
+    ),
+  ]
+);

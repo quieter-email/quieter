@@ -73,6 +73,7 @@ import {
   filterMailSnoozeVisibility,
   listMailSnoozePage,
 } from "../snooze/queries";
+import { reuseGmailReplayMetadata } from "./gmail-replay-metadata";
 import type { MailInputs } from "./inputs";
 
 const MAX_VISIBILITY_SCAN_PAGES = 5;
@@ -324,6 +325,7 @@ const replayGmailMailbox = async ({
         : [],
     };
   }
+  const startHistoryId = providerCursor?.provider ?? "";
   const delta = await callGmail(
     context,
     input.mailboxId,
@@ -335,8 +337,21 @@ const replayGmailMailbox = async ({
         reconcileProvider:
           input.targetChangeVersion === undefined ||
           BigInt(input.targetChangeVersion) > headVersion,
+        reuseRecordedFacts: async (load) =>
+          await reuseGmailReplayMetadata(
+            {
+              affectedMessageThreads,
+              affectedThreadIds,
+              contentRevision,
+              headVersion,
+              mailboxId: input.mailboxId,
+              signal,
+              startHistoryId,
+            },
+            load
+          ),
         signal,
-        startHistoryId: providerCursor?.provider ?? "",
+        startHistoryId,
       })
   );
   return {
