@@ -4,12 +4,13 @@ import { Popover as PopoverPrimitive } from "@base-ui/react/popover";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { menuSurfaceClassName } from "./menu-chrome";
 import {
   anchoredPopupMotionClassName,
   anchoredTriggerClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset } from "./popup-surface";
 
 export const Popover = PopoverPrimitive.Root;
 export const PopoverPortal = PopoverPrimitive.Portal;
@@ -66,14 +67,14 @@ export const PopoverContent = ({
       <PopoverPrimitive.Popup
         className={cn(
           anchoredPopupMotionClassName,
-          "z-50 rounded-xl",
+          "z-50",
           {
             "flex items-center gap-2 p-1.5": size === "compact",
             "flex max-h-(--available-height) flex-col outline-none":
               chrome === "bare",
             "max-h-(--available-height) overflow-y-auto": scrollable,
             "max-w-sm min-w-52 p-4": chrome === "default" && size !== "compact",
-            [popupSurfaceClassName]: chrome === "default",
+            [menuSurfaceClassName]: chrome === "default",
             "w-80 max-w-(--available-width)": size === "sm",
           },
           className
@@ -113,7 +114,7 @@ export const PopoverArrow = ({
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Arrow>) => (
   <PopoverPrimitive.Arrow
     className={cn(
-      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm border-fg/15 bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
+      "pointer-events-none absolute size-2.5 rotate-45 rounded-sm border-fg/10 bg-popover data-[side=bottom]:-top-1.25 data-[side=bottom]:border-t data-[side=bottom]:border-l data-[side=left]:-right-1.25 data-[side=left]:border-t data-[side=left]:border-r data-[side=right]:-left-1.25 data-[side=right]:border-b data-[side=right]:border-l data-[side=top]:-bottom-1.25 data-[side=top]:border-r data-[side=top]:border-b",
       className
     )}
     {...props}

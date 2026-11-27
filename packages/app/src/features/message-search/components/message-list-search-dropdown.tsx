@@ -6,7 +6,6 @@ import {
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
 import { MailboxLabelSwatch } from "@quieter/app/features/message-labels/components/mailbox-label-swatch";
-import { mailboxLabelSearchPillSurfaceClassNameByColor } from "@quieter/app/features/message-labels/domain/mailbox-label-presentation";
 import type { searchFilterOptions } from "@quieter/app/features/message-search/components/message-list-search-filter-options";
 import { normalizeLabelSelectionKey } from "@quieter/app/features/message-search/state/message-list-search-state";
 import type {
@@ -18,10 +17,14 @@ import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
-import { popupSurfaceClassName } from "@quieter/ui/popup-surface";
+import {
+  PopupMenuButton,
+  PopupMenuGroupLabel,
+  PopupMenuSurface,
+} from "@quieter/ui/popup-menu";
 import { LazyMotion, domAnimation, AnimatePresence, m } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { CSSProperties, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { createPortal } from "react-dom";
 
 const createSearchFilterSections = (
@@ -69,14 +72,10 @@ const getSearchFilterOptionState = (
   return filter.negated === true ? "exclude" : "include";
 };
 
-const SearchDropdownSectionLabel = ({ children }: { children: string }) => (
-  <p className="px-2.5 pb-1 text-caption text-muted-fg">{children}</p>
-);
+const MotionPopupMenuSurface = m.create(PopupMenuSurface);
 
 const SearchDropdownRow = ({
   active = false,
-  className,
-  customColor,
   highlighted = false,
   hint,
   icon,
@@ -84,43 +83,23 @@ const SearchDropdownRow = ({
   onClick,
 }: {
   active?: boolean;
-  className?: string;
-  customColor?: string;
   highlighted?: boolean;
   hint?: string;
   icon: ReactNode;
   label: string;
   onClick: () => void;
-}) => {
-  const rowStyle: CSSProperties & { "--selected-color": string | undefined } = {
-    "--selected-color": customColor,
-  };
-  return (
-    <button
-      className={cn(
-        "relative flex min-h-9 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:z-10 focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
-        className,
-        {
-          "bg-control-hover": highlighted && !className && !customColor,
-          "bg-detail": active && !highlighted && !className && !customColor,
-          "outline-1 -outline-offset-1 outline-ring":
-            highlighted && !!(className || customColor),
-          "q-custom-color-surface": !!customColor,
-          "ring-1 ring-ring ring-inset":
-            active && !highlighted && !!(className || customColor),
-        }
-      )}
-      data-search-highlighted={highlighted || undefined}
-      onClick={onClick}
-      style={rowStyle}
-      type="button"
-    >
-      {icon}
-      <span className="min-w-0 flex-1 truncate">{label}</span>
-      {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
-    </button>
-  );
-};
+}) => (
+  <PopupMenuButton
+    aria-pressed={active}
+    data-search-highlighted={highlighted || undefined}
+    highlighted={highlighted}
+    onClick={onClick}
+  >
+    {icon}
+    <span className="min-w-0 flex-1 truncate">{label}</span>
+    {!!hint && <span className="text-micro text-muted-fg">{hint}</span>}
+  </PopupMenuButton>
+);
 
 type LabelsSubmenuLayout = {
   coneHeight: number;
@@ -345,14 +324,6 @@ export const MessageListSearchDropdown = ({
           return (
             <SearchDropdownRow
               active={selectionState !== undefined}
-              customColor={
-                label.color?.startsWith("#") === true ? label.color : undefined
-              }
-              className={
-                mailboxLabelSearchPillSurfaceClassNameByColor[
-                  label.color ?? "gray"
-                ]
-              }
               highlighted={
                 highlightedItemKey ===
                 `label:${normalizeLabelSelectionKey(label.name)}`
@@ -419,12 +390,9 @@ export const MessageListSearchDropdown = ({
             points={`0 ${labelsLayout.coneOriginY} 8 0 8 ${labelsLayout.coneHeight}`}
           />
         </svg>
-        <div
+        <PopupMenuSurface
           aria-label="Labels"
-          className={cn(
-            popupSurfaceClassName,
-            "pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain rounded-xl p-2"
-          )}
+          className="pointer-events-auto absolute top-0 left-2 max-h-[calc(100dvh-1rem)] w-72 overflow-x-hidden overflow-y-auto overscroll-contain"
           onPointerEnter={(event) => {
             if (event.pointerType === "mouse") {
               cancelCloseLabelsSubmenu();
@@ -438,7 +406,7 @@ export const MessageListSearchDropdown = ({
           ref={labelsSubmenuRef}
         >
           {labelsContent}
-        </div>
+        </PopupMenuSurface>
       </div>,
       document.body
     );
@@ -447,7 +415,7 @@ export const MessageListSearchDropdown = ({
     <LazyMotion features={domAnimation}>
       <AnimatePresence initial={false}>
         {isOpen && (
-          <m.div
+          <MotionPopupMenuSurface
             animate={{ opacity: 1, scale: 1, transformOrigin: "top", y: 0 }}
             exit={{
               opacity: 0,
@@ -463,10 +431,7 @@ export const MessageListSearchDropdown = ({
             }}
             transition={{ duration: 0.1, ease: "easeOut" }}
             aria-label="Search filters"
-            className={cn(
-              popupSurfaceClassName,
-              "fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-[min(22rem,calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom)))] flex-col overflow-hidden rounded-xl p-2 lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-[min(28rem,calc(100dvh-6rem))]"
-            )}
+            className="fixed inset-x-2 top-[calc(env(safe-area-inset-top)+4.5rem)] z-30 flex max-h-[min(22rem,calc(100dvh-6rem-env(safe-area-inset-top)-env(safe-area-inset-bottom)))] flex-col overflow-hidden lg:absolute lg:inset-x-0 lg:top-full lg:mt-2 lg:max-h-[min(28rem,calc(100dvh-6rem))]"
             data-blocking-overlay=""
             data-search-dropdown-content
             onMouseDown={(event) => {
@@ -480,9 +445,7 @@ export const MessageListSearchDropdown = ({
               <div className="flex flex-col gap-2.5">
                 {searchFilterSections.map((section) => (
                   <div className="flex flex-col gap-0.5" key={section.label}>
-                    <SearchDropdownSectionLabel>
-                      {section.label}
-                    </SearchDropdownSectionLabel>
+                    <PopupMenuGroupLabel>{section.label}</PopupMenuGroupLabel>
                     {section.options.map((option) => {
                       const selectionState = getSearchFilterOptionState(
                         draftSearchState.filters,
@@ -524,7 +487,7 @@ export const MessageListSearchDropdown = ({
                 ))}
 
                 <div className="flex flex-col gap-1">
-                  <SearchDropdownSectionLabel>More</SearchDropdownSectionLabel>
+                  <PopupMenuGroupLabel>More</PopupMenuGroupLabel>
                   <div
                     className="relative"
                     onPointerEnter={(event) => {
@@ -540,23 +503,16 @@ export const MessageListSearchDropdown = ({
                       }
                     }}
                   >
-                    <button
+                    <PopupMenuButton
                       aria-expanded={showLabelsSubmenu}
                       aria-haspopup="true"
-                      className={cn(
-                        "relative z-50 flex min-h-9 w-full items-center gap-2 rounded-md border border-transparent px-2.5 py-1.5 text-left text-body-sm text-fg hover:bg-control-hover focus-visible:border-ring focus-visible:bg-control-hover focus-visible:outline-hidden",
-                        {
-                          "bg-control-hover": isLabelHighlighted,
-                          "bg-detail":
-                            selectedUserLabelStates.size > 0 &&
-                            !isLabelHighlighted,
-                        }
-                      )}
+                      aria-pressed={selectedUserLabelStates.size > 0}
+                      className="z-50"
+                      highlighted={isLabelHighlighted || showLabelsSubmenu}
                       onClick={() => {
                         setIsLabelsSubmenuOpen((open) => !open);
                       }}
                       ref={labelsTriggerRef}
-                      type="button"
                     >
                       <Icon
                         aria-hidden
@@ -575,7 +531,7 @@ export const MessageListSearchDropdown = ({
                         tone="muted"
                         icon={ArrowRight01Icon}
                       />
-                    </button>
+                    </PopupMenuButton>
 
                     <AnimatePresence initial={false}>
                       {showLabelsSubmenu && (
@@ -587,13 +543,13 @@ export const MessageListSearchDropdown = ({
                           transition={{ duration: 0.16, ease: "easeOut" }}
                         >
                           <div className="min-h-0 overflow-hidden">
-                            <div
+                            <PopupMenuSurface
                               aria-label="Labels"
-                              className="mt-1 rounded-md bg-detail p-2"
+                              className="mt-1"
                               ref={labelsInlineRef}
                             >
                               {labelsContent}
-                            </div>
+                            </PopupMenuSurface>
                           </div>
                         </m.div>
                       )}
@@ -610,7 +566,7 @@ export const MessageListSearchDropdown = ({
                 Close search
               </Button>
             </ActionFooter>
-          </m.div>
+          </MotionPopupMenuSurface>
         )}
       </AnimatePresence>
     </LazyMotion>

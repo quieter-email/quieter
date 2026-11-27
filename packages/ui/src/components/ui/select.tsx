@@ -17,12 +17,13 @@ import {
   menuGroupLabelClassName,
   menuItemClassName,
   menuListPaddingClassName,
+  menuSurfaceClassName,
 } from "./menu-chrome";
 import {
   anchoredPopupMotionClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset } from "./popup-surface";
 
 type SelectDensity = "default" | "compact";
 
@@ -151,8 +152,8 @@ export const SelectContent = ({
         <SelectPrimitive.Popup
           className={cn(
             anchoredPopupMotionClassName,
-            popupSurfaceClassName,
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            menuSurfaceClassName,
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
             menuListPaddingClassName,
             { [menuCompactPopupClassName]: size === "compact" },
             className

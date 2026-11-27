@@ -346,15 +346,13 @@ const MailboxMenuItem = ({
 }) => (
   <div className="flex items-center gap-1">
     <DropdownMenuItem
-      highlight="subtle"
       nativeButton
       // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- The menu supplies the mailbox summary as button content.
       render={<button ref={handleRef} type="button" />}
       aria-current={isActive ? "page" : undefined}
       aria-describedby="mailbox-order-help"
       aria-keyshortcuts="Alt+ArrowUp Alt+ArrowDown"
-      // oxlint-disable-next-line shadcn/no-restyle -- Keep the drag handle at its measured size while pressed.
-      className="min-w-0 flex-1 touch-pan-y active:scale-100"
+      className="min-w-0 flex-1 touch-pan-y"
       data-mailbox-switcher-navigation-item
       onSelect={(event) => {
         if (!event.defaultPrevented) {
@@ -464,7 +462,6 @@ const MailboxTeam = ({
           <div className="flex items-center gap-1">
             <DropdownMenuItem
               closeOnSelect={false}
-              highlight="subtle"
               nativeButton
               // oxlint-disable-next-line jsx-a11y/control-has-associated-label -- The menu supplies the group name as button content.
               render={<button ref={handleRef} type="button" />}
@@ -939,7 +936,6 @@ export const MailboxSwitcherDropdown = ({
                   <DropdownMenuItem
                     aria-current={allInboxesActive ? "page" : undefined}
                     data-mailbox-switcher-navigation-item
-                    highlight="subtle"
                     onSelect={onSelectAllInboxes}
                   >
                     <Icon
@@ -1068,7 +1064,6 @@ export const MailboxSwitcherDropdown = ({
                   <div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
-                      highlight="subtle"
                       render={
                         <Link
                           search={{

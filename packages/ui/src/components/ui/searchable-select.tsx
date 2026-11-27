@@ -1,21 +1,20 @@
 "use client";
 
 import { Combobox as ComboboxPrimitive } from "@base-ui/react/combobox";
-import { Search01Icon } from "@hugeicons/core-free-icons";
 import { useMemo } from "react";
 
 import { cn } from "../../lib/cn";
-import { Icon } from "./icon";
 import { CheckIcon, ChevronDownIcon } from "./icons";
 import { Input } from "./input";
-import { InputAddon, InputGroup } from "./input-group";
 import {
   menuEmptyClassName,
   menuItemClassName,
   menuListPaddingClassName,
+  menuSurfaceClassName,
 } from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { PopupMenuSearch } from "./popup-menu";
+import { popupSideOffset } from "./popup-surface";
 import { selectTriggerVariants } from "./select";
 import type { SelectTriggerProps } from "./select";
 
@@ -115,25 +114,17 @@ export const SearchableSelect = ({
             aria-label={ariaLabel}
             className={cn(
               anchoredPopupMotionClassName,
-              popupSurfaceClassName,
-              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
+              menuSurfaceClassName,
+              "flex max-h-[min(16rem,var(--available-height))] w-80 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden"
             )}
           >
-            <div className="shrink-0 border-b border-fg/10 p-2">
-              <InputGroup>
-                <InputAddon
-                  aria-hidden
-                  className="ml-3 flex shrink-0 items-center"
-                >
-                  <Icon icon={Search01Icon} size={14} tone="muted" />
-                </InputAddon>
-                <ComboboxPrimitive.Input
-                  aria-label={searchPlaceholder}
-                  placeholder={searchPlaceholder}
-                  render={<Input chrome="attached" />}
-                />
-              </InputGroup>
-            </div>
+            <PopupMenuSearch>
+              <ComboboxPrimitive.Input
+                aria-label={searchPlaceholder}
+                placeholder={searchPlaceholder}
+                render={<Input chrome="command" size="sm" />}
+              />
+            </PopupMenuSearch>
             <ComboboxPrimitive.Empty>
               <p className={menuEmptyClassName}>{emptyMessage}</p>
             </ComboboxPrimitive.Empty>

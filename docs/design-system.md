@@ -106,13 +106,13 @@ Truncate workspace and row titles to one line when space is limited. Help and in
 | Main canvas and text | `bg`, `fg` |
 | Legacy surface roles | `bg-raised` (Panel), `bg-surface` (Section) |
 | Cards | `card`, `card-fg` |
-| Floating menus, selectors, and popovers | `popover`, `popover-fg` |
+| Floating menus, selectors, and popovers | `popover`, `popover-fg`, `popover-highlight` |
 | Modal dialogs, alerts, and drawers | `panel`, `fg`, with `section` headers and `detail` controls |
 | Fields and interaction ladder | `input`, `control`, `control-hover`, `control-active` |
 | Selected navigation, rows, tabs, and options | `selection`, `fg` |
 | Main action | `primary`, `primary-hover`, `primary-active`, `primary-fg` |
 | Secondary action | `secondary`, `secondary-hover`, `secondary-active`, `secondary-fg` |
-| Muted content and menu highlights | `muted`, `muted-fg`, `accent`, `accent-fg` |
+| Muted content and general accents | `muted`, `muted-fg`, `accent`, `accent-fg` |
 | State | `success`, `warning`, `destructive`, with their foreground pairs; destructive actions also use `destructive-hover` and `destructive-active` |
 | Edges and focus | `border`, `border-strong`, `ring` |
 | Categorical colors | `q-gray`, `q-blue`, `q-cyan`, `q-green`, `q-yellow`, `q-orange`, `q-red`, `q-pink`, `q-purple` |
@@ -128,6 +128,8 @@ Themes own their colors. Avoid per-caller dark-mode color patches and feature-lo
 App themes are defined in `APP_THEMES` in `lib/brand-themes.ts`, separately from the logo artwork collection. The palette defines surfaces, primary action colors, optional gradients, corner radii, workspace gutters, and settings row padding. Dark, Light, Eclipse, Lilac haze, and Porcelain keep the default geometry. Run `vp run generate:brand-palette-css` after changing themes, and commit the resulting CSS. `vp run generate:assets` also regenerates that CSS before rendering artwork. Do not edit `brand-palettes.generated.css` directly.
 
 ### Space and shape
+
+Floating lists use the same surface, row geometry, dividers, and focus treatment in dropdowns, context menus, selects, and command menus. The dark popup fill is `#202022`. Hover and keyboard highlight use `popover-highlight`, which mixes the popup fill with its foreground so it stays visible across themes. Use the behavior-specific shared menu or select component first. When a feature owns positioning or keyboard interaction, compose `PopupMenuSurface`, `PopupMenuButton`, and `PopupMenuSearch` for the same appearance.
 
 Spacing uses the existing Tailwind scale with a 4px base, including half steps. There is no separate named spacing scale to invent. Repeated settings and workspace spacing belongs in those shared layouts. Unique viewport constraints and measured positions may use layout values without becoming global tokens.
 

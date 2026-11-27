@@ -11,14 +11,15 @@ import { useDateTimePreferences } from "./date-time-preferences";
 import { Icon } from "./icon";
 import { CheckIcon } from "./icons";
 import { Input } from "./input";
-import { InputAddon, InputGroup } from "./input-group";
 import {
   menuEmptyClassName,
   menuItemClassName,
   menuListPaddingClassName,
+  menuSurfaceClassName,
 } from "./menu-chrome";
 import { anchoredPopupMotionClassName } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { PopupMenuSearch } from "./popup-menu";
+import { popupSideOffset } from "./popup-surface";
 import { selectTriggerVariants } from "./select";
 
 export type TimePickerProps = Pick<
@@ -126,28 +127,20 @@ export const TimePicker = ({
             aria-label={ariaLabel ?? "Choose time"}
             className={cn(
               anchoredPopupMotionClassName,
-              popupSurfaceClassName,
-              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden rounded-xl"
+              menuSurfaceClassName,
+              "flex max-h-[min(18rem,var(--available-height))] w-52 max-w-(--available-width) min-w-(--anchor-width) flex-col overflow-hidden"
             )}
           >
-            <div className="shrink-0 border-b border-fg/10 p-2">
-              <InputGroup>
-                <InputAddon
-                  aria-hidden
-                  className="ml-3 flex shrink-0 items-center"
-                >
-                  <Icon icon={Clock01Icon} size={14} tone="muted" />
-                </InputAddon>
-                <ComboboxPrimitive.Input
-                  aria-label="Type a time"
-                  id={props.id ? `${props.id}-input` : undefined}
-                  placeholder={
-                    timeFormat === "12h" ? "e.g. 2:35 PM" : "e.g. 14:35"
-                  }
-                  render={<Input chrome="attached" />}
-                />
-              </InputGroup>
-            </div>
+            <PopupMenuSearch icon={Clock01Icon}>
+              <ComboboxPrimitive.Input
+                aria-label="Type a time"
+                id={props.id ? `${props.id}-input` : undefined}
+                placeholder={
+                  timeFormat === "12h" ? "e.g. 2:35 PM" : "e.g. 14:35"
+                }
+                render={<Input chrome="command" size="sm" />}
+              />
+            </PopupMenuSearch>
             <ComboboxPrimitive.Empty>
               <p className={menuEmptyClassName}>Enter a valid time.</p>
             </ComboboxPrimitive.Empty>

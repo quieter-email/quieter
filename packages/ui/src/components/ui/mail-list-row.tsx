@@ -42,7 +42,7 @@ export const mailListRowParts = {
   selectionCell:
     "relative z-10 ms-3.25 flex h-full shrink-0 items-center justify-center",
   trigger:
-    "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
+    "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:
     "pointer-events-none absolute top-1/2 left-0 z-20 h-8 w-0.75 -translate-y-1/2 rounded-r-full bg-primary",
   viewport:

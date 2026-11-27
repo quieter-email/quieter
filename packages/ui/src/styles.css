@@ -160,7 +160,7 @@
   --switch-thumb: #9a9aa2;
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: #303034;
+  --popover: #202022;
   --popover-fg: var(--fg);
   --primary: oklch(0.95 0 0);
   --primary-fg: oklch(0.141 0 0);
@@ -260,6 +260,7 @@
 :root,
 .theme-light,
 .dark {
+  --popover-highlight: color-mix(in srgb, var(--popover), var(--popover-fg) 9%);
   --primary-hover: color-mix(in oklch, var(--primary), var(--fg) 8%);
   --primary-active: color-mix(in oklch, var(--primary), var(--fg) 16%);
   --destructive-hover: color-mix(in oklch, var(--destructive), var(--fg) 8%);
@@ -281,7 +282,7 @@
   --switch-thumb: var(--muted-fg);
   --card: var(--bg-surface);
   --card-fg: var(--fg);
-  --popover: color-mix(in srgb, var(--section), var(--fg) 9%);
+  --popover: color-mix(in srgb, var(--section), var(--fg) 3%);
   --popover-fg: var(--fg);
   --primary: var(--theme-primary);
   --primary-fg: var(--theme-primary-fg);
@@ -340,6 +341,7 @@
   --color-card-fg: var(--card-fg);
   --color-popover: var(--popover);
   --color-popover-fg: var(--popover-fg);
+  --color-popover-highlight: var(--popover-highlight);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-active: var(--primary-active);
