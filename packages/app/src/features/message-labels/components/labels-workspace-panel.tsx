@@ -109,7 +109,12 @@ type LabelsWorkspacePanelProps = {
 };
 
 type LabelEditor =
-  | { mode: "create"; kind: "label" | "group"; groupId: string | null }
+  | {
+      mode: "create";
+      kind: "label" | "group";
+      groupId: string | null;
+      id: string;
+    }
   | { mode: "rename"; kind: "label" | "group"; id: string };
 
 type ColorEdit = {
@@ -148,7 +153,7 @@ const renderDelete = ({
     <Text as="p" className="min-w-0 flex-1" size="sm" tone="muted">
       Delete <span className="text-fg">{name}</span>?{" "}
       {kind === "group"
-        ? "Its labels move to Ungrouped."
+        ? "Its labels move out of the group."
         : "It will be removed from conversations and automatic rules."}
     </Text>
     <ActionFooter className="w-40 max-w-full">
@@ -394,7 +399,7 @@ export const LabelsWorkspacePanel = ({
     if (groupId !== null) {
       expandGroup(groupId);
     }
-    setEditor({ groupId, kind, mode: "create" });
+    setEditor({ groupId, id: crypto.randomUUID(), kind, mode: "create" });
   };
 
   const createLabel = async (
@@ -907,7 +912,7 @@ export const LabelsWorkspacePanel = ({
                     </DropdownMenuSubmenuTrigger>
                     <DropdownMenuSubmenuContent>
                       {[
-                        { color: null, id: null, name: "Ungrouped" },
+                        { color: null, id: null, name: "No group" },
                         ...groups,
                       ].map((option) => (
                         <DropdownMenuCheckboxItem
@@ -971,7 +976,7 @@ export const LabelsWorkspacePanel = ({
 
   const renderCreator = (groupId: string | null, hasChildren: boolean) =>
     renderPresence(
-      `create:${editor?.kind ?? "label"}`,
+      "create",
       editor?.mode === "create" && editor.groupId === groupId,
       <div className={cn(rowClassName, "bg-section")}>
         <span aria-hidden="true" className={gutterCellClassName} />
@@ -983,10 +988,11 @@ export const LabelsWorkspacePanel = ({
                 editor.kind === "group" ? defaultGroupColor : "gray"
               }
               initialName=""
+              key={editor.id}
               kind={editor.kind}
               mode="create"
               onCancel={() => {
-                setEditor(null);
+                setEditor((current) => (current === editor ? null : current));
               }}
               onSubmit={async (draft) => {
                 if (editor.kind === "group") {
@@ -1286,15 +1292,17 @@ export const LabelsWorkspacePanel = ({
             {areLabelsPending || labelsUnavailable ? null : (
               <>
                 <ul>{groupRows}</ul>
-                {groups.length > 0 && query === "" ? (
+                {!dragDisabled &&
+                groups.length > 0 &&
+                ungrouped.length === 0 ? (
                   <LabelDropTarget
-                    className={cn(rowClassName, "mt-2 min-h-8")}
+                    className={rowClassName}
                     disabled={dragDisabled}
                     groupId={null}
                   >
                     <span aria-hidden="true" className={gutterCellClassName} />
                     <Text as="span" size="caption" tone="muted">
-                      Ungrouped
+                      Drop here to remove from group
                     </Text>
                   </LabelDropTarget>
                 ) : null}

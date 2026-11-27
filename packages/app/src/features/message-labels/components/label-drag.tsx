@@ -7,7 +7,12 @@ import {
   PointerActivationConstraints,
   PointerSensor,
 } from "@dnd-kit/dom";
-import { DragDropProvider, useDraggable, useDroppable } from "@dnd-kit/react";
+import {
+  DragDropProvider,
+  useDraggable,
+  useDragOperation,
+  useDroppable,
+} from "@dnd-kit/react";
 import type { DragDropEventHandlers } from "@dnd-kit/react";
 import { Drag01Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
@@ -205,6 +210,7 @@ export const LabelDropTarget = ({
   groupId: string | null;
 }) => {
   const id = useId();
+  const operation = useDragOperation<LabelDragData>();
   const { isDropTarget, ref } = useDroppable<LabelDragData>({
     accept: LABEL_DRAG_TYPE,
     collisionDetector: collideWithLabelTarget,
@@ -212,6 +218,10 @@ export const LabelDropTarget = ({
     disabled,
     id,
   });
+
+  if (groupId === null && operation.source?.type !== LABEL_DRAG_TYPE) {
+    return null;
+  }
 
   return (
     <div className={cn(className, { "bg-selection": isDropTarget })} ref={ref}>
