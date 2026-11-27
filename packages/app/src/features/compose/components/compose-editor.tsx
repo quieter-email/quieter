@@ -533,7 +533,7 @@ export const ComposeEditorBody = ({
     <div
       aria-invalid={invalid || undefined}
       className={cn(
-        "relative min-h-20 w-full overflow-hidden rounded-md border border-transparent bg-control text-body text-fg transition-colors duration-150 ease-out squircle",
+        "relative min-h-20 w-full overflow-hidden rounded-md border border-transparent bg-control text-body text-fg transition-colors duration-150 ease-out",
         {
           "has-[.ProseMirror:focus-visible]:border-ring has-[.ProseMirror:focus-visible]:outline-hidden aria-invalid:border-destructive aria-invalid:focus-within:border-destructive":
             chrome === "default",

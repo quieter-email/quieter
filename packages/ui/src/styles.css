@@ -101,7 +101,7 @@
   --font-sans: var(--font-geist);
   --font-heading: var(--font-geist);
   --font-mono: var(--font-geist-mono);
-  --radius: 0.5rem;
+  --radius: 0.25rem;
   --workspace-gap: 6px;
   --workspace-gap-wide: 8px;
   --settings-row-padding: 1rem;
@@ -437,7 +437,7 @@
   --radius-3xl: calc(var(--radius) + 10px);
   --radius-4xl: calc(var(--radius) + 12px);
   --radius-5xl: calc(var(--radius) + 14px);
-  --radius-panel: calc(var(--radius) + 12px);
+  --radius-panel: calc(var(--radius) + 10px);
   --radius-section: calc(var(--radius-panel) - 3px);
   --shadow-2xs: var(--shadow-2xs);
   --shadow-xs: var(--shadow-xs);
@@ -457,14 +457,6 @@
     scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
-  @supports (corner-shape: squircle) {
-    *,
-    ::before,
-    ::after {
-      corner-shape: superellipse(1.825);
-    }
-  }
-
   *::-webkit-scrollbar-track {
     background: transparent;
   }
@@ -480,21 +472,6 @@
     @apply bg-bg font-sans text-fg antialiased;
     background-image: var(--canvas-glow);
     font-optical-sizing: auto;
-  }
-}
-
-@utility not-squircle {
-  @supports (corner-shape: squircle) {
-    corner-shape: round;
-  }
-}
-
-/* The base layer already shapes every corner as a superellipse, so this
-   only re-asserts the default, e.g. under a not-squircle ancestor. It exists
-   so the intent reads at the usage site and the class resolves to real CSS. */
-@utility squircle {
-  @supports (corner-shape: squircle) {
-    corner-shape: superellipse(1.825);
   }
 }
 
@@ -618,18 +595,12 @@
 .q-color-picker .react-colorful__hue {
   height: 0.5rem;
   border-radius: 9999px;
-  corner-shape: round;
 }
 
 .q-color-picker .react-colorful__pointer {
   width: 0.875rem;
   height: 0.875rem;
   border-width: 2px;
-  corner-shape: round;
-}
-
-.q-color-picker .react-colorful__pointer-fill {
-  corner-shape: round;
 }
 
 .card-stack {

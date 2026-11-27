@@ -40,12 +40,9 @@ export const SidebarNavItem = ({
   ...buttonProps
 }: SidebarNavItemProps) => (
   <div
-    className={cn(
-      "group relative flex w-full items-center rounded-md py-px squircle",
-      {
-        "hover:bg-control-hover": active !== true,
-      }
-    )}
+    className={cn("group relative flex w-full items-center rounded-md py-px", {
+      "hover:bg-control-hover": active !== true,
+    })}
     onMouseEnter={onMouseEnter}
     onMouseLeave={onMouseLeave}
   >

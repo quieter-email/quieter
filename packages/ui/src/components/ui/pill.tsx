@@ -7,7 +7,7 @@ import type { ComponentPropsWithoutRef, CSSProperties, Ref } from "react";
 import { cn } from "../../lib/cn";
 
 export const pillVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-center rounded-sm font-medium whitespace-nowrap",
+  "inline-flex shrink-0 items-center justify-center rounded-sm font-medium whitespace-nowrap",
   {
     defaultVariants: {
       size: "sm",

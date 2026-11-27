@@ -29,7 +29,7 @@ export const settingsSurfaceVariants = cva("", {
       padding: "px-4 py-(--settings-row-padding) @md:px-6",
       page: "@container space-y-6",
       rowShell:
-        "squircle relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
+        "relative flex w-full items-center gap-4 px-4 py-(--settings-row-padding) @md:px-6",
       title: "truncate text-body-sm font-medium text-fg",
       value: "text-body-sm/5 text-muted-fg",
     },
@@ -106,7 +106,7 @@ export const SettingsCard = ({
 }) => (
   <div
     className={cn(
-      "@container overflow-hidden squircle",
+      "@container overflow-hidden",
       {
         "flex min-h-15 items-center justify-between gap-4 px-4 py-(--settings-row-padding) @md:px-6":
           variant === "error",
@@ -252,7 +252,7 @@ export const SettingsRowLayout = ({
     })}
   >
     {icon !== undefined && icon !== null ? (
-      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg squircle [&_svg]:size-4">
+      <div className="flex size-8 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}
@@ -285,7 +285,7 @@ export const SettingsNavigationRow = ({
   <button
     className={cn(
       settingsSurfaceVariants({ variant: "rowShell" }),
-      "group border border-transparent text-left transition-colors squircle first:rounded-t-section last:rounded-b-section hover:bg-detail focus-visible:border-ring focus-visible:outline-hidden",
+      "group border border-transparent text-left transition-colors first:rounded-t-section last:rounded-b-section hover:bg-detail focus-visible:border-ring focus-visible:outline-hidden",
       { "pointer-events-none": disabled }
     )}
     disabled={disabled}
@@ -300,7 +300,7 @@ export const SettingsNavigationRow = ({
     type="button"
   >
     {icon !== undefined && icon !== null ? (
-      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg transition-colors squircle group-hover:text-fg [&_svg]:size-4">
+      <div className="flex size-9 shrink-0 items-center justify-center rounded-md bg-detail text-muted-fg transition-colors group-hover:text-fg [&_svg]:size-4">
         {icon}
       </div>
     ) : null}
@@ -344,7 +344,7 @@ export const SettingsInlineLoading = ({ label }: { label: string }) => (
   >
     <span
       aria-hidden
-      className="h-2 w-10 animate-pulse rounded-full bg-muted not-squircle motion-reduce:animate-none"
+      className="h-2 w-10 animate-pulse rounded-full bg-muted motion-reduce:animate-none"
     />
     <span className="sr-only">{label}</span>
   </output>

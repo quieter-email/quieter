@@ -497,7 +497,7 @@ const MailboxTeam = ({
                   <>
                     <span
                       aria-hidden
-                      className="size-1.5 shrink-0 rounded-full bg-primary not-squircle"
+                      className="size-1.5 shrink-0 rounded-full bg-primary"
                     />
                     <span className="sr-only">Unread mail</span>
                   </>
@@ -842,14 +842,14 @@ export const MailboxSwitcherDropdown = ({
       }}
       open={isOpen}
     >
-      <div className="relative min-w-0 flex-1 rounded-md squircle hover:bg-control-hover">
+      <div className="relative min-w-0 flex-1 rounded-md hover:bg-control-hover">
         <DropdownMenuTrigger
           onKeyDownCapture={handleEscapeCapture}
           aria-label={`Switch mailbox, ${currentLabel}${hasOtherUnread ? ", unread mail in other mailboxes" : ""}`}
           render={<Button size="auto" variant="ghost" />}
           nativeButton
           // oxlint-disable-next-line shadcn/no-restyle -- Switcher trigger keeps its nav metrics.
-          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left squircle hover:bg-transparent hover:text-fg active:scale-100"
+          className="relative z-10 w-full min-w-0 rounded-md px-3 py-2 text-left hover:bg-transparent hover:text-fg active:scale-100"
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
@@ -876,7 +876,7 @@ export const MailboxSwitcherDropdown = ({
           {hasOtherUnread && (
             <span
               aria-hidden
-              className="size-1.5 shrink-0 rounded-full bg-primary not-squircle"
+              className="size-1.5 shrink-0 rounded-full bg-primary"
             />
           )}
           <Icon aria-hidden icon={ArrowDown01Icon} tone="muted" />

@@ -772,10 +772,7 @@ export const DesignSystemShowcase = () => {
           <div className="grid grid-cols-2 gap-3 @md:grid-cols-3">
             {surfaceTokens.map((token) => (
               <div
-                className={cn(
-                  "rounded-md border border-border p-4 squircle",
-                  token.cls
-                )}
+                className={cn("rounded-md border border-border p-4", token.cls)}
                 key={token.name}
               >
                 <p className="text-body-sm font-medium text-fg">{token.name}</p>
@@ -936,10 +933,10 @@ export const DesignSystemShowcase = () => {
 
         <Section title="Borders">
           <div className="flex flex-wrap gap-3">
-            <div className="rounded-md border border-border px-4 py-3 text-body-sm squircle">
+            <div className="rounded-md border border-border px-4 py-3 text-body-sm">
               border
             </div>
-            <div className="rounded-md border border-border-strong px-4 py-3 text-body-sm squircle">
+            <div className="rounded-md border border-border-strong px-4 py-3 text-body-sm">
               border-strong
             </div>
           </div>
@@ -2355,7 +2352,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Mobile header">
-          <div className="overflow-hidden rounded-md border border-border squircle">
+          <div className="overflow-hidden rounded-md border border-border">
             <MobileHeader
               className="flex"
               leading="sidebar"
@@ -2381,7 +2378,7 @@ export const DesignSystemShowcase = () => {
           description="One mark, one statement, one optional next action. Holds still under reduced motion."
           title="Empty state"
         >
-          <div className="flex min-h-64 rounded-md border border-border squircle">
+          <div className="flex min-h-64 rounded-md border border-border">
             <EmptyMessageState
               action={
                 <Button size="sm" type="button" variant="outline">

@@ -10,8 +10,8 @@ const colorSwatchVariants = cva("inline-flex shrink-0 bg-(--swatch-color)", {
   defaultVariants: { shape: "circle", size: "md" },
   variants: {
     shape: {
-      circle: "rounded-full not-squircle",
-      square: "rounded-[min(var(--radius-xs),25%)] squircle",
+      circle: "rounded-full",
+      square: "rounded-[min(var(--radius-xs),25%)]",
     },
     size: { lg: "size-6", md: "size-3", sm: "size-2.5" },
   },

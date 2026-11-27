@@ -50,7 +50,7 @@ export const surfaceVariants = cva("", {
       detail: "rounded-md bg-detail",
       // Control tray that floats over scrolling content, e.g. the mail
       // selection actions. It shares the popup fill so it reads above the list.
-      floating: `${popupSurfaceClassName} flex min-w-0 items-center gap-1 rounded-section squircle`,
+      floating: `${popupSurfaceClassName} flex min-w-0 items-center gap-1 rounded-section`,
       panel: "rounded-panel bg-panel inset-ring inset-ring-panel-edge/30",
       section:
         "rounded-section bg-section inset-ring inset-ring-section-edge/30",

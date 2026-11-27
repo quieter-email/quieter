@@ -20,7 +20,7 @@ export const PopoverTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof PopoverPrimitive.Trigger>) => (
   <PopoverPrimitive.Trigger
-    className={cn("squircle", className, anchoredTriggerClassName)}
+    className={cn(className, anchoredTriggerClassName)}
     {...props}
   />
 );
