@@ -88,7 +88,7 @@ export const buttonVariants = cva(
       },
       {
         className:
-          "text-caption focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-100",
+          "text-body-sm focus-visible:ring-ring/50 focus-visible:ring-inset disabled:opacity-100",
         size: "text",
         variant: "inline-edit",
       },

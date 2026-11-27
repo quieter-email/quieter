@@ -29,6 +29,8 @@ export const LabelsInlineEditor = ({
   const [color, setColor] = useState(initialColor);
   const [isSaving, setIsSaving] = useState(false);
   const saving = useRef(false);
+  const closed = useRef(false);
+  const submittedName = useRef<string | null>(null);
   const colorOpen = useRef(false);
   const isPresent = useIsPresent();
   const creating = mode === "create";
@@ -43,16 +45,20 @@ export const LabelsInlineEditor = ({
     [mode]
   );
 
-  const finish = async () => {
-    if (saving.current || !isPresent) {
+  const finish = async (trigger: "blur" | "submit") => {
+    if (saving.current || closed.current || !isPresent) {
       return;
     }
     const trimmedName = name.trim();
+    if (trigger === "blur" && trimmedName === submittedName.current) {
+      return;
+    }
     if (trimmedName === "" || (!creating && trimmedName === initialName)) {
       onCancel();
       return;
     }
     saving.current = true;
+    submittedName.current = trimmedName;
     setIsSaving(true);
     try {
       await onSubmit({ color, name: trimmedName });
@@ -67,19 +73,19 @@ export const LabelsInlineEditor = ({
     <form
       aria-label={creating ? `New ${kind}` : `Rename ${kind}`}
       aria-busy={isSaving}
-      className="flex min-w-0 flex-1 items-center gap-2"
+      className="flex min-w-0 flex-1 items-center gap-2.5"
       inert={!isPresent}
       onBlur={(event) => {
         if (
           !colorOpen.current &&
           !event.currentTarget.contains(event.relatedTarget)
         ) {
-          void finish();
+          void finish("blur");
         }
       }}
       onSubmit={(event) => {
         event.preventDefault();
-        void finish();
+        void finish("submit");
       }}
     >
       {creating ? (
@@ -91,7 +97,7 @@ export const LabelsInlineEditor = ({
           onOpenChange={(open, outsidePress) => {
             colorOpen.current = open;
             if (outsidePress && !open) {
-              void finish();
+              void finish("blur");
             }
           }}
           swatchShape={kind === "group" ? "circle" : "square"}
@@ -101,8 +107,8 @@ export const LabelsInlineEditor = ({
       ) : null}
       <Input
         aria-label={nameLabel}
-        chrome="ghost"
-        className="w-44 max-w-full"
+        chrome="inline"
+        className="min-w-0 flex-1"
         maxLength={kind === "group" ? 100 : 225}
         onChange={(event) => {
           setName(event.currentTarget.value);
@@ -115,6 +121,7 @@ export const LabelsInlineEditor = ({
           ) {
             event.preventDefault();
             event.stopPropagation();
+            closed.current = true;
             onCancel();
           }
         }}

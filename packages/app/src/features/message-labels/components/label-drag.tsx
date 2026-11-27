@@ -154,22 +154,26 @@ export const LabelDragRow = ({
 
   return (
     <li
-      className={cn("relative", className, { "bg-section": isDragSource })}
+      className={cn("group/row relative", className, {
+        "bg-section": isDragSource,
+      })}
       ref={ref}
     >
-      <IconButtonTooltip label={`Drag ${name}`}>
-        <Button
-          aria-label={`Drag ${name}`}
-          className="shrink-0 cursor-grab touch-none active:cursor-grabbing"
-          disabled={disabled}
-          ref={handleRef}
-          size="icon-xs"
-          type="button"
-          variant="ghost"
-        >
-          <Icon aria-hidden icon={Drag01Icon} />
-        </Button>
-      </IconButtonTooltip>
+      <span className="flex w-6 shrink-0 justify-center opacity-0 transition-opacity duration-150 group-hover/row:opacity-100 has-focus-visible:opacity-100 motion-reduce:transition-none pointer-coarse:opacity-100">
+        <IconButtonTooltip label={`Drag ${name}`}>
+          <Button
+            aria-label={`Drag ${name}`}
+            className="shrink-0 cursor-grab touch-none active:cursor-grabbing"
+            disabled={disabled}
+            ref={handleRef}
+            size="icon-xs"
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={Drag01Icon} />
+          </Button>
+        </IconButtonTooltip>
+      </span>
       {children}
       <LabelRowEdge
         disabled={disabled}

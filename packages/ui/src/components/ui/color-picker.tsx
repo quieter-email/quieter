@@ -1,12 +1,11 @@
 "use client";
 
-import {
-  ArrowDown01Icon,
-  CheckmarkCircle02Icon,
-} from "@hugeicons/core-free-icons";
+import { Add01Icon, ArrowDown01Icon } from "@hugeicons/core-free-icons";
 import { useId, useRef, useState } from "react";
 import { HexColorInput, HexColorPicker } from "react-colorful";
 
+import { cn } from "../../lib/cn";
+import { ActionFooter } from "./action-footer";
 import { Button } from "./button";
 import { ColorSwatch } from "./color-swatch";
 import { Icon } from "./icon";
@@ -63,6 +62,8 @@ export const ColorPicker = ({
   const [pickerColor, setPickerColor] = useState("#888888");
   const [showCustom, setShowCustom] = useState(false);
   const hasPresets = (presets?.length ?? 0) > 0;
+  const isCustomValue =
+    hasPresets && !(presets ?? []).some((preset) => preset.color === value);
 
   const changeColor = (color: string) => {
     const hex =
@@ -125,68 +126,74 @@ export const ColorPicker = ({
       )}
       <PopoverContent
         align="start"
-        className={hasPresets && !showCustom ? "w-32" : "w-52"}
+        className={hasPresets ? undefined : "w-48"}
         size="compact"
       >
         <PopoverTitle className="sr-only">{label}</PopoverTitle>
-        <div className="flex w-full flex-col gap-1" inert={disabled}>
+        <div
+          className={cn("flex flex-col gap-2", {
+            // Five 28px swatch buttons and their gaps.
+            "w-37": hasPresets,
+            "w-full": !hasPresets,
+          })}
+          inert={disabled}
+        >
           {hasPresets ? (
-            <>
-              <div
-                aria-label="Preset colors"
-                className="grid grid-cols-3 justify-items-center gap-1"
-              >
-                {presets?.map((preset) => (
-                  <IconButtonTooltip key={preset.value} label={preset.label}>
-                    <Button
-                      aria-label={preset.label}
-                      aria-pressed={preset.color === value}
-                      className="relative"
-                      disabled={disabled}
-                      onClick={(event) => {
-                        const color = readSwatchColor(
-                          event.currentTarget.firstElementChild
-                        );
-                        if (color) {
-                          setPickerColor(color);
-                        }
-                        onValueChange(preset.value);
-                      }}
-                      size="icon-xs"
-                      variant="ghost"
-                    >
-                      <ColorSwatch
-                        color={preset.color}
-                        shape={swatchShape}
-                        size="lg"
-                      />
-                      {preset.color === value ? (
-                        <Icon
-                          aria-hidden
-                          className="absolute end-0 bottom-0"
-                          icon={CheckmarkCircle02Icon}
-                          size={10}
-                        />
-                      ) : null}
-                    </Button>
-                  </IconButtonTooltip>
-                ))}
-              </div>
-              <Button
-                aria-expanded={showCustom}
-                onClick={() => {
-                  setShowCustom((shown) => !shown);
-                }}
-                size="compact"
-                type="button"
-                variant="ghost"
-              >
-                Custom color
-              </Button>
-            </>
+            <div className="grid grid-cols-5 gap-0.5">
+              {presets?.map((preset) => (
+                <IconButtonTooltip key={preset.value} label={preset.label}>
+                  <Button
+                    aria-label={preset.label}
+                    aria-pressed={preset.color === value}
+                    disabled={disabled}
+                    onClick={(event) => {
+                      const color = readSwatchColor(
+                        event.currentTarget.firstElementChild
+                      );
+                      if (color) {
+                        setPickerColor(color);
+                      }
+                      onValueChange(preset.value);
+                    }}
+                    size="icon-sm"
+                    variant="ghost"
+                  >
+                    <ColorSwatch
+                      color={preset.color}
+                      selected={preset.color === value}
+                      shape={swatchShape}
+                      size="lg"
+                    />
+                  </Button>
+                </IconButtonTooltip>
+              ))}
+              <IconButtonTooltip label="Custom color">
+                <Button
+                  aria-expanded={showCustom}
+                  aria-label="Custom color"
+                  aria-pressed={isCustomValue}
+                  onClick={() => {
+                    setShowCustom((shown) => !shown);
+                  }}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  {isCustomValue ? (
+                    <ColorSwatch
+                      color={value}
+                      selected
+                      shape={swatchShape}
+                      size="lg"
+                    />
+                  ) : (
+                    <Icon aria-hidden icon={Add01Icon} />
+                  )}
+                </Button>
+              </IconButtonTooltip>
+            </div>
           ) : null}
           {(!hasPresets || showCustom) && (
-            <div className="flex flex-col gap-2 p-1">
+            <div className="flex flex-col gap-2">
               <HexColorPicker
                 className="q-color-picker"
                 color={pickerColor}
@@ -211,11 +218,11 @@ export const ColorPicker = ({
                   spellCheck={false}
                 />
               </div>
-              <PopoverClose
-                render={<Button size="compact" variant="secondary" />}
-              >
-                Done
-              </PopoverClose>
+              <ActionFooter>
+                <PopoverClose render={<Button size="compact" />}>
+                  Done
+                </PopoverClose>
+              </ActionFooter>
             </div>
           )}
         </div>
