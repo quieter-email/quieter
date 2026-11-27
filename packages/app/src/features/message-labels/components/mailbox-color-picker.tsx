@@ -28,7 +28,7 @@ export const MailboxColorPicker = ({
   disabled?: boolean;
   label: string;
   onChange: (color: MailboxLabelColor) => void;
-  onOpenChange?: (open: boolean) => void;
+  onOpenChange?: (open: boolean, outsidePress: boolean) => void;
   open?: boolean;
   swatchShape?: "circle" | "square";
   trigger?: "default" | "swatch";

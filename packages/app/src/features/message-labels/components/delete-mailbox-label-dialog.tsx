@@ -28,23 +28,17 @@ import {
 import { Button } from "@quieter/ui/button";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
-export const DeleteMailboxLabelDialog = ({
-  label,
+export const useDeleteMailboxLabel = ({
   mailboxId,
   mailboxProvider,
-  onOpenChange,
   onDeleted,
-  open,
 }: {
-  label: MailboxLabel | null;
   mailboxId: string;
   mailboxProvider: MailboxLabel["provider"];
-  onOpenChange: (open: boolean) => void;
   onDeleted?: (id: string) => void;
-  open: boolean;
 }) => {
   const queryClient = useQueryClient();
-  const deleteLabel = useMutation({
+  return useMutation({
     mutationFn: async (labelId: string) => {
       if (isSandboxMailboxId(mailboxId)) {
         const current = getDemoLabelAutomation(mailboxId);
@@ -84,6 +78,30 @@ export const DeleteMailboxLabelDialog = ({
     },
     onSuccess: (_result, labelId) => {
       onDeleted?.(labelId);
+    },
+  });
+};
+
+export const DeleteMailboxLabelDialog = ({
+  label,
+  mailboxId,
+  mailboxProvider,
+  onOpenChange,
+  onDeleted,
+  open,
+}: {
+  label: MailboxLabel | null;
+  mailboxId: string;
+  mailboxProvider: MailboxLabel["provider"];
+  onOpenChange: (open: boolean) => void;
+  onDeleted?: (id: string) => void;
+  open: boolean;
+}) => {
+  const deleteLabel = useDeleteMailboxLabel({
+    mailboxId,
+    mailboxProvider,
+    onDeleted: (id) => {
+      onDeleted?.(id);
       onOpenChange(false);
     },
   });

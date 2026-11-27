@@ -11,7 +11,6 @@ import {
 } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
-import { SettingsInsetRow } from "@quieter/ui/settings-layout";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useId, useState } from "react";
@@ -63,9 +62,9 @@ export const AutoLabelSwitch = ({
   };
 
   return (
-    <SettingsInsetRow>
+    <div className="flex min-h-8 items-center gap-2 px-3 py-1 sm:px-4">
       <label className="min-w-0 flex-1 cursor-default" htmlFor={id}>
-        <span className="block text-body text-fg">Auto-label new mail</span>
+        <span className="block text-caption text-fg">Auto-label new mail</span>
       </label>
       <Switch
         checked={enabled}
@@ -78,6 +77,6 @@ export const AutoLabelSwitch = ({
       >
         <SwitchThumb />
       </Switch>
-    </SettingsInsetRow>
+    </div>
   );
 };
