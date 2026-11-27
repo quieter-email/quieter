@@ -4,7 +4,6 @@ import {
   Add01Icon,
   AiMagicIcon,
   ArrowDown02Icon,
-  ArrowRight01Icon,
   ArrowUp02Icon,
   Delete01Icon,
   FolderTransferIcon,
@@ -48,11 +47,14 @@ import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import {
+  applyLabelOrganizationAction,
   emptyLabelOrganization,
   mailboxLabelNamedColorSchema,
+  orderLabelGroups,
   orderMailboxLabels,
 } from "@quieter/mail/mailbox-organization";
 import type {
+  LabelOrganization,
   LabelOrganizationAction,
   MailboxLabel,
   MailboxLabelColor,
@@ -73,19 +75,24 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
+import { ChevronRightIcon, EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { WorkspaceHeader } from "@quieter/ui/workspace-section";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
 import {
   AnimatePresence,
   LazyMotion,
-  domAnimation,
+  domMax,
   m,
   useReducedMotion,
 } from "motion/react";
@@ -95,7 +102,12 @@ import type { ReactNode } from "react";
 import { createLabelGroupTree } from "../domain/label-group-tree";
 import type { LabelGroup } from "../domain/label-group-tree";
 import { useDeleteMailboxLabel } from "./delete-mailbox-label-dialog";
-import { LabelDragProvider, LabelDragRow, LabelDropTarget } from "./label-drag";
+import {
+  LabelDragProvider,
+  LabelDragRow,
+  LabelDropTarget,
+  LabelGroupDragRow,
+} from "./label-drag";
 import { getLabelUpdates } from "./label-update-mutation";
 import { LabelsInlineEditor } from "./labels-inline-editor";
 import { MailboxLabelSwatch } from "./mailbox-label-swatch";
@@ -125,11 +137,16 @@ type ColorEdit = {
 
 const rowClassName =
   "relative flex min-h-9 w-full items-center gap-2 rounded-lg px-2";
-const gutterCellClassName = "flex w-6 shrink-0 justify-center";
+// The 24px drag handle overflows the narrower gutter into the row padding so
+// the group caret can sit closer to it without the two targets overlapping.
+const gutterCellClassName = "flex w-4 shrink-0 justify-center";
+const caretCellClassName =
+  "me-0.5 flex w-3 shrink-0 items-center justify-center";
 const nameCellClassName =
   "flex min-w-0 flex-1 items-center gap-1.5 self-stretch @sm:w-1/3 @sm:flex-none";
 const promptCellClassName = "hidden min-w-0 flex-1 items-center @sm:flex";
-const switchCellClassName = "flex w-9 shrink-0 justify-center";
+const switchCellClassName =
+  "flex w-16 shrink-0 justify-center whitespace-nowrap";
 const menuCellClassName = "flex w-6 shrink-0 justify-center";
 
 const isNonemptyMailboxId = (
@@ -149,7 +166,7 @@ const renderDelete = ({
   onCancel: () => void;
   onDelete: () => void;
 }) => (
-  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5 ps-10 pe-2">
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5 ps-8 pe-2">
     <Text as="p" className="min-w-0 flex-1" size="sm" tone="muted">
       Delete <span className="text-fg">{name}</span>?{" "}
       {kind === "group"
@@ -309,15 +326,55 @@ export const LabelsWorkspacePanel = ({
         color !== "gray" &&
         !organization.groups.some((group) => group.color === color)
     ) ?? "blue";
-  const organizationMutation = useMutation({
-    mutationFn: async (input: {
-      action: LabelOrganizationAction;
-      mailboxId: string;
-    }) => await updateLabelOrganization(input.mailboxId, input.action),
-    onError: async (_error, input) => {
-      await queryClient.invalidateQueries({
-        queryKey: labelOrganizationQueryOptions(input.mailboxId).queryKey,
-      });
+  const organizationMutationKey = labelOrganizationQueryOptions(
+    mailboxId ?? ""
+  ).queryKey;
+  const organizationMutation = useMutation<
+    LabelOrganization,
+    Error,
+    { action: LabelOrganizationAction; mailboxId: string },
+    {
+      optimistic: LabelOrganization | undefined;
+      previous: LabelOrganization;
+    } | null
+  >({
+    mutationFn: async ({ action, mailboxId: changedMailboxId }) =>
+      await updateLabelOrganization(changedMailboxId, action),
+    mutationKey: organizationMutationKey,
+    onError: (_error, input, context) => {
+      const { queryKey } = labelOrganizationQueryOptions(input.mailboxId);
+      if (
+        context !== null &&
+        context !== undefined &&
+        queryClient.getQueryData(queryKey) === context.optimistic
+      ) {
+        queryClient.setQueryData(queryKey, context.previous);
+      }
+      void queryClient.invalidateQueries({ queryKey });
+    },
+    onMutate: async ({ action, mailboxId: changedMailboxId }) => {
+      if (action.kind !== "move-label" && action.kind !== "move-group") {
+        return null;
+      }
+      const { queryKey } = labelOrganizationQueryOptions(changedMailboxId);
+      const cancellation = queryClient.cancelQueries({ queryKey });
+      const previous = queryClient.getQueryData<LabelOrganization>(queryKey);
+      if (!previous) {
+        await cancellation;
+        return null;
+      }
+      const next = applyLabelOrganizationAction(
+        previous,
+        action,
+        crypto.randomUUID()
+      );
+      if (typeof next === "string") {
+        await cancellation;
+        return null;
+      }
+      const optimistic = queryClient.setQueryData(queryKey, next);
+      await cancellation;
+      return { optimistic, previous };
     },
     onSuccess: (updated, input) => {
       queryClient.setQueryData(
@@ -325,16 +382,17 @@ export const LabelsWorkspacePanel = ({
         updated
       );
     },
+    scope: { id: JSON.stringify(organizationMutationKey) },
   });
+  const isChangingOrganization =
+    useIsMutating({ exact: true, mutationKey: organizationMutationKey }) > 0;
   const areGroupActionsDisabled =
     areLabelActionsDisabled ||
     organizationData === undefined ||
-    organizationMutation.isPending;
+    isChangingOrganization;
 
   const labelGroupTree = createLabelGroupTree(organization);
-  const groups = organization.groups.toSorted((first, second) =>
-    first.name.localeCompare(second.name)
-  );
+  const groups = orderLabelGroups(organization);
   const labelsByGroupId = new Map<string | null, MailboxLabel[]>();
   for (const label of userLabels) {
     const groupId = labelGroupTree.getLabelGroupId(label.id);
@@ -373,7 +431,14 @@ export const LabelsWorkspacePanel = ({
     action: LabelOrganizationAction,
     fallback: string
   ): Promise<boolean> => {
-    if (!isNonemptyMailboxId(mailboxId) || !canManage) {
+    if (
+      !isNonemptyMailboxId(mailboxId) ||
+      !canManage ||
+      queryClient.isMutating({
+        exact: true,
+        mutationKey: organizationMutationKey,
+      }) > 0
+    ) {
       return false;
     }
     try {
@@ -598,6 +663,18 @@ export const LabelsWorkspacePanel = ({
         ? null
         : (destination[targetIndex + (target?.edge === "after" ? 1 : 0)]?.id ??
           null);
+    const currentGroupId = labelGroupTree.getLabelGroupId(labelId);
+    const currentLabels = labelsByGroupId.get(currentGroupId) ?? [];
+    const currentIndex = currentLabels.findIndex(
+      (label) => label.id === labelId
+    );
+    if (
+      currentGroupId === groupId &&
+      currentIndex !== -1 &&
+      (currentLabels[currentIndex + 1]?.id ?? null) === beforeLabelId
+    ) {
+      return;
+    }
     const saved = await runOrganizationAction(
       {
         beforeLabelId,
@@ -611,6 +688,35 @@ export const LabelsWorkspacePanel = ({
     if (saved && groupId !== null) {
       expandGroup(groupId);
     }
+  };
+
+  const moveGroup = async (
+    groupId: string,
+    target: { id: string; edge: "before" | "after" }
+  ) => {
+    if (areGroupActionsDisabled || target.id === groupId) {
+      return;
+    }
+    const destination = groups.filter((group) => group.id !== groupId);
+    const targetIndex = destination.findIndex(
+      (group) => group.id === target.id
+    );
+    if (targetIndex === -1) {
+      return;
+    }
+    const beforeGroupId =
+      destination[targetIndex + (target.edge === "after" ? 1 : 0)]?.id ?? null;
+    const currentIndex = groups.findIndex((group) => group.id === groupId);
+    if (
+      currentIndex === -1 ||
+      (groups[currentIndex + 1]?.id ?? null) === beforeGroupId
+    ) {
+      return;
+    }
+    await runOrganizationAction(
+      { beforeGroupId, groupId, kind: "move-group" },
+      "Could not move group."
+    );
   };
 
   const toggleGroup = (groupId: string) => {
@@ -695,18 +801,21 @@ export const LabelsWorkspacePanel = ({
       editor.id === label.id;
     const editingPrompt = automationLabelId === label.id;
     const prompt = getAutoLabelPrompt(label);
+    const autoLabelEnabled = label.autoLabel?.enabled !== false;
     return (
       <Fragment key={label.id}>
         <LabelDragRow
           className={cn(rowClassName, {
             "flex-wrap @sm:flex-nowrap": editingPrompt,
           })}
+          color={label.color}
           disabled={dragDisabled}
           groupId={groupId}
           labelId={label.id}
           name={label.name}
         >
           <div className={nameCellClassName}>
+            <span aria-hidden="true" className={caretCellClassName} />
             {groupId === null ? null : renderTreeGuide(isLastVisible)}
             <MailboxColorPicker
               className="flex shrink-0"
@@ -752,25 +861,26 @@ export const LabelsWorkspacePanel = ({
             ) : (
               <Button
                 aria-label={`Rename ${label.name}`}
+                className="flex-1"
                 disabled={areLabelActionsDisabled}
                 onClick={() => {
                   setEditor({ id: label.id, kind: "label", mode: "rename" });
                 }}
-                size="text"
+                size="inline-field"
                 variant="inline-edit"
               >
                 <span className="truncate">{label.name}</span>
+                {mailboxProvider === "managed" ? (
+                  <span className="shrink-0 text-caption text-muted-fg tabular-nums">
+                    {managedLabelCountById.get(label.id) ?? 0}
+                  </span>
+                ) : null}
               </Button>
             )}
-            {mailboxProvider === "managed" && !renaming ? (
-              <span className="shrink-0 ps-0.5 text-caption text-muted-fg tabular-nums">
-                {managedLabelCountById.get(label.id) ?? 0}
-              </span>
-            ) : null}
           </div>
           <div
             className={cn({
-              "order-last flex w-full min-w-0 ps-8 pb-2 @sm:order-none @sm:w-auto @sm:flex-1 @sm:py-2 @sm:ps-0":
+              "order-last flex w-full min-w-0 ps-6 pb-2 @sm:order-none @sm:w-auto @sm:flex-1 @sm:py-0.5 @sm:ps-0":
                 editingPrompt,
               [promptCellClassName]: !editingPrompt,
             })}
@@ -795,12 +905,12 @@ export const LabelsWorkspacePanel = ({
             ) : (
               <Button
                 aria-label={`Edit auto-label prompt for ${label.name}`}
-                className="max-w-full"
+                className="w-full"
                 disabled={areLabelActionsDisabled}
                 onClick={() => {
                   setAutomationLabelId(label.id);
                 }}
-                size="text"
+                size="inline-field"
                 variant="inline-edit"
               >
                 <Text as="span" size="sm" tone="muted" truncate>
@@ -810,10 +920,12 @@ export const LabelsWorkspacePanel = ({
             )}
           </div>
           <div className={switchCellClassName}>
-            <IconButtonTooltip label={`Auto-label ${label.name}`}>
+            <IconButtonTooltip
+              label={`${autoLabelEnabled ? "Disable" : "Enable"} auto-label for ${label.name}`}
+            >
               <Switch
                 aria-label={`Auto-label ${label.name}`}
-                checked={label.autoLabel?.enabled !== false}
+                checked={autoLabelEnabled}
                 disabled={areLabelActionsDisabled}
                 onCheckedChange={(enabled) => {
                   void saveLabelAutomation(label, {
@@ -829,7 +941,7 @@ export const LabelsWorkspacePanel = ({
                     enabled,
                   });
                 }}
-                size="sm"
+                size="xs"
               >
                 <SwitchThumb />
               </Switch>
@@ -983,6 +1095,7 @@ export const LabelsWorkspacePanel = ({
       <div className={cn(rowClassName, "bg-section")}>
         <span aria-hidden="true" className={gutterCellClassName} />
         <div className={nameCellClassName}>
+          <span aria-hidden="true" className={caretCellClassName} />
           {groupId === null ? null : renderTreeGuide(!hasChildren)}
           {editor?.mode === "create" ? (
             <LabelsInlineEditor
@@ -1022,7 +1135,18 @@ export const LabelsWorkspacePanel = ({
       return null;
     }
     const labelCount = labelsByGroupId.get(group.id)?.length ?? 0;
-    const expanded = query !== "" || !collapsedGroupIds.has(group.id);
+    const pendingAction = organizationMutation.isPending
+      ? organizationMutation.variables?.action
+      : undefined;
+    const expanded =
+      query !== "" ||
+      !collapsedGroupIds.has(group.id) ||
+      (pendingAction?.kind === "move-label" &&
+        pendingAction.groupId === group.id);
+    const [firstLabel] = children;
+    const groupIndex = groups.findIndex((entry) => entry.id === group.id);
+    const previousGroup = groups[groupIndex - 1];
+    const nextGroup = groups[groupIndex + 1];
     const editingColor =
       colorEdit?.kind === "group" && colorEdit.id === group.id
         ? colorEdit
@@ -1032,172 +1156,237 @@ export const LabelsWorkspacePanel = ({
       editor.kind === "group" &&
       editor.id === group.id;
     return (
-      <li key={group.id}>
-        <LabelDropTarget
-          className={rowClassName}
-          disabled={dragDisabled}
-          groupId={group.id}
-        >
-          <div className={gutterCellClassName}>
-            <IconButtonTooltip
-              label={expanded ? "Collapse group" : "Expand group"}
-            >
-              <Button
-                aria-expanded={expanded}
-                aria-label={`${expanded ? "Collapse" : "Expand"} ${group.name}`}
-                disabled={query !== ""}
-                onClick={() => {
-                  toggleGroup(group.id);
-                }}
-                size="icon-xs"
-                variant="ghost"
+      <LabelGroupDragRow
+        color={group.color}
+        disabled={dragDisabled}
+        groupId={group.id}
+        key={group.id}
+        name={group.name}
+      >
+        {({ handle, headerRef, isDragSource }) => {
+          const showChildren = expanded && !isDragSource;
+          return (
+            <>
+              <div
+                className={cn("rounded-lg", {
+                  "bg-section shadow-sm": isDragSource,
+                })}
+                ref={headerRef}
               >
-                <span
-                  className={cn(
-                    "flex transition-transform duration-150 ease-out motion-reduce:transition-none",
-                    { "rotate-90": expanded }
-                  )}
-                >
-                  <Icon aria-hidden icon={ArrowRight01Icon} />
-                </span>
-              </Button>
-            </IconButtonTooltip>
-          </div>
-          <div className={nameCellClassName}>
-            <MailboxColorPicker
-              className="flex shrink-0"
-              disabled={areGroupActionsDisabled && editingColor === null}
-              label={`Edit color for ${group.name}`}
-              onChange={(value) => {
-                setColorEdit({ id: group.id, kind: "group", value });
-              }}
-              onOpenChange={(open) => {
-                if (open) {
-                  setColorEdit({
-                    id: group.id,
-                    kind: "group",
-                    value: group.color,
-                  });
-                } else if (editingColor !== null) {
-                  setColorEdit(null);
-                  if (editingColor.value !== group.color) {
-                    void saveGroup(
-                      { color: editingColor.value, name: group.name },
-                      group.id
-                    );
+                <LabelDropTarget
+                  className={rowClassName}
+                  disabled={dragDisabled}
+                  groupId={group.id}
+                  target={
+                    firstLabel === undefined
+                      ? undefined
+                      : { edge: "before", id: firstLabel.id }
                   }
-                }
-              }}
-              open={editingColor !== null}
-              swatchShape="circle"
-              trigger="swatch"
-              value={editingColor?.value ?? group.color}
-            />
-            {renaming ? (
-              <LabelsInlineEditor
-                initialColor={group.color}
-                initialName={group.name}
-                kind="group"
-                mode="rename"
-                onCancel={() => {
-                  setEditor(null);
-                }}
-                onSubmit={async (draft) => {
-                  if (await saveGroup(draft, group.id)) {
-                    setEditor((current) =>
-                      current === editor ? null : current
-                    );
-                  }
-                }}
-              />
-            ) : (
-              <>
-                <Button
-                  aria-label={`Rename ${group.name}`}
-                  disabled={areGroupActionsDisabled}
-                  onClick={() => {
-                    setEditor({ id: group.id, kind: "group", mode: "rename" });
-                  }}
-                  size="text"
-                  variant="inline-edit"
                 >
-                  <span className="truncate">{group.name}</span>
-                </Button>
-                <span className="shrink-0 ps-0.5 text-caption text-muted-fg tabular-nums">
-                  {labelCount}
-                </span>
-              </>
-            )}
-          </div>
-          <span
-            aria-hidden="true"
-            className="hidden min-w-0 flex-1 @sm:block"
-          />
-          <span aria-hidden="true" className={switchCellClassName} />
-          <div className={menuCellClassName}>
-            <DropdownMenu>
-              <IconButtonTooltip label={`Options for ${group.name}`}>
-                <DropdownMenuTrigger
-                  aria-label={`Options for ${group.name}`}
-                  disabled={areGroupActionsDisabled}
-                  render={<Button size="icon-xs" variant="ghost" />}
-                >
-                  <Icon aria-hidden icon={MoreHorizontalIcon} />
-                </DropdownMenuTrigger>
-              </IconButtonTooltip>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem
-                  onSelect={() => {
-                    openCreator("label", group.id);
-                  }}
-                >
-                  <Icon aria-hidden icon={Add01Icon} />
-                  New label in group
-                </DropdownMenuItem>
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setEditor({ id: group.id, kind: "group", mode: "rename" });
-                  }}
-                >
-                  <Icon aria-hidden icon={PencilEdit02Icon} />
-                  Rename
-                </DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem
-                  onSelect={() => {
-                    setDeletingGroup(group);
-                  }}
-                  tone="destructive"
-                >
-                  <Icon aria-hidden icon={Delete01Icon} />
-                  Delete group
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </LabelDropTarget>
-        {renderPresence(
-          `delete:${group.id}`,
-          deletingGroup?.id === group.id,
-          renderDelete({
-            kind: "group",
-            name: group.name,
-            onCancel: () => {
-              setDeletingGroup(null);
-            },
-            onDelete: () => void deleteGroup(group),
-            pending: organizationMutation.isPending,
-          })
-        )}
-        {renderPresence(
-          `children:${group.id}`,
-          expanded,
-          <>
-            {renderCreator(group.id, children.length > 0)}
-            <ul>{children.map(renderLabelRow)}</ul>
-          </>
-        )}
-      </li>
+                  <div className={gutterCellClassName}>{handle}</div>
+                  <div className={nameCellClassName}>
+                    <div className={caretCellClassName}>
+                      <IconButtonTooltip
+                        label={showChildren ? "Collapse group" : "Expand group"}
+                      >
+                        <Button
+                          aria-expanded={showChildren}
+                          aria-label={`${showChildren ? "Collapse" : "Expand"} ${group.name}`}
+                          disabled={query !== "" || isDragSource}
+                          onClick={() => {
+                            toggleGroup(group.id);
+                          }}
+                          size="icon-2xs"
+                          className="shrink-0"
+                          variant="ghost"
+                        >
+                          <span
+                            className={cn(
+                              "flex transition-transform duration-150 ease-out motion-reduce:transition-none",
+                              { "rotate-90": showChildren }
+                            )}
+                          >
+                            <ChevronRightIcon viewBox="-4 -4 24 24" />
+                          </span>
+                        </Button>
+                      </IconButtonTooltip>
+                    </div>
+                    <MailboxColorPicker
+                      className="flex shrink-0"
+                      disabled={
+                        areGroupActionsDisabled && editingColor === null
+                      }
+                      label={`Edit color for ${group.name}`}
+                      onChange={(value) => {
+                        setColorEdit({ id: group.id, kind: "group", value });
+                      }}
+                      onOpenChange={(open) => {
+                        if (open) {
+                          setColorEdit({
+                            id: group.id,
+                            kind: "group",
+                            value: group.color,
+                          });
+                        } else if (editingColor !== null) {
+                          setColorEdit(null);
+                          if (editingColor.value !== group.color) {
+                            void saveGroup(
+                              { color: editingColor.value, name: group.name },
+                              group.id
+                            );
+                          }
+                        }
+                      }}
+                      open={editingColor !== null}
+                      swatchShape="circle"
+                      trigger="swatch"
+                      value={editingColor?.value ?? group.color}
+                    />
+                    {renaming ? (
+                      <LabelsInlineEditor
+                        initialColor={group.color}
+                        initialName={group.name}
+                        kind="group"
+                        mode="rename"
+                        onCancel={() => {
+                          setEditor(null);
+                        }}
+                        onSubmit={async (draft) => {
+                          if (await saveGroup(draft, group.id)) {
+                            setEditor((current) =>
+                              current === editor ? null : current
+                            );
+                          }
+                        }}
+                      />
+                    ) : (
+                      <Button
+                        aria-description={`${labelCount} ${labelCount === 1 ? "label" : "labels"}`}
+                        aria-label={`Rename ${group.name}`}
+                        className="flex-1"
+                        disabled={areGroupActionsDisabled}
+                        onClick={() => {
+                          setEditor({
+                            id: group.id,
+                            kind: "group",
+                            mode: "rename",
+                          });
+                        }}
+                        size="inline-field"
+                        variant="inline-edit"
+                      >
+                        <span className="truncate">{group.name}</span>
+                        <span className="shrink-0 text-caption text-muted-fg tabular-nums">
+                          {labelCount}
+                        </span>
+                      </Button>
+                    )}
+                  </div>
+                  <span
+                    aria-hidden="true"
+                    className="hidden min-w-0 flex-1 @sm:block"
+                  />
+                  <span aria-hidden="true" className={switchCellClassName} />
+                  <div className={menuCellClassName}>
+                    <DropdownMenu>
+                      <IconButtonTooltip label={`Options for ${group.name}`}>
+                        <DropdownMenuTrigger
+                          aria-label={`Options for ${group.name}`}
+                          disabled={areGroupActionsDisabled}
+                          render={<Button size="icon-xs" variant="ghost" />}
+                        >
+                          <Icon aria-hidden icon={MoreHorizontalIcon} />
+                        </DropdownMenuTrigger>
+                      </IconButtonTooltip>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            openCreator("label", group.id);
+                          }}
+                        >
+                          <Icon aria-hidden icon={Add01Icon} />
+                          New label in group
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setEditor({
+                              id: group.id,
+                              kind: "group",
+                              mode: "rename",
+                            });
+                          }}
+                        >
+                          <Icon aria-hidden icon={PencilEdit02Icon} />
+                          Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={previousGroup === undefined}
+                          onSelect={() => {
+                            if (previousGroup !== undefined) {
+                              void moveGroup(group.id, {
+                                edge: "before",
+                                id: previousGroup.id,
+                              });
+                            }
+                          }}
+                        >
+                          <Icon aria-hidden icon={ArrowUp02Icon} />
+                          Move up
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={nextGroup === undefined}
+                          onSelect={() => {
+                            if (nextGroup !== undefined) {
+                              void moveGroup(group.id, {
+                                edge: "after",
+                                id: nextGroup.id,
+                              });
+                            }
+                          }}
+                        >
+                          <Icon aria-hidden icon={ArrowDown02Icon} />
+                          Move down
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem
+                          onSelect={() => {
+                            setDeletingGroup(group);
+                          }}
+                          tone="destructive"
+                        >
+                          <Icon aria-hidden icon={Delete01Icon} />
+                          Delete group
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+                </LabelDropTarget>
+              </div>
+              {renderPresence(
+                `delete:${group.id}`,
+                deletingGroup?.id === group.id,
+                renderDelete({
+                  kind: "group",
+                  name: group.name,
+                  onCancel: () => {
+                    setDeletingGroup(null);
+                  },
+                  onDelete: () => void deleteGroup(group),
+                  pending: organizationMutation.isPending,
+                })
+              )}
+              {renderPresence(
+                `children:${group.id}`,
+                showChildren,
+                <>
+                  {renderCreator(group.id, children.length > 0)}
+                  <ul>{children.map(renderLabelRow)}</ul>
+                </>
+              )}
+            </>
+          );
+        }}
+      </LabelGroupDragRow>
     );
   };
 
@@ -1219,7 +1408,7 @@ export const LabelsWorkspacePanel = ({
     listStatus = query === "" ? "No labels yet." : "No labels match.";
   }
   return (
-    <LazyMotion features={domAnimation}>
+    <LazyMotion features={domMax}>
       <div className="@container flex h-full min-h-0 w-full flex-col">
         <WorkspaceHeader>
           <MailSubviewHeader
@@ -1255,45 +1444,57 @@ export const LabelsWorkspacePanel = ({
               New label
             </Button>
           </MailSubviewHeader>
-          <InputGroup chrome="toolbar" className="mt-3">
-            <InputAddon aria-hidden className="ms-3 flex shrink-0 items-center">
-              <Icon icon={Search01Icon} size={14} tone="muted" />
-            </InputAddon>
-            <Input
-              aria-label="Filter labels and groups"
-              chrome="attached"
-              onChange={(event) => {
-                setLabelSearch(event.currentTarget.value);
-              }}
-              placeholder="Filter by name"
-              value={labelSearch}
-            />
-          </InputGroup>
-        </WorkspaceHeader>
-        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
-          <div
-            className={cn(rowClassName, "min-h-8 text-caption text-muted-fg")}
-          >
-            <span aria-hidden="true" className={gutterCellClassName} />
-            <span className={nameCellClassName}>Name</span>
-            <span className="hidden min-w-0 flex-1 truncate @sm:block">
-              Auto-label prompt
-            </span>
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2">
+            <InputGroup chrome="toolbar" className="min-w-32 flex-1">
+              <InputAddon
+                aria-hidden
+                className="ms-3 flex shrink-0 items-center"
+              >
+                <Icon icon={Search01Icon} size={14} tone="muted" />
+              </InputAddon>
+              <Input
+                aria-label="Filter labels and groups"
+                chrome="attached"
+                onChange={(event) => {
+                  setLabelSearch(event.currentTarget.value);
+                }}
+                placeholder="Filter by name"
+                value={labelSearch}
+              />
+            </InputGroup>
             {isNonemptyMailboxId(mailboxId) ? (
               <AutoLabelSwitch
                 canManage={canManage}
-                className="ms-auto min-w-0"
+                className="shrink-0 text-caption text-muted-fg"
                 key={mailboxId}
                 mailboxId={mailboxId}
               />
             ) : null}
+          </div>
+        </WorkspaceHeader>
+        <m.div
+          className="min-h-0 flex-1 overflow-y-auto px-2 pb-2"
+          data-labels-list=""
+          layoutScroll
+        >
+          <div
+            className={cn(
+              rowClassName,
+              "mb-1 min-h-8 text-caption text-muted-fg"
+            )}
+          >
+            <span aria-hidden="true" className={gutterCellClassName} />
+            <span className={nameCellClassName}>
+              <span aria-hidden="true" className={caretCellClassName} />
+              Name
+            </span>
+            <span className="hidden min-w-0 flex-1 truncate ps-2.25 @sm:block">
+              Auto-label prompt
+            </span>
+            <span className={switchCellClassName}>Auto-label</span>
             <span aria-hidden="true" className={menuCellClassName} />
           </div>
-          <LabelDragProvider
-            onMove={(labelId, groupId, target) =>
-              void moveLabel(labelId, groupId, target)
-            }
-          >
+          <LabelDragProvider onMove={moveLabel} onMoveGroup={moveGroup}>
             {renderCreator(null, true)}
             {areLabelsPending || labelsUnavailable ? null : (
               <>
@@ -1316,7 +1517,7 @@ export const LabelsWorkspacePanel = ({
               </>
             )}
             {listStatus === null ? null : (
-              <div className="flex flex-wrap items-center gap-3 py-2 ps-10">
+              <div className="flex flex-wrap items-center gap-3 py-2 ps-8">
                 <Text as="p" size="caption" tone="muted">
                   {listStatus}
                 </Text>
@@ -1335,7 +1536,7 @@ export const LabelsWorkspacePanel = ({
               </div>
             )}
           </LabelDragProvider>
-        </div>
+        </m.div>
       </div>
     </LazyMotion>
   );
