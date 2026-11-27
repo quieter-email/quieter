@@ -1,3 +1,4 @@
+import { orderMailboxLabels } from "@quieter/mail/mailbox-organization";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 
 import type { LabelGroup, createLabelGroupTree } from "./label-group-tree";
@@ -33,7 +34,10 @@ export const buildLabelPickerSections = (
   tree: ReturnType<typeof createLabelGroupTree>,
   view: LabelPickerView
 ): LabelPickerSection[] => {
-  const userLabels = labels.filter((label) => label.type === "user");
+  const userLabels = orderMailboxLabels(
+    labels.filter((label) => label.type === "user"),
+    tree.labelOrder
+  );
   const labelsById = new Map(userLabels.map((label) => [label.id, label]));
   const applied = new Set(view.appliedIds);
   const appliedLabels = userLabels.filter((label) => applied.has(label.id));
@@ -77,9 +81,6 @@ export const buildLabelPickerSections = (
       }));
   }
 
-  // Entries directly inside `parentId`: its own labels from `directLabels`,
-  // and each child group holding any label at any depth. Each entry sits where
-  // its first label sits in the mailbox's label order.
   const getEntriesUnder = (
     parentId: string | null,
     directLabels: readonly MailboxLabel[]
@@ -91,29 +92,28 @@ export const buildLabelPickerSections = (
       Extract<LabelPickerEntry, { kind: "group" }>
     >();
     for (const label of userLabels) {
-      const chain = tree.getLabelAncestry(label.id);
-      const parentIndex =
-        parentId === null
-          ? -1
-          : chain.findIndex((group) => group.id === parentId);
-      if (parentId !== null && parentIndex === -1) {
-        continue;
-      }
-      const child = chain[parentIndex + 1];
-      if (child === undefined) {
+      const groupId = tree.getLabelGroupId(label.id);
+      if (groupId === parentId) {
         if (direct.has(label.id)) {
           entries.push(toLabelEntry(label));
         }
         continue;
       }
-      const existing = groupEntries.get(child.id);
+      if (parentId !== null || groupId === null) {
+        continue;
+      }
+      const group = tree.getGroup(groupId);
+      if (group === undefined) {
+        continue;
+      }
+      const existing = groupEntries.get(groupId);
       if (existing === undefined) {
         const entry: Extract<LabelPickerEntry, { kind: "group" }> = {
-          group: child,
+          group,
           kind: "group",
           labelCount: 1,
         };
-        groupEntries.set(child.id, entry);
+        groupEntries.set(groupId, entry);
         entries.push(entry);
       } else {
         existing.labelCount += 1;
@@ -127,7 +127,7 @@ export const buildLabelPickerSections = (
     return [
       {
         entries: getEntriesUnder(group.id, userLabels),
-        title: tree.getGroupPath(group.id) ?? group.name,
+        title: group.name,
       },
     ];
   }

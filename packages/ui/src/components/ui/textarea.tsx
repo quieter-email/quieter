@@ -26,6 +26,9 @@ const textareaVariants = cva(
         composer: composerStyles,
         "composer-action": `${composerStyles} pr-12`,
         default: "",
+        // Text edited in place inside a row, matching inline inputs.
+        inline:
+          "[field-sizing:content] max-h-40 min-h-5 resize-none rounded-none border-0 bg-transparent p-0 text-body-sm focus-visible:ring-0",
         prompt:
           "[field-sizing:content] max-h-40 min-h-16 resize-none rounded-none border-0 bg-transparent px-0 py-2 text-body-sm focus-visible:ring-0",
       },

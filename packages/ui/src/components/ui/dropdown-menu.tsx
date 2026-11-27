@@ -282,8 +282,8 @@ export const DropdownMenuSubmenuTrigger = ({
       )}
       {...props}
     >
-      <span className="min-w-0 flex-1">{children}</span>
-      <ChevronRightIcon className="size-4 shrink-0 text-muted-fg" />
+      {children}
+      <ChevronRightIcon className="ms-auto size-4 shrink-0 text-muted-fg" />
     </MenuPrimitive.SubmenuTrigger>
   );
 };

@@ -2,10 +2,14 @@
 
 import {
   Add01Icon,
+  AiMagicIcon,
+  ArrowDown02Icon,
+  ArrowRight01Icon,
+  ArrowUp02Icon,
   Delete01Icon,
-  Edit01Icon,
-  FolderAddIcon,
-  MoreVerticalIcon,
+  FolderTransferIcon,
+  MoreHorizontalIcon,
+  PencilEdit02Icon,
   Search01Icon,
 } from "@hugeicons/core-free-icons";
 import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail-subview-header";
@@ -46,33 +50,16 @@ import type { AutoLabelSettings } from "@quieter/mail/auto-label";
 import {
   emptyLabelOrganization,
   mailboxLabelNamedColorSchema,
+  orderMailboxLabels,
 } from "@quieter/mail/mailbox-organization";
 import type {
   LabelOrganizationAction,
   MailboxLabel,
   MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
-import {
-  AlertDialog,
-  AlertDialogBody,
-  AlertDialogCloseButton,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from "@quieter/ui/alert-dialog";
+import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import {
-  Dialog,
-  DialogBody,
-  DialogCloseButton,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@quieter/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -84,33 +71,33 @@ import {
   DropdownMenuSubmenuTrigger,
   DropdownMenuTrigger,
 } from "@quieter/ui/dropdown-menu";
-import { Field, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { EyeIcon, EyeOffIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
-import {
-  SettingsCard,
-  SettingsInsetRows,
-  settingsSurfaceVariants,
-} from "@quieter/ui/settings-layout";
+import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
-import { TextField, TextFieldInput } from "@quieter/ui/text-field";
 import { toast } from "@quieter/ui/toast";
+import { WorkspaceHeader } from "@quieter/ui/workspace-section";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSelector } from "@tanstack/react-store";
-import { useCallback, useEffect, useId, useReducer, useState } from "react";
+import {
+  AnimatePresence,
+  LazyMotion,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
+import { Fragment, useEffect, useReducer, useState } from "react";
 import type { ReactNode } from "react";
 
 import { createLabelGroupTree } from "../domain/label-group-tree";
 import type { LabelGroup } from "../domain/label-group-tree";
-import { DeleteMailboxLabelDialog } from "./delete-mailbox-label-dialog";
-import { LabelGroupDialog } from "./label-group-dialog";
-import { LabelGroupRow } from "./label-group-row";
-import { LabelGroupSelect } from "./label-group-select";
-import type { LabelGroupOption } from "./label-group-select";
+import { useDeleteMailboxLabel } from "./delete-mailbox-label-dialog";
+import { LabelDragProvider, LabelDragRow, LabelDropTarget } from "./label-drag";
 import { getLabelUpdates } from "./label-update-mutation";
+import { LabelsInlineEditor } from "./labels-inline-editor";
 import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 type LabelsWorkspacePanelProps = {
@@ -121,20 +108,83 @@ type LabelsWorkspacePanelProps = {
   onOpenSidebar: () => void;
 };
 
-type LabelEdit = {
-  labelId: MailboxLabel["id"];
-} & (
-  | { kind: "name"; value: MailboxLabel["name"] }
-  | { kind: "color"; value: MailboxLabelColor }
-);
+type LabelEditor =
+  | {
+      mode: "create";
+      kind: "label" | "group";
+      groupId: string | null;
+      id: string;
+    }
+  | { mode: "rename"; kind: "label" | "group"; id: string };
 
-type GroupDialogState =
-  | { group: LabelGroup; kind: "edit" }
-  | { kind: "create"; parentId: string | null };
+type ColorEdit = {
+  kind: "label" | "group";
+  id: string;
+  value: MailboxLabelColor;
+};
+
+const rowClassName =
+  "relative flex min-h-9 w-full items-center gap-2 rounded-lg px-2";
+const gutterCellClassName = "flex w-6 shrink-0 justify-center";
+const nameCellClassName =
+  "flex min-w-0 flex-1 items-center gap-1.5 self-stretch @sm:w-1/3 @sm:flex-none";
+const promptCellClassName = "hidden min-w-0 flex-1 items-center @sm:flex";
+const switchCellClassName = "flex w-9 shrink-0 justify-center";
+const menuCellClassName = "flex w-6 shrink-0 justify-center";
 
 const isNonemptyMailboxId = (
   mailboxId: string | null | undefined
 ): mailboxId is string => (mailboxId?.trim() ?? "") !== "";
+
+const renderDelete = ({
+  name,
+  kind,
+  pending,
+  onCancel,
+  onDelete,
+}: {
+  name: string;
+  kind: "label" | "group";
+  pending: boolean;
+  onCancel: () => void;
+  onDelete: () => void;
+}) => (
+  <div className="flex flex-wrap items-center gap-x-4 gap-y-2 py-1.5 ps-10 pe-2">
+    <Text as="p" className="min-w-0 flex-1" size="sm" tone="muted">
+      Delete <span className="text-fg">{name}</span>?{" "}
+      {kind === "group"
+        ? "Its labels move out of the group."
+        : "It will be removed from conversations and automatic rules."}
+    </Text>
+    <ActionFooter className="w-40 max-w-full">
+      <Button
+        disabled={pending}
+        onClick={onCancel}
+        size="xs"
+        variant="secondary"
+      >
+        Cancel
+      </Button>
+      <Button
+        onClick={onDelete}
+        pending={pending}
+        size="xs"
+        variant="destructive"
+      >
+        Delete
+      </Button>
+    </ActionFooter>
+  </div>
+);
+
+const renderTreeGuide = (last: boolean) => (
+  <span aria-hidden="true" className="relative w-5 shrink-0 self-stretch">
+    {last ? null : (
+      <span className="absolute inset-y-0 start-1/2 border-s border-border" />
+    )}
+    <span className="absolute start-1/2 top-0 h-1/2 w-2 rounded-es-md border-s border-b border-border" />
+  </span>
+);
 
 export const LabelsWorkspacePanel = ({
   canManage,
@@ -144,23 +194,22 @@ export const LabelsWorkspacePanel = ({
   onOpenSidebar,
 }: LabelsWorkspacePanelProps) => {
   const queryClient = useQueryClient();
-  const id = useId();
-  const [isCreatingLabel, setIsCreatingLabel] = useState(false);
-  const [newLabelColor, setNewLabelColor] = useState<MailboxLabelColor>("gray");
-  const [newLabelName, setNewLabelName] = useState("");
-  const [newLabelGroupId, setNewLabelGroupId] = useState<string | null>(null);
+  const reducedMotion = useReducedMotion();
+  const [editor, setEditor] = useState<LabelEditor | null>(null);
+  const [colorEdit, setColorEdit] = useState<ColorEdit | null>(null);
   const [labelSearch, setLabelSearch] = useState("");
   const [collapsedGroupIds, setCollapsedGroupIds] = useState<
     ReadonlySet<string>
   >(() => new Set());
-  const [groupDialog, setGroupDialog] = useState<GroupDialogState | null>(null);
   const [deletingGroup, setDeletingGroup] = useState<LabelGroup | null>(null);
-  const [labelEdit, setLabelEdit] = useState<LabelEdit | null>(null);
-  const focusNameInput = useCallback((input: HTMLInputElement | null) => {
-    input?.focus();
-    input?.select();
-  }, []);
   const [deletingLabel, setDeletingLabel] = useState<MailboxLabel | null>(null);
+  const deleteLabel = useDeleteMailboxLabel({
+    mailboxId: mailboxId ?? "",
+    mailboxProvider,
+    onDeleted: () => {
+      setDeletingLabel(null);
+    },
+  });
   const [automationLabelId, setAutomationLabelId] = useState<string | null>(
     null
   );
@@ -218,22 +267,28 @@ export const LabelsWorkspacePanel = ({
     queryClient,
   });
   const labelUpdateState = useSelector(labelUpdates.state);
-  const userLabels = getUserLabels(
+  const { data: organizationData, isError: isOrganizationError } = useQuery(
+    labelOrganizationQueryOptions(
+      mailboxId ?? "",
+      isNonemptyMailboxId(mailboxId)
+    )
+  );
+  const organization = organizationData ?? emptyLabelOrganization;
+
+  const sidebarLabels = getUserLabels(
     labelUpdates.project(labels ?? [], labelUpdateState)
   );
-  const automationLabel = userLabels.find(
-    (label) => label.id === automationLabelId
-  );
+  const userLabels = orderMailboxLabels(sidebarLabels, organization.labelOrder);
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
       : readHiddenLabelIds(mailboxId);
   const effectiveHiddenLabelIds = computeEffectiveHiddenLabelIds(
     mailboxProvider,
-    userLabels,
+    sidebarLabels,
     hiddenLabelIds
   );
-  const visibleLabelCount = userLabels.filter(
+  const visibleLabelCount = sidebarLabels.filter(
     (label) => !effectiveHiddenLabelIds.has(label.id)
   ).length;
 
@@ -246,16 +301,8 @@ export const LabelsWorkspacePanel = ({
   );
   const isSavingLabel =
     labelUpdateState.pending.length > 0 || updateLabelDetailsMutation.isPending;
-  const areLabelActionsDisabled =
-    !canManage || isSavingLabel || labelEdit !== null;
+  const areLabelActionsDisabled = !canManage || isSavingLabel;
 
-  const { data: organizationData, isError: isOrganizationError } = useQuery(
-    labelOrganizationQueryOptions(
-      mailboxId ?? "",
-      isNonemptyMailboxId(mailboxId)
-    )
-  );
-  const organization = organizationData ?? emptyLabelOrganization;
   const defaultGroupColor =
     mailboxLabelNamedColorSchema.options.find(
       (color) =>
@@ -285,20 +332,9 @@ export const LabelsWorkspacePanel = ({
     organizationMutation.isPending;
 
   const labelGroupTree = createLabelGroupTree(organization);
-  const childGroupsByParentId = new Map<string | null, LabelGroup[]>();
-  for (const group of organization.groups.toSorted((first, second) =>
+  const groups = organization.groups.toSorted((first, second) =>
     first.name.localeCompare(second.name)
-  )) {
-    const parentId =
-      group.parentId !== null &&
-      labelGroupTree.getGroup(group.parentId) !== undefined
-        ? group.parentId
-        : null;
-    childGroupsByParentId.set(parentId, [
-      ...(childGroupsByParentId.get(parentId) ?? []),
-      group,
-    ]);
-  }
+  );
   const labelsByGroupId = new Map<string | null, MailboxLabel[]>();
   for (const label of userLabels) {
     const groupId = labelGroupTree.getLabelGroupId(label.id);
@@ -307,18 +343,6 @@ export const LabelsWorkspacePanel = ({
       label,
     ]);
   }
-  const groupOptions: LabelGroupOption[] = [];
-  const addGroupOptions = (parentId: string | null) => {
-    for (const group of childGroupsByParentId.get(parentId) ?? []) {
-      groupOptions.push({
-        color: group.color,
-        id: group.id,
-        label: labelGroupTree.getGroupPath(group.id) ?? group.name,
-      });
-      addGroupOptions(group.id);
-    }
-  };
-  addGroupOptions(null);
 
   const setMailboxHiddenLabelIds = (
     updater: (current: Set<string>) => Set<string>
@@ -369,19 +393,22 @@ export const LabelsWorkspacePanel = ({
     });
   };
 
-  const openNewLabelDialog = (groupId: string | null) => {
-    setNewLabelName("");
-    setNewLabelColor("gray");
-    setNewLabelGroupId(groupId);
-    setIsCreatingLabel(true);
+  const openCreator = (
+    kind: "label" | "group",
+    groupId: string | null = null
+  ) => {
+    setLabelSearch("");
+    if (groupId !== null) {
+      expandGroup(groupId);
+    }
+    setEditor({ groupId, id: crypto.randomUUID(), kind, mode: "create" });
   };
 
-  const createLabel = async () => {
-    if (!isNonemptyMailboxId(mailboxId)) {
-      return;
-    }
-    const name = newLabelName.trim();
-    if (name === "") {
+  const createLabel = async (
+    { name, color }: { name: string; color: MailboxLabelColor },
+    groupId: string | null
+  ) => {
+    if (!isNonemptyMailboxId(mailboxId) || !canManage) {
       return;
     }
     if (
@@ -399,7 +426,7 @@ export const LabelsWorkspacePanel = ({
         const current = getDemoLabelAutomation(mailboxId);
         const demoLabel: MailboxLabel = {
           autoLabel: null,
-          color: newLabelColor,
+          color,
           description: null,
           id: `demo:label:${crypto.randomUUID()}`,
           inclusionCriteria: null,
@@ -416,7 +443,7 @@ export const LabelsWorkspacePanel = ({
         labelId = demoLabel.id;
       } else {
         const label = await createLabelMutation.mutateAsync({
-          color: newLabelColor,
+          color,
           mailboxId,
           name,
         });
@@ -428,10 +455,7 @@ export const LabelsWorkspacePanel = ({
           return current;
         });
       }
-      setNewLabelColor("gray");
-      setNewLabelName("");
       await invalidateLabels();
-      setIsCreatingLabel(false);
     } catch (error) {
       toastError(error, {
         boundary: "labels-panel",
@@ -439,39 +463,32 @@ export const LabelsWorkspacePanel = ({
       });
       return;
     }
-    if (
-      newLabelGroupId !== null &&
-      labelGroupTree.getGroup(newLabelGroupId) !== undefined &&
-      (await runOrganizationAction(
-        { groupId: newLabelGroupId, kind: "move-label", labelId },
+    if (groupId !== null) {
+      await runOrganizationAction(
+        {
+          groupId,
+          kind: "move-label",
+          labelId,
+          labelOrder: [...userLabels.map(({ id }) => id), labelId],
+        },
         "Label created, but it could not be added to the group. Use Move to group to try again."
-      ))
-    ) {
-      expandGroup(newLabelGroupId);
+      );
     }
-    setNewLabelGroupId(null);
+    setEditor((current) => (current === editor ? null : current));
   };
 
-  const submitGroupDialog = async (
-    dialog: GroupDialogState,
-    draft: Omit<LabelGroup, "id">
-  ) => {
-    const saved = await runOrganizationAction(
-      dialog.kind === "edit"
-        ? { ...draft, groupId: dialog.group.id, kind: "update-group" }
-        : { ...draft, kind: "create-group" },
-      dialog.kind === "edit"
-        ? "Could not update group."
-        : "Could not create group."
+  const saveGroup = async (
+    draft: Pick<LabelGroup, "name" | "color">,
+    groupId?: string
+  ) =>
+    await runOrganizationAction(
+      groupId === undefined
+        ? { ...draft, kind: "create-group", parentId: null }
+        : { ...draft, groupId, kind: "update-group", parentId: null },
+      groupId === undefined
+        ? "Could not create group."
+        : "Could not update group."
     );
-    if (saved) {
-      const { parentId } = draft;
-      if (parentId !== null) {
-        expandGroup(parentId);
-      }
-      setGroupDialog(null);
-    }
-  };
 
   const deleteGroup = async (group: LabelGroup) => {
     if (
@@ -508,8 +525,6 @@ export const LabelsWorkspacePanel = ({
         });
       }
       await invalidateLabels();
-      setAutomationLabelId(null);
-      toast.success("Auto-label updated.");
       return true;
     } catch (error) {
       toastError(error, {
@@ -520,30 +535,14 @@ export const LabelsWorkspacePanel = ({
     }
   };
 
-  const saveLabelEdit = (label: MailboxLabel, edit: LabelEdit) => {
-    if (!isNonemptyMailboxId(mailboxId) || !canManage) {
-      return;
+  const saveLabelName = (label: MailboxLabel, name: string) => {
+    if (label.name !== name) {
+      updateLabelMutation.mutate({
+        change: { kind: "name", name },
+        labelId: label.id,
+      });
     }
-    const name = edit.kind === "name" ? edit.value.trim() : label.name;
-    if (name === "") {
-      toast.error("Enter a label name.");
-      return;
-    }
-    setLabelEdit((current) => (current === edit ? null : current));
-    if (
-      edit.kind === "name"
-        ? name === label.name
-        : edit.value === (label.color ?? "gray")
-    ) {
-      return;
-    }
-    updateLabelMutation.mutate({
-      change:
-        edit.kind === "name"
-          ? { kind: "name", name }
-          : { color: edit.value, kind: "color" },
-      labelId: label.id,
-    });
+    setEditor(null);
   };
 
   const toggleSidebarVisibility = (label: MailboxLabel) => {
@@ -577,15 +576,39 @@ export const LabelsWorkspacePanel = ({
     });
   };
 
-  const moveLabel = async (label: MailboxLabel, groupId: string | null) => {
-    if (
-      labelGroupTree.getLabelGroupId(label.id) !== groupId &&
-      (await runOrganizationAction(
-        { groupId, kind: "move-label", labelId: label.id },
-        "Could not move label."
-      )) &&
-      groupId !== null
-    ) {
+  const moveLabel = async (
+    labelId: string,
+    groupId: string | null,
+    target?: { id: string; edge: "before" | "after" }
+  ) => {
+    if (areGroupActionsDisabled || target?.id === labelId) {
+      return;
+    }
+    const destination = (labelsByGroupId.get(groupId) ?? []).filter(
+      (label) => label.id !== labelId
+    );
+    const targetIndex = destination.findIndex(
+      (label) => label.id === target?.id
+    );
+    if (target !== undefined && targetIndex === -1) {
+      return;
+    }
+    const beforeLabelId =
+      targetIndex === -1
+        ? null
+        : (destination[targetIndex + (target?.edge === "after" ? 1 : 0)]?.id ??
+          null);
+    const saved = await runOrganizationAction(
+      {
+        beforeLabelId,
+        groupId,
+        kind: "move-label",
+        labelId,
+        labelOrder: userLabels.map(({ id }) => id),
+      },
+      "Could not move label."
+    );
+    if (saved && groupId !== null) {
       expandGroup(groupId);
     }
   };
@@ -600,623 +623,720 @@ export const LabelsWorkspacePanel = ({
     });
   };
 
+  const query = labelSearch.trim().toLocaleLowerCase();
+  const matches = (label: MailboxLabel) =>
+    label.name.toLocaleLowerCase().includes(query);
+  const groupMatches = (group: LabelGroup) =>
+    group.name.toLocaleLowerCase().includes(query);
+  const matchesGroupMember = (groupId: string | null) => {
+    const group = groups.find(({ id }) => id === groupId);
+    return (label: MailboxLabel) =>
+      matches(label) || (group !== undefined && groupMatches(group));
+  };
+  const ungrouped = (labelsByGroupId.get(null) ?? []).filter(matches);
+  const dragDisabled = areGroupActionsDisabled || query !== "";
+
+  const renderPresence = (
+    key: string,
+    show: boolean,
+    content: ReactNode,
+    as: "div" | "li" = "div"
+  ) => {
+    const Presence = as === "li" ? m.li : m.div;
+    return (
+      <AnimatePresence initial={false}>
+        {show ? (
+          <Presence
+            animate="open"
+            className="overflow-clip"
+            exit="closed"
+            initial="closed"
+            key={key}
+            transition={{
+              duration: reducedMotion === true ? 0 : 0.16,
+              ease: [0.23, 1, 0.32, 1],
+            }}
+            variants={{
+              closed: { height: 0, opacity: 0 },
+              open: { height: "auto", opacity: 1 },
+            }}
+          >
+            {content}
+          </Presence>
+        ) : null}
+      </AnimatePresence>
+    );
+  };
+
+  const renderTrailingSpacers = () => (
+    <>
+      <span aria-hidden="true" className="hidden min-w-0 flex-1 @sm:block" />
+      <span aria-hidden="true" className={switchCellClassName} />
+      <span aria-hidden="true" className={menuCellClassName} />
+    </>
+  );
+
   const renderLabelRow = (label: MailboxLabel) => {
     const isShown = !effectiveHiddenLabelIds.has(label.id);
-    const nameEdit =
-      labelEdit?.kind === "name" && labelEdit.labelId === label.id
-        ? labelEdit
+    const editingColor =
+      colorEdit?.kind === "label" && colorEdit.id === label.id
+        ? colorEdit
         : null;
-    const colorEdit =
-      labelEdit?.kind === "color" && labelEdit.labelId === label.id
-        ? labelEdit
-        : null;
+    const groupId = labelGroupTree.getLabelGroupId(label.id);
+    const siblings = labelsByGroupId.get(groupId) ?? [];
+    const index = siblings.findIndex(({ id }) => id === label.id);
+    const previous = index > 0 ? siblings.at(index - 1) : undefined;
+    const next = siblings.at(index + 1);
+    const visibleSiblings = siblings.filter(matchesGroupMember(groupId));
+    const isLastVisible = visibleSiblings.at(-1)?.id === label.id;
+    const renaming =
+      editor?.mode === "rename" &&
+      editor.kind === "label" &&
+      editor.id === label.id;
+    const editingPrompt = automationLabelId === label.id;
     const prompt = getAutoLabelPrompt(label);
-
     return (
-      <li
-        className={settingsSurfaceVariants({ variant: "insetRow" })}
-        key={label.id}
-      >
-        <MailboxColorPicker
-          className="flex shrink-0"
-          disabled={!canManage || (labelEdit !== null && !colorEdit)}
-          label={`Edit color for ${label.name}`}
-          onChange={(value) => {
-            if (colorEdit) {
-              setLabelEdit({ ...colorEdit, value });
-            }
-          }}
-          onOpenChange={(open) => {
-            if (open && canManage && labelEdit === null) {
-              setLabelEdit({
-                kind: "color",
-                labelId: label.id,
-                value: label.color ?? "gray",
-              });
-            } else if (!open && colorEdit) {
-              saveLabelEdit(label, colorEdit);
-            }
-          }}
-          open={colorEdit !== null}
-          trigger="swatch"
-          value={colorEdit?.value ?? label.color ?? "gray"}
-        />
-        <div className="min-w-0 flex-1">
-          {nameEdit ? (
-            <Input
-              aria-label={`Name for ${label.name}`}
-              chrome="inline"
-              disabled={!canManage}
-              maxLength={225}
-              onBlur={() => {
-                saveLabelEdit(label, nameEdit);
+      <Fragment key={label.id}>
+        <LabelDragRow
+          className={cn(rowClassName, {
+            "flex-wrap @sm:flex-nowrap": editingPrompt,
+          })}
+          disabled={dragDisabled}
+          groupId={groupId}
+          labelId={label.id}
+          name={label.name}
+        >
+          <div className={nameCellClassName}>
+            {groupId === null ? null : renderTreeGuide(isLastVisible)}
+            <MailboxColorPicker
+              className="flex shrink-0"
+              disabled={areLabelActionsDisabled && editingColor === null}
+              label={`Edit color for ${label.name}`}
+              onChange={(value) => {
+                setColorEdit({ id: label.id, kind: "label", value });
               }}
-              onChange={(event) => {
-                setLabelEdit({
-                  ...nameEdit,
-                  value: event.currentTarget.value,
-                });
-              }}
-              onKeyDown={(event) => {
-                if (event.nativeEvent.isComposing) {
-                  return;
-                }
-                if (event.key === "Escape") {
-                  event.preventDefault();
-                  setLabelEdit(null);
-                } else if (event.key === "Enter") {
-                  event.preventDefault();
-                  event.currentTarget.blur();
+              onOpenChange={(open) => {
+                if (open) {
+                  setColorEdit({
+                    id: label.id,
+                    kind: "label",
+                    value: label.color ?? "gray",
+                  });
+                } else if (editingColor !== null) {
+                  setColorEdit(null);
+                  if (editingColor.value !== (label.color ?? "gray")) {
+                    updateLabelMutation.mutate({
+                      change: { color: editingColor.value, kind: "color" },
+                      labelId: label.id,
+                    });
+                  }
                 }
               }}
-              ref={focusNameInput}
-              required
-              value={nameEdit.value}
+              open={editingColor !== null}
+              trigger="swatch"
+              value={editingColor?.value ?? label.color ?? "gray"}
             />
-          ) : (
-            <Button
-              aria-label={`Edit name for ${label.name}`}
-              className="w-full"
-              disabled={!canManage || labelEdit !== null}
-              onClick={() => {
-                setLabelEdit({
-                  kind: "name",
-                  labelId: label.id,
-                  value: label.name,
-                });
-              }}
-              variant="inline-edit"
-            >
-              <span className="truncate">{label.name}</span>
-            </Button>
-          )}
-        </div>
-        {mailboxProvider === "managed" ? (
-          <span className="shrink-0 text-micro text-muted-fg tabular-nums">
-            {managedLabelCountById.get(label.id) ?? 0}
-          </span>
-        ) : null}
-        <div className="flex min-w-0 flex-1 items-center gap-1">
-          <Text
-            as="span"
-            className="min-w-0 flex-1"
-            size="sm"
-            tone="muted"
-            truncate
-          >
-            {prompt || "Add prompt…"}
-          </Text>
-          <IconButtonTooltip label={`Edit prompt for ${label.name}`}>
-            <Button
-              aria-haspopup="dialog"
-              aria-label={`Edit prompt for ${label.name}`}
-              disabled={areLabelActionsDisabled}
-              onClick={() => {
-                setAutomationLabelId(label.id);
-              }}
-              size="icon-xs"
-              variant="ghost"
-            >
-              <Icon aria-hidden icon={Edit01Icon} />
-            </Button>
-          </IconButtonTooltip>
-        </div>
-        <IconButtonTooltip label={`Auto-label ${label.name}`}>
-          <Switch
-            aria-label={`Auto-label ${label.name}`}
-            checked={label.autoLabel?.enabled !== false}
-            disabled={areLabelActionsDisabled}
-            onCheckedChange={(enabled) => {
-              void saveLabelAutomation(label, {
-                ...(label.autoLabel ?? {
-                  domains: [],
-                  keywordScope: "anywhere",
-                  keywords: [],
-                  matchMode: "all",
-                  prompt: label.inclusionCriteria ?? "",
-                  recipients: [],
-                  senders: [],
-                }),
-                enabled,
-              });
-            }}
-            size="sm"
-          >
-            <SwitchThumb />
-          </Switch>
-        </IconButtonTooltip>
-        <DropdownMenu>
-          <IconButtonTooltip label={`Options for ${label.name}`}>
-            <DropdownMenuTrigger
-              appearance="icon"
-              aria-label={`Options for ${label.name}`}
-              className="-me-2"
-              disabled={areLabelActionsDisabled}
-            >
-              <Icon aria-hidden icon={MoreVerticalIcon} />
-            </DropdownMenuTrigger>
-          </IconButtonTooltip>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              disabled={areLabelActionsDisabled}
-              onSelect={() => {
-                toggleSidebarVisibility(label);
-              }}
-            >
-              {isShown ? (
-                <EyeOffIcon aria-hidden className="size-4" />
-              ) : (
-                <EyeIcon aria-hidden className="size-4" />
-              )}
-              {isShown ? "Hide from sidebar" : "Show in sidebar"}
-            </DropdownMenuItem>
-            {organization.groups.length > 0 ? (
-              <DropdownMenuSubmenu>
-                <DropdownMenuSubmenuTrigger disabled={areGroupActionsDisabled}>
-                  Move to group
-                </DropdownMenuSubmenuTrigger>
-                <DropdownMenuSubmenuContent>
-                  {[
-                    { color: null, id: null, label: "No group" },
-                    ...groupOptions,
-                  ].map((option) => (
-                    <DropdownMenuCheckboxItem
-                      checked={
-                        labelGroupTree.getLabelGroupId(label.id) === option.id
-                      }
-                      closeOnSelect
-                      disabled={areGroupActionsDisabled}
-                      key={option.id ?? "none"}
-                      onCheckedChange={() => {
-                        void moveLabel(label, option.id);
-                      }}
-                    >
-                      {option.id === null ? null : (
-                        <MailboxLabelSwatch color={option.color} kind="group" />
-                      )}
-                      <span className="min-w-0 truncate">{option.label}</span>
-                    </DropdownMenuCheckboxItem>
-                  ))}
-                </DropdownMenuSubmenuContent>
-              </DropdownMenuSubmenu>
+            {renaming ? (
+              <LabelsInlineEditor
+                initialColor={label.color ?? "gray"}
+                initialName={label.name}
+                kind="label"
+                mode="rename"
+                onCancel={() => {
+                  setEditor(null);
+                }}
+                onSubmit={({ name }) => {
+                  saveLabelName(label, name);
+                }}
+              />
+            ) : (
+              <Button
+                aria-label={`Rename ${label.name}`}
+                disabled={areLabelActionsDisabled}
+                onClick={() => {
+                  setEditor({ id: label.id, kind: "label", mode: "rename" });
+                }}
+                size="text"
+                variant="inline-edit"
+              >
+                <span className="truncate">{label.name}</span>
+              </Button>
+            )}
+            {mailboxProvider === "managed" && !renaming ? (
+              <span className="shrink-0 ps-0.5 text-caption text-muted-fg tabular-nums">
+                {managedLabelCountById.get(label.id) ?? 0}
+              </span>
             ) : null}
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              disabled={areLabelActionsDisabled}
-              onSelect={() => {
-                setDeletingLabel(label);
+          </div>
+          <div
+            className={cn({
+              "order-last flex w-full min-w-0 ps-8 pb-2 @sm:order-none @sm:w-auto @sm:flex-1 @sm:py-2 @sm:ps-0":
+                editingPrompt,
+              [promptCellClassName]: !editingPrompt,
+            })}
+          >
+            {editingPrompt ? (
+              <AutoLabelEditor
+                key={`${mailboxId}:${label.id}`}
+                label={label}
+                onCancel={() => {
+                  setAutomationLabelId(null);
+                }}
+                onSave={async (settings) => {
+                  const saved = await saveLabelAutomation(label, settings);
+                  if (saved) {
+                    setAutomationLabelId((current) =>
+                      current === label.id ? null : current
+                    );
+                  }
+                  return saved;
+                }}
+              />
+            ) : (
+              <Button
+                aria-label={`Edit auto-label prompt for ${label.name}`}
+                className="max-w-full"
+                disabled={areLabelActionsDisabled}
+                onClick={() => {
+                  setAutomationLabelId(label.id);
+                }}
+                size="text"
+                variant="inline-edit"
+              >
+                <Text as="span" size="sm" tone="muted" truncate>
+                  {prompt === "" ? "Add prompt…" : prompt}
+                </Text>
+              </Button>
+            )}
+          </div>
+          <div className={switchCellClassName}>
+            <IconButtonTooltip label={`Auto-label ${label.name}`}>
+              <Switch
+                aria-label={`Auto-label ${label.name}`}
+                checked={label.autoLabel?.enabled !== false}
+                disabled={areLabelActionsDisabled}
+                onCheckedChange={(enabled) => {
+                  void saveLabelAutomation(label, {
+                    ...(label.autoLabel ?? {
+                      domains: [],
+                      keywordScope: "anywhere",
+                      keywords: [],
+                      matchMode: "all",
+                      prompt: label.inclusionCriteria ?? "",
+                      recipients: [],
+                      senders: [],
+                    }),
+                    enabled,
+                  });
+                }}
+                size="sm"
+              >
+                <SwitchThumb />
+              </Switch>
+            </IconButtonTooltip>
+          </div>
+          <div className={menuCellClassName}>
+            <DropdownMenu>
+              <IconButtonTooltip label={`Options for ${label.name}`}>
+                <DropdownMenuTrigger
+                  aria-label={`Options for ${label.name}`}
+                  disabled={areLabelActionsDisabled}
+                  render={<Button size="icon-xs" variant="ghost" />}
+                >
+                  <Icon aria-hidden icon={MoreHorizontalIcon} />
+                </DropdownMenuTrigger>
+              </IconButtonTooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setEditor({ id: label.id, kind: "label", mode: "rename" });
+                  }}
+                >
+                  <Icon aria-hidden icon={PencilEdit02Icon} />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setAutomationLabelId(label.id);
+                  }}
+                >
+                  <Icon aria-hidden icon={AiMagicIcon} />
+                  Edit prompt
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    toggleSidebarVisibility(label);
+                  }}
+                >
+                  {isShown ? (
+                    <EyeOffIcon aria-hidden className="size-4" />
+                  ) : (
+                    <EyeIcon aria-hidden className="size-4" />
+                  )}
+                  {isShown ? "Hide from sidebar" : "Show in sidebar"}
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  disabled={areGroupActionsDisabled || previous === undefined}
+                  onSelect={() => {
+                    if (previous !== undefined) {
+                      void moveLabel(label.id, groupId, {
+                        edge: "before",
+                        id: previous.id,
+                      });
+                    }
+                  }}
+                >
+                  <Icon aria-hidden icon={ArrowUp02Icon} />
+                  Move up
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  disabled={areGroupActionsDisabled || next === undefined}
+                  onSelect={() => {
+                    if (next !== undefined) {
+                      void moveLabel(label.id, groupId, {
+                        edge: "after",
+                        id: next.id,
+                      });
+                    }
+                  }}
+                >
+                  <Icon aria-hidden icon={ArrowDown02Icon} />
+                  Move down
+                </DropdownMenuItem>
+                {groups.length > 0 ? (
+                  <DropdownMenuSubmenu>
+                    <DropdownMenuSubmenuTrigger
+                      disabled={areGroupActionsDisabled}
+                    >
+                      <Icon aria-hidden icon={FolderTransferIcon} />
+                      Move to group
+                    </DropdownMenuSubmenuTrigger>
+                    <DropdownMenuSubmenuContent>
+                      {[
+                        { color: null, id: null, name: "No group" },
+                        ...groups,
+                      ].map((option) => (
+                        <DropdownMenuCheckboxItem
+                          checked={groupId === option.id}
+                          closeOnSelect
+                          disabled={areGroupActionsDisabled}
+                          key={option.id ?? "none"}
+                          onCheckedChange={() => {
+                            if (groupId !== option.id) {
+                              void moveLabel(label.id, option.id);
+                            }
+                          }}
+                        >
+                          {option.id === null ? null : (
+                            <MailboxLabelSwatch
+                              color={option.color}
+                              kind="group"
+                            />
+                          )}
+                          <span className="min-w-0 truncate">
+                            {option.name}
+                          </span>
+                        </DropdownMenuCheckboxItem>
+                      ))}
+                    </DropdownMenuSubmenuContent>
+                  </DropdownMenuSubmenu>
+                ) : null}
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setDeletingLabel(label);
+                  }}
+                  tone="destructive"
+                >
+                  <Icon aria-hidden icon={Delete01Icon} />
+                  Delete
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </LabelDragRow>
+        {renderPresence(
+          `delete:${label.id}`,
+          deletingLabel?.id === label.id,
+          renderDelete({
+            kind: "label",
+            name: label.name,
+            onCancel: () => {
+              setDeletingLabel(null);
+            },
+            onDelete: () => {
+              deleteLabel.mutate(label.id);
+            },
+            pending: deleteLabel.isPending,
+          }),
+          "li"
+        )}
+      </Fragment>
+    );
+  };
+
+  const renderCreator = (groupId: string | null, hasChildren: boolean) =>
+    renderPresence(
+      "create",
+      editor?.mode === "create" && editor.groupId === groupId,
+      <div className={cn(rowClassName, "bg-section")}>
+        <span aria-hidden="true" className={gutterCellClassName} />
+        <div className={nameCellClassName}>
+          {groupId === null ? null : renderTreeGuide(!hasChildren)}
+          {editor?.mode === "create" ? (
+            <LabelsInlineEditor
+              initialColor={
+                editor.kind === "group" ? defaultGroupColor : "gray"
+              }
+              initialName=""
+              key={editor.id}
+              kind={editor.kind}
+              mode="create"
+              onCancel={() => {
+                setEditor((current) => (current === editor ? null : current));
               }}
-              tone="destructive"
+              onSubmit={async (draft) => {
+                if (editor.kind === "group") {
+                  if (await saveGroup(draft)) {
+                    setEditor((current) =>
+                      current === editor ? null : current
+                    );
+                  }
+                } else {
+                  await createLabel(draft, groupId);
+                }
+              }}
+            />
+          ) : null}
+        </div>
+        {renderTrailingSpacers()}
+      </div>
+    );
+
+  const renderGroup = (group: LabelGroup) => {
+    const children = (labelsByGroupId.get(group.id) ?? []).filter(
+      matchesGroupMember(group.id)
+    );
+    if (children.length === 0 && !groupMatches(group)) {
+      return null;
+    }
+    const labelCount = labelsByGroupId.get(group.id)?.length ?? 0;
+    const expanded = query !== "" || !collapsedGroupIds.has(group.id);
+    const editingColor =
+      colorEdit?.kind === "group" && colorEdit.id === group.id
+        ? colorEdit
+        : null;
+    const renaming =
+      editor?.mode === "rename" &&
+      editor.kind === "group" &&
+      editor.id === group.id;
+    return (
+      <li key={group.id}>
+        <LabelDropTarget
+          className={rowClassName}
+          disabled={dragDisabled}
+          groupId={group.id}
+        >
+          <div className={gutterCellClassName}>
+            <IconButtonTooltip
+              label={expanded ? "Collapse group" : "Expand group"}
             >
-              <Icon aria-hidden icon={Delete01Icon} />
-              Delete
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+              <Button
+                aria-expanded={expanded}
+                aria-label={`${expanded ? "Collapse" : "Expand"} ${group.name}`}
+                disabled={query !== ""}
+                onClick={() => {
+                  toggleGroup(group.id);
+                }}
+                size="icon-xs"
+                variant="ghost"
+              >
+                <span
+                  className={cn(
+                    "flex transition-transform duration-150 ease-out motion-reduce:transition-none",
+                    { "rotate-90": expanded }
+                  )}
+                >
+                  <Icon aria-hidden icon={ArrowRight01Icon} />
+                </span>
+              </Button>
+            </IconButtonTooltip>
+          </div>
+          <div className={nameCellClassName}>
+            <MailboxColorPicker
+              className="flex shrink-0"
+              disabled={areGroupActionsDisabled && editingColor === null}
+              label={`Edit color for ${group.name}`}
+              onChange={(value) => {
+                setColorEdit({ id: group.id, kind: "group", value });
+              }}
+              onOpenChange={(open) => {
+                if (open) {
+                  setColorEdit({
+                    id: group.id,
+                    kind: "group",
+                    value: group.color,
+                  });
+                } else if (editingColor !== null) {
+                  setColorEdit(null);
+                  if (editingColor.value !== group.color) {
+                    void saveGroup(
+                      { color: editingColor.value, name: group.name },
+                      group.id
+                    );
+                  }
+                }
+              }}
+              open={editingColor !== null}
+              swatchShape="circle"
+              trigger="swatch"
+              value={editingColor?.value ?? group.color}
+            />
+            {renaming ? (
+              <LabelsInlineEditor
+                initialColor={group.color}
+                initialName={group.name}
+                kind="group"
+                mode="rename"
+                onCancel={() => {
+                  setEditor(null);
+                }}
+                onSubmit={async (draft) => {
+                  if (await saveGroup(draft, group.id)) {
+                    setEditor((current) =>
+                      current === editor ? null : current
+                    );
+                  }
+                }}
+              />
+            ) : (
+              <>
+                <Button
+                  aria-label={`Rename ${group.name}`}
+                  disabled={areGroupActionsDisabled}
+                  onClick={() => {
+                    setEditor({ id: group.id, kind: "group", mode: "rename" });
+                  }}
+                  size="text"
+                  variant="inline-edit"
+                >
+                  <span className="truncate">{group.name}</span>
+                </Button>
+                <span className="shrink-0 ps-0.5 text-caption text-muted-fg tabular-nums">
+                  {labelCount}
+                </span>
+              </>
+            )}
+          </div>
+          <span
+            aria-hidden="true"
+            className="hidden min-w-0 flex-1 @sm:block"
+          />
+          <span aria-hidden="true" className={switchCellClassName} />
+          <div className={menuCellClassName}>
+            <DropdownMenu>
+              <IconButtonTooltip label={`Options for ${group.name}`}>
+                <DropdownMenuTrigger
+                  aria-label={`Options for ${group.name}`}
+                  disabled={areGroupActionsDisabled}
+                  render={<Button size="icon-xs" variant="ghost" />}
+                >
+                  <Icon aria-hidden icon={MoreHorizontalIcon} />
+                </DropdownMenuTrigger>
+              </IconButtonTooltip>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem
+                  onSelect={() => {
+                    openCreator("label", group.id);
+                  }}
+                >
+                  <Icon aria-hidden icon={Add01Icon} />
+                  New label in group
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setEditor({ id: group.id, kind: "group", mode: "rename" });
+                  }}
+                >
+                  <Icon aria-hidden icon={PencilEdit02Icon} />
+                  Rename
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                  onSelect={() => {
+                    setDeletingGroup(group);
+                  }}
+                  tone="destructive"
+                >
+                  <Icon aria-hidden icon={Delete01Icon} />
+                  Delete group
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        </LabelDropTarget>
+        {renderPresence(
+          `delete:${group.id}`,
+          deletingGroup?.id === group.id,
+          renderDelete({
+            kind: "group",
+            name: group.name,
+            onCancel: () => {
+              setDeletingGroup(null);
+            },
+            onDelete: () => void deleteGroup(group),
+            pending: organizationMutation.isPending,
+          })
+        )}
+        {renderPresence(
+          `children:${group.id}`,
+          expanded,
+          <>
+            {renderCreator(group.id, children.length > 0)}
+            <ul>{children.map(renderLabelRow)}</ul>
+          </>
+        )}
       </li>
     );
   };
 
-  const deletingGroupParent =
-    deletingGroup?.parentId === null || deletingGroup === null
-      ? undefined
-      : labelGroupTree.getGroup(deletingGroup.parentId);
-  const searchQuery = labelSearch.trim().toLocaleLowerCase();
-  const isSearching = searchQuery !== "";
-
-  const renderBranch = (
-    parentId: string | null,
-    showAll: boolean
-  ): ReactNode[] => {
-    const nodes: ReactNode[] = [];
-    for (const group of childGroupsByParentId.get(parentId) ?? []) {
-      const groupMatches =
-        showAll || group.name.toLocaleLowerCase().includes(searchQuery);
-      const isExpanded = isSearching || !collapsedGroupIds.has(group.id);
-      const children = isExpanded ? renderBranch(group.id, groupMatches) : [];
-      if (!isSearching || groupMatches || children.length > 0) {
-        nodes.push(
-          <LabelGroupRow
-            actionsDisabled={areGroupActionsDisabled}
-            group={group}
-            isExpanded={isExpanded}
-            isSearching={isSearching}
-            key={group.id}
-            onCreateGroup={() => {
-              setGroupDialog({ kind: "create", parentId: group.id });
-            }}
-            onCreateLabel={() => {
-              openNewLabelDialog(group.id);
-            }}
-            onDelete={() => {
-              setDeletingGroup(group);
-            }}
-            onEdit={() => {
-              setGroupDialog({ group, kind: "edit" });
-            }}
-            onToggle={() => {
-              toggleGroup(group.id);
-            }}
-          >
-            {children}
-          </LabelGroupRow>
-        );
-      }
-    }
-    for (const label of labelsByGroupId.get(parentId) ?? []) {
-      if (showAll || label.name.toLocaleLowerCase().includes(searchQuery)) {
-        nodes.push(renderLabelRow(label));
-      }
-    }
-    return nodes;
-  };
-
-  let labelsContent: React.ReactNode;
-  if (areLabelsPending && labels === undefined) {
-    labelsContent = (
-      <p
-        className={cn(
-          "text-body text-muted-fg",
-          settingsSurfaceVariants({ variant: "padding" })
-        )}
-      >
-        {areLabelsPaused ? "Waiting for a connection…" : "Loading labels…"}
-      </p>
-    );
+  const groupRows = groups.map(renderGroup).filter((row) => row !== null);
+  let listStatus: string | null = null;
+  if (areLabelsPending) {
+    listStatus = areLabelsPaused
+      ? "Waiting for a connection…"
+      : "Loading labels…";
   } else if (labelsUnavailable) {
-    labelsContent = (
-      <div
-        className={cn(
-          "flex flex-wrap items-center justify-between gap-3",
-          settingsSurfaceVariants({ variant: "padding" })
-        )}
-        role="alert"
-      >
-        <p className="text-body text-destructive">Could not load labels.</p>
-        <Button
-          onClick={() => {
-            void refetchLabels();
-          }}
-          size="sm"
-          type="button"
-          variant="secondary"
-        >
-          Try again
-        </Button>
-      </div>
-    );
-  } else if (userLabels.length === 0 && organization.groups.length === 0) {
-    labelsContent = (
-      <p
-        className={cn(
-          "text-body text-muted-fg",
-          settingsSurfaceVariants({ variant: "padding" })
-        )}
-      >
-        No labels yet.
-      </p>
-    );
-  } else {
-    const tree = renderBranch(null, !isSearching);
-    labelsContent = (
-      <>
-        <TextField
-          className={cn(
-            // oxlint-disable-next-line shadcn/require-static-classes -- Shared surface scale lives in settings-layout.
-            settingsSurfaceVariants({ variant: "insetRow" }),
-            "relative"
-          )}
-        >
-          <Icon
-            aria-hidden
-            className="pointer-events-none absolute top-1/2 left-4 -translate-y-1/2 @md:left-6"
-            icon={Search01Icon}
-            tone="muted"
-          />
-          <TextFieldInput
-            aria-label="Filter labels and groups"
-            chrome="ghost"
-            // oxlint-disable-next-line shadcn/no-restyle -- Search input leaves room for its leading icon.
-            className="pl-7"
-            onChange={(event) => {
-              setLabelSearch(event.currentTarget.value);
-            }}
-            placeholder="Filter by name"
-            value={labelSearch}
-          />
-        </TextField>
-        {isOrganizationError && organizationData === undefined ? (
-          <p
-            className={cn(
-              "text-body-sm text-muted-fg",
-              settingsSurfaceVariants({ variant: "padding" })
-            )}
-          >
-            Could not load groups. Labels are shown without them.
-          </p>
-        ) : null}
-        {tree.length > 0 ? (
-          <ul>{tree}</ul>
-        ) : (
-          <p
-            className={cn(
-              "text-body text-muted-fg",
-              settingsSurfaceVariants({ variant: "padding" })
-            )}
-          >
-            No labels or groups match.
-          </p>
-        )}
-      </>
-    );
+    listStatus = "Could not load labels.";
+  } else if (isOrganizationError && organizationData === undefined) {
+    listStatus = "Could not load groups.";
+  } else if (
+    ungrouped.length === 0 &&
+    groupRows.length === 0 &&
+    editor?.mode !== "create"
+  ) {
+    listStatus = query === "" ? "No labels yet." : "No labels match.";
   }
-
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-y-auto">
-      <div className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6 sm:py-12">
-        <MailSubviewHeader
-          className="mb-4"
-          closeAction={{ label: "Close labels", onClick: onClose }}
-          onOpenSidebar={onOpenSidebar}
-          title="Labels"
-        >
-          <Button
-            aria-haspopup="dialog"
-            disabled={
-              areGroupActionsDisabled || !isNonemptyMailboxId(mailboxId)
-            }
-            onClick={() => {
-              setGroupDialog({ kind: "create", parentId: null });
-            }}
-            size="sm"
-            type="button"
-            variant="secondary"
+    <LazyMotion features={domAnimation}>
+      <div className="@container flex h-full min-h-0 w-full flex-col">
+        <WorkspaceHeader>
+          <MailSubviewHeader
+            closeAction={{ label: "Close labels", onClick: onClose }}
+            onOpenSidebar={onOpenSidebar}
+            title="Labels"
+            titleClassName="ms-1"
+            titleSize="body"
           >
-            <Icon aria-hidden icon={FolderAddIcon} />
-            New group
-          </Button>
-          <Button
-            aria-haspopup="dialog"
-            disabled={
-              areLabelActionsDisabled || !isNonemptyMailboxId(mailboxId)
-            }
-            onClick={() => {
-              openNewLabelDialog(null);
-            }}
-            size="sm"
-            type="button"
-          >
-            <Icon aria-hidden icon={Add01Icon} />
-            New label
-          </Button>
-        </MailSubviewHeader>
-
-        <SettingsCard>
-          {isNonemptyMailboxId(mailboxId) ? (
-            <AutoLabelSwitch
-              canManage={canManage}
-              key={mailboxId}
-              mailboxId={mailboxId}
-            />
-          ) : null}
-          <SettingsInsetRows density="compact">
-            {labelsContent}
-          </SettingsInsetRows>
-        </SettingsCard>
-      </div>
-
-      <Dialog open={isCreatingLabel} onOpenChange={setIsCreatingLabel}>
-        <DialogContent>
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              if (
-                !createLabelMutation.isPending &&
-                !organizationMutation.isPending
-              ) {
-                void createLabel();
-              }
-            }}
-          >
-            <DialogHeader>
-              <DialogTitle>New label</DialogTitle>
-            </DialogHeader>
-            <DialogBody spacing="3">
-              <Field>
-                <FieldLabel htmlFor={`${id}-new-name`}>Name</FieldLabel>
-                <Input
-                  disabled={!canManage || createLabelMutation.isPending}
-                  id={`${id}-new-name`}
-                  maxLength={225}
-                  onChange={(event) => {
-                    setNewLabelName(event.currentTarget.value);
-                  }}
-                  placeholder="e.g. Work"
-                  required
-                  value={newLabelName}
-                />
-              </Field>
-              <Field>
-                <Text as="p" weight="medium">
-                  Color
-                </Text>
-                <MailboxColorPicker
-                  disabled={!canManage || createLabelMutation.isPending}
-                  label="Label color"
-                  onChange={setNewLabelColor}
-                  value={newLabelColor}
-                />
-              </Field>
-              {groupOptions.length > 0 ? (
-                <Field>
-                  <FieldLabel htmlFor={`${id}-new-group`}>Group</FieldLabel>
-                  <LabelGroupSelect
-                    disabled={
-                      !canManage ||
-                      createLabelMutation.isPending ||
-                      organizationMutation.isPending
-                    }
-                    id={`${id}-new-group`}
-                    noneLabel="No group"
-                    onChange={setNewLabelGroupId}
-                    options={groupOptions}
-                    value={newLabelGroupId}
-                  />
-                </Field>
-              ) : null}
-            </DialogBody>
-            <DialogFooter>
-              <DialogCloseButton
-                disabled={createLabelMutation.isPending}
-                variant="secondary"
-              >
-                Cancel
-              </DialogCloseButton>
-              <Button
-                disabled={
-                  !canManage ||
-                  createLabelMutation.isPending ||
-                  organizationMutation.isPending ||
-                  !newLabelName.trim()
-                }
-                pending={
-                  createLabelMutation.isPending ||
-                  organizationMutation.isPending
-                }
-                pendingLabel="Creating…"
-                type="submit"
-              >
-                Create label
-              </Button>
-            </DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
-
-      {groupDialog ? (
-        <LabelGroupDialog
-          canManage={canManage}
-          defaultColor={defaultGroupColor}
-          group={groupDialog.kind === "edit" ? groupDialog.group : null}
-          groupOptions={
-            groupDialog.kind === "edit"
-              ? groupOptions.filter(
-                  ({ id: optionGroupId }) =>
-                    !labelGroupTree
-                      .getAncestry(optionGroupId)
-                      .some((group) => group.id === groupDialog.group.id)
-                )
-              : groupOptions
-          }
-          initialParentId={
-            groupDialog.kind === "create" ? groupDialog.parentId : null
-          }
-          isPending={organizationMutation.isPending}
-          onCancel={() => {
-            setGroupDialog(null);
-          }}
-          onSubmit={(draft) => {
-            void submitGroupDialog(groupDialog, draft);
-          }}
-        />
-      ) : null}
-
-      <AlertDialog
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeletingGroup(null);
-          }
-        }}
-        open={!!deletingGroup}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete group</AlertDialogTitle>
-            <AlertDialogDescription>
-              {deletingGroupParent
-                ? `Labels and groups inside move to "${deletingGroupParent.name}".`
-                : "Labels and groups inside move to the top level."}{" "}
-              No labels are deleted.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogBody>
-            <p className="text-body text-fg">
-              Delete{" "}
-              {deletingGroup?.name ? `"${deletingGroup.name}"` : "this group"}?
-            </p>
-          </AlertDialogBody>
-          <AlertDialogFooter>
-            <AlertDialogCloseButton variant="secondary">
-              Cancel
-            </AlertDialogCloseButton>
             <Button
-              disabled={organizationMutation.isPending || !deletingGroup}
+              chrome="toolbar"
+              disabled={
+                areGroupActionsDisabled || !isNonemptyMailboxId(mailboxId)
+              }
               onClick={() => {
-                if (deletingGroup) {
-                  void deleteGroup(deletingGroup);
-                }
+                openCreator("group");
               }}
-              pending={organizationMutation.isPending}
-              pendingLabel="Deleting…"
-              variant="destructive"
+              size="sm"
+              variant="secondary"
             >
-              Delete group
+              New group
             </Button>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
-      {automationLabel ? (
-        <AutoLabelEditor
-          canManage={canManage}
-          isPending={updateLabelDetailsMutation.isPending}
-          key={`${mailboxId}:${automationLabel.id}:${JSON.stringify(automationLabel.autoLabel)}`}
-          label={automationLabel}
-          onCancel={() => {
-            setAutomationLabelId(null);
-          }}
-          onSave={async (settings) =>
-            await saveLabelAutomation(automationLabel, settings)
-          }
-        />
-      ) : null}
-
-      <DeleteMailboxLabelDialog
-        label={deletingLabel}
-        mailboxId={mailboxId ?? ""}
-        mailboxProvider={mailboxProvider}
-        onDeleted={(labelId) => {
-          if (labelEdit?.labelId === labelId) {
-            setLabelEdit(null);
-          }
-        }}
-        onOpenChange={(open) => {
-          if (!open) {
-            setDeletingLabel(null);
-          }
-        }}
-        open={deletingLabel !== null && isNonemptyMailboxId(mailboxId)}
-      />
-    </div>
+            <Button
+              chrome="toolbar"
+              disabled={
+                areLabelActionsDisabled || !isNonemptyMailboxId(mailboxId)
+              }
+              onClick={() => {
+                openCreator("label");
+              }}
+              size="sm"
+            >
+              New label
+            </Button>
+          </MailSubviewHeader>
+          <InputGroup chrome="toolbar" className="mt-3">
+            <InputAddon aria-hidden className="ms-3 flex shrink-0 items-center">
+              <Icon icon={Search01Icon} size={14} tone="muted" />
+            </InputAddon>
+            <Input
+              aria-label="Filter labels and groups"
+              chrome="attached"
+              onChange={(event) => {
+                setLabelSearch(event.currentTarget.value);
+              }}
+              placeholder="Filter by name"
+              value={labelSearch}
+            />
+          </InputGroup>
+        </WorkspaceHeader>
+        <div className="min-h-0 flex-1 overflow-y-auto px-2 pb-2">
+          <div
+            className={cn(rowClassName, "min-h-8 text-caption text-muted-fg")}
+          >
+            <span aria-hidden="true" className={gutterCellClassName} />
+            <span className={nameCellClassName}>Name</span>
+            <span className="hidden min-w-0 flex-1 truncate @sm:block">
+              Auto-label prompt
+            </span>
+            {isNonemptyMailboxId(mailboxId) ? (
+              <AutoLabelSwitch
+                canManage={canManage}
+                className="ms-auto min-w-0"
+                key={mailboxId}
+                mailboxId={mailboxId}
+              />
+            ) : null}
+            <span aria-hidden="true" className={menuCellClassName} />
+          </div>
+          <LabelDragProvider
+            onMove={(labelId, groupId, target) =>
+              void moveLabel(labelId, groupId, target)
+            }
+          >
+            {renderCreator(null, true)}
+            {areLabelsPending || labelsUnavailable ? null : (
+              <>
+                <ul>{groupRows}</ul>
+                {!dragDisabled &&
+                groups.length > 0 &&
+                ungrouped.length === 0 ? (
+                  <LabelDropTarget
+                    className={rowClassName}
+                    disabled={dragDisabled}
+                    groupId={null}
+                  >
+                    <span aria-hidden="true" className={gutterCellClassName} />
+                    <Text as="span" size="caption" tone="muted">
+                      Drop here to remove from group
+                    </Text>
+                  </LabelDropTarget>
+                ) : null}
+                <ul>{ungrouped.map(renderLabelRow)}</ul>
+              </>
+            )}
+            {listStatus === null ? null : (
+              <div className="flex flex-wrap items-center gap-3 py-2 ps-10">
+                <Text as="p" size="caption" tone="muted">
+                  {listStatus}
+                </Text>
+                {labelsUnavailable && (
+                  <Button
+                    onClick={() => {
+                      void refetchLabels();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    Try again
+                  </Button>
+                )}
+              </div>
+            )}
+          </LabelDragProvider>
+        </div>
+      </div>
+    </LazyMotion>
   );
 };

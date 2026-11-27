@@ -1644,6 +1644,7 @@ export const DesignSystemShowcase = () => {
                   onClick={() => {
                     setInlineNameDraft(inlineName);
                   }}
+                  size="text"
                   variant="inline-edit"
                 >
                   <span className="truncate">{inlineName}</span>
@@ -1651,7 +1652,7 @@ export const DesignSystemShowcase = () => {
               ) : (
                 <Input
                   aria-label="Example name"
-                  chrome="inline"
+                  chrome="ghost"
                   onBlur={() => {
                     setInlineName(inlineNameDraft.trim() || inlineName);
                     setInlineNameDraft(null);
@@ -1670,6 +1671,7 @@ export const DesignSystemShowcase = () => {
                     }
                   }}
                   ref={focusNameInput}
+                  size="sm"
                   value={inlineNameDraft}
                 />
               )}
