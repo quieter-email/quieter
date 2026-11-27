@@ -13,7 +13,7 @@ import { Icon } from "./icon";
 import { Pill } from "./pill";
 
 export const mailListRowFrameVariants = cva(
-  "group/row relative flex h-19 items-stretch rounded-xl",
+  "group/row relative flex h-16 items-stretch rounded-xl",
   {
     defaultVariants: {
       layout: "stacked",
@@ -24,7 +24,7 @@ export const mailListRowFrameVariants = cva(
           "after:pointer-events-none after:absolute after:inset-y-0 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
-        adaptive: "@3xl:h-14",
+        adaptive: "@3xl:h-12",
         stacked: "",
       },
     },

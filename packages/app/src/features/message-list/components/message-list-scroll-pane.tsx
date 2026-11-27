@@ -34,7 +34,7 @@ import {
   useRef,
 } from "react";
 
-const MESSAGE_ROW_HEIGHT_PX = 76;
+const MESSAGE_ROW_HEIGHT_PX = 64;
 const SELECTION_TRAY_CLEARANCE_PX = 72;
 const MESSAGE_LIST_OVERSCAN = 12;
 const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
@@ -124,7 +124,7 @@ const MessageListLoadingSkeleton = () => (
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-19 animate-pulse items-center gap-3 rounded-xl px-3 @sm:gap-4 @sm:px-4"
+        className="flex h-16 animate-pulse items-center gap-3 rounded-xl px-3 @sm:gap-4 @sm:px-4"
         key={rowId}
       >
         <div className="size-9.5 shrink-0 rounded-lg bg-muted" />
