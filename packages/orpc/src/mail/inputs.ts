@@ -186,6 +186,12 @@ export const mailInputSchemas = {
   listLabels: z.object({
     mailboxId: z.string().trim().min(1),
   }),
+  listMailboxRowIds: z.object({
+    category: mailCategorySchema,
+    mailboxId: z.string().trim().min(1),
+    maxResults: z.number().int().positive().max(100),
+    pageToken: z.string().optional(),
+  }),
   listMessageDeliveryStatuses: z.object({
     mailboxId: z.string().trim().min(1),
     messageIds: z.array(z.string().trim().min(1)).max(100),

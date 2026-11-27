@@ -11,7 +11,6 @@ import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail
 import { toastError } from "@quieter/app/lib/error-toast";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { orpc } from "@quieter/app/lib/orpc";
-import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -32,18 +31,8 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-type ScheduledMessage = Pick<
-  RouterOutputs["scheduledSends"]["list"][number],
-  | "id"
-  | "subject"
-  | "to"
-  | "sendAt"
-  | "timeZone"
-  | "status"
-  | "errorMessage"
-  | "deliveryKind"
-  | "canUndo"
->;
+import { getDemoScheduledMessages } from "../domain/demo-scheduled-messages";
+import type { ScheduledMessage } from "../domain/demo-scheduled-messages";
 
 const scheduledStatusLabels = {
   cancelled: "Canceled",
@@ -71,36 +60,7 @@ export const ScheduledMessagesWorkspace = ({
     if (!demo) {
       return [];
     }
-    const { timeZone } = Intl.DateTimeFormat().resolvedOptions();
-    const tomorrow = new Date();
-    tomorrow.setDate(tomorrow.getDate() + 1);
-    tomorrow.setHours(9, 0, 0, 0);
-    const nextWeek = new Date(tomorrow);
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    return [
-      {
-        canUndo: false,
-        deliveryKind: "scheduled",
-        errorMessage: null,
-        id: "demo-scheduled-proposal",
-        sendAt: tomorrow.toISOString(),
-        status: "scheduled",
-        subject: "A few thoughts on the proposal",
-        timeZone,
-        to: "Alex <alex@example.com>",
-      },
-      {
-        canUndo: false,
-        deliveryKind: "scheduled",
-        errorMessage: null,
-        id: "demo-scheduled-check-in",
-        sendAt: nextWeek.toISOString(),
-        status: "scheduled",
-        subject: "Checking in next week",
-        timeZone,
-        to: "Sam <sam@example.com>",
-      },
-    ];
+    return getDemoScheduledMessages();
   });
   const listOptions = orpc.scheduledSends.list.queryOptions({
     input: { mailboxId },

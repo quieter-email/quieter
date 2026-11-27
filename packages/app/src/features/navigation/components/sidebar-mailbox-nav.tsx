@@ -21,6 +21,10 @@ import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { Icon } from "@quieter/ui/icon";
 
+import { useSidebarMailCounts } from "../domain/sidebar-mail-counts";
+import { orderSidebarEntries } from "../domain/sidebar-preferences";
+import { SidebarContextMenu } from "./sidebar-context-menu";
+
 const SIDEBAR_MAILBOX_ITEMS: readonly {
   id: MailboxCategory | "scheduled";
   icon: IconSvgElement;
@@ -58,12 +62,28 @@ const SIDEBAR_MAILBOX_ITEMS: readonly {
   { icon: Delete01Icon, id: "trash", label: "Trash", shortcutId: "go-trash" },
   { icon: Delete02Icon, id: "spam", label: "Spam", shortcutId: "go-spam" },
 ];
-const API_MAILBOX_ITEMS = SIDEBAR_MAILBOX_ITEMS.filter(
-  (item) => item.id === "sent"
-);
+export const getSidebarMailItems = ({
+  embedded,
+  mailboxId,
+  mailboxProvider,
+}: Pick<
+  SidebarMailboxNavProps,
+  "embedded" | "mailboxId" | "mailboxProvider"
+>) =>
+  SIDEBAR_MAILBOX_ITEMS.filter((item) =>
+    mailboxProvider === "api"
+      ? item.id === "sent"
+      : item.id !== "scheduled" ||
+        (!embedded && mailboxId !== null && mailboxProvider !== null)
+  );
 
 type SidebarMailboxNavProps = {
   allInboxesActive: boolean;
+  userId: string;
+  mailboxes: Parameters<typeof useSidebarMailCounts>[0]["mailboxes"];
+  countEntries: readonly string[];
+  onSetCounts: (ids: readonly string[], enabled: boolean) => void;
+  order?: readonly string[];
   animateEntrance: boolean;
   embedded: boolean;
   mailboxId: string | null;
@@ -75,6 +95,11 @@ type SidebarMailboxNavProps = {
 
 export const SidebarMailboxNav = ({
   allInboxesActive,
+  userId,
+  mailboxes,
+  countEntries,
+  onSetCounts,
+  order,
   animateEntrance,
   embedded,
   mailboxId,
@@ -86,27 +111,62 @@ export const SidebarMailboxNav = ({
   const isScheduledMailbox = inboxRouteApi.useSearch({
     select: (search) => search.mailbox === "scheduled",
   });
-  const mailboxItems =
-    mailboxProvider === "api"
-      ? API_MAILBOX_ITEMS
-      : SIDEBAR_MAILBOX_ITEMS.filter(
-          (item) =>
-            item.id !== "scheduled" ||
-            (!embedded &&
-              mailboxId !== null &&
-              (mailboxProvider === "gmail" || mailboxProvider === "managed"))
-        );
+  const mailboxItems = getSidebarMailItems({
+    embedded,
+    mailboxId,
+    mailboxProvider,
+  });
+  const countableIds =
+    !embedded && (mailboxId !== null || allInboxesActive)
+      ? mailboxItems.map((item) => item.id)
+      : [];
+  const enabledCounts = countableIds.filter((id) => countEntries.includes(id));
+
+  const counts = useSidebarMailCounts({
+    allInboxesActive,
+    entries: enabledCounts,
+    mailboxId,
+    mailboxes,
+    userId,
+  });
 
   return (
     <nav aria-label="Mailboxes" className="flex flex-col">
       <SidebarEntrance
         animateEntrance={animateEntrance}
-        className="mt-2 mb-1 flex items-center justify-between px-3"
+        className="mt-2 mb-1"
         index={3}
       >
-        <p className="text-caption font-medium text-muted-fg">Mail</p>
+        <SidebarContextMenu
+          actions={[
+            ...(enabledCounts.length < countableIds.length
+              ? [
+                  {
+                    label: "Show all counts",
+                    onSelect: () => {
+                      onSetCounts(countableIds, true);
+                    },
+                  },
+                ]
+              : []),
+            ...(enabledCounts.length > 0
+              ? [
+                  {
+                    label: "Hide all counts",
+                    onSelect: () => {
+                      onSetCounts(countableIds, false);
+                    },
+                  },
+                ]
+              : []),
+          ]}
+        >
+          <p className="px-3 text-caption font-medium text-muted-fg">Mail</p>
+        </SidebarContextMenu>
       </SidebarEntrance>
-      {mailboxItems.map((item, index) => {
+      {orderSidebarEntries(mailboxItems, order).map((item, index) => {
+        const showCount = enabledCounts.includes(item.id);
+        const count = counts.get(item.id);
         const isActive =
           item.id === "scheduled"
             ? isScheduledMailbox
@@ -119,43 +179,69 @@ export const SidebarMailboxNav = ({
             className="w-full"
             index={index + 3}
           >
-            <SidebarMailboxNavItem
-              active={isActive}
-              aria-current={isActive ? "page" : undefined}
-              mailboxSearch={
-                embedded
-                  ? undefined
-                  : {
-                      mailbox: item.id,
-                      mailboxId,
-                      messageId: null,
-                      query: item.id === "scheduled" ? null : undefined,
-                      threadId: null,
-                      view:
-                        item.id !== "scheduled" && allInboxesActive
-                          ? "all-inboxes"
-                          : "inbox",
-                      workspace: null,
-                    }
+            <SidebarContextMenu
+              actions={
+                countableIds.includes(item.id)
+                  ? [
+                      {
+                        label: showCount ? "Hide count" : "Show count",
+                        onSelect: () => {
+                          onSetCounts([item.id], !showCount);
+                        },
+                      },
+                    ]
+                  : []
               }
-              onClick={() => {
-                if (embedded && item.id !== "scheduled") {
-                  onSelectMailbox(item.id);
-                }
-                onRequestClose?.();
-              }}
-              type="button"
-              variant="ghost"
             >
-              <Icon tone="default" icon={item.icon} />
-              {item.label}
-              {!embedded && mailboxId !== null && item.shortcutId ? (
-                <ShortcutHint
-                  className="ml-auto"
-                  shortcutId={item.shortcutId}
-                />
-              ) : null}
-            </SidebarMailboxNavItem>
+              <SidebarMailboxNavItem
+                active={isActive}
+                aria-current={isActive ? "page" : undefined}
+                mailboxSearch={
+                  embedded
+                    ? undefined
+                    : {
+                        mailbox: item.id,
+                        mailboxId,
+                        messageId: null,
+                        query: item.id === "scheduled" ? null : undefined,
+                        threadId: null,
+                        view:
+                          item.id !== "scheduled" && allInboxesActive
+                            ? "all-inboxes"
+                            : "inbox",
+                        workspace: null,
+                      }
+                }
+                onClick={() => {
+                  if (embedded && item.id !== "scheduled") {
+                    onSelectMailbox(item.id);
+                  }
+                  onRequestClose?.();
+                }}
+                type="button"
+                variant="ghost"
+              >
+                <Icon tone="default" icon={item.icon} />
+                {item.label}
+                {showCount && count !== undefined && (
+                  <span
+                    className="ml-auto text-micro text-muted-fg tabular-nums"
+                    title={`Total in ${item.label}`}
+                  >
+                    {count > 99 ? "99+" : count}
+                  </span>
+                )}
+                {!showCount &&
+                  !embedded &&
+                  mailboxId !== null &&
+                  item.shortcutId && (
+                    <ShortcutHint
+                      className="ml-auto"
+                      shortcutId={item.shortcutId}
+                    />
+                  )}
+              </SidebarMailboxNavItem>
+            </SidebarContextMenu>
           </SidebarEntrance>
         );
       })}

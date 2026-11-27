@@ -18,6 +18,11 @@ import { createStore } from "@tanstack/react-store";
 
 type LabelChange =
   | { kind: "name"; name: MailboxLabel["name"] }
+  | {
+      kind: "name-and-color";
+      name: MailboxLabel["name"];
+      color: MailboxLabelColor;
+    }
   | { kind: "color"; color: MailboxLabelColor }
   | { kind: "visibility"; visible: MailboxLabel["visible"] };
 
@@ -64,7 +69,7 @@ const createLabelUpdates = (
         }
         const { kind, ...patch } = update.change;
         const name =
-          kind === "name"
+          kind === "name" || kind === "name-and-color"
             ? update.change.name
             : (state.get().confirmed.get(label.id)?.name ?? label.name);
 
@@ -141,6 +146,10 @@ const createLabelUpdates = (
         switch (update.change.kind) {
           case "name": {
             patch = { name: label.name };
+            break;
+          }
+          case "name-and-color": {
+            patch = { color: label.color, name: label.name };
             break;
           }
           case "color": {

@@ -25,6 +25,11 @@ export const getMessagesQueryKey = (
     normalizeSearchQuery(searchQuery) ?? "",
   ] as const;
 
+export const getSidebarMailCountQueryKey = (
+  mailboxId: string,
+  mailbox: MailboxCategory
+) => [...getMessagesQueryKey(mailboxId, mailbox), "sidebar-count"] as const;
+
 export const getLiveSyncQueryKey = (
   mailboxId: string,
   mailbox: MailboxCategory,

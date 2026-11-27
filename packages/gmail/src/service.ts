@@ -87,6 +87,11 @@ const gmailThreadSchema = z.object({
   snippet: z.string().optional(),
 });
 
+const gmailThreadLabelsSchema = z.object({
+  id: z.string(),
+  messages: z.array(gmailMessageSchema.pick({ labelIds: true })).optional(),
+});
+
 const gmailThreadMutationSchema = z.object({
   historyId: z.string().optional(),
   id: z.string(),
@@ -351,13 +356,15 @@ const isMessageInMailbox = (
   return true;
 };
 
-const getThreadMailboxMessages = ({
+const getThreadMailboxMessages = <
+  Message extends Pick<GmailMessage, "labelIds">,
+>({
   mailbox,
   messages,
 }: {
   mailbox?: MailboxCategory;
-  messages: GmailMessage[];
-}): GmailMessage[] => {
+  messages: Message[];
+}): Message[] => {
   const publishedMessages = messages.filter(
     (message) => !hasDraftLabel(message.labelIds)
   );
@@ -1426,6 +1433,7 @@ const getGmailMetadataBatch = async <T>(
   accessToken: string,
   ids: readonly string[],
   signal?: AbortSignal,
+  format: "full" | "minimal" = "full",
   attempt = 0
 ): Promise<(T | null)[]> => {
   if (ids.length === 0) {
@@ -1442,7 +1450,7 @@ const getGmailMetadataBatch = async <T>(
           `/gmail/v1/users/me/${resource}s/${encodeURIComponent(id)}`,
           {
             fields,
-            format: "full",
+            format,
           }
         )
       )
@@ -1536,6 +1544,7 @@ const getGmailMetadataBatch = async <T>(
       accessToken,
       retryIndexes.map((index) => ids[index]),
       signal,
+      format,
       attempt + 1
     );
     for (const [retryIndex, resultIndex] of retryIndexes.entries()) {
@@ -1730,6 +1739,67 @@ const getGmailThreadsListMetadata = async (
     );
   }
   return threads;
+};
+
+export const listGmailMailboxRowIds = async (
+  accessToken: string,
+  options: {
+    mailbox: Exclude<MailboxCategory, "important" | "later">;
+    maxResults: number;
+    pageToken?: string;
+    signal?: AbortSignal;
+  }
+) => {
+  if (options.mailbox === "drafts") {
+    const list = await listDrafts(accessToken, options);
+    return {
+      ids: list.drafts.flatMap((draft) =>
+        draft.message?.id && draft.message.threadId ? [draft.id] : []
+      ),
+      nextPageToken: list.nextPageToken,
+    };
+  }
+
+  if (options.mailbox !== "done") {
+    const page = await listMessages(accessToken, {
+      ...options,
+      query: options.mailbox === "spam" ? "-in:drafts -in:trash" : "-in:drafts",
+    });
+    return {
+      ids: [...new Set(page.messages.map((message) => message.threadId))],
+      nextPageToken: page.nextPageToken,
+    };
+  }
+
+  // Done excludes any thread that still has an Inbox message.
+  const list = await listThreads(accessToken, options);
+  const ids: string[] = [];
+  for (const batch of chunkArray(
+    list.threads.map((thread) => thread.id),
+    GMAIL_BATCH_MESSAGE_CHUNK_SIZE
+  )) {
+    const threads = await getGmailMetadataBatch(
+      "thread",
+      gmailThreadLabelsSchema,
+      "id,messages(labelIds)",
+      accessToken,
+      batch,
+      options.signal,
+      "minimal"
+    );
+    for (const thread of threads) {
+      if (
+        thread &&
+        getThreadMailboxMessages({
+          mailbox: "done",
+          messages: thread.messages ?? [],
+        }).length > 0
+      ) {
+        ids.push(thread.id);
+      }
+    }
+  }
+  return { ids, nextPageToken: list.nextPageToken };
 };
 
 const getThreadListSummaries = async (

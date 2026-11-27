@@ -195,6 +195,7 @@ export const orpcActions = {
     listGmailUsefulDetails: ["read", "List extracted details from Gmail."],
     listLabelSuggestions: "internal",
     listLabels: ["read", "List mailbox labels and their IDs."],
+    listMailboxRowIds: "internal",
     listMailboxes: [
       "read",
       "List Gmail, managed, and transactional mailboxes you can access.",
@@ -437,6 +438,7 @@ export const orpcActions = {
       "write",
       "Cancel a queued send and restore the draft when available.",
     ],
+    count: "internal",
     create: [
       "send",
       "Schedule a full message using a new sendOperationId UUID.",

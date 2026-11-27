@@ -6,6 +6,7 @@ import {
   Edit01Icon,
   NoteEditIcon,
   Sorting05Icon,
+  Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import {
@@ -18,7 +19,10 @@ import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain
 import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import type { MailboxSwitcherOrder } from "@quieter/app/features/navigation/components/mailbox-switcher";
 import { SidebarLabelNav } from "@quieter/app/features/navigation/components/sidebar-label-nav";
-import { SidebarMailboxNav } from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
+import {
+  getSidebarMailItems,
+  SidebarMailboxNav,
+} from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
 import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
@@ -30,8 +34,26 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { useQueryClient } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import type { ReactNode } from "react";
 
+import {
+  SIDEBAR_MAIL,
+  SIDEBAR_SECTIONS,
+  SIDEBAR_TOOLS,
+  moveSidebarEntry,
+  orderSidebarEntries,
+  useSidebarPreferences,
+} from "../domain/sidebar-preferences";
+import type {
+  SidebarEntry,
+  SidebarSection,
+} from "../domain/sidebar-preferences";
+import {
+  SidebarContextActions,
+  SidebarContextMenu,
+} from "./sidebar-context-menu";
+import { SidebarCustomizeDialog } from "./sidebar-customize-dialog";
 import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 
@@ -106,6 +128,8 @@ const SidebarInboxSection = ({
   selectedMailboxId,
   selectedMailboxProvider,
   selectedView,
+  customizing,
+  setCustomizing,
 }: Pick<
   SidebarContentProps,
   | "animateEntrance"
@@ -124,8 +148,35 @@ const SidebarInboxSection = ({
   | "selectedMailboxId"
   | "selectedMailboxProvider"
   | "selectedView"
->) => {
+> & { customizing: boolean; setCustomizing: (open: boolean) => void }) => {
   const queryClient = useQueryClient();
+  const { preferences, updatePreferences } = useSidebarPreferences(userId);
+  const [labelItems, setLabelItems] = useState<
+    Record<string, readonly SidebarEntry[]>
+  >({});
+  const labelOrderKey = allInboxesActive
+    ? "labels:all"
+    : `labels:mailbox:${selectedMailboxId ?? ""}`;
+  const reportLabelItems = useCallback(
+    (items: readonly SidebarEntry[]) => {
+      setLabelItems((current) => {
+        const previous = current[labelOrderKey];
+        if (
+          previous?.length === items.length &&
+          items.every(
+            (item, index) =>
+              item.id === previous[index]?.id &&
+              item.label === previous[index]?.label &&
+              item.color === previous[index]?.color
+          )
+        ) {
+          return current;
+        }
+        return { ...current, [labelOrderKey]: items };
+      });
+    },
+    [labelOrderKey]
+  );
   const preview = usePreviewPersona();
   const preloadCalendar = () => {
     void loadCalendarWorkspace();
@@ -142,6 +193,204 @@ const SidebarInboxSection = ({
     onComposeNewMail();
     onRequestClose?.();
   };
+  const toolItems = [
+    {
+      content: (
+        <SidebarMailboxNavItem
+          active={isSnippetMailbox}
+          aria-current={isSnippetMailbox ? "page" : undefined}
+          mailboxSearch={{
+            mailbox: "snippets",
+            mailboxId: selectedMailboxId,
+            messageId: null,
+            threadId: null,
+            view: "inbox",
+            workspace: null,
+          }}
+          onClick={onRequestClose}
+          onFocus={() => void loadSnippetWorkspace()}
+          onMouseEnter={() => void loadSnippetWorkspace()}
+          onPointerDown={() => void loadSnippetWorkspace()}
+          type="button"
+          variant="ghost"
+        >
+          <Icon tone="default" icon={NoteEditIcon} />
+          Snippets
+        </SidebarMailboxNavItem>
+      ),
+      icon: NoteEditIcon,
+      id: "snippets",
+      label: "Snippets",
+    },
+    ...(!allInboxesActive && selectedMailboxProvider === "managed"
+      ? [
+          {
+            content: (
+              <SidebarMailboxNavItem
+                active={selectedView === "rules"}
+                aria-current={selectedView === "rules" ? "page" : undefined}
+                mailboxSearch={{
+                  mailbox: "inbox",
+                  mailboxId: selectedMailboxId,
+                  messageId: null,
+                  threadId: null,
+                  view: "rules",
+                  workspace: null,
+                }}
+                onClick={onRequestClose}
+                type="button"
+                variant="ghost"
+              >
+                <Icon aria-hidden tone="default" icon={Sorting05Icon} />
+                Organize mailbox
+              </SidebarMailboxNavItem>
+            ),
+            icon: Sorting05Icon,
+            id: "rules",
+            label: "Organize mailbox",
+          },
+        ]
+      : []),
+  ];
+  const handleSetCounts = (ids: readonly string[], enabled: boolean) => {
+    updatePreferences((current) => ({
+      ...current,
+      countEntries: enabled
+        ? [...new Set([...current.countEntries, ...ids])]
+        : current.countEntries.filter((id) => !ids.includes(id)),
+    }));
+  };
+  const sections: (SidebarSection & { content: ReactNode })[] = [];
+  if (embedded !== true) {
+    sections.push({
+      content: (
+        <SidebarEntrance
+          animateEntrance={animateEntrance}
+          className="mb-2 w-full"
+          index={2}
+        >
+          <SidebarMailboxNavItem
+            mailboxSearch={{
+              mailboxId: selectedMailboxId,
+              workspace: "calendar",
+            }}
+            onClick={onRequestClose}
+            onFocus={preloadCalendar}
+            onMouseEnter={preloadCalendar}
+            onPointerDown={preloadCalendar}
+            replace={false}
+            type="button"
+            variant="ghost"
+          >
+            <Icon aria-hidden tone="default" icon={Calendar03Icon} />
+            Calendar
+          </SidebarMailboxNavItem>
+        </SidebarEntrance>
+      ),
+      icon: Calendar03Icon,
+      id: "calendar",
+      label: "Calendar",
+    });
+  }
+  sections.push({
+    content: (
+      <SidebarMailboxNav
+        allInboxesActive={allInboxesActive}
+        userId={userId}
+        mailboxes={groups.flatMap((group) => group.mailboxes)}
+        countEntries={preferences.countEntries}
+        onSetCounts={handleSetCounts}
+        order={preferences.order[SIDEBAR_MAIL]}
+        animateEntrance={animateEntrance}
+        embedded={embedded === true}
+        mailboxId={selectedMailboxId}
+        mailboxProvider={selectedMailboxProvider}
+        onRequestClose={onRequestClose}
+        onSelectMailbox={onSelectMailbox}
+        selectedMailbox={selectedMailbox}
+      />
+    ),
+    id: SIDEBAR_MAIL,
+    items: getSidebarMailItems({
+      embedded: embedded === true,
+      mailboxId: selectedMailboxId,
+      mailboxProvider: selectedMailboxProvider,
+    }),
+    label: "Mail",
+    orderKey: SIDEBAR_MAIL,
+  });
+  if (embedded !== true && selectedMailboxId !== null) {
+    sections.push({
+      content: (
+        <SidebarEntrance
+          animateEntrance={animateEntrance}
+          className="mt-4 w-full"
+          index={10}
+        >
+          <nav aria-label="Mail tools" className="flex flex-col">
+            <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
+              Tools
+            </p>
+            {orderSidebarEntries(
+              toolItems,
+              preferences.order[SIDEBAR_TOOLS]
+            ).map((item) => (
+              <Fragment key={item.id}>{item.content}</Fragment>
+            ))}
+          </nav>
+        </SidebarEntrance>
+      ),
+      id: SIDEBAR_TOOLS,
+      items: toolItems,
+      label: "Tools",
+      orderKey: SIDEBAR_TOOLS,
+    });
+  }
+  if (allInboxesActive || selectedMailboxProvider !== "api") {
+    const mailboxProvider =
+      selectedMailboxProvider === "managed" ? "managed" : "gmail";
+    sections.push({
+      content: allInboxesActive ? (
+        <UnifiedSidebarLabelNav
+          order={preferences.order[labelOrderKey]}
+          onItemsChange={reportLabelItems}
+          groups={groups}
+          selectedMailbox={selectedMailbox}
+          mailboxId={selectedMailboxId}
+          onRequestClose={onRequestClose}
+          userId={userId}
+          searchQuery={searchQuery}
+        />
+      ) : (
+        <SidebarLabelNav
+          order={preferences.order[labelOrderKey]}
+          onItemsChange={reportLabelItems}
+          animateEntrance={animateEntrance}
+          canManage={
+            embedded !== true &&
+            (selectedMailboxProvider === "gmail" ||
+              selectedMailboxGrantRole === "manager")
+          }
+          mailboxId={selectedMailboxId}
+          mailboxProvider={mailboxProvider}
+          embedded={embedded === true}
+          onRequestClose={onRequestClose}
+          onManageLabels={onManageLabels}
+          selectedMailbox={selectedMailbox}
+          onSearch={(query) => {
+            onSearch(query);
+            onRequestClose?.();
+          }}
+          searchQuery={searchQuery}
+        />
+      ),
+      id: "labels",
+      items: labelItems[labelOrderKey],
+      label: "Labels",
+      orderKey: labelOrderKey,
+    });
+  }
+
   return (
     <>
       <SidebarEntrance
@@ -189,128 +438,41 @@ const SidebarInboxSection = ({
           ) : null}
         </Button>
       </SidebarEntrance>
-
       <div className="mt-2 min-h-0 flex-1 overflow-y-auto p-1">
-        {embedded === true ? null : (
-          <SidebarEntrance
-            animateEntrance={animateEntrance}
-            className="mb-2 w-full"
-            index={2}
-          >
-            <SidebarMailboxNavItem
-              mailboxSearch={{
-                mailboxId: selectedMailboxId,
-                workspace: "calendar",
-              }}
-              onClick={onRequestClose}
-              onFocus={preloadCalendar}
-              onMouseEnter={preloadCalendar}
-              onPointerDown={preloadCalendar}
-              replace={false}
-              type="button"
-              variant="ghost"
-            >
-              <Icon aria-hidden tone="default" icon={Calendar03Icon} />
-              Calendar
-            </SidebarMailboxNavItem>
-          </SidebarEntrance>
-        )}
-        <SidebarMailboxNav
-          allInboxesActive={allInboxesActive}
-          animateEntrance={animateEntrance}
-          embedded={embedded === true}
-          mailboxId={selectedMailboxId}
-          mailboxProvider={selectedMailboxProvider}
-          onRequestClose={onRequestClose}
-          onSelectMailbox={onSelectMailbox}
-          selectedMailbox={selectedMailbox}
-        />
-        {embedded !== true && selectedMailboxId !== null ? (
-          <SidebarEntrance
-            animateEntrance={animateEntrance}
-            className="mt-4 w-full"
-            index={10}
-          >
-            <nav aria-label="Mail tools" className="flex flex-col">
-              <p className="mb-1 px-3 text-caption font-medium text-muted-fg">
-                Tools
-              </p>
-              <SidebarMailboxNavItem
-                active={isSnippetMailbox}
-                aria-current={isSnippetMailbox ? "page" : undefined}
-                mailboxSearch={{
-                  mailbox: "snippets",
-                  mailboxId: selectedMailboxId,
-                  messageId: null,
-                  threadId: null,
-                  view: "inbox",
-                  workspace: null,
-                }}
-                onClick={onRequestClose}
-                onFocus={() => void loadSnippetWorkspace()}
-                onMouseEnter={() => void loadSnippetWorkspace()}
-                onPointerDown={() => void loadSnippetWorkspace()}
-                type="button"
-                variant="ghost"
-              >
-                <Icon tone="default" icon={NoteEditIcon} />
-                Snippets
-              </SidebarMailboxNavItem>
-              {!allInboxesActive && selectedMailboxProvider === "managed" ? (
-                <SidebarMailboxNavItem
-                  active={selectedView === "rules"}
-                  aria-current={selectedView === "rules" ? "page" : undefined}
-                  mailboxSearch={{
-                    mailbox: "inbox",
-                    mailboxId: selectedMailboxId,
-                    messageId: null,
-                    threadId: null,
-                    view: "rules",
-                    workspace: null,
-                  }}
-                  onClick={onRequestClose}
-                  type="button"
-                  variant="ghost"
-                >
-                  <Icon aria-hidden tone="default" icon={Sorting05Icon} />
-                  Organize mailbox
-                </SidebarMailboxNavItem>
-              ) : null}
-            </nav>
-          </SidebarEntrance>
-        ) : null}
-        {allInboxesActive && (
-          <UnifiedSidebarLabelNav
-            groups={groups}
-            selectedMailbox={selectedMailbox}
-            mailboxId={selectedMailboxId}
-            onRequestClose={onRequestClose}
-            userId={userId}
-            searchQuery={searchQuery}
-          />
-        )}
-        {!allInboxesActive && selectedMailboxProvider !== "api" && (
-          <SidebarLabelNav
-            animateEntrance={animateEntrance}
-            canManage={
-              embedded !== true &&
-              (selectedMailboxProvider === "gmail" ||
-                selectedMailboxGrantRole === "manager")
-            }
-            mailboxId={selectedMailboxId}
-            mailboxProvider={selectedMailboxProvider ?? "gmail"}
-            embedded={embedded === true}
-            onRequestClose={onRequestClose}
-            onManageLabels={onManageLabels}
-            selectedMailbox={selectedMailbox}
-            onSearch={(query) => {
-              onSearch(query);
-              onRequestClose?.();
-            }}
-            searchQuery={searchQuery}
-          />
+        {orderSidebarEntries(sections, preferences.order[SIDEBAR_SECTIONS]).map(
+          (section) => (
+            <div key={section.id}>{section.content}</div>
+          )
         )}
       </div>
+      <SidebarCustomizeDialog
+        open={customizing}
+        onOpenChange={setCustomizing}
+        sections={sections}
+        order={preferences.order}
+        countEntries={preferences.countEntries}
+        onSetCounts={
+          embedded !== true && (selectedMailboxId !== null || allInboxesActive)
+            ? handleSetCounts
+            : undefined
+        }
+        onMove={({ group, ids, id, targetId }) => {
+          updatePreferences((current) => {
+            const next = moveSidebarEntry(
+              ids,
+              current.order[group],
+              id,
+              targetId
+            );
+            return next === undefined
+              ? current
+              : {
+                  ...current,
+                  order: { ...current.order, [group]: next },
+                };
+          });
+        }}
+      />
     </>
   );
 };
@@ -318,13 +480,19 @@ const SidebarInboxSection = ({
 const SidebarFooter = ({
   animateEntrance,
   onRequestClose,
-}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose">) => (
+  onCustomize,
+}: Pick<SidebarContentProps, "animateEntrance" | "onRequestClose"> & {
+  onCustomize: () => void;
+}) => (
   <SidebarEntrance
     animateEntrance={animateEntrance}
     className="mt-auto p-1"
     index={9}
   >
-    <SidebarFooterLinks onRequestClose={onRequestClose} />
+    <SidebarFooterLinks
+      onRequestClose={onRequestClose}
+      onCustomize={onCustomize}
+    />
   </SidebarEntrance>
 );
 
@@ -352,6 +520,10 @@ const SidebarContent = ({
   selectedView,
   switcherSide = "right",
 }: SidebarContentProps) => {
+  const [customizing, setCustomizing] = useState(false);
+  const handleCustomize = useCallback(() => {
+    setCustomizing(true);
+  }, []);
   const { excludedIds } = useUnifiedInboxPreferences(userId);
   const handleSelectMailboxId = (mailboxId: string) => {
     onSelectMailboxId(mailboxId);
@@ -364,76 +536,96 @@ const SidebarContent = ({
   };
 
   return (
-    <div className="relative z-10 flex min-h-0 flex-1 flex-col px-4 py-6">
-      <SidebarEntrance
-        animateEntrance={animateEntrance}
-        className="flex min-w-0 items-start gap-2 rounded-md px-1"
-      >
-        <MailboxSwitcherDropdown
-          allInboxesActive={allInboxesActive}
-          onSelectAllInboxes={
-            embedded
-              ? undefined
-              : () => {
-                  handleSelectView("all-inboxes");
-                }
-          }
-          embedded={embedded}
-          groups={groups}
-          onReorderMailboxSwitcher={onReorderMailboxSwitcher}
-          onReconnectMailbox={onReconnectMailbox}
-          onSelectMailboxId={handleSelectMailboxId}
-          reconnectingMailboxId={reconnectingMailboxId}
-          selectedMailboxId={selectedMailboxId}
-          side={switcherSide}
-          unifiedInboxExcludedIds={excludedIds}
-        />
+    <SidebarContextActions.Provider value={handleCustomize}>
+      <SidebarContextMenu className="relative z-10 flex min-h-0 flex-1 flex-col">
+        <div className="flex min-h-0 flex-1 flex-col px-4 py-6">
+          <SidebarEntrance
+            animateEntrance={animateEntrance}
+            className="flex min-w-0 items-start gap-2 rounded-md px-1"
+          >
+            <MailboxSwitcherDropdown
+              allInboxesActive={allInboxesActive}
+              onSelectAllInboxes={
+                embedded
+                  ? undefined
+                  : () => {
+                      handleSelectView("all-inboxes");
+                    }
+              }
+              embedded={embedded}
+              groups={groups}
+              onReorderMailboxSwitcher={onReorderMailboxSwitcher}
+              onReconnectMailbox={onReconnectMailbox}
+              onSelectMailboxId={handleSelectMailboxId}
+              reconnectingMailboxId={reconnectingMailboxId}
+              selectedMailboxId={selectedMailboxId}
+              side={switcherSide}
+              unifiedInboxExcludedIds={excludedIds}
+            />
 
-        {onRequestClose && (
-          <IconButtonTooltip label="Close sidebar">
-            <Button
-              aria-label="Close sidebar"
-              className="lg:hidden"
-              onClick={onRequestClose}
-              size="icon-sm"
-              type="button"
-              variant="ghost"
-            >
-              <Icon aria-hidden icon={Cancel01Icon} />
-            </Button>
-          </IconButtonTooltip>
-        )}
-      </SidebarEntrance>
+            {embedded && (
+              <IconButtonTooltip label="Customize sidebar">
+                <Button
+                  aria-label="Customize sidebar"
+                  onClick={handleCustomize}
+                  size="icon-sm"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={Settings02Icon} />
+                </Button>
+              </IconButtonTooltip>
+            )}
 
-      <SidebarInboxSection
-        userId={userId}
-        allInboxesActive={allInboxesActive}
-        animateEntrance={animateEntrance}
-        embedded={embedded}
-        groups={groups}
-        onComposeNewMail={onComposeNewMail}
-        onManageLabels={(sourceMailboxId) => {
-          onManageLabels(sourceMailboxId);
-          onRequestClose?.();
-        }}
-        onRequestClose={onRequestClose}
-        onSearch={onSearch}
-        onSelectMailbox={onSelectMailbox}
-        isSnippetMailbox={isSnippetMailbox}
-        searchQuery={searchQuery}
-        selectedMailbox={selectedMailbox}
-        selectedMailboxId={selectedMailboxId}
-        selectedMailboxProvider={selectedMailboxProvider}
-        selectedView={selectedView}
-      />
+            {onRequestClose && (
+              <IconButtonTooltip label="Close sidebar">
+                <Button
+                  aria-label="Close sidebar"
+                  className="lg:hidden"
+                  onClick={onRequestClose}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden icon={Cancel01Icon} />
+                </Button>
+              </IconButtonTooltip>
+            )}
+          </SidebarEntrance>
 
-      {!embedded && (
-        <SidebarFooter
-          animateEntrance={animateEntrance}
-          onRequestClose={onRequestClose}
-        />
-      )}
-    </div>
+          <SidebarInboxSection
+            customizing={customizing}
+            setCustomizing={setCustomizing}
+            userId={userId}
+            allInboxesActive={allInboxesActive}
+            animateEntrance={animateEntrance}
+            embedded={embedded}
+            groups={groups}
+            onComposeNewMail={onComposeNewMail}
+            onManageLabels={(sourceMailboxId) => {
+              onManageLabels(sourceMailboxId);
+              onRequestClose?.();
+            }}
+            onRequestClose={onRequestClose}
+            onSearch={onSearch}
+            onSelectMailbox={onSelectMailbox}
+            isSnippetMailbox={isSnippetMailbox}
+            searchQuery={searchQuery}
+            selectedMailbox={selectedMailbox}
+            selectedMailboxId={selectedMailboxId}
+            selectedMailboxProvider={selectedMailboxProvider}
+            selectedView={selectedView}
+          />
+
+          {!embedded && (
+            <SidebarFooter
+              animateEntrance={animateEntrance}
+              onRequestClose={onRequestClose}
+              onCustomize={handleCustomize}
+            />
+          )}
+        </div>
+      </SidebarContextMenu>
+    </SidebarContextActions.Provider>
   );
 };
 

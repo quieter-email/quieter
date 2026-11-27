@@ -157,6 +157,10 @@ export const mailRouter = {
     .route({ method: "GET" })
     .input(mailInputSchemas.listLabels)
     .handler(labelsMailOperations.listLabels),
+  listMailboxRowIds: protectedProcedure
+    .route({ method: "GET" })
+    .input(mailInputSchemas.listMailboxRowIds)
+    .handler(queriesMailOperations.listMailboxRowIds),
   listMessageDeliveryStatuses: protectedProcedure
     .route({ method: "GET" })
     .input(mailInputSchemas.listMessageDeliveryStatuses)
