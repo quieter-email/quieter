@@ -1,4 +1,5 @@
 import { ORPCError } from "@orpc/server";
+import { serverEnv } from "@quieter/env/server";
 import type { GmailMetadataChange } from "@quieter/gmail";
 import {
   batchModifyMessages,
@@ -10,6 +11,7 @@ import {
 } from "@quieter/gmail";
 import type { MailMutationResult } from "@quieter/mail/data-plane";
 import { MAILBOX_LABELS } from "@quieter/mail/messages";
+import { reportError } from "@quieter/observability";
 
 import { callGmail } from "../gmail-request";
 import type { MailRequestContext } from "../gmail-request";
@@ -18,6 +20,7 @@ import {
   writeGmailCapturedMessage,
 } from "../mail-capture";
 import { setMailImportance } from "../mail-importance";
+import { publishMailUpdate } from "../mail-updates";
 import { assertAccessibleMailbox } from "../mailbox/service";
 import {
   updateManagedThreadLabels,
@@ -31,12 +34,17 @@ import {
   applyManagedMessageChanges,
 } from "../managed-mail/messages/service";
 import {
+  executeMailCommandWithReceipt,
+  isRejectedGmailWrite,
+} from "./command-receipt";
+import {
   learnAiMemoryFromGmailAction,
   learnAiMemoryFromMailAction,
   recordLabelFeedback,
 } from "./feedback";
 import type { MailInputs } from "./inputs";
 import { applyMailPlacement, supersedePendingMailPlacement } from "./placement";
+import { authorizeMailPlacement } from "./placement-access";
 
 type MetadataOperation =
   | "read"
@@ -382,120 +390,153 @@ const mutateThread = async (
   });
 };
 
-export const mutationsMailOperations = {
-  applyChanges: async ({
-    context,
-    input,
-  }: {
-    context: MailRequestContext;
-    input: MailInputs["applyChanges"];
-  }): Promise<MailMutationResult> => {
-    const selectedMailbox = await assertAccessibleMailbox({
-      mailboxId: input.mailboxId,
-      userId: context.userId,
-    });
-    if (input.command.kind === "set-placement") {
-      return await applyMailPlacement({
-        context,
-        input: { ...input, command: input.command },
-      });
-    }
-    const supersedesPlacement =
-      input.command.kind === "move" ||
-      (input.command.kind === "set-labels" &&
-        [...input.command.addIds, ...input.command.removeIds].some((label) =>
-          ["INBOX", "SPAM", "TRASH"].includes(label)
-        ));
-    if (supersedesPlacement) {
-      await supersedePendingMailPlacement({
-        context,
-        mailboxId: input.mailboxId,
-        retireSnoozes: false,
-        threadIds: input.targets.map((target) => target.threadId),
-      });
-    }
-    if (input.command.kind === "set-importance") {
-      let { targets } = input;
-      if (selectedMailbox.provider === "gmail") {
-        targets = await callGmail(
-          context,
-          input.mailboxId,
-          async (accessToken, signal) => {
-            const threadIds = [
-              ...new Set(input.targets.map((target) => target.threadId)),
-            ];
-            const incomingIdsByThread = new Map<string, string[]>();
-            for (let offset = 0; offset < threadIds.length; offset += 4) {
-              await Promise.all(
-                threadIds.slice(offset, offset + 4).map(async (threadId) => {
-                  const thread = await getThreadWithDetails(
-                    accessToken,
-                    threadId,
-                    signal,
-                    async (snapshot) => {
-                      await writeGmailCapturedMessage({
-                        mailboxId: input.mailboxId,
-                        snapshot,
-                        source: "on_demand",
-                      });
-                    }
-                  );
-                  incomingIdsByThread.set(
-                    threadId,
-                    thread.messages
-                      .filter(
-                        (message) =>
-                          message.labelIds?.some((label) =>
-                            ["SENT", "DRAFT"].includes(label)
-                          ) !== true
-                      )
-                      .map((message) => message.id)
-                  );
-                })
-              );
-            }
-            return input.targets.map((target) => {
-              if (target.messageIds.length > 0) {
-                return target;
-              }
-              const messageIds = incomingIdsByThread.get(target.threadId) ?? [];
-              if (messageIds.length === 0) {
-                throw new ORPCError("BAD_REQUEST", {
-                  message: "This thread has no incoming messages to update.",
-                });
-              }
-              return { ...target, messageIds };
-            });
-          }
-        ).catch((error: unknown) => {
-          if (isGmailServiceError(error) && error.status === 404) {
-            throw new ORPCError("NOT_FOUND", {
-              message: "Message thread not found.",
-            });
-          }
-          throw error;
-        });
+const applyMailChanges = async ({
+  context,
+  input,
+  markDispatched,
+  selectedMailbox,
+}: {
+  context: MailRequestContext;
+  input: MailInputs["applyChanges"];
+  markDispatched?: () => void;
+  selectedMailbox: Awaited<ReturnType<typeof assertAccessibleMailbox>>;
+}): Promise<MailMutationResult> => {
+  const dispatch = async <T>(write: () => Promise<T>): Promise<T> => {
+    try {
+      const result = await write();
+      markDispatched?.();
+      return result;
+    } catch (error) {
+      const preconditionFailed =
+        error instanceof ORPCError &&
+        [400, 401, 403, 404, 409, 429].includes(error.status);
+      if (!preconditionFailed && !isRejectedGmailWrite(error)) {
+        markDispatched?.();
       }
-      return await setMailImportance({
-        actorUserId: context.userId,
-        important: input.command.important,
-        mailboxId: input.mailboxId,
-        targets,
+      throw error;
+    }
+  };
+  const afterWrite = async (work: () => Promise<void>) => {
+    if (markDispatched === undefined) {
+      await work();
+      return;
+    }
+    await work().catch((error: unknown) => {
+      reportError(error, { operation: "mail-command-metadata" });
+    });
+  };
+  if (input.command.kind === "set-placement") {
+    const { command } = input;
+    return await dispatch(
+      async () =>
+        await applyMailPlacement({ context, input: { ...input, command } })
+    );
+  }
+  const supersedesPlacement =
+    input.command.kind === "move" ||
+    (input.command.kind === "set-labels" &&
+      [...input.command.addIds, ...input.command.removeIds].some((label) =>
+        ["INBOX", "SPAM", "TRASH"].includes(label)
+      ));
+  if (supersedesPlacement) {
+    await supersedePendingMailPlacement({
+      context,
+      mailboxId: input.mailboxId,
+      retireSnoozes: false,
+      threadIds: input.targets.map((target) => target.threadId),
+    });
+  }
+  if (input.command.kind === "set-importance") {
+    let { targets } = input;
+    if (selectedMailbox.provider === "gmail") {
+      targets = await callGmail(
+        context,
+        input.mailboxId,
+        async (accessToken, signal) => {
+          const threadIds = [
+            ...new Set(input.targets.map((target) => target.threadId)),
+          ];
+          const incomingIdsByThread = new Map<string, string[]>();
+          for (let offset = 0; offset < threadIds.length; offset += 4) {
+            await Promise.all(
+              threadIds.slice(offset, offset + 4).map(async (threadId) => {
+                const thread = await getThreadWithDetails(
+                  accessToken,
+                  threadId,
+                  signal,
+                  async (snapshot) => {
+                    await writeGmailCapturedMessage({
+                      mailboxId: input.mailboxId,
+                      snapshot,
+                      source: "on_demand",
+                    });
+                  }
+                );
+                incomingIdsByThread.set(
+                  threadId,
+                  thread.messages
+                    .filter(
+                      (message) =>
+                        message.labelIds?.some((label) =>
+                          ["SENT", "DRAFT"].includes(label)
+                        ) !== true
+                    )
+                    .map((message) => message.id)
+                );
+              })
+            );
+          }
+          return input.targets.map((target) => {
+            if (target.messageIds.length > 0) {
+              return target;
+            }
+            const messageIds = incomingIdsByThread.get(target.threadId) ?? [];
+            if (messageIds.length === 0) {
+              throw new ORPCError("BAD_REQUEST", {
+                message: "This thread has no incoming messages to update.",
+              });
+            }
+            return { ...target, messageIds };
+          });
+        }
+      ).catch((error: unknown) => {
+        if (isGmailServiceError(error) && error.status === 404) {
+          throw new ORPCError("NOT_FOUND", {
+            message: "Message thread not found.",
+          });
+        }
+        throw error;
       });
     }
-    if (selectedMailbox.provider === "managed") {
-      const result = await applyManagedMessageChanges({
-        ...input,
-        command: input.command,
-        userId: context.userId,
-      });
-      const appliedThreadIds = [
-        ...new Set(
-          input.targets.flatMap((target, index) =>
-            result.targets[index]?.status === "applied" ? [target.threadId] : []
-          )
-        ),
-      ];
+    const { important } = input.command;
+    return await dispatch(
+      async () =>
+        await setMailImportance({
+          actorUserId: context.userId,
+          important,
+          mailboxId: input.mailboxId,
+          targets,
+        })
+    );
+  }
+  if (selectedMailbox.provider === "managed") {
+    const { command } = input;
+    const result = await dispatch(
+      async () =>
+        await applyManagedMessageChanges({
+          ...input,
+          command,
+          userId: context.userId,
+        })
+    );
+    const appliedThreadIds = [
+      ...new Set(
+        input.targets.flatMap((target, index) =>
+          result.targets[index]?.status === "applied" ? [target.threadId] : []
+        )
+      ),
+    ];
+    await afterWrite(async () => {
       if (supersedesPlacement && appliedThreadIds.length > 0) {
         await supersedePendingMailPlacement({
           context,
@@ -540,63 +581,90 @@ export const mutationsMailOperations = {
           messageIds
         );
       }
-      return {
-        syncToken:
-          result.revision === null ? undefined : String(result.revision),
-        targets: result.targets,
-      };
-    }
+    });
+    return {
+      syncToken: result.revision === null ? undefined : String(result.revision),
+      targets: result.targets,
+    };
+  }
 
-    return await callGmail(
-      context,
-      input.mailboxId,
-      async (accessToken, signal) => {
-        const requestedMessageIds = [
-          ...new Set(input.targets.flatMap((target) => target.messageIds)),
-        ];
-        const associations = await getGmailMessageThreadAssociations(
-          accessToken,
-          requestedMessageIds,
-          signal
-        );
-        const associationByMessageId = new Map(
-          associations.map((association) => [association.id, association])
-        );
-        const validTargets = input.targets.filter((target) =>
-          target.messageIds.every(
-            (messageId) =>
-              associationByMessageId.get(messageId)?.threadId ===
-              target.threadId
-          )
-        );
-        const messageIds = [
-          ...new Set(validTargets.flatMap((target) => target.messageIds)),
-        ];
-        const targetResults: MailMutationResult["targets"] = input.targets.map(
-          (target): MailMutationResult["targets"][number] => ({
-            status: validTargets.includes(target) ? "applied" : "failed",
+  return await callGmail(
+    context,
+    input.mailboxId,
+    async (accessToken, signal) => {
+      const requestedMessageIds = [
+        ...new Set(input.targets.flatMap((target) => target.messageIds)),
+      ];
+      const associations = await getGmailMessageThreadAssociations(
+        accessToken,
+        requestedMessageIds,
+        signal
+      );
+      const associationByMessageId = new Map(
+        associations.map((association) => [association.id, association])
+      );
+      const validTargets = input.targets.filter((target) =>
+        target.messageIds.every(
+          (messageId) =>
+            associationByMessageId.get(messageId)?.threadId === target.threadId
+        )
+      );
+      const messageIds = [
+        ...new Set(validTargets.flatMap((target) => target.messageIds)),
+      ];
+      const outcomes = new Map<string, "failed" | "uncertain">();
+      const validTargetSet = new Set(validTargets);
+      const targetResults = () =>
+        input.targets.map((target): MailMutationResult["targets"][number] => {
+          const appliedMessageIds: string[] = [];
+          const failedMessageIds: string[] = [];
+          const uncertainMessageIds: string[] = [];
+          for (const id of new Set(target.messageIds)) {
+            const outcome = validTargetSet.has(target)
+              ? outcomes.get(id)
+              : "failed";
+            if (outcome === "uncertain") {
+              uncertainMessageIds.push(id);
+            } else if (outcome === "failed") {
+              failedMessageIds.push(id);
+            } else {
+              appliedMessageIds.push(id);
+            }
+          }
+          return {
+            ...(markDispatched === undefined
+              ? {}
+              : { appliedMessageIds, failedMessageIds, uncertainMessageIds }),
+            status:
+              failedMessageIds.length + uncertainMessageIds.length === 0
+                ? "applied"
+                : "failed",
             threadId: target.threadId,
-          })
+          };
+        });
+      if (messageIds.length === 0) {
+        return { targets: targetResults() };
+      }
+      const { command } = input;
+      if (command.kind === "delete-permanently") {
+        throw new ORPCError("BAD_REQUEST", {
+          message: "Permanent bulk deletion is unavailable.",
+        });
+      }
+      signal?.throwIfAborted();
+      if (command.kind === "set-read") {
+        await dispatch(
+          async () =>
+            await batchModifyMessages(
+              accessToken,
+              messageIds,
+              command.read
+                ? { removeLabelIds: ["UNREAD"] }
+                : { addLabelIds: ["UNREAD"] },
+              signal
+            )
         );
-        if (messageIds.length === 0) {
-          return { targets: targetResults };
-        }
-        if (input.command.kind === "delete-permanently") {
-          throw new ORPCError("BAD_REQUEST", {
-            message: "Permanent bulk deletion is unavailable.",
-          });
-        }
-        let appliedMessageIds = messageIds;
-        let failedMutation: PromiseRejectedResult | undefined;
-        if (input.command.kind === "set-read") {
-          await batchModifyMessages(
-            accessToken,
-            messageIds,
-            input.command.read
-              ? { removeLabelIds: ["UNREAD"] }
-              : { addLabelIds: ["UNREAD"] },
-            signal
-          );
+        await afterWrite(async () => {
           await refreshGmailCapturedMessageMetadata({
             accessToken,
             mailboxId: input.mailboxId,
@@ -604,20 +672,22 @@ export const mutationsMailOperations = {
           });
           await recordMetadataAction(
             { accessToken, context, input },
-            input.command.read ? "read" : "unread",
+            command.read ? "read" : "unread",
             messageIds
           );
-        } else if (input.command.kind === "set-labels") {
-          const { addIds, removeIds } = input.command;
-          await batchModifyMessages(
-            accessToken,
-            messageIds,
-            {
-              addLabelIds: addIds,
-              removeLabelIds: removeIds,
-            },
-            signal
-          );
+        });
+      } else if (command.kind === "set-labels") {
+        const { addIds, removeIds } = command;
+        await dispatch(
+          async () =>
+            await batchModifyMessages(
+              accessToken,
+              messageIds,
+              { addLabelIds: addIds, removeLabelIds: removeIds },
+              signal
+            )
+        );
+        await afterWrite(async () => {
           if (supersedesPlacement) {
             await supersedePendingMailPlacement({
               context,
@@ -649,65 +719,117 @@ export const mutationsMailOperations = {
           });
           await recordMetadataAction(
             { accessToken, context, input, labelFeedback },
-            {
-              addLabelIds: addIds,
-              removeLabelIds: removeIds,
-            },
+            { addLabelIds: addIds, removeLabelIds: removeIds },
             memoryMessageIds
           );
-        } else if (
-          input.command.kind === "move" &&
-          (input.command.destination === "trash" ||
-            input.command.destination === "inbox")
-        ) {
-          const change =
-            input.command.destination === "trash" ? "trash" : "untrash";
-          const results = await Promise.allSettled(
-            messageIds.map(
-              async (messageId) =>
-                await mutateGmailMessage(accessToken, messageId, change, signal)
-            )
-          );
-          appliedMessageIds = results.flatMap((result) =>
-            result.status === "fulfilled" ? [result.value.id] : []
-          );
-          failedMutation = results.find(
-            (result) => result.status === "rejected"
-          );
-          if (
-            input.command.destination === "inbox" &&
-            appliedMessageIds.length > 0
-          ) {
-            try {
+        });
+      } else if (command.kind === "move") {
+        let failedMutation: PromiseRejectedResult | undefined;
+        if (command.destination === "spam") {
+          await dispatch(
+            async () =>
               await batchModifyMessages(
                 accessToken,
-                appliedMessageIds,
-                { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
+                messageIds,
+                { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
                 signal
-              );
-            } catch (error) {
-              await refreshGmailCapturedMessageMetadata({
-                accessToken,
-                mailboxId: input.mailboxId,
-                messageIds: appliedMessageIds,
-              });
-              await recordMetadataAction(
-                { accessToken, context, input },
-                "untrash",
-                appliedMessageIds
-              );
-              throw error;
+              )
+          );
+        } else {
+          const change = command.destination === "trash" ? "trash" : "untrash";
+          const results = await Promise.allSettled(
+            messageIds.map(
+              async (id) =>
+                await mutateGmailMessage(accessToken, id, change, signal)
+            )
+          );
+          const [first] = results;
+          if (first?.status === "rejected") {
+            const failure: unknown = first.reason;
+            if (
+              isGmailServiceError(failure) &&
+              [401, 403, 429].includes(failure.status) &&
+              results.every(
+                (result) =>
+                  result.status === "rejected" &&
+                  isGmailServiceError(result.reason) &&
+                  result.reason.status === failure.status
+              )
+            ) {
+              throw failure;
             }
           }
-        } else if (input.command.kind === "move") {
-          await batchModifyMessages(
-            accessToken,
-            messageIds,
-            { addLabelIds: ["SPAM"], removeLabelIds: ["INBOX"] },
-            signal
-          );
+          const changedMessageIds: string[] = [];
+          const alreadyInInbox = new Set<string>();
+          for (const [index, id] of messageIds.entries()) {
+            const result = results[index];
+            if (result?.status === "fulfilled") {
+              changedMessageIds.push(id);
+              if (
+                result.value.labelIds.includes("INBOX") &&
+                !result.value.labelIds.some((label) =>
+                  ["SPAM", "TRASH"].includes(label)
+                )
+              ) {
+                alreadyInInbox.add(id);
+              }
+            } else if (result?.status === "rejected") {
+              const error: unknown = result.reason;
+              const rejected = isRejectedGmailWrite(error);
+              outcomes.set(id, rejected ? "failed" : "uncertain");
+              if (!rejected) {
+                markDispatched?.();
+                reportError(error, { operation: "mail-command-gmail-move" });
+              }
+              failedMutation ??= result;
+            }
+          }
+          if (changedMessageIds.length > 0) {
+            markDispatched?.();
+            if (command.destination === "inbox") {
+              try {
+                await batchModifyMessages(
+                  accessToken,
+                  changedMessageIds,
+                  { addLabelIds: ["INBOX"], removeLabelIds: ["SPAM"] },
+                  signal
+                );
+              } catch (error) {
+                const rejected = isRejectedGmailWrite(error);
+                const incompleteMessageIds = changedMessageIds.filter(
+                  (id) => !alreadyInInbox.has(id)
+                );
+                for (const id of incompleteMessageIds) {
+                  outcomes.set(id, rejected ? "failed" : "uncertain");
+                }
+                await afterWrite(async () => {
+                  const untrashedMessageIds =
+                    markDispatched === undefined
+                      ? changedMessageIds
+                      : incompleteMessageIds;
+                  await refreshGmailCapturedMessageMetadata({
+                    accessToken,
+                    mailboxId: input.mailboxId,
+                    messageIds: untrashedMessageIds,
+                  });
+                  await recordMetadataAction(
+                    { accessToken, context, input },
+                    "untrash",
+                    untrashedMessageIds
+                  );
+                });
+                if (markDispatched === undefined) {
+                  throw error;
+                }
+                if (!rejected) {
+                  reportError(error, { operation: "mail-command-gmail-inbox" });
+                }
+              }
+            }
+          }
         }
-        if (input.command.kind === "move" && appliedMessageIds.length > 0) {
+        const appliedMessageIds = messageIds.filter((id) => !outcomes.has(id));
+        if (appliedMessageIds.length > 0) {
           const appliedThreadIds = [
             ...new Set(
               appliedMessageIds.flatMap((id) => {
@@ -716,33 +838,87 @@ export const mutationsMailOperations = {
               })
             ),
           ];
-          if (appliedThreadIds.length > 0) {
+          await afterWrite(async () => {
             await supersedePendingMailPlacement({
               context,
               mailboxId: input.mailboxId,
               retireSnoozes: true,
               threadIds: appliedThreadIds,
             });
-          }
-          await refreshGmailCapturedMessageMetadata({
-            accessToken,
-            mailboxId: input.mailboxId,
-            messageIds: appliedMessageIds,
+            await refreshGmailCapturedMessageMetadata({
+              accessToken,
+              mailboxId: input.mailboxId,
+              messageIds: appliedMessageIds,
+            });
+            await recordMetadataAction(
+              { accessToken, context, input },
+              `move:${command.destination}`,
+              appliedMessageIds
+            );
           });
-          await recordMetadataAction(
-            { accessToken, context, input },
-            `move:${input.command.destination}`,
-            appliedMessageIds
-          );
         }
-        if (failedMutation) {
+        if (markDispatched === undefined && failedMutation) {
           throw failedMutation.reason;
         }
-        return {
-          targets: targetResults,
-        };
       }
+      return { targets: targetResults() };
+    }
+  );
+};
+
+export const mutationsMailOperations = {
+  applyChanges: async ({
+    context,
+    input,
+  }: {
+    context: MailRequestContext;
+    input: MailInputs["applyChanges"];
+  }): Promise<MailMutationResult> => {
+    if (input.requestId === undefined) {
+      const selectedMailbox = await assertAccessibleMailbox({
+        mailboxId: input.mailboxId,
+        userId: context.userId,
+      });
+      return await applyMailChanges({ context, input, selectedMailbox });
+    }
+    const selectedMailbox = await authorizeMailPlacement(
+      context,
+      input.mailboxId
     );
+    if (input.command.kind === "delete-permanently") {
+      throw new ORPCError("BAD_REQUEST", {
+        message: "Permanent bulk deletion is unavailable.",
+      });
+    }
+    return await executeMailCommandWithReceipt({
+      actorUserId: context.userId,
+      execute: async (markDispatched) =>
+        await applyMailChanges({
+          context,
+          input,
+          markDispatched,
+          selectedMailbox,
+        }),
+      input,
+      requestId: input.requestId,
+      wake:
+        selectedMailbox.provider === "gmail" &&
+        serverEnv.QUIETER_GMAIL_EVENTS_ENABLED === true &&
+        input.command.kind !== "set-placement" &&
+        input.command.kind !== "set-importance"
+          ? async () => {
+              const publication = publishMailUpdate({
+                mailboxId: input.mailboxId,
+                type: "mailbox.changed",
+              });
+              if (context.scheduleBackgroundTask) {
+                context.scheduleBackgroundTask(publication);
+              } else {
+                await publication;
+              }
+            }
+          : undefined,
+    });
   },
   markMessageAsRead: async (args: MessageMutationArgs) =>
     await mutateMessage(args, "read"),

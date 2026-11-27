@@ -5,6 +5,7 @@ import type {
   MailCaptureIdPage,
   MailMessageAnalysis,
 } from "@quieter/mail/capture";
+import type { MailMutationResult } from "@quieter/mail/data-plane";
 import type {
   DeliveryEvent,
   DeliveryStatus,
@@ -5733,3 +5734,25 @@ export const authRelations = defineRelations(tables, (r) => ({
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
   },
 }));
+
+export const mailCommandReceipt = pgTable(
+  "mailCommandReceipt",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    claimedAt: timestamp("claimedAt", { withTimezone: true }),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    result: jsonb("result").$type<MailMutationResult>(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.actorUserId, table.mailboxId, table.requestId],
+    }),
+    index("mail_command_receipt_mailbox_idx").on(table.mailboxId),
+  ]
+);
