@@ -273,20 +273,20 @@ export const LabelsWorkspacePanel = ({
   );
   const organization = organizationData ?? emptyLabelOrganization;
 
-  const userLabels = orderMailboxLabels(
-    getUserLabels(labelUpdates.project(labels ?? [], labelUpdateState)),
-    organization.labelOrder
+  const sidebarLabels = getUserLabels(
+    labelUpdates.project(labels ?? [], labelUpdateState)
   );
+  const userLabels = orderMailboxLabels(sidebarLabels, organization.labelOrder);
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
       : readHiddenLabelIds(mailboxId);
   const effectiveHiddenLabelIds = computeEffectiveHiddenLabelIds(
     mailboxProvider,
-    userLabels,
+    sidebarLabels,
     hiddenLabelIds
   );
-  const visibleLabelCount = userLabels.filter(
+  const visibleLabelCount = sidebarLabels.filter(
     (label) => !effectiveHiddenLabelIds.has(label.id)
   ).length;
 
