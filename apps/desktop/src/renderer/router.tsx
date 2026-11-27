@@ -1,10 +1,16 @@
 import { AppProviders } from "@quieter/app/components/app-providers";
 import { LoadingPage } from "@quieter/app/components/loading-page";
+import { authClient } from "@quieter/app/lib/auth";
 import {
   mailboxSearchSchema,
   onboardingSearchSchema,
   settingsSearchSchema,
 } from "@quieter/app/route-search";
+import {
+  extractRouteSessionUser,
+  loadAuthorizedSessionUser,
+  loadFreshSessionUser,
+} from "@quieter/app/session-user";
 import type { SessionUser } from "@quieter/app/session-user";
 import {
   createRootRoute,
@@ -13,6 +19,7 @@ import {
   lazyRouteComponent,
   Outlet,
   redirect,
+  useMatches,
 } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -27,6 +34,7 @@ const userSchema = z.object({
   image: z.string().nullable(),
   name: z.string(),
   needsOnboarding: z.boolean(),
+  sessionId: z.string().min(1).optional(),
 });
 
 const loadUser = async (): Promise<SessionUser | null> => {
@@ -37,7 +45,29 @@ const loadUser = async (): Promise<SessionUser | null> => {
     throw new Error("Unable to reach your account. Please try again.");
   }
   const data: unknown = await response.json();
-  return userSchema.nullable().parse(data);
+  const user = userSchema.nullable().parse(data);
+  if (user === null) {
+    return null;
+  }
+  if (user.sessionId !== undefined) {
+    return { ...user, sessionId: user.sessionId };
+  }
+  const { data: session } = await authClient.getSession();
+  return session?.user.id === user.id
+    ? { ...user, sessionId: session.session.id }
+    : null;
+};
+
+const DesktopAppLayout = () => {
+  const initialUser = useMatches({
+    select: extractRouteSessionUser,
+  });
+
+  return (
+    <AppProviders initialUser={initialUser}>
+      <Outlet />
+    </AppProviders>
+  );
 };
 
 const rootRoute = createRootRoute({
@@ -47,11 +77,7 @@ const rootRoute = createRootRoute({
 });
 
 const appRoute = createRoute({
-  component: () => (
-    <AppProviders>
-      <Outlet />
-    </AppProviders>
-  ),
+  component: DesktopAppLayout,
   getParentRoute: () => rootRoute,
   id: "_app",
 });
@@ -61,7 +87,7 @@ const authRoute = createRoute({
   component: DesktopAuthScreen,
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadFreshSessionUser(loadUser);
     if (user) {
       throw redirect({ to: user.needsOnboarding ? "/onboarding" : "/" });
     }
@@ -77,7 +103,7 @@ const inboxRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async ({ location }) => {
-    const user = await loadUser();
+    const user = await loadAuthorizedSessionUser(loadUser);
     if (!user) {
       throw redirect({ search: { returnTo: location.href }, to: "/auth" });
     }
@@ -102,7 +128,7 @@ const settingsRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadAuthorizedSessionUser(loadUser);
     if (!user) {
       throw redirect({ to: "/auth" });
     }
@@ -124,7 +150,7 @@ const onboardingRoute = createRoute({
   ),
   getParentRoute: () => appRoute,
   loader: async () => {
-    const user = await loadUser();
+    const user = await loadFreshSessionUser(loadUser);
     if (!user) {
       throw redirect({ to: "/auth" });
     }

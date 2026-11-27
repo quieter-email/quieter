@@ -18,6 +18,83 @@ export type MailboxSettingsPrefetchTarget = {
 export const loadPreferenceSettingsPanels = async () =>
   await import("@quieter/app/features/settings/components/preference-settings-panels");
 
+export const loadAccountSettingsPanel = async () => {
+  const { AccountSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/account-settings-panel");
+  return { default: component };
+};
+
+export const loadAccountBillingPanel = async () => {
+  const { AccountBillingPanel: component } =
+    await import("@quieter/app/features/settings/components/account-billing-panel");
+  return { default: component };
+};
+
+export const loadAiSettingsPanel = async () => {
+  const { AiSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/ai-settings-panel");
+  return { default: component };
+};
+
+export const loadConnectorsSettingsPanel = async () => {
+  const { ConnectorsSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/connectors-settings-panel");
+  return { default: component };
+};
+
+export const loadMailboxesSettingsPanel = async () => {
+  const { MailboxesSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/mailboxes-settings-panel");
+  return { default: component };
+};
+
+export const loadOrganizationSettingsPanel = async () => {
+  const { OrganizationSettingsPanel: component } =
+    await import("@quieter/app/features/settings/components/organization-settings-panel");
+  return { default: component };
+};
+
+export const loadSettingsTabPanel = async (tab: SettingsTab) => {
+  switch (tab) {
+    case "account": {
+      await loadAccountSettingsPanel();
+      return;
+    }
+    case "ai": {
+      await loadAiSettingsPanel();
+      return;
+    }
+    case "billing": {
+      await loadAccountBillingPanel();
+      return;
+    }
+    case "connectors": {
+      await loadConnectorsSettingsPanel();
+      return;
+    }
+    case "mailboxes": {
+      await loadMailboxesSettingsPanel();
+      return;
+    }
+    case "organization": {
+      await loadOrganizationSettingsPanel();
+      return;
+    }
+    case "appearance":
+    case "development":
+    case "overview":
+    case "privacy":
+    case "reading":
+    case "shortcuts": {
+      await loadPreferenceSettingsPanels();
+      break;
+    }
+    default: {
+      break;
+    }
+  }
+};
+
 export const AI_SETTINGS_STALE_TIME = 60_000;
 
 export const prefetchSettingsOverview = async (queryClient: QueryClient) => {
@@ -73,6 +150,16 @@ export const prefetchSettingsTab = async (
       break;
     }
   }
+};
+
+export const warmSettingsTab = async (
+  queryClient: QueryClient,
+  tab: SettingsTab
+) => {
+  await Promise.allSettled([
+    loadSettingsTabPanel(tab),
+    prefetchSettingsTab(queryClient, tab),
+  ]);
 };
 
 export const prefetchOrganizationSettingsDetail = async (

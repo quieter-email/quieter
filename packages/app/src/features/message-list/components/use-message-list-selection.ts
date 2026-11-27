@@ -21,6 +21,7 @@ type SelectionState = {
 export const useMessageListSelection = ({
   activeMailbox,
   activeThreadId,
+  isPending = false,
   mailboxId,
   onActivateMessage,
   onDeactivateActiveMessage,
@@ -30,6 +31,7 @@ export const useMessageListSelection = ({
 }: {
   activeMailbox: MailboxCategory;
   activeThreadId: string | null;
+  isPending?: boolean;
   mailboxId: string;
   onActivateMessage: (messageId: string, threadId: string) => void;
   onDeactivateActiveMessage: () => void;
@@ -42,6 +44,8 @@ export const useMessageListSelection = ({
   const focusRingRequestedRef = useRef(false);
   const selectionScopeKey =
     selectionScopeKeyOverride ?? `${mailboxId}:${activeMailbox}:${searchQuery}`;
+  const preserveSelectionWhileEmpty =
+    isPending && threadedMessages.length === 0;
   const loadedThreadIdSet = useMemo(
     () => new Set(threadedMessages.map((thread) => thread.threadId)),
     [threadedMessages]
@@ -65,16 +69,25 @@ export const useMessageListSelection = ({
   );
   const selectedThreadIds = useMemo(
     () =>
-      new Set(
-        [...scopedSelectionState.selectedThreadIds].filter((threadId) =>
-          loadedThreadIdSet.has(threadId)
-        )
-      ),
-    [loadedThreadIdSet, scopedSelectionState.selectedThreadIds]
+      preserveSelectionWhileEmpty
+        ? scopedSelectionState.selectedThreadIds
+        : new Set(
+            [...scopedSelectionState.selectedThreadIds].filter((threadId) =>
+              loadedThreadIdSet.has(threadId)
+            )
+          ),
+    [
+      loadedThreadIdSet,
+      preserveSelectionWhileEmpty,
+      scopedSelectionState.selectedThreadIds,
+    ]
   );
   const selectionAnchorThreadId = (() => {
     const anchorId = scopedSelectionState.selectionAnchorThreadId;
-    if ((anchorId ?? "") === "" || !loadedThreadIdSet.has(anchorId ?? "")) {
+    if (
+      (anchorId ?? "") === "" ||
+      (!preserveSelectionWhileEmpty && !loadedThreadIdSet.has(anchorId ?? ""))
+    ) {
       return null;
     }
     return anchorId;

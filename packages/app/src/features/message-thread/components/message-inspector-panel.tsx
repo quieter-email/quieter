@@ -51,7 +51,9 @@ export const MessageInspectorPanel = ({
     data: inspector,
     error: inspectorError,
     isError: isInspectorError,
+    isPaused: isInspectorPaused,
     isPending: isInspectorPending,
+    refetch: refetchInspector,
   } = useQuery(getMessageInspectorOptions(mailboxId, message.id, open));
   const payloadText =
     inspector?.payload === undefined
@@ -59,18 +61,34 @@ export const MessageInspectorPanel = ({
       : JSON.stringify(inspector.payload, null, 2);
   let inspectorBody: ReactNode = null;
 
-  if (isInspectorPending) {
+  if (inspector === undefined && isInspectorError) {
     inspectorBody = (
-      <div className="flex items-center gap-2 text-body-sm text-muted-fg">
-        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-        <span>Loading message details…</span>
+      <div
+        className="flex flex-wrap items-center justify-between gap-3"
+        role="alert"
+      >
+        <Text tone="destructive">
+          {inspectorError.message ?? "Could not load message details."}
+        </Text>
+        <Button
+          onClick={() => {
+            void refetchInspector();
+          }}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Try again
+        </Button>
       </div>
     );
-  } else if (isInspectorError) {
+  } else if (inspector === undefined && isInspectorPending) {
     inspectorBody = (
-      <Text tone="destructive">
-        {inspectorError.message ?? "Could not load message details."}
-      </Text>
+      <p aria-live="polite" className="text-body-sm text-muted-fg">
+        {isInspectorPaused
+          ? "Waiting for a connection…"
+          : "Loading message details…"}
+      </p>
     );
   } else if (inspector !== undefined) {
     const sentAt =

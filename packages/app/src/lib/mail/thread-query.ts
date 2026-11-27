@@ -68,6 +68,7 @@ export const getThreadWithDetailsOptions = (
   queryOptions<ThreadQueryData>({
     enabled,
     gcTime: 1000 * 60 * 30,
+    networkMode: "offlineFirst",
     persister: queryPersister.persisterFn,
     queryFn: async ({ signal }) => {
       if (isManagedSandboxMailboxId(mailboxId)) {

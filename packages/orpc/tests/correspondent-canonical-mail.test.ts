@@ -164,6 +164,7 @@ describe("canonical mail boundaries", () => {
       displayName: "Test mailbox",
       emailAddress: "owner@example.test",
       id: mailboxId,
+      mailChangeVersion: null,
       organizationId: "organization",
       ownerUserId: "owner",
       provider: "managed",

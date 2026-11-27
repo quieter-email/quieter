@@ -80,7 +80,9 @@ type MessageActionsDropdownProps = Omit<
 
 type MessageActionsContextMenuProps = PropsWithChildren<
   MessageActionsSharedProps & {
+    isMessageActionPending?: boolean;
     isPending?: boolean;
+    isThreadActionPending?: boolean;
     triggerClassName?: string;
     triggerStyle?: CSSProperties;
   }
@@ -576,15 +578,17 @@ export const MessageActionsDropdown = ({
 
 export const MessageActionsContextMenu = ({
   children,
+  isMessageActionPending,
   isPending = false,
+  isThreadActionPending,
   triggerClassName,
   triggerStyle,
   ...props
 }: MessageActionsContextMenuProps) => {
   const entries = getMessageActionEntries(props, {
-    message: isPending,
-    optimistic: isPending,
-    thread: isPending,
+    message: isMessageActionPending ?? isPending,
+    optimistic: false,
+    thread: isThreadActionPending ?? isPending,
   });
   if (entries.length === 0) {
     return children;

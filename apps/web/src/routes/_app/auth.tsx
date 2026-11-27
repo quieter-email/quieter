@@ -1,5 +1,6 @@
 import { LoadingPage } from "@quieter/app/components/loading-page";
 import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
+import { loadFreshSessionUser } from "@quieter/app/session-user";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 import { z } from "zod";
@@ -18,7 +19,7 @@ export const Route = createFileRoute("/_app/auth")({
   ),
   ssr: "data-only",
   loader: async ({ location }) => {
-    const user = await getSessionUser();
+    const user = await loadFreshSessionUser(getSessionUser);
 
     if (user) {
       const search = location.search as { returnTo?: string };

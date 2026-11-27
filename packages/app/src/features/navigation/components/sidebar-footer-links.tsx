@@ -10,6 +10,8 @@ import {
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
+import { warmSettingsDestination } from "@quieter/app/lib/background-prefetch";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button } from "@quieter/ui/button";
 import {
@@ -21,7 +23,8 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { Link, useLocation } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, useLocation, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
 import { SidebarContextMenu } from "./sidebar-context-menu";
@@ -140,12 +143,25 @@ export const SidebarFooterLinks = ({
   onRequestClose?: () => void;
   onCustomize?: () => void;
 }) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const preview = usePreviewPersona();
   const returnTo = useLocation({ select: (location) => location.href });
+  const warmSettings = () => {
+    void warmSettingsDestination({
+      isSandboxMode: preview !== null,
+      queryClient,
+      router,
+    });
+  };
   return (
     <div className="flex items-center gap-1">
       <SidebarContextMenu className="min-w-0 flex-1">
         <SidebarNavItem
           onClick={onRequestClose}
+          onFocus={warmSettings}
+          onMouseEnter={warmSettings}
+          onPointerDown={warmSettings}
           nativeButton={false}
           render={<Link search={{ from: returnTo }} to="/settings" />}
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.

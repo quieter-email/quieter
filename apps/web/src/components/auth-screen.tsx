@@ -14,6 +14,7 @@ import {
 import type { PreviewPersona } from "@quieter/app/lib/preview-personas";
 import { queryPersister } from "@quieter/app/lib/query-persister";
 import { appFetch } from "@quieter/app/runtime";
+import { purgeAuthorizedSessionUser } from "@quieter/app/session-user";
 import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
 import type { DesktopAuthQuery } from "@quieter/auth/desktop";
 import { Button } from "@quieter/ui/button";
@@ -99,6 +100,7 @@ export const AuthCredentials = ({
 
   const callbackUrl = normalizeAuthReturnTo(returnTo);
   const clearCachedAccountData = async () => {
+    purgeAuthorizedSessionUser();
     queryClient.clear();
     await queryPersister.removeQueries();
   };
@@ -153,6 +155,7 @@ export const AuthCredentials = ({
       setErrors((prev) => ({ ...prev, google: undefined }));
     },
     onSuccess: async (response) => {
+      purgeAuthorizedSessionUser();
       queryClient.clear();
       await queryPersister.removeQueries();
 
@@ -191,6 +194,7 @@ export const AuthCredentials = ({
       setErrors((prev) => ({ ...prev, passkey: undefined }));
     },
     onSuccess: async () => {
+      purgeAuthorizedSessionUser();
       queryClient.clear();
       await queryPersister.removeQueries();
 
@@ -430,6 +434,7 @@ const PreviewPersonaPicker = ({ navigate }: { navigate: AuthNavigate }) => {
         return;
       }
 
+      purgeAuthorizedSessionUser();
       setPreviewPersona(persona);
       setDemoModeEnabled(persona === "gmail");
       setManagedDemoModeEnabled(persona === "managed");

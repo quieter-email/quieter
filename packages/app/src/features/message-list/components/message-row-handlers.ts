@@ -6,7 +6,6 @@ import type { MessageListProps } from "./message-list-types";
 import type { useMessageListSelection } from "./use-message-list-selection";
 
 export const createMessageRowHandlers = ({
-  isActionPending,
   isActive,
   mailboxActions,
   onKeyboardOpen,
@@ -18,7 +17,7 @@ export const createMessageRowHandlers = ({
   thread,
   unread,
 }: {
-  isActionPending: boolean;
+  isActionPending?: boolean;
   isActive: boolean;
   mailboxActions: MessageListProps["mailboxActions"];
   onKeyboardOpen?: () => void;
@@ -72,8 +71,7 @@ export const createMessageRowHandlers = ({
       !isActive &&
       !showSelectionControl &&
       unread &&
-      mailboxActions.canMarkRead &&
-      !isActionPending
+      mailboxActions.canMarkRead
     ) {
       void (async () => {
         try {

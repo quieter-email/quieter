@@ -1,7 +1,6 @@
 "use client";
 
 import { Menu01Icon } from "@hugeicons/core-free-icons";
-import { loadCalendarWorkspace } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import { BillingCheckoutResult } from "@quieter/app/features/settings/components/billing-checkout-result";
 import { ConnectorConnectionResult } from "@quieter/app/features/settings/components/connector-connection-result";
 import { GmailConnectionResult } from "@quieter/app/features/settings/components/gmail-connection-result";
@@ -11,7 +10,15 @@ import {
   SettingsLoadingState,
   SettingsPageHeader,
 } from "@quieter/app/features/settings/components/settings-layout";
-import { loadPreferenceSettingsPanels } from "@quieter/app/features/settings/components/settings-prefetch";
+import {
+  loadAccountBillingPanel,
+  loadAccountSettingsPanel,
+  loadAiSettingsPanel,
+  loadConnectorsSettingsPanel,
+  loadMailboxesSettingsPanel,
+  loadOrganizationSettingsPanel,
+  loadPreferenceSettingsPanels,
+} from "@quieter/app/features/settings/components/settings-prefetch";
 import { SettingsSearch } from "@quieter/app/features/settings/components/settings-search";
 import { SettingsSidebar } from "@quieter/app/features/settings/components/settings-sidebar";
 import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
@@ -20,60 +27,25 @@ import { authClient } from "@quieter/app/lib/auth";
 import {
   canPrefetchInBackground,
   scheduleBackgroundPrefetch,
+  warmInboxDestination,
 } from "@quieter/app/lib/background-prefetch";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
-import { mailboxSearchSchema } from "@quieter/app/route-search";
 import { Button } from "@quieter/ui/button";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { WorkspaceSection } from "@quieter/ui/workspace-section";
 import { WorkspaceSidebar } from "@quieter/ui/workspace-sidebar";
 import { useQueryClient } from "@tanstack/react-query";
-import { defaultParseSearch, useRouter } from "@tanstack/react-router";
+import { useRouter } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
-const loadAccountSettingsPanel = async () => {
-  const { AccountSettingsPanel: component } =
-    await import("@quieter/app/features/settings/components/account-settings-panel");
-  return { default: component };
-};
 const AccountSettingsPanel = lazy(loadAccountSettingsPanel);
-
-const loadAccountBillingPanel = async () => {
-  const { AccountBillingPanel: component } =
-    await import("@quieter/app/features/settings/components/account-billing-panel");
-  return { default: component };
-};
 const AccountBillingPanel = lazy(loadAccountBillingPanel);
-
-const loadAiSettingsPanel = async () => {
-  const { AiSettingsPanel: component } =
-    await import("@quieter/app/features/settings/components/ai-settings-panel");
-  return { default: component };
-};
 const AiSettingsPanel = lazy(loadAiSettingsPanel);
-
-const loadConnectorsSettingsPanel = async () => {
-  const { ConnectorsSettingsPanel: component } =
-    await import("@quieter/app/features/settings/components/connectors-settings-panel");
-  return { default: component };
-};
 const ConnectorsSettingsPanel = lazy(loadConnectorsSettingsPanel);
-
-const loadMailboxesSettingsPanel = async () => {
-  const { MailboxesSettingsPanel: component } =
-    await import("@quieter/app/features/settings/components/mailboxes-settings-panel");
-  return { default: component };
-};
 const MailboxesSettingsPanel = lazy(loadMailboxesSettingsPanel);
-
-const loadOrganizationSettingsPanel = async () => {
-  const { OrganizationSettingsPanel: component } =
-    await import("@quieter/app/features/settings/components/organization-settings-panel");
-  return { default: component };
-};
 const OrganizationSettingsPanel = lazy(loadOrganizationSettingsPanel);
 
 const PreferencesSettingsPanel = lazy(
@@ -122,11 +94,19 @@ export const SettingsScreen = ({
   const preview = usePreviewPersona();
   const routeSearch = settingsRouteApi.useSearch();
   const { from, tab } = routeSearch;
+  const userId = session.data?.user.id ?? initialUser.id;
   useEffect(
     () =>
       scheduleBackgroundPrefetch(queryClient, async (signal) => {
         await Promise.allSettled([
-          router.loadRouteChunk(router.routesByPath["/"]),
+          warmInboxDestination({
+            from,
+            isSandboxMode: preview !== null,
+            queryClient,
+            router,
+            signal,
+            userId,
+          }),
           loadPreferenceSettingsPanels(),
         ]);
         for (const load of [
@@ -143,30 +123,8 @@ export const SettingsScreen = ({
           await Promise.allSettled([load()]);
         }
       }),
-    [queryClient, router]
+    [from, preview, queryClient, router, userId]
   );
-  const userId = session.data?.user.id;
-  useEffect((): (() => void) | undefined => {
-    if (preview !== null || userId !== initialUser.id) {
-      return undefined;
-    }
-    return scheduleBackgroundPrefetch(queryClient, async (signal) => {
-      const returnUrl = new URL(from, window.location.origin);
-      const route = mailboxSearchSchema.parse(
-        returnUrl.origin === window.location.origin &&
-          returnUrl.pathname === "/"
-          ? defaultParseSearch(returnUrl.search)
-          : {}
-      );
-      if (route.workspace !== "calendar") {
-        return;
-      }
-      const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
-      if (!signal.aborted) {
-        await prefetchCalendarWorkspace(queryClient, { route, signal, userId });
-      }
-    });
-  }, [from, initialUser.id, preview, queryClient, userId]);
   const preferences = [
     "overview",
     "appearance",

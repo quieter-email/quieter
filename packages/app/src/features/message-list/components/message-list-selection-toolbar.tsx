@@ -2,7 +2,6 @@
 
 import {
   Cancel01Icon,
-  Loading03Icon,
   MoreHorizontalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
@@ -140,6 +139,7 @@ const MessageListBulkActionsMenu = ({
     <DropdownMenuContent align="center" side="top">
       {actions.map((action) => (
         <DropdownMenuItem
+          disabled={disabled || action.disabled === true}
           key={action.id}
           onSelect={() => {
             void action.onSelect();
@@ -181,6 +181,7 @@ export const MessageListSelectionToolbar = ({
     .filter((action) => action.promoted === true)
     .slice(0, INLINE_ACTION_LIMIT);
   const actionsDisabled = disabled || selectedCount === 0;
+  const hasEnabledActions = actions.some((action) => action.disabled !== true);
 
   return (
     <section aria-label={`Selected ${itemLabelPlural}`}>
@@ -209,16 +210,6 @@ export const MessageListSelectionToolbar = ({
           <p className="truncate text-body-sm font-medium text-fg tabular-nums">
             {selectedCount} selected
           </p>
-
-          {pending && (
-            <Icon
-              aria-hidden
-              animation="spin"
-              icon={Loading03Icon}
-              size={14}
-              tone="muted"
-            />
-          )}
         </div>
 
         {inlineActions.map((action, index) => (
@@ -231,7 +222,7 @@ export const MessageListSelectionToolbar = ({
           >
             <MessageListBulkActionButton
               action={action}
-              disabled={actionsDisabled}
+              disabled={actionsDisabled || action.disabled === true}
             />
           </span>
         ))}
@@ -246,7 +237,7 @@ export const MessageListSelectionToolbar = ({
         {actions.length > 0 && (
           <MessageListBulkActionsMenu
             actions={actions}
-            disabled={actionsDisabled}
+            disabled={actionsDisabled || !hasEnabledActions}
           />
         )}
 

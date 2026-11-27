@@ -192,7 +192,6 @@ type MessageRowContentProps = Omit<
 >;
 
 const MessageRowSelectionButton = ({
-  isActionPending,
   isSelected,
   onThreadSelectionPress,
   reducedMotion,
@@ -202,7 +201,6 @@ const MessageRowSelectionButton = ({
   showCheckbox,
   thread,
 }: {
-  isActionPending: boolean;
   isSelected: boolean;
   onThreadSelectionPress: MessageRowProps["onThreadSelectionPress"];
   reducedMotion: boolean | null;
@@ -235,7 +233,6 @@ const MessageRowSelectionButton = ({
         aria-label={selectionAriaLabel}
         aria-pressed={isSelected}
         className={mailListRowParts.selectionButton}
-        disabled={isActionPending}
         onKeyDown={handleSelectionKeyDown}
         onMouseDown={handleSelectionPress}
         onMouseEnter={() => {
@@ -391,11 +388,12 @@ type MessageRowSurfaceProps = {
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
   gmailLabels: MailboxLabel[];
-  isActionPending: boolean;
   isActive: boolean;
   isDraftMailbox: boolean;
+  isMessageActionPending: boolean;
   isPressed: boolean;
   isSelected: boolean;
+  isThreadActionPending: boolean;
   mailboxActions: MessageListProps["mailboxActions"];
   mailboxContextsByThreadId?: MessageListProps["mailboxContextsByThreadId"];
   mailboxId: string;
@@ -434,11 +432,12 @@ const MessageRowSurface = ({
   date,
   deliveryStatus,
   gmailLabels,
-  isActionPending,
   isActive,
   isDraftMailbox,
+  isMessageActionPending,
   isPressed,
   isSelected,
+  isThreadActionPending,
   mailboxActions,
   mailboxContextsByThreadId,
   mailboxId,
@@ -483,7 +482,6 @@ const MessageRowSurface = ({
     handleRowKeyDown,
     handleRowMouseDown,
   } = createMessageRowHandlers({
-    isActionPending,
     isActive,
     mailboxActions,
     onKeyboardOpen,
@@ -532,7 +530,7 @@ const MessageRowSurface = ({
       <IconButtonTooltip label={placementLabel}>
         <Button
           aria-label={placementLabel}
-          disabled={isActionPending}
+          disabled={isThreadActionPending}
           fullWidth
           onClick={() => {
             void placementAction(thread.threadId);
@@ -600,7 +598,6 @@ const MessageRowSurface = ({
         <span aria-hidden className={mailListRowParts.unreadIndicator} />
       )}
       <MessageRowSelectionButton
-        isActionPending={isActionPending}
         isSelected={isSelected}
         onThreadSelectionPress={onThreadSelectionPress}
         reducedMotion={reducedMotion}
@@ -614,7 +611,8 @@ const MessageRowSurface = ({
       <div className="relative h-full min-w-0 flex-1">
         <MessageActionsContextMenu
           actions={threadActions}
-          isPending={isActionPending}
+          isMessageActionPending={isMessageActionPending}
+          isThreadActionPending={isThreadActionPending}
           mailboxContextsByThreadId={mailboxContextsByThreadId}
           mailboxId={mailboxId}
           mailbox={activeMailbox}
@@ -754,9 +752,12 @@ const MessageRowContent = ({
   );
   const date = formatMessageListDate(anchorMessage);
   const unread = !isDraftMailbox && thread.unreadCount > 0;
-  const isActionPending =
-    pendingActions.isMessageActionPending(anchorMessage.id) ||
-    pendingActions.isThreadActionPending(thread.threadId);
+  const isMessageActionPending = pendingActions.isMessageActionPending(
+    anchorMessage.id
+  );
+  const isThreadActionPending = pendingActions.isThreadActionPending(
+    thread.threadId
+  );
   const surfaceOpacity = getMessageRowSurfaceOpacity(
     isActive,
     isHovered,
@@ -782,11 +783,12 @@ const MessageRowContent = ({
       date={date}
       deliveryStatus={deliveryStatus}
       gmailLabels={gmailLabels}
-      isActionPending={isActionPending}
       isActive={isActive}
       isDraftMailbox={isDraftMailbox}
+      isMessageActionPending={isMessageActionPending}
       isPressed={isPressed}
       isSelected={isSelected}
+      isThreadActionPending={isThreadActionPending}
       mailboxActions={mailboxActions}
       mailboxContextsByThreadId={mailboxContextsByThreadId}
       mailboxId={mailboxId}

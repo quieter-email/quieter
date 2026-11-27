@@ -1,4 +1,5 @@
 import { LoadingPage } from "@quieter/app/components/loading-page";
+import { loadFreshSessionUser } from "@quieter/app/session-user";
 import { desktopAuthQuerySchema } from "@quieter/auth/desktop";
 import { createFileRoute } from "@tanstack/react-router";
 
@@ -10,7 +11,7 @@ export const Route = createFileRoute("/_app/desktop/auth")({
     desktopAuth: desktopAuthQuerySchema.safeParse(search).data ?? null,
   }),
   ssr: "data-only",
-  loader: async () => ({ user: await getSessionUser() }),
+  loader: async () => ({ user: await loadFreshSessionUser(getSessionUser) }),
   head: () => ({
     meta: [
       { title: "Sign in to quieter desktop" },

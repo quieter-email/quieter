@@ -368,15 +368,23 @@ const MessageHeaderActions = ({
 };
 
 const ThreadMessageBody = ({
+  error,
   expanded,
+  isError,
   isLoading,
+  isPaused,
   mailboxId,
   message,
+  onRetry,
 }: {
+  error?: unknown;
   expanded: boolean;
+  isError?: boolean;
   isLoading?: boolean;
+  isPaused?: boolean;
   mailboxId: string;
   message: MessageListItem;
+  onRetry?: () => void;
 }) => {
   const [hasExpanded, setHasExpanded] = useState(expanded);
   if (expanded && !hasExpanded) {
@@ -409,9 +417,13 @@ const ThreadMessageBody = ({
         >
           {hasExpanded && (
             <MessageBody
+              error={error}
+              isError={isError}
               isLoading={isLoading}
+              isPaused={isPaused}
               mailboxId={mailboxId}
               message={message}
+              onRetry={onRetry}
             />
           )}
         </div>
@@ -450,26 +462,34 @@ const MessageExpandButton = ({
 );
 
 const ThreadMessageCard = ({
+  error,
   expanded,
+  isError,
   isLoading,
+  isPaused,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
   message,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
   verificationCode,
 }: {
+  error?: unknown;
   expanded: boolean;
+  isError?: boolean;
   isLoading?: boolean;
+  isPaused?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   onToggleExpanded: () => void;
   verificationCode?: string;
@@ -542,10 +562,14 @@ const ThreadMessageCard = ({
             </div>
           )}
           <ThreadMessageBody
+            error={error}
             expanded={expanded}
+            isError={isError}
             isLoading={isLoading}
+            isPaused={isPaused}
             mailboxId={mailboxId}
             message={message}
+            onRetry={onRetry}
           />
         </div>
 
@@ -562,23 +586,31 @@ const ThreadMessageCard = ({
 };
 
 export const SingleMessageCard = ({
+  error,
+  isError,
   isLoading,
+  isPaused,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
   message,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   isActionPending,
   verificationCode,
 }: {
+  error?: unknown;
+  isError?: boolean;
   isLoading?: boolean;
+  isPaused?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCode?: string;
 }) => {
@@ -634,9 +666,13 @@ export const SingleMessageCard = ({
           </div>
         )}
         <MessageBody
+          error={error}
+          isError={isError}
           isLoading={isLoading}
+          isPaused={isPaused}
           mailboxId={mailboxId}
           message={message}
+          onRetry={onRetry}
         />
       </div>
 
@@ -653,24 +689,34 @@ export const SingleMessageCard = ({
 
 export const ThreadMessageList = ({
   allThreadMessages,
+  error,
+  isError,
   isLoading,
+  isMessageActionPending,
+  isPaused,
   mailboxId,
   mailboxProvider,
   messages,
   navigationScope,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   isActionPending,
   verificationCodes,
 }: {
   allThreadMessages: MessageListItem[];
+  error?: unknown;
+  isError?: boolean;
   isLoading?: boolean;
+  isMessageActionPending?: (messageId: string) => boolean;
+  isPaused?: boolean;
   isActionPending?: boolean;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   messages: MessageListItem[];
   navigationScope?: ConversationNavigationScope;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
@@ -761,15 +807,23 @@ export const ThreadMessageList = ({
 
         return (
           <ThreadMessageCard
+            error={error}
             expanded={isExpanded}
+            isError={isError}
             isLoading={isLoading}
-            isActionPending={isActionPending}
+            isPaused={isPaused}
+            isActionPending={
+              isMessageActionPending
+                ? isMessageActionPending(threadMessage.id)
+                : isActionPending
+            }
             key={threadMessage.id}
             linkedDraftMessage={linkedDraftMessage}
             mailboxId={mailboxId}
             mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
+            onRetry={onRetry}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
               setMessageExpansion((current) => ({

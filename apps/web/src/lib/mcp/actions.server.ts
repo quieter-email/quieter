@@ -240,6 +240,10 @@ export const orpcActions = {
       "read",
       "Read the exact unsubscribe email a mailing list requests.",
     ],
+    pullMailboxChanges: [
+      "read",
+      "Read changes for several views of the same mailbox.",
+    ],
     removeManagedMailboxDivisionGrant: [
       "delete",
       "Remove a division's managed mailbox access.",

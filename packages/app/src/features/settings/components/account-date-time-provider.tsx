@@ -2,6 +2,7 @@
 
 import { toastError } from "@quieter/app/lib/error-toast";
 import { orpc } from "@quieter/app/lib/orpc";
+import { queryPersister } from "@quieter/app/lib/query-persister";
 import {
   DateTimePreferencesProvider,
   useDateTimePreferences,
@@ -25,6 +26,7 @@ export const useAccountPreferences = (enabled = true) => {
   const query = useQuery({
     ...orpc.accountPreferences.get.queryOptions(),
     enabled,
+    persister: queryPersister.persisterFn,
   });
   const pending = useMutationState({
     filters: {

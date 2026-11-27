@@ -36,6 +36,8 @@ Logout or confirmed mailbox access loss disposes the affected coordinator state,
 
 The cache holds at most five pages per unfiltered message-list query. The active list queues up to 60 full threads from the viewport and the two screens below it. The queue prioritizes visible rows, then unread and important threads within each screen. It uses at most two background requests at once, with a separate slot for hover or keyboard intent. Speculative reads skip the server's open-triggered capture and importance processing. Search result lists, raw MIME, headers, credentials, and attachment bytes are excluded from disk storage. Missing body records cause a network fetch. Optimistic state is not persisted as confirmed state.
 
+The protected route's authenticated session initializes the workspace QueryClient. The restore reads the mailbox catalog, unread counts, and account preferences together, then loads bounded windows and label catalogs for mailboxes in the current access list. Unfiltered Drafts and Later lists use the same cache and revalidate on open. The catalog revalidates in the background on mount and reconnect. Access hints and authoritative read failures remove revoked mailbox data from memory and disk while other mailboxes stay available. Unseen mail and unsupported search filters still require an authoritative read.
+
 Records are scoped to the signed-in user and mailbox. Account changes fence in-flight cache operations and remove other users' records; logout clears the cache. Authorization/not-found failures purge the affected mailbox's disk cache. As with any local cache, access changes cannot erase an offline browser immediately. IndexedDB is a performance cache, never an authorization source.
 
 ## Local verification

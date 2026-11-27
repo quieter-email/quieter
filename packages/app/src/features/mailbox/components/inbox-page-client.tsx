@@ -19,6 +19,7 @@ type InboxPageClientProps = {
     id?: string | null;
     email?: string | null;
     name?: string | null;
+    sessionId?: string | null;
   };
 };
 

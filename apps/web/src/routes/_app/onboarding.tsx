@@ -2,6 +2,7 @@ import { LoadingPage } from "@quieter/app/components/loading-page";
 import { OnboardingScreen } from "@quieter/app/features/onboarding/components/onboarding-screen";
 import { getSafeAuthReturnTo } from "@quieter/app/lib/return-to";
 import { onboardingSearchSchema } from "@quieter/app/route-search";
+import { loadFreshSessionUser } from "@quieter/app/session-user";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 
@@ -12,7 +13,7 @@ export const Route = createFileRoute("/_app/onboarding")({
   validateSearch: zodValidator(onboardingSearchSchema),
   ssr: "data-only",
   loader: async ({ location }) => {
-    const user = await getSessionUser();
+    const user = await loadFreshSessionUser(getSessionUser);
 
     if (!user) {
       throw redirect({

@@ -172,7 +172,9 @@ export const LabelsWorkspacePanel = ({
   const {
     data: labels,
     isError: areLabelsError,
+    isPaused: areLabelsPaused,
     isPending: areLabelsPending,
+    refetch: refetchLabels,
   } = useQuery(
     labelsQueryOptions(mailboxId ?? "", isNonemptyMailboxId(mailboxId))
   );
@@ -870,7 +872,7 @@ export const LabelsWorkspacePanel = ({
   };
 
   let labelsContent: React.ReactNode;
-  if (areLabelsPending) {
+  if (areLabelsPending && labels === undefined) {
     labelsContent = (
       <p
         className={cn(
@@ -878,19 +880,30 @@ export const LabelsWorkspacePanel = ({
           settingsSurfaceVariants({ variant: "padding" })
         )}
       >
-        Loading labels…
+        {areLabelsPaused ? "Waiting for a connection…" : "Loading labels…"}
       </p>
     );
   } else if (labelsUnavailable) {
     labelsContent = (
-      <p
+      <div
         className={cn(
-          "text-body text-destructive",
+          "flex flex-wrap items-center justify-between gap-3",
           settingsSurfaceVariants({ variant: "padding" })
         )}
+        role="alert"
       >
-        Could not load labels.
-      </p>
+        <p className="text-body text-destructive">Could not load labels.</p>
+        <Button
+          onClick={() => {
+            void refetchLabels();
+          }}
+          size="sm"
+          type="button"
+          variant="secondary"
+        >
+          Try again
+        </Button>
+      </div>
     );
   } else if (userLabels.length === 0 && organization.groups.length === 0) {
     labelsContent = (

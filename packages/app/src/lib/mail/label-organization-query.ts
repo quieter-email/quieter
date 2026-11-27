@@ -1,4 +1,5 @@
 import { rpc } from "@quieter/app/lib/orpc";
+import { queryPersister } from "@quieter/app/lib/query-persister";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import {
   applyLabelOrganizationAction,
@@ -6,7 +7,10 @@ import {
   labelOrganizationActionSchema,
   labelOrganizationSchema,
 } from "@quieter/mail/mailbox-organization";
-import type { LabelOrganizationAction } from "@quieter/mail/mailbox-organization";
+import type {
+  LabelOrganization,
+  LabelOrganizationAction,
+} from "@quieter/mail/mailbox-organization";
 import { queryOptions } from "@tanstack/react-query";
 
 const readDemoOrganization = (mailboxId: string) => {
@@ -26,8 +30,11 @@ export const labelOrganizationQueryOptions = (
   mailboxId: string,
   enabled = true
 ) =>
-  queryOptions({
+  queryOptions<LabelOrganization>({
     enabled,
+    persister: isSandboxMailboxId(mailboxId)
+      ? undefined
+      : queryPersister.persisterFn,
     queryFn: async ({ signal }) =>
       isSandboxMailboxId(mailboxId)
         ? readDemoOrganization(mailboxId)

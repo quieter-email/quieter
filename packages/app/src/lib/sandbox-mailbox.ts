@@ -1,8 +1,6 @@
-import {
-  DEMO_MAILBOX_ID,
-  LANDING_DEMO_MAILBOX_ID,
-} from "@quieter/app/lib/gmail/demo-mail";
-import { DEMO_MANAGED_MAILBOX_ID } from "@quieter/app/lib/managed-mail/demo-managed-mail";
+export const DEMO_MAILBOX_ID = "demo:mailbox";
+export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
+export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
 
 export const isGmailSandboxMailboxId = (mailboxId: string) =>
   mailboxId === DEMO_MAILBOX_ID || mailboxId === LANDING_DEMO_MAILBOX_ID;

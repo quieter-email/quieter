@@ -12,6 +12,7 @@ import { mailboxLabelPillToneByColor } from "@quieter/app/features/message-label
 import { toastError } from "@quieter/app/lib/error-toast";
 import { labelOrganizationQueryOptions } from "@quieter/app/lib/mail/label-organization-query";
 import { labelSuggestionsQueryOptions } from "@quieter/app/lib/mail/label-suggestions-query";
+import { getLabelsQueryKey } from "@quieter/app/lib/mail/labels-query";
 import type {
   LabelOrganization,
   MailboxLabel,
@@ -31,7 +32,7 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Pill, PillButton } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTitle } from "@quieter/ui/popover";
-import { useQueries } from "@tanstack/react-query";
+import { useQueries, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
@@ -45,6 +46,7 @@ export type ConversationLabelChanges = {
 
 type ConversationLabelsProps = {
   appliedLabelIds: readonly string[];
+  areLabelsError?: boolean;
   areLabelsPaused?: boolean;
   areLabelsPending?: boolean;
   labels: readonly MailboxLabel[];
@@ -64,10 +66,13 @@ type PickerState = {
   groupId: string | null;
   highlightedId: string | null;
   labels: readonly MailboxLabel[];
+  /** Locks optional metadata (suggestions, groups) once the user navigates. */
+  locked: boolean;
   organization?: LabelOrganization;
   query: string;
   ready: boolean;
   suggestionIds: readonly string[];
+  suggestionsHydrated: boolean;
 };
 
 type PickerAction =
@@ -84,13 +89,16 @@ const closedPicker: PickerState = {
   groupId: null,
   highlightedId: null,
   labels: [],
+  locked: false,
   query: "",
   ready: false,
   suggestionIds: [],
+  suggestionsHydrated: false,
 };
 
 export const ConversationLabels = ({
   appliedLabelIds,
+  areLabelsError = false,
   areLabelsPaused = false,
   areLabelsPending = false,
   labels,
@@ -100,6 +108,7 @@ export const ConversationLabels = ({
   onFilterByLabel,
   onUpdateLabels,
 }: ConversationLabelsProps) => {
+  const queryClient = useQueryClient();
   const canEdit = onUpdateLabels !== undefined;
   const isRow = layout !== "header";
   const pillSize = layout === "adaptive" ? "adaptive" : "sm";
@@ -114,6 +123,16 @@ export const ConversationLabels = ({
   const viewportRef = useRef<HTMLElement | null>(null);
   const restorePickerFocusRef = useRef(true);
   const removedLabelIdRef = useRef<string | null>(null);
+  const cachedLabels = queryClient.getQueryData<MailboxLabel[]>(
+    getLabelsQueryKey(mailboxId)
+  );
+  const resolvedLabels = labels.length > 0 ? labels : (cachedLabels ?? labels);
+  const isCatalogReady =
+    resolvedLabels.length > 0 ||
+    cachedLabels !== undefined ||
+    (!areLabelsPending && !areLabelsError);
+  const isCatalogFailed =
+    !isCatalogReady && areLabelsError && resolvedLabels.length === 0;
   const shouldLoadDetails = canEdit && (!isRow || open);
   const organizationQuery = useQueries<
     ReturnType<typeof labelOrganizationQueryOptions>[]
@@ -129,19 +148,43 @@ export const ConversationLabels = ({
       ? [labelSuggestionsQueryOptions(mailboxId, messageIds)]
       : [],
   }).at(0);
-  const organization = organizationQuery?.data;
-  const suggestionIds = suggestionsQuery?.data;
-  const isWaitingForDetails =
-    areLabelsPending ||
-    organizationQuery?.isPending === true ||
-    (messageIds.length > 0 && suggestionsQuery?.isPending === true);
-  if (open && !picker.ready && !isWaitingForDetails) {
+  const organization =
+    organizationQuery?.data ??
+    queryClient.getQueryData<LabelOrganization>(
+      labelOrganizationQueryOptions(mailboxId).queryKey
+    );
+  const suggestionIds =
+    suggestionsQuery?.data ??
+    (messageIds.length > 0
+      ? queryClient.getQueryData<string[]>(
+          labelSuggestionsQueryOptions(mailboxId, messageIds).queryKey
+        )
+      : undefined);
+  if (open && !picker.ready && isCatalogReady) {
     setPicker({
       ...picker,
-      labels,
+      labels: resolvedLabels,
       organization,
       ready: true,
       suggestionIds: suggestionIds ?? [],
+      suggestionsHydrated:
+        suggestionIds !== undefined || messageIds.length === 0,
+    });
+  } else if (
+    open &&
+    picker.ready &&
+    !picker.locked &&
+    ((picker.organization === undefined && organization !== undefined) ||
+      (!picker.suggestionsHydrated && suggestionIds !== undefined))
+  ) {
+    setPicker({
+      ...picker,
+      organization: picker.organization ?? organization,
+      suggestionIds: picker.suggestionsHydrated
+        ? picker.suggestionIds
+        : (suggestionIds ?? picker.suggestionIds),
+      suggestionsHydrated:
+        picker.suggestionsHydrated || suggestionIds !== undefined,
     });
   }
   useEffect((): (() => void) | undefined => {
@@ -178,7 +221,7 @@ export const ConversationLabels = ({
   }, [isRow, open, rowElement]);
 
   const applied = new Set(appliedLabelIds);
-  const appliedLabels = labels.filter(
+  const appliedLabels = resolvedLabels.filter(
     (label) => label.type === "user" && applied.has(label.id)
   );
   if (appliedLabels.length === 0 && (!canEdit || (isRow && !open))) {
@@ -221,13 +264,12 @@ export const ConversationLabels = ({
       anchorElement,
       anchorLabelId,
       appliedIds: appliedLabelIds,
-      labels,
+      labels: resolvedLabels,
       organization,
-      ready:
-        !areLabelsPending &&
-        organization !== undefined &&
-        (suggestionIds !== undefined || messageIds.length === 0),
+      ready: isCatalogReady,
       suggestionIds: suggestionIds ?? [],
+      suggestionsHydrated:
+        suggestionIds !== undefined || messageIds.length === 0,
     });
     restorePickerFocusRef.current = true;
     setOpen(true);
@@ -325,9 +367,9 @@ export const ConversationLabels = ({
   const highlight = (index: number) => {
     const highlightedId = items[index]?.id ?? null;
     setPicker((current) =>
-      current.highlightedId === highlightedId
+      current.highlightedId === highlightedId && current.locked
         ? current
-        : { ...current, highlightedId }
+        : { ...current, highlightedId, locked: true }
     );
     document
       .querySelector(`#${CSS.escape(`${listId}-${index}`)}`)
@@ -340,6 +382,9 @@ export const ConversationLabels = ({
       return;
     }
     if (action.kind === "label") {
+      setPicker((current) =>
+        current.locked ? current : { ...current, locked: true }
+      );
       const checked = !applied.has(action.labelId);
       void updateLabels({
         addLabelIds: checked ? [action.labelId] : [],
@@ -354,6 +399,7 @@ export const ConversationLabels = ({
         action.kind === "back" && current.groupId !== null
           ? `group:${current.groupId}`
           : null,
+      locked: true,
       query: "",
     }));
   };
@@ -398,12 +444,13 @@ export const ConversationLabels = ({
 
   let status: string | undefined;
   if (!picker.ready) {
-    status =
-      areLabelsPaused ||
-      organizationQuery?.isPaused === true ||
-      suggestionsQuery?.isPaused === true
-        ? "Waiting for a connection…"
-        : "Loading labels…";
+    if (isCatalogFailed) {
+      status = "Could not load labels.";
+    } else if (areLabelsPaused) {
+      status = "Waiting for a connection…";
+    } else {
+      status = "Loading labels…";
+    }
   } else if (items.length === 0) {
     status =
       userLabelCount === 0
@@ -621,6 +668,7 @@ export const ConversationLabels = ({
                     setPicker((current) => ({
                       ...current,
                       highlightedId: null,
+                      locked: true,
                       query: value,
                     }));
                   }}

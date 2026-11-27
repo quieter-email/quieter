@@ -435,6 +435,60 @@ export const createMailCache = (
         return null;
       }
     },
+    async getItems(keys: readonly string[]): Promise<Map<string, string>> {
+      const owner = userId;
+      const epoch = generation;
+      if (!owner || keys.length === 0) {
+        return new Map();
+      }
+      const uniqueKeys = [...new Set(keys)];
+      try {
+        await initialization;
+        const db = await open();
+        if (epoch !== generation || owner !== userId) {
+          return new Map();
+        }
+        const tx = db.transaction(["entries", "values", "epochs"], "readonly");
+        if (
+          ((await tx.objectStore("epochs").get("session")) ?? "") !==
+          databaseEpoch
+        ) {
+          await tx.done;
+          return new Map();
+        }
+        const currentTime = now();
+        const entriesStore = tx.objectStore("entries");
+        const valuesStore = tx.objectStore("values");
+        const records = await Promise.all(
+          uniqueKeys.map(async (key) => {
+            const scopedKey = `${owner}:${key}`;
+            const [entry, value] = await Promise.all([
+              entriesStore.get(scopedKey),
+              valuesStore.get(scopedKey),
+            ]);
+            return { entry, key, value };
+          })
+        );
+        await tx.done;
+        if (epoch !== generation || owner !== userId) {
+          return new Map();
+        }
+        const results = new Map<string, string>();
+        for (const { entry, key, value } of records) {
+          if (
+            entry !== undefined &&
+            entry.userId === owner &&
+            entry.expiresAt > currentTime &&
+            typeof value === "string"
+          ) {
+            results.set(key, value);
+          }
+        }
+        return results;
+      } catch {
+        return new Map();
+      }
+    },
     protect(key: string, protect: boolean) {
       if (protect) {
         protectedKeys.add(key);
@@ -995,7 +1049,11 @@ export const createMailCache = (
           } else if (root === "message-thread") {
             entryMailbox = threadScope;
           }
-          if (entryMailbox === mailboxId) {
+          if (
+            entryMailbox === mailboxId ||
+            (prefix === "quieter-cache-" &&
+              (root === "mailboxes" || root === "gmail-unread-counts"))
+          ) {
             await tx.objectStore("entries").delete(entry.key);
             await tx.objectStore("values").delete(entry.key);
           }

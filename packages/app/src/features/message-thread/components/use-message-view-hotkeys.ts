@@ -103,13 +103,12 @@ export const useMessageViewHotkeys = ({
     activeMailbox === "drafts"
       ? "Open the draft instead of replying or forwarding."
       : "Choose a connected mailbox you can send from.";
-  const canMarkRead =
-    !isActionPending &&
-    mailboxActions.canMarkRead &&
-    activeMailbox !== "drafts";
-  const mailActionReason = isActionPending
+  const canMarkRead = mailboxActions.canMarkRead && activeMailbox !== "drafts";
+  const unavailableActionReason =
+    "This action is unavailable for this conversation.";
+  const threadPendingReason = isActionPending
     ? "Wait for the current action to finish."
-    : "This action is unavailable for this conversation.";
+    : unavailableActionReason;
   const actions: {
     enabled: boolean;
     execute: () => void | Promise<void>;
@@ -159,7 +158,7 @@ export const useMessageViewHotkeys = ({
       icon: placementIcon,
       keywords: "done archive inbox",
       label: placementLabel,
-      reason: mailActionReason,
+      reason: threadPendingReason,
       shortcutId: "detail-done",
     },
     {
@@ -170,12 +169,11 @@ export const useMessageViewHotkeys = ({
       icon: importanceIcon,
       keywords: "important star flag",
       label: importanceLabel,
-      reason: mailActionReason,
+      reason: threadPendingReason,
       shortcutId: "detail-important",
     },
     {
       enabled:
-        !isActionPending &&
         mailboxProvider !== "api" &&
         activeMailbox !== "drafts" &&
         activeMailbox !== "trash",
@@ -186,15 +184,12 @@ export const useMessageViewHotkeys = ({
         }, "Conversation moved to Trash.");
       },
       icon: Delete01Icon,
-      reason: mailActionReason,
+      reason: unavailableActionReason,
       shortcutId: "detail-trash",
       tone: "destructive",
     },
     {
-      enabled:
-        !isActionPending &&
-        mailboxProvider === "gmail" &&
-        activeMailbox === "inbox",
+      enabled: mailboxProvider === "gmail" && activeMailbox === "inbox",
       execute: async () => {
         await runThreadAction(async () => {
           await mailboxActions.markThreadAsSpam(hotkeyMessage.threadId);
@@ -202,7 +197,7 @@ export const useMessageViewHotkeys = ({
         }, "Conversation marked as Spam.");
       },
       icon: Delete02Icon,
-      reason: mailActionReason,
+      reason: unavailableActionReason,
       shortcutId: "detail-spam",
       tone: "destructive",
     },
@@ -214,7 +209,7 @@ export const useMessageViewHotkeys = ({
         }, "Conversation marked as Read.");
       },
       icon: MailOpen02Icon,
-      reason: mailActionReason,
+      reason: unavailableActionReason,
       shortcutId: "detail-mark-read",
     },
     {
@@ -225,7 +220,7 @@ export const useMessageViewHotkeys = ({
         }, "Conversation marked as Unread.");
       },
       icon: Mail01Icon,
-      reason: mailActionReason,
+      reason: unavailableActionReason,
       shortcutId: "detail-mark-unread",
     },
   ];

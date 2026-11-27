@@ -155,11 +155,12 @@ export const useMailboxSelection = ({
     isManagedDemoMode,
     isEmptyPreviewPersona
   );
-  const { data: queriedMailboxesData, isPending: isMailboxesPending } =
-    useQuery({
-      ...mailboxesQueryOptions(!isSandboxMode),
-      refetchOnMount: true,
-    });
+  const {
+    data: queriedMailboxesData,
+    isError: isMailboxesError,
+    isPending: isMailboxesPending,
+    refetch: refetchMailboxes,
+  } = useQuery(mailboxesQueryOptions(!isSandboxMode));
   const selectionQueryKey = getMailboxSelectionQueryKey({
     isDemoMode,
     isEmptyPreviewPersona,
@@ -275,9 +276,12 @@ export const useMailboxSelection = ({
     mailboxGroups,
     mailboxes,
     mailboxesQuery: {
+      hasData: isSandboxMode ? true : queriedMailboxesData !== undefined,
+      isError: isSandboxMode ? false : isMailboxesError,
       isPending: isSandboxMode
         ? areSandboxMailboxesPending
         : isMailboxesPending,
+      refetch: refetchMailboxes,
     },
     selectedMailboxId,
     selectedMailboxNeedsReconnect,

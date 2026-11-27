@@ -1,6 +1,5 @@
 "use client";
 
-import { LoadingPage } from "@quieter/app/components/loading-page";
 import type { RestoreUndoneDraft } from "@quieter/app/features/compose/components/held-send-toast";
 import type { ComposeDraftState } from "@quieter/app/features/compose/domain/draft";
 import { parseMailtoComposeDraft } from "@quieter/app/features/compose/domain/mailto";
@@ -13,7 +12,6 @@ import {
 import { useMailboxSelection } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-selection";
 import { useWorkspaceUiState } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-workspace-ui-state";
 import {
-  loadCalendarWorkspace,
   loadComposeWorkspace,
   loadSnippetWorkspace,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
@@ -24,9 +22,12 @@ import {
 } from "@quieter/app/features/settings/domain/default-view-setting";
 import { useDemoModeEnabled } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import { useManagedDemoModeEnabled } from "@quieter/app/features/settings/domain/managed-demo-mode-setting";
-import { authClient } from "@quieter/app/lib/auth";
-import { scheduleBackgroundPrefetch } from "@quieter/app/lib/background-prefetch";
-import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
+import {
+  scheduleBackgroundPrefetch,
+  warmCalendarDestination,
+  warmComposeDestination,
+  warmSettingsDestination,
+} from "@quieter/app/lib/background-prefetch";
 import {
   chatsQueryOptions,
   getChatQueryKey,
@@ -41,14 +42,20 @@ import { getErrorMessage } from "@quieter/app/lib/orpc-errors";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { RouterOutputs } from "@quieter/orpc";
-import { Button, LinkButton } from "@quieter/ui/button";
-import { Text } from "@quieter/ui/text";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useLocation, useRouter } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import {
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
+import { AuthorizedSessionContext } from "../../../components/authorized-session-context";
 import {
   isMailboxSupportedByProvider,
   useMailboxCommands,
@@ -59,6 +66,7 @@ type MailboxWorkspaceProps = {
     id?: string | null;
     email?: string | null;
     name?: string | null;
+    sessionId?: string | null;
   };
 };
 
@@ -882,33 +890,6 @@ const MailboxWorkspaceBody = ({
   );
 };
 
-const MailboxSessionNotice = ({
-  failed,
-  onRetry,
-}: {
-  failed: boolean;
-  onRetry: () => void;
-}) => {
-  const returnTo = useLocation({ select: (location) => location.href });
-  return (
-    <main className="flex min-h-dvh flex-col items-center justify-center gap-4 p-6">
-      <Text role="alert">
-        {failed
-          ? "Could not load your account. Please try again."
-          : "Sign in to continue."}
-      </Text>
-      <div className="flex items-center gap-3">
-        <Button onClick={onRetry} type="button">
-          Try again
-        </Button>
-        <LinkButton search={{ returnTo }} to="/auth" variant="outline">
-          Sign in
-        </LinkButton>
-      </div>
-    </main>
-  );
-};
-
 export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const queryClient = useQueryClient();
   const router = useRouter();
@@ -918,15 +899,7 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   const initialSearchRef = useRef(initialSearch);
   const startupViewAppliedRef = useRef(false);
   const defaultView = useDefaultView(user.id ?? "");
-  const session = authClient.useSession();
-  useEffect(() => {
-    if (session.error && !session.isPending && !session.isRefetching) {
-      toastError(session.error, {
-        boundary: "mailbox-session",
-        fallback: "Could not load your account. Please try again.",
-      });
-    }
-  }, [session.error, session.isPending, session.isRefetching]);
+  const session = useContext(AuthorizedSessionContext);
   const {
     activeMailbox,
     chatId,
@@ -988,36 +961,44 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   );
   const isCompletingGmailConnection =
     gmailLink === "complete" && !isSandboxMode;
-  const sessionMatchesUser =
-    !!session.data &&
-    (session.data.user.id === user.id ||
-      (!user.id && session.data.user.email === user.email));
+  const hasAuthorizedSession = session?.userId === user.id && Boolean(user.id);
+  const isMailboxesPending =
+    !isSandboxMode && (mailboxesQuery.isPending || isCompletingGmailConnection);
+  const isMailboxesError =
+    !isSandboxMode && mailboxesQuery.isError && !mailboxesQuery.hasData;
   const isWorkspaceReady =
     browserPreferencesReady &&
-    !session.isPending &&
-    sessionMatchesUser &&
-    (isSandboxMode ||
-      (!mailboxesQuery.isPending && !isCompletingGmailConnection));
-  const sessionUserId = session.data?.user.id;
+    hasAuthorizedSession &&
+    (isSandboxMode || (!isMailboxesPending && !isMailboxesError));
+  const sessionUserId = session?.userId;
+  const sessionId = session?.sessionId;
+  const writableMailboxes = mailboxes.filter(
+    (mailbox) =>
+      mailbox.connectionStatus === "connected" &&
+      mailbox.provider !== "api" &&
+      mailbox.grantRole !== "reader"
+  );
+  const newComposeMailboxId =
+    writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
+    writableMailboxes[0]?.id ??
+    null;
   useEffect(() => {
     const enabled = isWorkspaceReady && Boolean(sessionUserId);
     return enabled
       ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
           await Promise.allSettled([
-            router.loadRouteChunk(router.routesByPath["/settings"]),
-            (async () => {
-              const { loadPreferenceSettingsPanels, prefetchSettingsOverview } =
-                await import("@quieter/app/features/settings/components/settings-prefetch");
-              if (!signal.aborted) {
-                await Promise.allSettled([
-                  loadPreferenceSettingsPanels(),
-                  previewPersona === null && !isSandboxMode
-                    ? prefetchSettingsOverview(queryClient)
-                    : undefined,
-                ]);
-              }
-            })(),
-            loadComposeWorkspace(),
+            warmSettingsDestination({
+              isSandboxMode: previewPersona !== null || isSandboxMode,
+              queryClient,
+              router,
+              signal,
+            }),
+            warmComposeDestination({
+              isSandboxMode: previewPersona !== null || isSandboxMode,
+              mailboxId: newComposeMailboxId ?? selectedMailboxId,
+              queryClient,
+              signal,
+            }),
             loadSnippetWorkspace(),
           ]);
         })
@@ -1025,9 +1006,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   }, [
     isSandboxMode,
     isWorkspaceReady,
+    newComposeMailboxId,
     previewPersona,
     queryClient,
     router,
+    selectedMailboxId,
     sessionUserId,
   ]);
   const calendarActive = workspace === "calendar";
@@ -1036,14 +1019,14 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       isWorkspaceReady && sessionUserId !== undefined && !calendarActive;
     return enabled
       ? scheduleBackgroundPrefetch(queryClient, async (signal) => {
-          const { prefetchCalendarWorkspace } = await loadCalendarWorkspace();
-          if (!signal.aborted && previewPersona === null) {
-            await prefetchCalendarWorkspace(queryClient, {
-              route: mailboxSearchSchema.parse(router.state.location.search),
-              signal,
-              userId: sessionUserId,
-            });
-          }
+          await warmCalendarDestination({
+            isSandboxMode: previewPersona !== null,
+            prefetchEvents: true,
+            queryClient,
+            route: mailboxSearchSchema.parse(router.state.location.search),
+            signal,
+            userId: sessionUserId,
+          });
         })
       : undefined;
   }, [
@@ -1076,16 +1059,6 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       })();
     }
   }, [defaultView, isWorkspaceReady, setMailboxSearch]);
-  const writableMailboxes = mailboxes.filter(
-    (mailbox) =>
-      mailbox.connectionStatus === "connected" &&
-      mailbox.provider !== "api" &&
-      mailbox.grantRole !== "reader"
-  );
-  const newComposeMailboxId =
-    writableMailboxes.find((mailbox) => mailbox.id === selectedMailboxId)?.id ??
-    writableMailboxes[0]?.id ??
-    null;
   const canComposeNew =
     view === "all-inboxes"
       ? writableMailboxes.length > 0
@@ -1162,12 +1135,11 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
     onOpenCalendar: async () => {
       const calendarUserId =
         sessionUserId ?? user.id ?? user.email ?? "preview";
-      void loadCalendarWorkspace();
-      if (calendarUserId !== "preview" && previewPersona === null) {
-        void Promise.allSettled([
-          queryClient.query(calendarAccountsQueryOptions(calendarUserId)),
-        ]);
-      }
+      void warmCalendarDestination({
+        isSandboxMode: previewPersona !== null,
+        queryClient,
+        userId: calendarUserId,
+      });
       await setMailboxSearch(
         {
           mailboxId: selectedMailboxId,
@@ -1206,29 +1178,23 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
   } = workspaceActions;
   const { openComposeWorkspace: handleComposeDraftRequested } =
     composeWorkspace;
-  if (!session.isPending && !session.isRefetching && !sessionMatchesUser) {
-    return (
-      <MailboxSessionNotice
-        failed={!!session.error && session.error.status !== 401}
-        onRetry={() => {
-          void session.refetch();
-        }}
-      />
-    );
-  }
-  if (!isWorkspaceReady) {
-    return <LoadingPage />;
+  if (!hasAuthorizedSession) {
+    return null;
   }
 
   return (
     <MailboxWorkspaceBody
+      accountLabel={user.name?.trim() || user.email?.trim() || undefined}
       userId={sessionUserId ?? user.id ?? user.email ?? "preview"}
+      sessionId={sessionId}
       activeMailbox={activeMailbox}
       chatId={chatId ?? null}
       composeSession={composeWorkspace.composeSession}
       isComposeMailbox={isComposeMailbox}
       isConnectingGmail={isStartingGmailConnection}
       isDemoMode={isDemoMode}
+      isMailboxesError={isMailboxesError}
+      isMailboxesPending={isMailboxesPending}
       isManagedDemoMode={isManagedDemoMode}
       chats={chats}
       draftChatKey={draftChatKey}
@@ -1244,6 +1210,9 @@ export const MailboxWorkspace = ({ user }: MailboxWorkspaceProps) => {
       onRestoreUndoneSend={composeWorkspace.handleRestoreUndoneSend}
       onConnectGmail={() => {
         void connectGmail();
+      }}
+      onRetryMailboxes={() => {
+        void mailboxesQuery.refetch();
       }}
       onComposeDraftRequested={handleComposeDraftRequested}
       onComposeNewMail={createComposeDraft}

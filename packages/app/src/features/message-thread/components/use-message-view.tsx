@@ -85,26 +85,40 @@ export const useMessageViewData = ({
 }) => {
   const queryClient = useQueryClient();
   const {
-    data: gmailLabels = [],
+    data: rawGmailLabels,
+    isError: isLabelsError,
     isPaused: areLabelsPaused,
-    isPending: areLabelsPending,
+    isPending: isLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId, mailboxProvider !== "api"));
+  const gmailLabels = rawGmailLabels ?? [];
+  const areLabelsPending = isLabelsPending && rawGmailLabels === undefined;
+  const areLabelsError = isLabelsError && rawGmailLabels === undefined;
   const includeDraftsInThreadCount =
     (mailboxProvider !== "gmail" && !isSandboxMailboxId(mailboxId)) ||
     isDraftMessage(message);
+  const expectedMessage = {
+    id: message.id,
+    includeDrafts: includeDraftsInThreadCount,
+    threadMessageCount: message.threadMessageCount,
+  };
   const {
     data: threadData,
-    isSuccess: isThreadSuccess,
-    isPlaceholderData: isThreadPlaceholder,
+    error: threadError,
+    isError: isThreadError,
     isFetching: isThreadFetching,
+    isPaused: isThreadPaused,
     isPending: isThreadPending,
+    isPlaceholderData: isThreadPlaceholder,
+    isSuccess: isThreadSuccess,
+    refetch: refetchThread,
   } = useQuery({
     // react-doctor-disable-next-line react-doctor/no-event-handler
-    ...getThreadWithDetailsOptions(mailboxId, message.threadId, true, {
-      id: message.id,
-      includeDrafts: includeDraftsInThreadCount,
-      threadMessageCount: message.threadMessageCount,
-    }),
+    ...getThreadWithDetailsOptions(
+      mailboxId,
+      message.threadId,
+      true,
+      expectedMessage
+    ),
     placeholderData: {
       messages: [message],
       snippet: message.snippet,
@@ -126,7 +140,7 @@ export const useMessageViewData = ({
   });
   useEffect(() => {
     let cancelled = false;
-    const expectedMessage = {
+    const expectedThreadMessage = {
       id: message.id,
       includeDrafts: includeDraftsInThreadCount,
       threadMessageCount: message.threadMessageCount,
@@ -135,12 +149,12 @@ export const useMessageViewData = ({
       mailboxId,
       message.threadId,
       true,
-      expectedMessage
+      expectedThreadMessage
     );
     if (
       shouldRefreshThreadContent(
         queryClient.getQueryData(options.queryKey),
-        expectedMessage
+        expectedThreadMessage
       )
     ) {
       void Promise.allSettled([
@@ -148,7 +162,7 @@ export const useMessageViewData = ({
           const thread = await queryClient.query(options);
           if (
             !cancelled &&
-            shouldRefreshThreadContent(thread, expectedMessage)
+            shouldRefreshThreadContent(thread, expectedThreadMessage)
           ) {
             await queryClient.query({ ...options, staleTime: 0 });
           }
@@ -216,22 +230,24 @@ export const useMessageViewData = ({
   const verificationCodes = codeQueries.flatMap(
     (query) => query.data?.items ?? []
   );
-  const messagesMissingLoadedBody =
-    getMessagesMissingLoadedBody(visibleMessages);
-  const hasMissingLoadedBody = messagesMissingLoadedBody.length > 0;
   const openedPrefetchedThread =
     mailboxProvider !== "api" && threadData?.prefetched === true;
-  const hasCompletePrefetchedThread =
-    threadData?.prefetched === true &&
-    !shouldRefreshThreadContent(threadData, {
-      id: message.id,
-      includeDrafts: includeDraftsInThreadCount,
-      threadMessageCount: message.threadMessageCount,
-    });
+  const hasCompleteCachedThread =
+    !isThreadPending &&
+    !isThreadPlaceholder &&
+    !shouldRefreshThreadContent(threadData, expectedMessage);
+  const hasReadySingleMessage =
+    !isDraftMessage(message) &&
+    hasRenderableMessageBody(message) &&
+    (message.threadMessageCount ?? 1) <= 1;
+  const hasReadyThreadContent =
+    hasCompleteCachedThread || hasReadySingleMessage;
   const isBodyRefreshPending =
-    isThreadPending ||
-    (isThreadFetching && !hasCompletePrefetchedThread) ||
-    hasMissingLoadedBody;
+    !hasReadyThreadContent && (isThreadPending || isThreadFetching);
+  const isThreadLoadError =
+    !hasCompleteCachedThread && isThreadError && !isThreadFetching;
+  const isThreadLoadPaused =
+    !hasReadyThreadContent && isThreadPaused && !isThreadLoadError;
   useEffect(() => {
     if (openedPrefetchedThread) {
       void Promise.allSettled([
@@ -299,12 +315,9 @@ export const useMessageViewData = ({
       messageId: threadMessage.id,
     }))
   );
-  const isActionPending =
-    pendingActions.isMessageActionPending(message.id) ||
-    visibleMessages.some((entry) =>
-      pendingActions.isMessageActionPending(entry.id)
-    ) ||
-    pendingActions.isThreadActionPending(message.threadId);
+  const isThreadActionPending = pendingActions.isThreadActionPending(
+    message.threadId
+  );
   const hotkeyMessage = visibleMessages.at(-1) ?? message;
   const hotkeyLinkedDraftMessage =
     findLinkedDraftForMessage(threadMessages, hotkeyMessage) ?? undefined;
@@ -325,17 +338,22 @@ export const useMessageViewData = ({
   return {
     apiSource,
     apiSourceAction,
+    areLabelsError,
     areLabelsPaused,
     areLabelsPending,
     canComposeFromMailbox,
     gmailLabels,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
-    isActionPending,
     isBodyRefreshPending,
     isSingleMessageThread,
+    isThreadActionPending,
+    isThreadLoadError,
+    isThreadLoadPaused,
+    refetchThread,
     subject,
     threadAttachments,
+    threadError,
     threadIsUnread,
     threadLabelIds,
     threadMessages,

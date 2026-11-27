@@ -47,7 +47,10 @@ import {
 } from "@quieter/app/features/reminders/message-reminders";
 import { toastError } from "@quieter/app/lib/error-toast";
 import { parseSender } from "@quieter/app/lib/gmail/message-utils";
-import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
+import {
+  hasRenderableMessageBody,
+  MAILBOX_LABELS,
+} from "@quieter/app/lib/mail";
 import { getThreadWithDetailsOptions } from "@quieter/app/lib/mail/thread-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
@@ -121,6 +124,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     activeMailbox,
     apiSource,
     apiSourceAction,
+    areLabelsError,
     areLabelsPaused,
     areLabelsPending,
     canComposeFromMailbox,
@@ -135,9 +139,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     gmailLabels,
     hotkeyLinkedDraftMessage,
     hotkeyMessage,
-    isActionPending,
     isBodyRefreshPending,
     isSingleMessageThread,
+    isThreadActionPending,
+    isThreadLoadError,
+    isThreadLoadPaused,
     mailboxActions,
     mailboxId,
     mailboxProvider,
@@ -148,8 +154,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     onOpenConversation,
     onManageSnippets,
     pendingActions,
+    refetchThread,
     subject,
     threadAttachments,
+    threadError,
     threadIsUnread,
     threadLabelIds,
     threadMessages,
@@ -376,7 +384,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     hotkeyMessage,
     importanceIcon: threadIsImportant ? StarOffIcon : StarIcon,
     importanceLabel,
-    isActionPending,
+    isActionPending: isThreadActionPending,
     mailboxActions,
     mailboxId,
     mailboxProvider,
@@ -393,7 +401,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
     }
   };
   const openAssistantSnooze = useEffectEvent(() => {
-    if (snoozeAction === null || isActionPending || isBodyRefreshPending) {
+    if (
+      snoozeAction === null ||
+      isThreadActionPending ||
+      isBodyRefreshPending
+    ) {
       throw new Error("Snooze is unavailable for this conversation.");
     }
     openSnooze();
@@ -538,7 +550,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           <div className="flex shrink-0 items-center gap-1 empty:hidden">
             {toggleThreadPlacement && (
               <ConversationPlacementAction
-                disabled={isActionPending}
+                disabled={isThreadActionPending}
                 icon={returnThreadToInbox ? InboxIcon : CheckmarkCircle02Icon}
                 label={placementLabel}
                 onToggle={toggleThreadPlacement}
@@ -619,7 +631,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 aria-label="Important"
                 aria-pressed={threadIsImportant}
                 className="-ms-1.5"
-                disabled={isActionPending}
+                disabled={isThreadActionPending}
                 onClick={toggleThreadImportance}
                 size="icon-xs"
                 type="button"
@@ -636,6 +648,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
           ) : null}
           <ConversationLabels
             appliedLabelIds={threadLabelIds}
+            areLabelsError={areLabelsError}
             areLabelsPaused={areLabelsPaused}
             areLabelsPending={areLabelsPending}
             key={`${mailboxId}:${message.threadId}`}
@@ -736,11 +749,40 @@ const MessageViewContent = (props: MessageViewContentProps) => {
               />
             ) : null}
 
+            {isThreadLoadError &&
+            visibleMessages.every((entry) =>
+              hasRenderableMessageBody(entry)
+            ) ? (
+              <div
+                className="mx-4 mt-4 flex flex-wrap items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
+                role="alert"
+              >
+                <span className="text-destructive">
+                  Could not load the full conversation.
+                </span>
+                <Button
+                  onClick={() => {
+                    void refetchThread();
+                  }}
+                  size="sm"
+                  type="button"
+                  variant="secondary"
+                >
+                  Try again
+                </Button>
+              </div>
+            ) : null}
+
             {isSingleMessageThread ? (
               visibleMessages.map((threadMessage) => (
                 <SingleMessageCard
+                  error={threadError}
+                  isError={isThreadLoadError}
                   isLoading={isBodyRefreshPending}
-                  isActionPending={isActionPending}
+                  isPaused={isThreadLoadPaused}
+                  isActionPending={pendingActions.isMessageActionPending(
+                    threadMessage.id
+                  )}
                   key={threadMessage.id}
                   linkedDraftMessage={findLinkedDraftForMessage(
                     threadMessages,
@@ -752,6 +794,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                   onComposeDraftRequested={
                     canComposeFromMailbox ? openInlineCompose : undefined
                   }
+                  onRetry={() => {
+                    void refetchThread();
+                  }}
                   onUnsubscribe={
                     mailboxProvider === "gmail"
                       ? mailboxActions.unsubscribeFromMessage
@@ -767,8 +812,11 @@ const MessageViewContent = (props: MessageViewContentProps) => {
             ) : (
               <ThreadMessageList
                 allThreadMessages={threadMessages}
+                error={threadError}
+                isError={isThreadLoadError}
                 isLoading={isBodyRefreshPending}
-                isActionPending={isActionPending}
+                isMessageActionPending={pendingActions.isMessageActionPending}
+                isPaused={isThreadLoadPaused}
                 key={`${mailboxId}:${message.threadId}`}
                 mailboxId={mailboxId}
                 mailboxProvider={mailboxProvider}
@@ -777,6 +825,9 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                 onComposeDraftRequested={
                   canComposeFromMailbox ? openInlineCompose : undefined
                 }
+                onRetry={() => {
+                  void refetchThread();
+                }}
                 onUnsubscribe={
                   mailboxProvider === "gmail"
                     ? mailboxActions.unsubscribeFromMessage
@@ -811,17 +862,10 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                           fallback={
                             <ComposerEditorFrame className="min-h-64">
                               <output
-                                aria-label="Loading inline composer"
                                 aria-live="polite"
-                                className="grid flex-1 place-items-center"
+                                className="grid flex-1 place-items-center text-body-sm text-muted-fg"
                               >
-                                <Icon
-                                  aria-hidden
-                                  size={20}
-                                  tone="muted"
-                                  animation="spin"
-                                  icon={Loading03Icon}
-                                />
+                                Loading composer…
                               </output>
                             </ComposerEditorFrame>
                           }
@@ -942,9 +986,7 @@ const MessageViewContent = (props: MessageViewContentProps) => {
                           composeManagedDemoMode !== true ? (
                             <Button
                               disabled={
-                                suggestReply.isPending ||
-                                isBodyRefreshPending ||
-                                isActionPending
+                                suggestReply.isPending || isBodyRefreshPending
                               }
                               onClick={requestSuggestedReply}
                               size="sm"
