@@ -13,7 +13,7 @@ import { Icon } from "./icon";
 import { Pill } from "./pill";
 
 export const mailListRowFrameVariants = cva(
-  "group/row relative flex h-17 items-stretch rounded-xl border-b border-transparent",
+  "group/row relative flex h-19 items-stretch rounded-xl",
   {
     defaultVariants: {
       layout: "stacked",
@@ -21,23 +21,26 @@ export const mailListRowFrameVariants = cva(
     variants: {
       accent: {
         yellow:
-          "after:pointer-events-none after:absolute after:inset-y-1 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
+          "after:pointer-events-none after:absolute after:inset-y-0 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
-        adaptive: "@3xl:h-12",
+        adaptive: "@3xl:h-14",
         stacked: "",
       },
     },
   }
 );
 
+const rowOverlayClassName =
+  "pointer-events-none absolute inset-x-2 z-0 rounded-lg bg-selection/45 dark:bg-selection";
+
 export const mailListRowParts = {
-  overlay:
-    "pointer-events-none absolute inset-x-2 inset-y-1 z-0 rounded-lg bg-selection/45 dark:bg-selection",
+  listOverlay: `${rowOverlayClassName} inset-y-0`,
+  overlay: `${rowOverlayClassName} inset-y-1`,
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
-    "relative z-10 ml-2 flex h-full shrink-0 items-center justify-center @sm:ml-2.75",
+    "relative z-10 ml-3 flex h-full shrink-0 items-center justify-center @sm:ml-4",
   trigger:
     "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:
@@ -170,7 +173,7 @@ export const MailListRowDetails = ({
   timestamp,
   unread = false,
 }: MailListRowDetailsProps) => (
-  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 pr-4 pl-2 @sm:gap-3 @sm:pl-3">
+  <div className="pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 pr-5 pl-3 @sm:gap-3 @sm:pr-6 @sm:pl-4">
     <div
       className={cn(
         "flex min-w-0 flex-1 flex-col justify-center gap-0.5 overflow-x-clip",

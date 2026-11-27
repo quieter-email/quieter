@@ -5,6 +5,7 @@ import type { VariantProps } from "class-variance-authority";
 import type { ComponentPropsWithoutRef } from "react";
 
 import { cn } from "../../lib/cn";
+import { popupSurfaceClassName } from "./popup-surface";
 
 export const surfaceVariants = cva("", {
   compoundVariants: [
@@ -42,9 +43,14 @@ export const surfaceVariants = cva("", {
       dense: "p-2",
       none: "p-0",
       snug: "p-3",
+      // Keeps floating tray controls concentric with its corners.
+      tray: "p-1",
     },
     variant: {
       detail: "rounded-md bg-detail",
+      // Control tray that floats over scrolling content, e.g. the mail
+      // selection actions. It shares the popup fill so it reads above the list.
+      floating: `${popupSurfaceClassName} flex min-w-0 items-center gap-1 rounded-section squircle`,
       panel: "rounded-panel bg-panel inset-ring inset-ring-panel-edge/30",
       section:
         "rounded-section bg-section inset-ring inset-ring-section-edge/30",

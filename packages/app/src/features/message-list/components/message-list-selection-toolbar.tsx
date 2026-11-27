@@ -6,17 +6,15 @@ import {
   MoreHorizontalIcon,
   Tag01Icon,
 } from "@hugeicons/core-free-icons";
-import {
-  AssistantSidebarContext,
-  AssistantSidebarTrigger,
-} from "@quieter/app/features/chat/components/assistant-sidebar-context";
 import { MessageLabelsMenu } from "@quieter/app/features/message-labels/components/message-labels-menu";
 import type {
   MessageListBulkAction,
   MessageListBulkLabels,
 } from "@quieter/app/features/message-list/components/message-list-types";
+import { getAppPresenceMotion } from "@quieter/app/features/motion/app-motion";
 import { Button } from "@quieter/ui/button";
 import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
+import { cn } from "@quieter/ui/cn";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,63 +23,51 @@ import {
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { use, useLayoutEffect, useRef, useState } from "react";
+import { Surface } from "@quieter/ui/surface";
+import {
+  AnimatePresence,
+  LazyMotion,
+  domAnimation,
+  m,
+  useReducedMotion,
+} from "motion/react";
+import type { ReactNode } from "react";
 
-/** One 36px control plus the 8px gap that follows it. */
-const ACTION_SLOT_WIDTH_PX = 44;
-/** Select-all checkbox, its gap, and room for a five digit selection count. */
-const SELECTION_SUMMARY_WIDTH_PX = 120;
-/** Overflow menu, divider, and the clear button that always close the row. */
-const TRAILING_CONTROLS_WIDTH_PX = 89;
-const ASSISTANT_TRIGGER_SLOT_WIDTH_PX = 40;
+/** Promoted actions that get their own button once the list is wide enough. */
+const INLINE_ACTION_LIMIT = 3;
 
 /**
- * Promotes as many actions to their own button as the header row can hold.
- * The list lives in a resizable panel, so the row is measured rather than
- * guessed at a breakpoint, seeded before first paint so nothing pops in.
+ * Floats the selection tray over the bottom of the list panel. The search
+ * header stays in place, so the tray rises from and sinks back into the edge.
  */
-const useInlineActionCapacity = ({
-  availableActionCount,
-  reservedWidth,
+export const MessageListSelectionTray = ({
+  children,
 }: {
-  availableActionCount: number;
-  reservedWidth: number;
+  children: ReactNode | null;
 }) => {
-  const rowRef = useRef<HTMLDivElement | null>(null);
-  const [inlineActionCapacity, setInlineActionCapacity] = useState(0);
+  const reducedMotion = useReducedMotion();
+  const presence = getAppPresenceMotion({ distance: 8, reducedMotion });
 
-  useLayoutEffect((): (() => void) | undefined => {
-    const row = rowRef.current;
-    if (row === null) {
-      return undefined;
-    }
-
-    const updateCapacity = (width: number) => {
-      const capacity = Math.max(
-        0,
-        Math.min(
-          availableActionCount,
-          Math.floor((width - reservedWidth) / ACTION_SLOT_WIDTH_PX)
-        )
-      );
-      setInlineActionCapacity(capacity);
-    };
-    updateCapacity(row.getBoundingClientRect().width);
-
-    const observer = new ResizeObserver(([entry]) => {
-      updateCapacity(entry?.contentRect.width ?? 0);
-    });
-    observer.observe(row);
-
-    return () => {
-      observer.disconnect();
-    };
-  }, [availableActionCount, reservedWidth]);
-
-  return {
-    inlineActionCapacity,
-    rowRef,
-  };
+  return (
+    <div className="pointer-events-none absolute inset-x-0 bottom-3 z-20 flex justify-center px-2 @sm:px-4">
+      <LazyMotion features={domAnimation}>
+        <AnimatePresence>
+          {children === null ? null : (
+            <m.div
+              animate={presence.animate}
+              className="pointer-events-auto max-w-full min-w-0"
+              exit={{ ...presence.initial, pointerEvents: "none" }}
+              initial={presence.initial}
+              key="selection"
+              transition={presence.transition}
+            >
+              {children}
+            </m.div>
+          )}
+        </AnimatePresence>
+      </LazyMotion>
+    </div>
+  );
 };
 
 const MessageListBulkActionButton = ({
@@ -101,7 +87,7 @@ const MessageListBulkActionButton = ({
       }}
       size="icon"
       type="button"
-      variant={action.destructive === true ? "destructive" : "outline"}
+      variant={action.destructive === true ? "destructive" : "ghost"}
     >
       <Icon aria-hidden icon={action.icon} />
     </Button>
@@ -122,7 +108,7 @@ const MessageListBulkLabelsMenu = ({
         <DropdownMenuTrigger
           chrome="toolbar"
           aria-label="Modify labels"
-          render={<Button chrome="toolbar" size="icon" variant="outline" />}
+          render={<Button chrome="toolbar" size="icon" variant="ghost" />}
           disabled={disabled}
           type="button"
         >
@@ -133,7 +119,7 @@ const MessageListBulkLabelsMenu = ({
   />
 );
 
-const MessageListBulkOverflowMenu = ({
+const MessageListBulkActionsMenu = ({
   actions,
   disabled,
 }: {
@@ -141,19 +127,17 @@ const MessageListBulkOverflowMenu = ({
   disabled: boolean;
 }) => (
   <DropdownMenu>
-    <IconButtonTooltip label="More actions">
-      <DropdownMenuTrigger
-        chrome="toolbar"
-        aria-label="Open more actions"
-        render={<Button chrome="toolbar" size="icon" variant="outline" />}
-        disabled={disabled}
-        type="button"
-      >
-        <Icon aria-hidden icon={MoreHorizontalIcon} />
-      </DropdownMenuTrigger>
-    </IconButtonTooltip>
+    <DropdownMenuTrigger
+      chrome="toolbar"
+      render={<Button chrome="toolbar" variant="outline" />}
+      disabled={disabled}
+      type="button"
+    >
+      <Icon aria-hidden icon={MoreHorizontalIcon} />
+      <span>Actions</span>
+    </DropdownMenuTrigger>
 
-    <DropdownMenuContent align="end">
+    <DropdownMenuContent align="center" side="top">
       {actions.map((action) => (
         <DropdownMenuItem
           key={action.id}
@@ -193,73 +177,63 @@ export const MessageListSelectionToolbar = ({
   pending: boolean;
   selectedCount: number;
 }) => {
-  const assistant = use(AssistantSidebarContext);
-  const assistantTriggerVisible = assistant !== null && !assistant.open;
-  const promotedActions = actions.filter((action) => action.promoted === true);
-  const { inlineActionCapacity, rowRef } = useInlineActionCapacity({
-    availableActionCount: promotedActions.length,
-    reservedWidth:
-      SELECTION_SUMMARY_WIDTH_PX +
-      TRAILING_CONTROLS_WIDTH_PX +
-      (labels === null ? 0 : ACTION_SLOT_WIDTH_PX) +
-      (assistantTriggerVisible ? ASSISTANT_TRIGGER_SLOT_WIDTH_PX : 0),
-  });
-  const inlineActions = promotedActions.slice(0, inlineActionCapacity);
-  const inlineActionIds = new Set(inlineActions.map((action) => action.id));
-  const overflowActions = actions.filter(
-    (action) => !inlineActionIds.has(action.id)
-  );
+  const inlineActions = actions
+    .filter((action) => action.promoted === true)
+    .slice(0, INLINE_ACTION_LIMIT);
   const actionsDisabled = disabled || selectedCount === 0;
 
   return (
-    <div
-      className="flex h-8 min-w-0 items-stretch justify-between gap-2"
-      ref={rowRef}
-    >
-      <div className="flex min-w-0 items-center gap-2.5">
-        <IconButtonTooltip
-          label={allSelected ? "Clear selection" : "Select all"}
-        >
-          <Checkbox
-            aria-label={
-              allSelected
-                ? `Clear selected ${itemLabelPlural}`
-                : `Select all loaded ${itemLabelPlural}`
-            }
-            checked={allSelected}
-            disabled={disabled}
-            indeterminate={indeterminate}
-            onCheckedChange={(checked) => {
-              onToggleAll(checked);
-            }}
+    <section aria-label={`Selected ${itemLabelPlural}`}>
+      <Surface padding="tray" variant="floating">
+        <div className="flex min-w-0 items-center gap-2.5 ps-2 pe-1.5">
+          <IconButtonTooltip
+            label={allSelected ? "Clear selection" : "Select all"}
           >
-            <CheckboxIndicator />
-          </Checkbox>
-        </IconButtonTooltip>
+            <Checkbox
+              aria-label={
+                allSelected
+                  ? `Clear selected ${itemLabelPlural}`
+                  : `Select all loaded ${itemLabelPlural}`
+              }
+              checked={allSelected}
+              disabled={disabled}
+              indeterminate={indeterminate}
+              onCheckedChange={(checked) => {
+                onToggleAll(checked);
+              }}
+            >
+              <CheckboxIndicator />
+            </Checkbox>
+          </IconButtonTooltip>
 
-        <p className="truncate text-body font-medium text-fg">
-          {selectedCount} selected
-        </p>
+          <p className="truncate text-body-sm font-medium text-fg tabular-nums">
+            {selectedCount} selected
+          </p>
 
-        {pending && (
-          <Icon
-            aria-hidden
-            size={14}
-            animation="spin"
-            tone="muted"
+          {pending && (
+            <Icon
+              aria-hidden
+              animation="spin"
+              icon={Loading03Icon}
+              size={14}
+              tone="muted"
+            />
+          )}
+        </div>
 
-            icon={Loading03Icon}
-          />
-        )}
-      </div>
-
-      <div className="flex shrink-0 items-stretch gap-2">
-        {inlineActions.map((action) => (
-          <MessageListBulkActionButton
-            action={action}
-            disabled={actionsDisabled}
+        {inlineActions.map((action, index) => (
+          <span
+            className={cn("hidden", {
+              "@md:contents": index < 2,
+              "@xl:contents": index >= 2,
+            })}
             key={action.id}
-          />
+          >
+            <MessageListBulkActionButton
+              action={action}
+              disabled={actionsDisabled}
+            />
+          </span>
         ))}
 
         {labels !== null && (
@@ -269,14 +243,14 @@ export const MessageListSelectionToolbar = ({
           />
         )}
 
-        {overflowActions.length > 0 && (
-          <MessageListBulkOverflowMenu
-            actions={overflowActions}
+        {actions.length > 0 && (
+          <MessageListBulkActionsMenu
+            actions={actions}
             disabled={actionsDisabled}
           />
         )}
 
-        <div aria-hidden className="my-1.5 w-px shrink-0 bg-border" />
+        <div aria-hidden className="mx-0.5 h-5 w-px shrink-0 bg-fg/10" />
 
         <IconButtonTooltip label="Clear selection">
           <Button
@@ -286,19 +260,18 @@ export const MessageListSelectionToolbar = ({
             onClick={onClearSelection}
             size="icon"
             type="button"
-            variant="outline"
+            variant="ghost"
           >
             <Icon aria-hidden icon={Cancel01Icon} />
           </Button>
         </IconButtonTooltip>
-        <AssistantSidebarTrigger className="data-[sidebar-open=true]:-ms-2" />
-      </div>
 
-      {pending && (
-        <output aria-live="polite" className="sr-only">
-          Updating selected {itemLabelPlural}…
-        </output>
-      )}
-    </div>
+        {pending && (
+          <output aria-live="polite" className="sr-only">
+            Updating selected {itemLabelPlural}…
+          </output>
+        )}
+      </Surface>
+    </section>
   );
 };

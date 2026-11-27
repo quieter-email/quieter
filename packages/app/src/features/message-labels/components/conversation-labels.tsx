@@ -18,6 +18,7 @@ import type {
   MailboxLabelColor,
 } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
+import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { CommandMenu } from "@quieter/ui/command-menu";
 import type { CommandMenuItem } from "@quieter/ui/command-menu";
@@ -32,8 +33,8 @@ import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
 import { Pill, PillButton } from "@quieter/ui/pill";
 import { Popover, PopoverContent, PopoverTitle } from "@quieter/ui/popover";
-import { useQuery } from "@tanstack/react-query";
-import { useId, useRef, useState } from "react";
+import { useQueries } from "@tanstack/react-query";
+import { useEffect, useId, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { createLabelGroupTree } from "../domain/label-group-tree";
@@ -46,6 +47,7 @@ export type ConversationLabelChanges = {
 type ConversationLabelsProps = {
   appliedLabelIds: readonly string[];
   labels: readonly MailboxLabel[];
+  layout?: "header" | "stacked" | "adaptive";
   mailboxId: string;
   messageIds: readonly string[];
   onFilterByLabel?: (label: MailboxLabel) => void;
@@ -63,6 +65,7 @@ type PickerState = {
   labels: readonly MailboxLabel[];
   organization?: LabelOrganization;
   query: string;
+  ready: boolean;
   suggestionIds: readonly string[];
 };
 
@@ -81,6 +84,7 @@ const closedPicker: PickerState = {
   highlightedId: null,
   labels: [],
   query: "",
+  ready: false,
   suggestionIds: [],
 };
 
@@ -104,42 +108,113 @@ const LabelMarker = ({
 export const ConversationLabels = ({
   appliedLabelIds,
   labels,
+  layout = "header",
   mailboxId,
   messageIds,
   onFilterByLabel,
   onUpdateLabels,
 }: ConversationLabelsProps) => {
   const canEdit = onUpdateLabels !== undefined;
+  const isRow = layout !== "header";
+  const pillSize = layout === "adaptive" ? "adaptive" : "sm";
   const [open, setOpen] = useState(false);
   const [picker, setPicker] = useState<PickerState>(closedPicker);
   const listId = useId();
   const [addButtonElement, setAddButtonElement] = useState<HTMLElement | null>(
     null
   );
-  const rowRef = useRef<HTMLDivElement>(null);
+  const [rowElement, setRowElement] = useState<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const viewportRef = useRef<HTMLElement | null>(null);
   const restorePickerFocusRef = useRef(true);
   const removedLabelIdRef = useRef<string | null>(null);
-  const { data: organization } = useQuery(
-    labelOrganizationQueryOptions(mailboxId, canEdit)
-  );
-  const { data: suggestionIds } = useQuery(
-    labelSuggestionsQueryOptions(mailboxId, messageIds, canEdit)
-  );
+  const shouldLoadDetails = canEdit && (!isRow || open);
+  const organizationQuery = useQueries<
+    ReturnType<typeof labelOrganizationQueryOptions>[]
+  >({
+    queries: shouldLoadDetails
+      ? [labelOrganizationQueryOptions(mailboxId)]
+      : [],
+  }).at(0);
+  const suggestionsQuery = useQueries<
+    ReturnType<typeof labelSuggestionsQueryOptions>[]
+  >({
+    queries: shouldLoadDetails
+      ? [labelSuggestionsQueryOptions(mailboxId, messageIds)]
+      : [],
+  }).at(0);
+  const organization = organizationQuery?.data;
+  const suggestionIds = suggestionsQuery?.data;
+  const isWaitingForDetails =
+    organizationQuery?.isPending === true ||
+    (messageIds.length > 0 && suggestionsQuery?.isPending === true);
+  if (open && !picker.ready && !isWaitingForDetails) {
+    setPicker({
+      ...picker,
+      organization,
+      ready: true,
+      suggestionIds: suggestionIds ?? [],
+    });
+  }
+  useEffect((): (() => void) | undefined => {
+    if (!isRow || !open) {
+      return undefined;
+    }
+    const row = rowElement?.closest("li");
+    const viewport = row?.closest<HTMLElement>("[data-message-list-viewport]");
+    if (!row || !viewport) {
+      return undefined;
+    }
+    viewportRef.current = viewport;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.at(0)?.isIntersecting !== false) {
+          return;
+        }
+        if (
+          inputRef.current
+            ?.closest("[data-popover-popup]")
+            ?.contains(document.activeElement) === true
+        ) {
+          viewport.focus({ preventScroll: true });
+        }
+        restorePickerFocusRef.current = false;
+        setOpen(false);
+      },
+      { root: viewport }
+    );
+    observer.observe(row);
+    return () => {
+      observer.disconnect();
+    };
+  }, [isRow, open, rowElement]);
 
   const applied = new Set(appliedLabelIds);
-  // The pill a picker hangs off disappears when its label is unchecked; the
-  // picker and later focus move to the add button for the rest of the session.
-  if (picker.anchorLabelId !== null && !applied.has(picker.anchorLabelId)) {
-    setPicker({ ...picker, anchorElement: null, anchorLabelId: null });
-  }
   const appliedLabels = labels.filter(
     (label) => label.type === "user" && applied.has(label.id)
   );
-  if (appliedLabels.length === 0 && !canEdit) {
+  if (appliedLabels.length === 0 && (!canEdit || (isRow && !open))) {
     return null;
   }
-  const anchor = picker.anchorElement ?? addButtonElement;
+  const visibleLabels = isRow
+    ? appliedLabels.slice(0, layout === "adaptive" ? 4 : 2)
+    : appliedLabels;
+  if (
+    picker.anchorLabelId !== null &&
+    !visibleLabels.some(({ id }) => id === picker.anchorLabelId)
+  ) {
+    setPicker({ ...picker, anchorElement: null, anchorLabelId: null });
+  }
+  const hiddenLabels = appliedLabels.slice(visibleLabels.length);
+  const hiddenCount = hiddenLabels.length;
+  const anchor = picker.anchorElement ?? addButtonElement ?? rowElement;
+  const returnFocus = () =>
+    (addButtonElement?.isConnected === true ? addButtonElement : null) ??
+    rowElement
+      ?.closest("li")
+      ?.querySelector<HTMLElement>("[data-message-row-trigger]") ??
+    (viewportRef.current?.isConnected === true ? viewportRef.current : null) ??
+    false;
 
   const togglePicker = (
     anchorLabelId: string | null,
@@ -160,6 +235,10 @@ export const ConversationLabels = ({
       appliedIds: appliedLabels.map((label) => label.id),
       labels,
       organization,
+      ready:
+        !isRow ||
+        (organization !== undefined &&
+          (suggestionIds !== undefined || messageIds.length === 0)),
       suggestionIds: suggestionIds ?? [],
     });
     restorePickerFocusRef.current = true;
@@ -177,26 +256,32 @@ export const ConversationLabels = ({
     }
   };
 
-  const tree = createLabelGroupTree(picker.organization);
+  const tree =
+    open && picker.ready
+      ? createLabelGroupTree(picker.organization)
+      : undefined;
   const userLabelCount = picker.labels.filter(
     (label) => label.type === "user"
   ).length;
-  const sections = buildLabelPickerSections(picker.labels, tree, {
-    appliedIds: picker.appliedIds,
-    groupId: picker.groupId,
-    query: picker.query,
-    suggestionIds: picker.suggestionIds,
-  });
+  const sections =
+    tree === undefined
+      ? []
+      : buildLabelPickerSections(picker.labels, tree, {
+          appliedIds: picker.appliedIds,
+          groupId: picker.groupId,
+          query: picker.query,
+          suggestionIds: picker.suggestionIds,
+        });
   const currentGroup =
     picker.groupId === null || picker.query.trim() !== ""
       ? undefined
-      : tree.getGroup(picker.groupId);
+      : tree?.getGroup(picker.groupId);
   const items: PickerItem[] = [];
   if (currentGroup !== undefined) {
     const parent =
       currentGroup.parentId === null
         ? undefined
-        : tree.getGroup(currentGroup.parentId);
+        : tree?.getGroup(currentGroup.parentId);
     items.push({
       action: { groupId: parent?.id ?? null, kind: "back" },
       group: sections[0]?.title ?? currentGroup.name,
@@ -322,7 +407,13 @@ export const ConversationLabels = ({
   };
 
   let status: string | undefined;
-  if (items.length === 0) {
+  if (!picker.ready) {
+    status =
+      organizationQuery?.isPaused === true ||
+      suggestionsQuery?.isPaused === true
+        ? "Waiting for a connection…"
+        : "Loading labels…";
+  } else if (items.length === 0) {
     status =
       userLabelCount === 0
         ? "No labels in this mailbox."
@@ -331,7 +422,11 @@ export const ConversationLabels = ({
 
   const renderPill = (label: MailboxLabel): ReactNode => {
     const appearance = {
-      className: "max-w-44 min-w-0",
+      className: cn("min-w-0", {
+        "@3xl:max-w-36": layout === "adaptive",
+        "max-w-24 shrink": isRow,
+        "max-w-44": !isRow,
+      }),
       customColor:
         label.color?.startsWith("#") === true ? label.color : undefined,
       title: label.name,
@@ -343,6 +438,7 @@ export const ConversationLabels = ({
         {...appearance}
         aria-expanded={open && picker.anchorLabelId === label.id}
         aria-haspopup="dialog"
+        size={pillSize}
         onClick={(event) => {
           togglePicker(label.id, event.currentTarget);
         }}
@@ -350,9 +446,11 @@ export const ConversationLabels = ({
         {name}
       </PillButton>
     ) : (
-      <Pill {...appearance}>{name}</Pill>
+      <Pill {...appearance} size={pillSize}>
+        {name}
+      </Pill>
     );
-    if (onFilterByLabel === undefined && !canEdit) {
+    if (!canEdit && (isRow || onFilterByLabel === undefined)) {
       return <span key={label.id}>{pill}</span>;
     }
 
@@ -366,14 +464,16 @@ export const ConversationLabels = ({
           }
         }}
       >
-        <ContextMenuTrigger render={<span className="inline-flex min-w-0" />}>
+        <ContextMenuTrigger
+          render={<span className="pointer-events-auto inline-flex min-w-0" />}
+        >
           {pill}
         </ContextMenuTrigger>
         <ContextMenuContent
           finalFocus={() => {
             const removed = removedLabelIdRef.current === label.id;
             removedLabelIdRef.current = null;
-            return removed ? addButtonElement : true;
+            return removed ? returnFocus() : true;
           }}
         >
           {onFilterByLabel === undefined ? null : (
@@ -405,38 +505,70 @@ export const ConversationLabels = ({
     );
   };
 
+  const handleOverflowClick = () => {
+    togglePicker(null, null);
+  };
   const addButtonProps = {
     "aria-expanded": open && picker.anchorLabelId === null,
     "aria-haspopup": "dialog",
-    onClick: () => {
-      togglePicker(null, null);
-    },
+    onClick: handleOverflowClick,
     ref: setAddButtonElement,
     variant: "ghost",
   } as const;
   const hasLabels = appliedLabels.length > 0;
-  const addButton = canEdit ? (
-    <IconButtonTooltip label="Add labels">
-      <Button
-        {...addButtonProps}
-        aria-label="Add labels"
-        size={hasLabels ? "icon-xs" : "xs"}
+  const addButton =
+    canEdit && !isRow ? (
+      <IconButtonTooltip label="Add labels">
+        <Button
+          {...addButtonProps}
+          aria-label="Add labels"
+          size={hasLabels ? "icon-xs" : "xs"}
+        >
+          <Icon aria-hidden icon={PlusSignIcon} />
+          {hasLabels ? null : "Add labels"}
+        </Button>
+      </IconButtonTooltip>
+    ) : null;
+  let overflow: ReactNode = null;
+  if (hiddenCount > 0) {
+    const hiddenNames = hiddenLabels.map(({ name }) => name).join(", ");
+    overflow = canEdit ? (
+      <PillButton
+        aria-expanded={addButtonProps["aria-expanded"]}
+        aria-haspopup="dialog"
+        aria-label={`Show ${hiddenCount} more labels`}
+        className="pointer-events-auto"
+        onClick={handleOverflowClick}
+        ref={setAddButtonElement}
+        size={pillSize}
+        title={hiddenNames}
       >
-        <Icon aria-hidden icon={PlusSignIcon} />
-        {hasLabels ? null : "Add labels"}
-      </Button>
-    </IconButtonTooltip>
-  ) : null;
+        +{hiddenCount}
+      </PillButton>
+    ) : (
+      <Pill
+        aria-label={`More labels, ${hiddenNames}`}
+        size={pillSize}
+        title={hiddenNames}
+      >
+        +{hiddenCount}
+      </Pill>
+    );
+  }
 
   return (
     <div
       aria-label="Conversation labels"
-      className="flex min-w-0 flex-wrap items-center gap-1"
-      ref={rowRef}
+      className={cn("min-w-0 items-center gap-1", {
+        "flex flex-wrap": !isRow,
+        "hidden @sm:flex": isRow,
+      })}
+      ref={setRowElement}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- A fieldset would imply form controls; this groups label chips.
       role="group"
     >
-      {appliedLabels.map(renderPill)}
+      {visibleLabels.map(renderPill)}
+      {overflow}
       {addButton}
       {canEdit ? (
         <Popover
@@ -448,7 +580,7 @@ export const ConversationLabels = ({
               details.reason === "outside-press" &&
               target instanceof Element &&
               target.closest("button") !== null &&
-              rowRef.current?.contains(target) === true
+              rowElement?.contains(target) === true
             ) {
               return;
             }
@@ -461,12 +593,17 @@ export const ConversationLabels = ({
             anchor={anchor}
             chrome="bare"
             collisionPadding={16}
-            finalFocus={(closeType) =>
-              restorePickerFocusRef.current &&
-              (closeType === "keyboard" || closeType === "")
-                ? anchor
-                : false
-            }
+            finalFocus={(closeType) => {
+              if (
+                !restorePickerFocusRef.current ||
+                (closeType !== "keyboard" && closeType !== "")
+              ) {
+                return false;
+              }
+              return picker.anchorElement?.isConnected === true
+                ? picker.anchorElement
+                : returnFocus();
+            }}
             initialFocus={inputRef}
           >
             <PopoverTitle className="sr-only">Labels</PopoverTitle>

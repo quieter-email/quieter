@@ -170,7 +170,7 @@ export const MessageLabelsMenu = ({
   >
     {trigger}
 
-    <DropdownMenuContent align="end" className="max-h-72">
+    <DropdownMenuContent align="end" className="max-h-72" side="top">
       <MessageLabelsMenuItems
         isPending={isPending}
         mailboxId={mailboxId}

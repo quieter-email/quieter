@@ -19,6 +19,8 @@ export const pillVariants = cva(
       // The leading rides on the size token because tailwind-merge drops a
       // standalone `leading-*` that a font size later in the merge overrides.
       size: {
+        adaptive:
+          "px-2.5 py-1.5 text-micro/none @3xl:px-3 @3xl:text-caption/none",
         sm: "px-2.5 py-1.5 text-micro/none",
         xs: "px-2 py-1 text-micro/none",
       },

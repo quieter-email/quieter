@@ -7,6 +7,7 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
 import type { CalendarView } from "@quieter/calendar";
+import { serializeStructuredSearchState } from "@quieter/mail/search";
 import { captureException } from "@sentry/react";
 import { useNavigate, useRouter } from "@tanstack/react-router";
 import type {
@@ -210,6 +211,22 @@ export type MailboxSearchPatch = {
   view?: MailboxWorkspaceView;
   workspace?: "calendar" | null;
 };
+
+export const getLabelSearchPatch = (
+  mailboxId: string,
+  labelName: string
+): MailboxSearchPatch => ({
+  mailbox: "inbox",
+  mailboxId,
+  messageId: null,
+  query: serializeStructuredSearchState({
+    filters: [{ type: "label", value: labelName }],
+    text: "",
+  }),
+  threadId: null,
+  view: "inbox",
+  workspace: null,
+});
 
 type MailboxSearchOptions = {
   replace?: boolean;

@@ -12,6 +12,7 @@ import type {
   MailboxCategory,
   MessageListItem,
 } from "@quieter/app/lib/mail";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import type { ReactNode } from "react";
 
 export type ThreadPressGesture = {
@@ -51,6 +52,7 @@ export type MessageListProps = {
   onActivateMessage: (messageId: string, threadId?: string | null) => void;
   /** Plain row click on the already-open thread closes the reading pane (same as back). */
   onDeactivateActiveMessage: () => void;
+  onFilterByLabel?: (label: MailboxLabel, mailboxId: string) => void;
   onLoadMore: () => void;
   onKeyboardOpenMessage?: () => void;
   onOpenSidebar?: () => void;

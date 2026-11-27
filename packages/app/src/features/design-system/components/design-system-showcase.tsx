@@ -812,6 +812,16 @@ export const DesignSystemShowcase = () => {
               </Surface>
             </Surface>
           </Surface>
+          <div className="flex">
+            <Surface padding="tray" variant="floating">
+              <Text className="ms-2 me-1.5" size="sm" weight="medium">
+                3 selected
+              </Text>
+              <Button chrome="toolbar" size="sm" variant="outline">
+                Actions
+              </Button>
+            </Surface>
+          </div>
           <Surface variant="selection">
             <Text size="sm" weight="medium">
               Selected item
@@ -1065,7 +1075,7 @@ export const DesignSystemShowcase = () => {
           description="Stacked rows keep two lines. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
           title="Mail list rows"
         >
-          <div className="@container space-y-3">
+          <div className="@container">
             <div
               className={mailListRowFrameVariants({
                 accent: "yellow",
@@ -1085,7 +1095,7 @@ export const DesignSystemShowcase = () => {
                 senderEmail="nora@example.test"
                 subject="The updated project files are ready for your review"
                 subjectTrailing={
-                  <Pill size="xs" tone="blue">
+                  <Pill size="sm" tone="blue">
                     Work
                   </Pill>
                 }
@@ -1135,13 +1145,13 @@ export const DesignSystemShowcase = () => {
                 subject="A longer subject stays on one line and truncates when the list gets narrower"
                 subjectTrailing={
                   <>
-                    <Pill size="xs" tone="blue">
+                    <Pill size="adaptive" tone="blue">
                       Work
                     </Pill>
-                    <Pill size="xs" tone="purple">
+                    <Pill size="adaptive" tone="purple">
                       Projects
                     </Pill>
-                    <Pill size="xs" tone="green">
+                    <Pill size="adaptive" tone="green">
                       Follow up
                     </Pill>
                   </>

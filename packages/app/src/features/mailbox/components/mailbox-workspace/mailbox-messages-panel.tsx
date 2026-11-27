@@ -9,6 +9,7 @@ import { MailboxIdleState } from "@quieter/app/features/mailbox/components/mailb
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import {
   applyMailboxSearchPatch,
+  getLabelSearchPatch,
   useMailboxMessageId,
   useMailboxSearchActions,
   useMailboxThreadId,
@@ -23,7 +24,6 @@ import { toastError } from "@quieter/app/lib/error-toast";
 import { buildThreadListEntries } from "@quieter/app/lib/gmail/thread-list";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
-import { serializeStructuredSearchState } from "@quieter/mail/search";
 import { ActionFooter } from "@quieter/ui/action-footer";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
@@ -254,18 +254,7 @@ export const MailboxMessagesPanel = ({
     setShouldFocusMessageView(false);
     onFocusRequestComplete?.();
     resetListSelection();
-    void setMailboxSearch({
-      mailbox: "inbox",
-      mailboxId,
-      messageId: null,
-      query: serializeStructuredSearchState({
-        filters: [{ type: "label", value: label.name }],
-        text: "",
-      }),
-      threadId: null,
-      view: "inbox",
-      workspace: null,
-    });
+    void setMailboxSearch(getLabelSearchPatch(mailboxId, label.name));
   };
 
   const backToList = () => {
@@ -317,6 +306,7 @@ export const MailboxMessagesPanel = ({
             messages={listState.messages}
             onActivateMessage={activateMessage}
             onDeactivateActiveMessage={backToList}
+            onFilterByLabel={filterByLabel}
             onLoadMore={loadMoreMessages}
             onKeyboardOpenMessage={() => {
               setShouldFocusMessageView(true);
