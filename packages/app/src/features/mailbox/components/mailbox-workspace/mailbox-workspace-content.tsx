@@ -24,6 +24,7 @@ import { MailSubviewHeader } from "@quieter/app/features/mailbox/components/mail
 import { FirstRunManagedMailSetup } from "@quieter/app/features/mailbox/components/mailbox-workspace/first-run-managed-mail-setup";
 import { MailboxMessagesPanel } from "@quieter/app/features/mailbox/components/mailbox-workspace/mailbox-messages-panel";
 import {
+  getLabelSearchPatch,
   useMailboxMessageId,
   useMailboxSearchActions,
 } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
@@ -868,6 +869,13 @@ const MailboxWorkspaceContentInner = ({
             pendingKeyboardOpenRef.current = false;
             setCombinedFocusTarget(null);
             void setMailboxSearch({ messageId: null, threadId: null });
+          }}
+          onFilterByLabel={(label, sourceMailboxId) => {
+            pendingKeyboardOpenRef.current = false;
+            setCombinedFocusTarget(null);
+            void setMailboxSearch(
+              getLabelSearchPatch(sourceMailboxId, label.name, activeMailbox)
+            );
           }}
           onKeyboardOpenMessage={() => {
             pendingKeyboardOpenRef.current = true;

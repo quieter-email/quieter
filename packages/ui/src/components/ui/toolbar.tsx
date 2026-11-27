@@ -29,7 +29,7 @@ export const Toolbar = ({
           padding: "none",
           variant: chrome === "inset" ? "detail" : "section",
         }),
-        "inline-flex items-center border border-transparent shadow-sm squircle",
+        "inline-flex items-center border border-transparent shadow-sm",
         {
           "m-2 min-h-12 gap-1.5 border-0 px-3.5 py-2 shadow-none":
             chrome === "inset",
@@ -138,7 +138,7 @@ export const ToolbarInput = ({
   <ToolbarPrimitive.Input
     className={cn(
       inputControlClassName,
-      "h-8 min-w-32 rounded-md border border-border bg-detail px-3 text-body-sm shadow-sm squircle read-only:cursor-default read-only:bg-detail dark:border-transparent",
+      "h-8 min-w-32 rounded-md border border-border bg-detail px-3 text-body-sm shadow-sm read-only:cursor-default read-only:bg-detail dark:border-transparent",
       className
     )}
     {...props}

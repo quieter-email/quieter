@@ -2,6 +2,8 @@
 
 import { MoreVerticalIcon } from "@hugeicons/core-free-icons";
 import { applyMailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import type { MailboxSearchPatch } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-route-search";
+import { MailboxLabelSwatch } from "@quieter/app/features/message-labels/components/mailbox-label-swatch";
 import {
   SIDEBAR_LABEL_VISIBILITY_EVENT,
   computeEffectiveHiddenLabelIds,
@@ -21,15 +23,25 @@ import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { managedLabelCountsQueryOptions } from "@quieter/app/lib/managed-mailbox-organization-query";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
-import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
-import { ColorSwatch } from "@quieter/ui/color-swatch";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "@tanstack/react-router";
+import { useSelector } from "@tanstack/react-store";
 import type { ReactNode } from "react";
-import { useEffect, useReducer } from "react";
+import { useEffect, useEffectEvent, useReducer, useState } from "react";
+
+import { getLabelUpdates } from "../../message-labels/components/label-update-mutation";
+import { orderSidebarEntries } from "../domain/sidebar-preferences";
+import type { SidebarEntry } from "../domain/sidebar-preferences";
+import { SidebarContextMenu } from "./sidebar-context-menu";
+import {
+  SidebarLabelDialogs,
+  useSidebarLabelFilterReplacement,
+  useSidebarSearchNavigation,
+} from "./sidebar-label-actions";
+import type { SidebarLabelDialogState } from "./sidebar-label-actions";
 
 type SidebarLabelNavProps = {
   animateEntrance: boolean;
@@ -37,27 +49,14 @@ type SidebarLabelNavProps = {
   embedded: boolean;
   mailboxId: string | null;
   mailboxProvider: "gmail" | "managed";
+  onItemsChange?: (items: readonly SidebarEntry[]) => void;
   onManageLabels: () => void;
   onRequestClose?: () => void;
   onSearch: (query: string) => void;
+  order?: readonly string[];
   searchQuery: string;
   selectedMailbox: MailboxCategory | null;
 };
-
-const ManagedLabelColorDot = ({
-  className,
-  color,
-}: {
-  className?: string;
-  color: MailboxLabel["color"] | null | undefined;
-}) => (
-  <ColorSwatch
-    className={className}
-    color={
-      color?.startsWith("#") === true ? color : `var(--q-${color ?? "gray"})`
-    }
-  />
-);
 
 const SidebarLabelEntrance = ({
   animateEntrance,
@@ -108,13 +107,26 @@ export const SidebarLabelNav = ({
   embedded,
   mailboxId,
   mailboxProvider,
+  onItemsChange,
   onManageLabels,
   onRequestClose,
   onSearch,
+  order,
   searchQuery,
   selectedMailbox,
 }: SidebarLabelNavProps) => {
   const shouldAnimateEntrance = animateEntrance;
+  const queryClient = useQueryClient();
+  const navigateSearch = useSidebarSearchNavigation();
+  const replaceLabelFilters = useSidebarLabelFilterReplacement();
+  const [labelDialog, setLabelDialog] =
+    useState<SidebarLabelDialogState | null>(null);
+  if (
+    labelDialog !== null &&
+    (!canManage || labelDialog.request.mailboxId !== mailboxId)
+  ) {
+    setLabelDialog(null);
+  }
   const [hiddenLabelState, updateHiddenLabelState] = useReducer(
     reduceHiddenLabelState,
     mailboxId,
@@ -160,7 +172,15 @@ export const SidebarLabelNav = ({
   const managedLabelCountById = new Map(
     managedLabelCounts.map((record) => [record.labelId, record.count])
   );
-  const userLabels = getUserLabels(labels ?? []);
+  const labelUpdates = getLabelUpdates({
+    mailboxId: mailboxId ?? "",
+    mailboxProvider,
+    queryClient,
+  });
+  const labelUpdateState = useSelector(labelUpdates.state);
+  const userLabels = getUserLabels(
+    labelUpdates.project(labels ?? [], labelUpdateState)
+  );
   const hiddenLabelIds =
     hiddenLabelState.mailboxId === mailboxId
       ? hiddenLabelState.value
@@ -180,6 +200,37 @@ export const SidebarLabelNav = ({
   );
   const labelTitle = "Labels";
   const labelNounPlural = "labels";
+  const showsLabelRows =
+    !areLabelsPending && !labelsUnavailable && visibleUserLabels.length > 0;
+  const navItems = showsLabelRows
+    ? visibleUserLabels.map((label) => ({
+        color: label.color,
+        id: label.id,
+        label: label.name,
+      }))
+    : [];
+  const manageLabelsPatch: MailboxSearchPatch = {
+    mailbox: "inbox",
+    mailboxId,
+    messageId: null,
+    query: null,
+    view: "labels",
+    workspace: null,
+  };
+  const openManageLabels = () => {
+    if (embedded) {
+      onManageLabels();
+    }
+    onRequestClose?.();
+  };
+
+  const navItemsKey = JSON.stringify(navItems);
+  const reportNavItems = useEffectEvent(() => {
+    onItemsChange?.(navItems);
+  });
+  useEffect(() => {
+    reportNavItems();
+  }, [navItemsKey, onItemsChange]);
 
   const renderLabelNavContent = (): ReactNode => {
     if (areLabelsPending) {
@@ -215,7 +266,7 @@ export const SidebarLabelNav = ({
         </SidebarEntrance>
       );
     }
-    return visibleUserLabels.map((label, index) => {
+    return orderSidebarEntries(visibleUserLabels, order).map((label, index) => {
       const isActive =
         selectedMailbox !== null &&
         (selectedLabelKeys.has(normalizeLabelSelectionKey(label.id)) ||
@@ -227,6 +278,10 @@ export const SidebarLabelNav = ({
           : label.name,
         !isActive
       );
+      const labelOnlyQuery = serializeStructuredSearchState({
+        filters: [{ type: "label", value: label.name }],
+        text: "",
+      });
 
       return (
         <SidebarLabelEntrance
@@ -234,41 +289,97 @@ export const SidebarLabelNav = ({
           animateEntrance={shouldAnimateEntrance}
           index={index + 9}
         >
-          <SidebarMailboxNavItem
-            active={isActive}
-            aria-current={isActive ? "page" : undefined}
-            className="min-w-0"
-            mailboxSearch={
-              embedded
-                ? undefined
-                : {
-                    mailbox: selectedMailbox ?? "inbox",
-                    mailboxId,
-                    messageId: null,
-                    query: nextQuery,
-                    view: "inbox",
-                    workspace: null,
+          <SidebarContextMenu
+            actions={[
+              {
+                label: "Search in label",
+                onSelect: () => {
+                  if (embedded) {
+                    onSearch(labelOnlyQuery);
+                  } else {
+                    navigateSearch({
+                      mailbox: selectedMailbox ?? "inbox",
+                      mailboxId,
+                      messageId: null,
+                      query: labelOnlyQuery,
+                      view: "inbox",
+                      workspace: null,
+                    });
                   }
-            }
-            onClick={() => {
-              if (embedded) {
-                onSearch(nextQuery);
-              }
-              onRequestClose?.();
-            }}
-            type="button"
-            variant="ghost"
+                  onRequestClose?.();
+                },
+              },
+              ...(canManage && isNonemptyMailboxId(mailboxId)
+                ? [
+                    {
+                      label: "Edit label",
+                      onSelect: () => {
+                        setLabelDialog({
+                          open: true,
+                          request: {
+                            kind: "edit",
+                            label,
+                            mailboxId,
+                            mailboxProvider,
+                          },
+                        });
+                      },
+                    },
+                    {
+                      label: "Delete label",
+                      onSelect: () => {
+                        setLabelDialog({
+                          open: true,
+                          request: {
+                            kind: "delete",
+                            label,
+                            mailboxId,
+                            mailboxProvider,
+                          },
+                        });
+                      },
+                      tone: "destructive" as const,
+                    },
+                  ]
+                : []),
+            ]}
           >
-            <span className="flex size-3.5 shrink-0 items-center justify-center">
-              <ManagedLabelColorDot color={label.color} />
-            </span>
-            <span className="min-w-0 truncate">{label.name}</span>
-            {mailboxProvider === "managed" ? (
-              <span className="ml-auto text-micro text-muted-fg tabular-nums">
-                {managedLabelCountById.get(label.id) ?? 0}
+            <SidebarMailboxNavItem
+              active={isActive}
+              aria-current={isActive ? "page" : undefined}
+              className="min-w-0"
+              mailboxSearch={
+                embedded
+                  ? undefined
+                  : {
+                      mailbox: selectedMailbox ?? "inbox",
+                      mailboxId,
+                      messageId: null,
+                      query: nextQuery,
+                      view: "inbox",
+                      workspace: null,
+                    }
+              }
+              onClick={() => {
+                if (embedded) {
+                  onSearch(nextQuery);
+                }
+                onRequestClose?.();
+              }}
+              type="button"
+              variant="ghost"
+            >
+              <span className="flex size-3.5 shrink-0 items-center justify-center">
+                <MailboxLabelSwatch color={label.color} />
               </span>
-            ) : null}
-          </SidebarMailboxNavItem>
+              <span className="min-w-0 truncate">{label.name}</span>
+              {mailboxProvider === "managed" ? (
+                <span className="ml-auto text-micro text-muted-fg tabular-nums">
+                  {managedLabelCountById.get(label.id) ?? 0}
+                </span>
+              ) : null}
+            </SidebarMailboxNavItem>
+          </SidebarContextMenu>
         </SidebarLabelEntrance>
       );
     });
@@ -278,58 +389,95 @@ export const SidebarLabelNav = ({
     <section className="mt-4">
       <SidebarEntrance
         animateEntrance={shouldAnimateEntrance}
-        className="mb-1 flex items-center justify-between px-3"
+        className="mb-1"
         index={8}
       >
-        <p className="text-caption font-medium text-muted-fg">{labelTitle}</p>
-        {canManage && (
-          <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
-            <Button
-              aria-label={`Manage ${labelNounPlural}`}
-              nativeButton={embedded}
-              onClick={() => {
-                if (embedded) {
-                  onManageLabels();
-                }
-                onRequestClose?.();
-              }}
-              render={
-                embedded ? undefined : (
-                  <Link
-                    replace
-                    resetScroll={false}
-                    search={(previous) =>
-                      applyMailboxSearchPatch(
-                        mailboxSearchSchema.parse(previous),
-                        {
-                          mailbox: "inbox",
-                          mailboxId,
-                          messageId: null,
-                          query: null,
-                          view: "labels",
-                          workspace: null,
+        <SidebarContextMenu
+          actions={
+            canManage
+              ? [
+                  {
+                    label: `Manage ${labelNounPlural}`,
+                    onSelect: () => {
+                      if (!embedded) {
+                        navigateSearch(manageLabelsPatch);
+                      }
+                      openManageLabels();
+                    },
+                  },
+                ]
+              : []
+          }
+        >
+          <div className="flex items-center justify-between px-3">
+            <p className="text-caption font-medium text-muted-fg">
+              {labelTitle}
+            </p>
+            {canManage && (
+              <IconButtonTooltip label={`Manage ${labelNounPlural}`}>
+                <Button
+                  aria-label={`Manage ${labelNounPlural}`}
+                  nativeButton={embedded}
+                  onClick={openManageLabels}
+                  render={
+                    embedded ? undefined : (
+                      <Link
+                        replace
+                        resetScroll={false}
+                        search={(previous) =>
+                          applyMailboxSearchPatch(
+                            mailboxSearchSchema.parse(previous),
+                            manageLabelsPatch
+                          )
                         }
-                      )
-                    }
-                    to="/"
-                  />
-                )
-              }
-              className="-me-1.25"
-              role={embedded ? "button" : "link"}
-              size="icon-xs"
-              type="button"
-              variant="ghost"
-            >
-              <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
-            </Button>
-          </IconButtonTooltip>
-        )}
+                        to="/"
+                      />
+                    )
+                  }
+                  className="-me-1.25"
+                  role={embedded ? "button" : "link"}
+                  size="icon-xs"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Icon aria-hidden size={14} icon={MoreVerticalIcon} />
+                </Button>
+              </IconButtonTooltip>
+            )}
+          </div>
+        </SidebarContextMenu>
       </SidebarEntrance>
 
       <nav aria-label={labelTitle} className="flex flex-col">
         {renderLabelNavContent()}
       </nav>
+      <SidebarLabelDialogs
+        onDeleted={(request) => {
+          if (selectedMailbox === null) {
+            return;
+          }
+          replaceLabelFilters({
+            inScope: (route) =>
+              route.view !== "all-inboxes" &&
+              (route.mailboxId ?? mailboxId) === request.mailboxId,
+            nextName: null,
+            previousNames: [request.label.id, request.label.name],
+          });
+        }}
+        onOpenChange={(open) => {
+          setLabelDialog((current) => current && { ...current, open });
+        }}
+        onRenamed={(request, label) => {
+          replaceLabelFilters({
+            inScope: (route) =>
+              route.view !== "all-inboxes" &&
+              (route.mailboxId ?? mailboxId) === request.mailboxId,
+            nextName: label.name,
+            previousNames: [request.label.name],
+          });
+        }}
+        state={labelDialog}
+      />
     </section>
   );
 };

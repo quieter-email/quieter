@@ -20,6 +20,7 @@ export const MailboxColorPicker = ({
   onChange,
   onOpenChange,
   open,
+  swatchShape,
   trigger,
   value,
 }: {
@@ -29,6 +30,7 @@ export const MailboxColorPicker = ({
   onChange: (color: MailboxLabelColor) => void;
   onOpenChange?: (open: boolean) => void;
   open?: boolean;
+  swatchShape?: "circle" | "square";
   trigger?: "default" | "swatch";
   value: MailboxLabelColor;
 }) => (
@@ -42,6 +44,7 @@ export const MailboxColorPicker = ({
       }}
       open={open}
       presets={presets}
+      swatchShape={swatchShape}
       trigger={trigger}
       value={value.startsWith("#") ? value : `var(--q-${value})`}
     />

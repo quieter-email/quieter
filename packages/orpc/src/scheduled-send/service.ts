@@ -635,6 +635,21 @@ export const createHeldSend = async (
     })
   );
 
+const scheduledSendsFilter = (scope: { mailboxId: string; userId: string }) =>
+  and(
+    eq(scheduledMailSend.mailboxId, scope.mailboxId),
+    eq(scheduledMailSend.userId, scope.userId),
+    inArray(scheduledMailSend.status, [
+      "preparing",
+      "scheduled",
+      "sending",
+      "failed",
+      "uncertain",
+      "cancelled",
+    ]),
+    isNull(scheduledMailSend.payloadRetiredAt)
+  );
+
 export const listScheduledSends = async (scope: {
   mailboxId: string;
   userId: string;
@@ -643,23 +658,22 @@ export const listScheduledSends = async (scope: {
   const rows = await db
     .select()
     .from(scheduledMailSend)
-    .where(
-      and(
-        eq(scheduledMailSend.mailboxId, scope.mailboxId),
-        eq(scheduledMailSend.userId, scope.userId),
-        inArray(scheduledMailSend.status, [
-          "preparing",
-          "scheduled",
-          "sending",
-          "failed",
-          "uncertain",
-          "cancelled",
-        ]),
-        isNull(scheduledMailSend.payloadRetiredAt)
-      )
-    )
+    .where(scheduledSendsFilter(scope))
     .orderBy(asc(scheduledMailSend.sendAt), asc(scheduledMailSend.id));
   return rows.map(toSummary);
+};
+
+export const countScheduledSends = async (scope: {
+  mailboxId: string;
+  userId: string;
+}) => {
+  await assertAccessibleMailbox(scope);
+  const rows = await db
+    .select({ id: scheduledMailSend.id })
+    .from(scheduledMailSend)
+    .where(scheduledSendsFilter(scope))
+    .limit(100);
+  return rows.length;
 };
 
 export const getScheduledSendByOperation = async (scope: {

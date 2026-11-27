@@ -4,9 +4,13 @@ import type { ClipboardEvent, KeyboardEvent, Ref, SyntheticEvent } from "react";
 import { useEffect, useId, useImperativeHandle, useRef, useState } from "react";
 
 import { cn } from "../../lib/cn";
-import { menuEmptyClassName, menuItemClassName } from "./menu-chrome";
+import {
+  menuEmptyClassName,
+  menuItemClassName,
+  menuListPaddingClassName,
+  menuSurfaceClassName,
+} from "./menu-chrome";
 import { pillVariants } from "./pill";
-import { popupSurfaceClassName } from "./popup-surface";
 import {
   indexEditable,
   placeSelection,
@@ -110,8 +114,9 @@ const TokenFieldSuggestions = ({
   <div
     aria-label={label}
     className={cn(
-      popupSurfaceClassName,
-      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain rounded-xl p-1 squircle",
+      menuSurfaceClassName,
+      "absolute right-0 left-0 z-50 max-h-56 overflow-y-auto overscroll-contain",
+      menuListPaddingClassName,
       { "bottom-full mb-1": side === "top", "top-full mt-1": !(side === "top") }
     )}
     id={listId}

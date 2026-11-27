@@ -11,7 +11,7 @@ import {
   getDeliveryStatusTone,
 } from "@quieter/app/features/message-delivery/domain/delivery-status";
 import type { MessageDeliveryStatus } from "@quieter/app/features/message-delivery/domain/delivery-status";
-import { MessageLabels } from "@quieter/app/features/message-labels/components/message-labels";
+import { ConversationLabels } from "@quieter/app/features/message-labels/components/conversation-labels";
 import type { MessageListProps } from "@quieter/app/features/message-list/components/message-list-types";
 import type { useMessageListSelection } from "@quieter/app/features/message-list/components/use-message-list-selection";
 import { createMailboxThreadMessageActionHandlers } from "@quieter/app/features/message-thread/components/message-action-handlers";
@@ -157,6 +157,7 @@ type MessageRowProps = {
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
   offsetY: number;
+  onFilterByLabel?: MessageListProps["onFilterByLabel"];
   onOpenDraft: MessageListProps["onOpenDraft"];
   onKeyboardOpen?: () => void;
   onThreadFocus: (threadId: string | null) => void;
@@ -292,9 +293,9 @@ const MessageRowDetails = ({
   badge,
   date,
   deliveryStatus,
-  gmailLabels,
   isActive,
   isDraftMailbox,
+  labels,
   senderEmail,
   senderLabel,
   subject,
@@ -306,9 +307,9 @@ const MessageRowDetails = ({
   badge?: ReactNode;
   date: string;
   deliveryStatus?: MessageDeliveryStatus | null;
-  gmailLabels: MailboxLabel[];
   isActive: boolean;
   isDraftMailbox: boolean;
+  labels?: ReactNode;
   senderEmail: string;
   senderLabel: string;
   subject: string;
@@ -318,6 +319,7 @@ const MessageRowDetails = ({
   wideCompactRows?: boolean;
 }) => (
   <MailListRowDetails
+    inset="balanced"
     actions={actions}
     active={isActive}
     badge={badge}
@@ -373,13 +375,7 @@ const MessageRowDetails = ({
         {verificationCode && (
           <CopyVerificationCode code={verificationCode} size="xs" />
         )}
-        <MessageLabels
-          className="hidden @sm:flex"
-          compact
-          labelIds={thread.threadLabelIds}
-          labels={gmailLabels}
-          limit={wideCompactRows === true ? undefined : 2}
-        />
+        {labels}
       </>
     }
     timestamp={date || "--"}
@@ -405,6 +401,7 @@ type MessageRowSurfaceProps = {
   mailboxId: string;
   mailboxProvider: MessageListProps["mailboxProvider"];
   onKeyboardOpen?: () => void;
+  onFilterByLabel?: MessageListProps["onFilterByLabel"];
   onOpenDraft: MessageListProps["onOpenDraft"];
   onThreadFocus: (threadId: string | null) => void;
   onThreadIntent: (threadId: string | null) => void;
@@ -447,6 +444,7 @@ const MessageRowSurface = ({
   mailboxId,
   mailboxProvider,
   onKeyboardOpen,
+  onFilterByLabel,
   onOpenDraft,
   onThreadFocus,
   onThreadIntent,
@@ -516,7 +514,7 @@ const MessageRowSurface = ({
       : undefined;
   const snoozeAction = getMailSnoozeAction(snooze, thread.messages);
   const returnsToInbox = !thread.threadLabelIds.includes(MAILBOX_LABELS.inbox);
-  const { onApplySnooze } = threadActions;
+  const { onApplySnooze, onUpdateLabels } = threadActions;
   const returnsSnoozeNow =
     returnsToInbox && onApplySnooze !== undefined && liveSnooze !== undefined;
   let placementAction = returnsToInbox
@@ -593,7 +591,7 @@ const MessageRowSurface = ({
       <m.span
         animate={{ opacity: isPressed ? 1 : surfaceOpacity }}
         aria-hidden
-        className={mailListRowParts.overlay}
+        className={mailListRowParts.listOverlay}
         initial={false}
         transition={{ duration: appMotionDuration.feedback, ease: appEaseOut }}
       />
@@ -667,7 +665,38 @@ const MessageRowSurface = ({
             badge={badge}
             date={date}
             deliveryStatus={deliveryStatus}
-            gmailLabels={gmailLabels}
+            labels={
+              gmailLabels.length === 0 ? null : (
+                <ConversationLabels
+                  appliedLabelIds={thread.threadLabelIds}
+                  labels={gmailLabels}
+                  layout={wideCompactRows === true ? "adaptive" : "stacked"}
+                  mailboxId={mailboxId}
+                  messageIds={thread.messages
+                    .filter((message) => !message.draftId)
+                    .map(
+                      ({ id }) =>
+                        rowMailboxContext?.originalMessageIds.get(id) ?? id
+                    )}
+                  onFilterByLabel={
+                    onFilterByLabel === undefined
+                      ? undefined
+                      : (label) => {
+                          onFilterByLabel(label, mailboxId);
+                        }
+                  }
+                  onUpdateLabels={
+                    rowMailboxActions.canSetPlacement &&
+                    !isDraftMailbox &&
+                    onUpdateLabels !== undefined
+                      ? async (changes) => {
+                          await onUpdateLabels(thread.threadId, changes);
+                        }
+                      : undefined
+                  }
+                />
+              )
+            }
             isActive={isActive}
             isDraftMailbox={isDraftMailbox}
             senderEmail={senderEmail}
@@ -695,6 +724,7 @@ const MessageRowContent = ({
   mailboxDisplayName,
   mailboxId,
   mailboxProvider,
+  onFilterByLabel,
   onOpenDraft,
   onKeyboardOpen,
   onThreadFocus,
@@ -762,6 +792,7 @@ const MessageRowContent = ({
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
       onKeyboardOpen={onKeyboardOpen}
+      onFilterByLabel={onFilterByLabel}
       onOpenDraft={onOpenDraft}
       onThreadFocus={onThreadFocus}
       onThreadIntent={onThreadIntent}
@@ -804,6 +835,7 @@ export const MessageRow = ({
   mailboxProvider,
   offsetY,
   onKeyboardOpen,
+  onFilterByLabel,
   onOpenDraft,
   onThreadFocus,
   onThreadIntent,
@@ -833,6 +865,7 @@ export const MessageRow = ({
       mailboxDisplayName={mailboxDisplayName}
       mailboxId={mailboxId}
       mailboxProvider={mailboxProvider}
+      onFilterByLabel={onFilterByLabel}
       onOpenDraft={onOpenDraft}
       onKeyboardOpen={onKeyboardOpen}
       onThreadFocus={onThreadFocus}

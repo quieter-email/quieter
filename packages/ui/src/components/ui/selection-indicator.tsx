@@ -16,7 +16,7 @@ export const SelectionIndicator = ({
     <m.span
       aria-hidden
       className={cn(
-        "pointer-events-none absolute inset-0 -z-10 rounded-[inherit] [corner-shape:inherit]",
+        "pointer-events-none absolute inset-0 -z-10 rounded-[inherit]",
         {
           "bg-primary": variant === "primary",
           "bg-selection shadow-sm": variant !== "primary",

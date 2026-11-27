@@ -16,19 +16,21 @@ import {
   menuCompactPopupClassName,
   menuGroupLabelClassName,
   menuItemClassName,
+  menuListPaddingClassName,
+  menuSurfaceClassName,
 } from "./menu-chrome";
 import {
   anchoredPopupMotionClassName,
   overlayBackdropClassName,
 } from "./overlay-chrome";
-import { popupSideOffset, popupSurfaceClassName } from "./popup-surface";
+import { popupSideOffset } from "./popup-surface";
 
 type SelectDensity = "default" | "compact";
 
 const SelectDensityContext = createContext<SelectDensity>("default");
 
 export const selectTriggerVariants = cva(
-  "squircle inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring active:scale-100 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+  "inline-flex shrink-0 items-center justify-between text-left gap-2 rounded-md font-normal whitespace-nowrap select-none focus-visible:outline-hidden focus-visible:ring-1 focus-visible:ring-ring active:scale-100 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0",
   {
     compoundVariants: [{ chrome: "toolbar", className: "rounded-xl" }],
     defaultVariants: {
@@ -150,8 +152,9 @@ export const SelectContent = ({
         <SelectPrimitive.Popup
           className={cn(
             anchoredPopupMotionClassName,
-            popupSurfaceClassName,
-            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain rounded-xl p-1 data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            menuSurfaceClassName,
+            "z-50 max-h-[min(20rem,var(--available-height))] min-w-52 overflow-y-auto overscroll-contain data-[side=none]:min-w-(--anchor-width) data-[side=none]:duration-100 data-[side=none]:data-ending-style:scale-100 data-[side=none]:data-starting-style:scale-100",
+            menuListPaddingClassName,
             { [menuCompactPopupClassName]: size === "compact" },
             className
           )}
@@ -200,7 +203,7 @@ export const SelectList = ({
 }: ComponentPropsWithoutRef<typeof SelectPrimitive.List>) => (
   <SelectPrimitive.List
     className={cn(
-      "max-h-[min(18rem,var(--available-height))] scroll-py-7 overflow-y-auto overscroll-contain",
+      "max-h-[min(18rem,var(--available-height))] scroll-py-9 overflow-y-auto overscroll-contain",
       className
     )}
     {...props}

@@ -17,7 +17,10 @@ import {
 } from "@quieter/app/features/hotkeys/domain/hotkey-guards";
 import { MessageListHeader } from "@quieter/app/features/message-list/components/message-list-header";
 import { MessageListScrollPane } from "@quieter/app/features/message-list/components/message-list-scroll-pane";
-import { MessageListSelectionToolbar } from "@quieter/app/features/message-list/components/message-list-selection-toolbar";
+import {
+  MessageListSelectionToolbar,
+  MessageListSelectionTray,
+} from "@quieter/app/features/message-list/components/message-list-selection-toolbar";
 import type {
   MessageListBulkAction,
   MessageListBulkLabels,
@@ -1061,7 +1064,7 @@ export const MessageList = (props: MessageListProps) => {
 
   return (
     <div
-      className="@container flex min-h-0 flex-1 flex-col"
+      className="@container relative flex min-h-0 flex-1 flex-col"
       ref={listContainerRef}
     >
       {snoozeDialog}
@@ -1079,24 +1082,6 @@ export const MessageList = (props: MessageListProps) => {
             searchQuery={props.searchQuery}
             searchMailboxes={props.searchMailboxes}
           />
-        }
-        selection={
-          isSelecting ? (
-            <MessageListSelectionToolbar
-              actions={bulkActions}
-              allSelected={selection.allSelected}
-              disabled={props.isPending || isBulkActionPending}
-              indeterminate={selection.selectionIndeterminate}
-              itemLabelPlural={
-                props.activeMailbox === "drafts" ? "drafts" : "conversations"
-              }
-              labels={bulkLabels}
-              onClearSelection={handleClearSelection}
-              onToggleAll={handleToggleAllLoadedThreads}
-              pending={isBulkActionPending}
-              selectedCount={selection.selectedThreadIds.size}
-            />
-          ) : null
         }
       />
 
@@ -1143,9 +1128,29 @@ export const MessageList = (props: MessageListProps) => {
           onKeyboardOpenMessage={props.onKeyboardOpenMessage}
           onThreadSnooze={openThreadSnooze}
           selection={selection}
+          showSelectionTray={isSelecting}
           threadedMessages={threadedMessages}
         />
       </m.div>
+
+      <MessageListSelectionTray>
+        {isSelecting ? (
+          <MessageListSelectionToolbar
+            actions={bulkActions}
+            allSelected={selection.allSelected}
+            disabled={props.isPending || isBulkActionPending}
+            indeterminate={selection.selectionIndeterminate}
+            itemLabelPlural={
+              props.activeMailbox === "drafts" ? "drafts" : "conversations"
+            }
+            labels={bulkLabels}
+            onClearSelection={handleClearSelection}
+            onToggleAll={handleToggleAllLoadedThreads}
+            pending={isBulkActionPending}
+            selectedCount={selection.selectedThreadIds.size}
+          />
+        ) : null}
+      </MessageListSelectionTray>
     </div>
   );
 };

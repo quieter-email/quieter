@@ -6,7 +6,7 @@ import { workspaceSidebarEntranceClassName } from "@quieter/ui/workspace-sidebar
 import { cva } from "class-variance-authority";
 import type { ReactNode } from "react";
 
-const sidebarSurfaceVariants = cva("squircle rounded-md", {
+const sidebarSurfaceVariants = cva("rounded-md", {
   variants: {
     surface: {
       active: "pointer-events-none absolute inset-0 z-0 bg-selection",

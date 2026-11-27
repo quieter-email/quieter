@@ -151,7 +151,7 @@ export const buttonVariants = cva(
         // lines up with the row's metadata and label pills; translucent fills
         // keep contrast on hovered, active and selected row surfaces.
         "row-action":
-          "squircle h-auto gap-1 rounded-sm border-0 bg-fg/8 px-2 py-1 text-micro/none text-fg hover:bg-fg/12 [&_svg]:size-3",
+          "h-auto gap-1 rounded-sm border-0 bg-fg/8 px-2 py-1 text-micro/none text-fg hover:bg-fg/12 [&_svg]:size-3",
         // Quiet secondary action, e.g. the stop-response button.
         secondary:
           "bg-secondary text-secondary-fg shadow-sm hover:bg-secondary-hover",
@@ -163,7 +163,7 @@ export const buttonVariants = cva(
 );
 
 export const buttonFooterClassName =
-  "squircle min-w-20 px-3.5 font-medium [&_svg]:size-3.5";
+  "min-w-20 px-3.5 font-medium [&_svg]:size-3.5";
 
 export type ButtonProps = BaseUIButtonProps &
   Omit<VariantProps<typeof buttonVariants>, "auxiliaryPress"> & {

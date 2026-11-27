@@ -26,7 +26,7 @@ import { Calendar } from "@quieter/ui/calendar";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
-import { popupSurfaceClassName } from "@quieter/ui/popup-surface";
+import { PopupMenuButton, PopupMenuSurface } from "@quieter/ui/popup-menu";
 import { AnimatePresence, LazyMotion, domAnimation, m } from "motion/react";
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from "react";
 
@@ -144,7 +144,7 @@ export const MessageListSearchView = ({
           onBlur={handleSearchFieldBlur}
           ref={fieldRef}
         >
-          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-transparent bg-control p-0.5 transition-colors duration-150 ease-out squircle has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:outline-hidden">
+          <div className="flex min-h-8 min-w-0 items-center gap-1 rounded-xl border border-transparent bg-control p-0.5 transition-colors duration-150 ease-out has-[input[data-slot=search-input]:focus-visible]:border-ring has-[input[data-slot=search-input]:focus-visible]:outline-hidden">
             <div
               className="flex min-w-0 flex-1 scroll-px-1 scrollbar-none items-center gap-1 overflow-x-auto overscroll-x-contain [&::-webkit-scrollbar]:hidden"
               onMouseDown={(event) => {
@@ -489,59 +489,44 @@ export const MessageListSearchView = ({
             activeDateFilterIndex !== null &&
             (activeDateFilter.type === "after" ||
               activeDateFilter.type === "before") && (
-              <div
-                className={cn(
-                  popupSurfaceClassName,
-                  "absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain rounded-xl p-2"
-                )}
+              <PopupMenuSurface
+                className="absolute top-full z-40 mt-2 max-h-[calc(100dvh-5rem)] max-w-[calc(100vw-1rem)] overflow-auto overscroll-contain"
                 data-blocking-overlay=""
                 // oxlint-disable-next-line shadcn/no-inline-styles -- Popover anchors to measured input position.
                 style={{ left: datePopoverLeft }}
               >
-                <div className="mb-2 grid grid-cols-2 gap-1 border-b pb-2">
-                  <Button
+                <div className="mb-2 grid grid-cols-2 gap-1 border-b border-fg/10 pb-2">
+                  <PopupMenuButton
                     onClick={() => {
                       selectDateFilterValue(calendarFallbackMonth);
                     }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
                   >
                     Today
-                  </Button>
-                  <Button
+                  </PopupMenuButton>
+                  <PopupMenuButton
                     onClick={() => {
                       selectDatePreset({ type: "newer_than", value: "7d" });
                     }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
                   >
                     Last 7 days
-                  </Button>
-                  <Button
+                  </PopupMenuButton>
+                  <PopupMenuButton
                     onClick={() => {
                       selectDatePreset({ type: "newer_than", value: "30d" });
                     }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
                   >
                     Last 30 days
-                  </Button>
-                  <Button
+                  </PopupMenuButton>
+                  <PopupMenuButton
                     onClick={() => {
                       selectDatePreset({
                         type: "after",
                         value: `${calendarFallbackMonth.getFullYear()}/1/1`,
                       });
                     }}
-                    size="sm"
-                    type="button"
-                    variant="ghost"
                   >
                     This year
-                  </Button>
+                  </PopupMenuButton>
                 </div>
                 <Calendar
                   mode="single"
@@ -554,7 +539,7 @@ export const MessageListSearchView = ({
                   }}
                   selected={selectedDate}
                 />
-              </div>
+              </PopupMenuSurface>
             )}
 
           <MessageListSearchDropdown

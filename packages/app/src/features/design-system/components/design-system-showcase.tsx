@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  AlarmClockIcon,
   CheckmarkCircle02Icon,
   Clock01Icon,
   Delete01Icon,
@@ -108,7 +109,7 @@ import {
   mailListRowFrameVariants,
 } from "@quieter/ui/mail-list-row";
 import { entranceMotionVariants } from "@quieter/ui/motion";
-import { Pill } from "@quieter/ui/pill";
+import { Pill, PillButton } from "@quieter/ui/pill";
 import type { PillTone } from "@quieter/ui/pill";
 import {
   Popover,
@@ -130,6 +131,8 @@ import { SenderAvatar } from "@quieter/ui/sender-avatar";
 import {
   SettingsCard,
   SettingsFieldRow,
+  SettingsInsetRow,
+  SettingsInsetRows,
   SettingsNavigationRow,
   SettingsPageHeader,
   SettingsSectionLayout,
@@ -770,10 +773,7 @@ export const DesignSystemShowcase = () => {
           <div className="grid grid-cols-2 gap-3 @md:grid-cols-3">
             {surfaceTokens.map((token) => (
               <div
-                className={cn(
-                  "rounded-md border border-border p-4 squircle",
-                  token.cls
-                )}
+                className={cn("rounded-md border border-border p-4", token.cls)}
                 key={token.name}
               >
                 <p className="text-body-sm font-medium text-fg">{token.name}</p>
@@ -812,6 +812,16 @@ export const DesignSystemShowcase = () => {
               </Surface>
             </Surface>
           </Surface>
+          <div className="flex">
+            <Surface padding="tray" variant="floating">
+              <Text className="ms-2 me-1.5" size="sm" weight="medium">
+                3 selected
+              </Text>
+              <Button chrome="toolbar" size="sm" variant="outline">
+                Actions
+              </Button>
+            </Surface>
+          </div>
           <Surface variant="selection">
             <Text size="sm" weight="medium">
               Selected item
@@ -924,10 +934,10 @@ export const DesignSystemShowcase = () => {
 
         <Section title="Borders">
           <div className="flex flex-wrap gap-3">
-            <div className="rounded-md border border-border px-4 py-3 text-body-sm squircle">
+            <div className="rounded-md border border-border px-4 py-3 text-body-sm">
               border
             </div>
-            <div className="rounded-md border border-border-strong px-4 py-3 text-body-sm squircle">
+            <div className="rounded-md border border-border-strong px-4 py-3 text-body-sm">
               border-strong
             </div>
           </div>
@@ -1065,7 +1075,7 @@ export const DesignSystemShowcase = () => {
           description="Stacked rows keep two lines, or three with a compact footer. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
           title="Mail list rows"
         >
-          <div className="@container space-y-3">
+          <div className="@container space-y-px">
             <div
               className={mailListRowFrameVariants({
                 accent: "yellow",
@@ -1073,6 +1083,7 @@ export const DesignSystemShowcase = () => {
               })}
             >
               <MailListRowDetails
+                inset="balanced"
                 layout="stacked"
                 metadata={
                   <Pill size="xs" tone="neutral">
@@ -1085,7 +1096,7 @@ export const DesignSystemShowcase = () => {
                 senderEmail="nora@example.test"
                 subject="The updated project files are ready for your review"
                 subjectTrailing={
-                  <Pill size="xs" tone="blue">
+                  <Pill size="sm" tone="blue">
                     Work
                   </Pill>
                 }
@@ -1115,6 +1126,7 @@ export const DesignSystemShowcase = () => {
                   </IconButtonTooltip>
                 }
                 active
+                inset="balanced"
                 metadata={
                   <MailListRowMetadata
                     attachmentCount={2}
@@ -1135,13 +1147,13 @@ export const DesignSystemShowcase = () => {
                 subject="A longer subject stays on one line and truncates when the list gets narrower"
                 subjectTrailing={
                   <>
-                    <Pill size="xs" tone="blue">
+                    <Pill size="adaptive" tone="blue">
                       Work
                     </Pill>
-                    <Pill size="xs" tone="purple">
+                    <Pill size="adaptive" tone="purple">
                       Projects
                     </Pill>
-                    <Pill size="xs" tone="green">
+                    <Pill size="adaptive" tone="green">
                       Follow up
                     </Pill>
                   </>
@@ -1392,7 +1404,7 @@ export const DesignSystemShowcase = () => {
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start">
                 <DropdownMenuItem>Mark as read</DropdownMenuItem>
-                <DropdownMenuItem highlight="subtle">Archive</DropdownMenuItem>
+                <DropdownMenuItem>Archive</DropdownMenuItem>
                 <DropdownMenuCheckboxItem defaultChecked>
                   Show previews
                 </DropdownMenuCheckboxItem>
@@ -1673,6 +1685,12 @@ export const DesignSystemShowcase = () => {
               label="Edit example color"
               onChange={setLabelColor}
               trigger="swatch"
+              value={labelColor}
+            />
+            <MailboxColorPicker
+              label="Example group color"
+              onChange={setLabelColor}
+              swatchShape="circle"
               value={labelColor}
             />
           </Row>
@@ -2114,6 +2132,29 @@ export const DesignSystemShowcase = () => {
               </PopoverContent>
             </Popover>
           </Row>
+          <Row label="Hover action strip">
+            <Popover>
+              <PopoverTrigger
+                aria-label="Mark conversation Done"
+                delay={500}
+                openOnHover
+                render={
+                  <Button chrome="toolbar" size="icon-sm" variant="ghost" />
+                }
+              >
+                <Icon aria-hidden icon={CheckmarkCircle02Icon} />
+              </PopoverTrigger>
+              <PopoverContent align="end" size="compact">
+                <span className="ps-2 text-caption text-muted-fg">
+                  Mark conversation Done
+                </span>
+                <Button size="xs" variant="secondary">
+                  <Icon aria-hidden icon={AlarmClockIcon} />
+                  Snooze
+                </Button>
+              </PopoverContent>
+            </Popover>
+          </Row>
           <Row label="Vertical tabs">
             <Tabs defaultValue="account" orientation="vertical">
               <TabsList aria-label="Example vertical settings tabs">
@@ -2227,6 +2268,16 @@ export const DesignSystemShowcase = () => {
               Compact
             </Pill>
           </Row>
+          <Row label="Interactive">
+            <Popover>
+              <PopoverTrigger render={<PillButton tone="purple" />}>
+                Product
+              </PopoverTrigger>
+              <PopoverContent>
+                <PopoverTitle>Product label</PopoverTitle>
+              </PopoverContent>
+            </Popover>
+          </Row>
         </Section>
 
         <Section
@@ -2259,6 +2310,23 @@ export const DesignSystemShowcase = () => {
                   }}
                   title="Mailbox access"
                 />
+              </SettingsCard>
+            </SettingsSectionLayout>
+            <SettingsSectionLayout title="Compact rows">
+              <SettingsCard>
+                <SettingsInsetRows density="compact">
+                  <SettingsInsetRow>
+                    <Text className="flex-1">Product updates</Text>
+                    <Switch
+                      aria-label="Product updates"
+                      checked={checked}
+                      onCheckedChange={setChecked}
+                      size="sm"
+                    >
+                      <SwitchThumb />
+                    </Switch>
+                  </SettingsInsetRow>
+                </SettingsInsetRows>
               </SettingsCard>
             </SettingsSectionLayout>
           </div>
@@ -2305,7 +2373,7 @@ export const DesignSystemShowcase = () => {
         </Section>
 
         <Section title="Mobile header">
-          <div className="overflow-hidden rounded-md border border-border squircle">
+          <div className="overflow-hidden rounded-md border border-border">
             <MobileHeader
               className="flex"
               leading="sidebar"
@@ -2331,7 +2399,7 @@ export const DesignSystemShowcase = () => {
           description="One mark, one statement, one optional next action. Holds still under reduced motion."
           title="Empty state"
         >
-          <div className="flex min-h-64 rounded-md border border-border squircle">
+          <div className="flex min-h-64 rounded-md border border-border">
             <EmptyMessageState
               action={
                 <Button size="sm" type="button" variant="outline">

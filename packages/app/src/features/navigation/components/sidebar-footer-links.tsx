@@ -5,11 +5,13 @@ import {
   HelpCircleIcon,
   KeyboardIcon,
   Settings01Icon,
+  Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import { useKeyboardShortcuts } from "@quieter/app/features/hotkeys/components/keyboard-shortcuts-context";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
 import { SidebarNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { appRuntime } from "@quieter/app/runtime";
+import { Button } from "@quieter/ui/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,6 +23,8 @@ import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Link, useLocation } from "@tanstack/react-router";
 import { useState } from "react";
+
+import { SidebarContextMenu } from "./sidebar-context-menu";
 
 const BrowserPrivacyPreferencesItem = ({
   onRequestClose,
@@ -50,91 +54,119 @@ const SidebarHelpMenu = ({
   const { openKeyboardShortcuts } = useKeyboardShortcuts();
 
   return (
-    <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
-      <div className="relative shrink-0 rounded-md squircle hover:bg-control-hover">
-        <IconButtonTooltip label="Help and legal">
-          <DropdownMenuTrigger
-            appearance="icon-transparent"
-            aria-label="Help and legal"
-            className="relative z-10"
-          >
-            <Icon aria-hidden icon={HelpCircleIcon} />
-          </DropdownMenuTrigger>
-        </IconButtonTooltip>
-      </div>
-      <DropdownMenuContent align="end" side="top" size="compact">
-        <DropdownMenuItem
-          onSelect={() => {
+    <SidebarContextMenu
+      actions={[
+        {
+          label: "Keyboard shortcuts",
+          onSelect: () => {
             onRequestClose?.();
             openKeyboardShortcuts();
-          }}
-        >
-          <Icon aria-hidden icon={KeyboardIcon} />
-          Keyboard shortcuts
-          <ShortcutHint
-            className="ml-auto"
-            shortcutId="show-keyboard-shortcuts"
+          },
+        },
+      ]}
+    >
+      <DropdownMenu onOpenChange={setIsOpen} open={isOpen}>
+        <div className="relative shrink-0 rounded-md hover:bg-control-hover">
+          <IconButtonTooltip label="Help and legal">
+            <DropdownMenuTrigger
+              appearance="icon-transparent"
+              aria-label="Help and legal"
+              className="relative z-10"
+            >
+              <Icon aria-hidden icon={HelpCircleIcon} />
+            </DropdownMenuTrigger>
+          </IconButtonTooltip>
+        </div>
+        <DropdownMenuContent align="end" side="top" size="compact">
+          <DropdownMenuItem
+            onSelect={() => {
+              onRequestClose?.();
+              openKeyboardShortcuts();
+            }}
+          >
+            <Icon aria-hidden icon={KeyboardIcon} />
+            Keyboard shortcuts
+            <ShortcutHint
+              className="ml-auto"
+              shortcutId="show-keyboard-shortcuts"
+            />
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            onSelect={onRequestClose}
+            render={<Link to="/privacy" />}
+          >
+            Privacy
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={onRequestClose}
+            render={<Link to="/cookies" />}
+          >
+            Cookies
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={onRequestClose}
+            render={<Link to="/terms" />}
+          >
+            Terms
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            onSelect={onRequestClose}
+            render={<Link to="/imprint" />}
+          >
+            Imprint
+          </DropdownMenuItem>
+          {appRuntime.platform === "desktop" ? null : (
+            <BrowserPrivacyPreferencesItem onRequestClose={onRequestClose} />
+          )}
+          <DropdownMenuSeparator />
+          <DropdownMenuItem
+            render={
+              <a href="https://logo.dev" rel="noreferrer" target="_blank">
+                Logos by logo.dev
+              </a>
+            }
           />
-        </DropdownMenuItem>
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/privacy" />}
-        >
-          Privacy
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/cookies" />}
-        >
-          Cookies
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/terms" />}
-        >
-          Terms
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          onSelect={onRequestClose}
-          render={<Link to="/imprint" />}
-        >
-          Imprint
-        </DropdownMenuItem>
-        {appRuntime.platform === "desktop" ? null : (
-          <BrowserPrivacyPreferencesItem onRequestClose={onRequestClose} />
-        )}
-        <DropdownMenuSeparator />
-        <DropdownMenuItem
-          render={
-            <a href="https://logo.dev" rel="noreferrer" target="_blank">
-              Logos by logo.dev
-            </a>
-          }
-        />
-      </DropdownMenuContent>
-    </DropdownMenu>
+        </DropdownMenuContent>
+      </DropdownMenu>
+    </SidebarContextMenu>
   );
 };
 
 export const SidebarFooterLinks = ({
   onRequestClose,
+  onCustomize,
 }: {
   onRequestClose?: () => void;
+  onCustomize?: () => void;
 }) => {
   const returnTo = useLocation({ select: (location) => location.href });
   return (
     <div className="flex items-center gap-1">
-      <SidebarNavItem
-        onClick={onRequestClose}
-        nativeButton={false}
-        render={<Link search={{ from: returnTo }} to="/settings" />}
-        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
-        role="link"
-      >
-        <Icon icon={Settings01Icon} />
-        Settings
-      </SidebarNavItem>
+      <SidebarContextMenu className="min-w-0 flex-1">
+        <SidebarNavItem
+          onClick={onRequestClose}
+          nativeButton={false}
+          render={<Link search={{ from: returnTo }} to="/settings" />}
+          // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders a native anchor through its render slot.
+          role="link"
+        >
+          <Icon icon={Settings01Icon} />
+          Settings
+        </SidebarNavItem>
+      </SidebarContextMenu>
+      {onCustomize && (
+        <IconButtonTooltip label="Customize sidebar">
+          <Button
+            aria-label="Customize sidebar"
+            onClick={onCustomize}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <Icon aria-hidden icon={Settings02Icon} />
+          </Button>
+        </IconButtonTooltip>
+      )}
       <SidebarHelpMenu onRequestClose={onRequestClose} />
     </div>
   );

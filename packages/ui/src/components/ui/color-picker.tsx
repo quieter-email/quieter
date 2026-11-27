@@ -41,6 +41,7 @@ export const ColorPicker = ({
   onValueChange,
   open,
   presets,
+  swatchShape = "square",
   trigger = "default",
   value,
 }: {
@@ -50,6 +51,7 @@ export const ColorPicker = ({
   onValueChange: (color: string) => void;
   open?: boolean;
   presets?: readonly ColorPickerPreset[];
+  swatchShape?: "circle" | "square";
   trigger?: "default" | "swatch";
   value: string;
 }) => {
@@ -85,7 +87,7 @@ export const ColorPicker = ({
         ) : undefined
       }
     >
-      <ColorSwatch color={value} ref={swatchRef} shape="square" />
+      <ColorSwatch color={value} ref={swatchRef} shape={swatchShape} />
       {trigger === "default" ? (
         <Icon aria-hidden icon={ArrowDown01Icon} />
       ) : null}
@@ -124,7 +126,7 @@ export const ColorPicker = ({
             onChange={changeColor}
           />
           <div className="flex items-center gap-3">
-            <ColorSwatch color={pickerColor} shape="square" size="lg" />
+            <ColorSwatch color={pickerColor} shape={swatchShape} size="lg" />
             <label className="sr-only" htmlFor={`${id}-hex`}>
               Hex color
             </label>
@@ -165,7 +167,7 @@ export const ColorPicker = ({
                     >
                       <ColorSwatch
                         color={preset.color}
-                        shape="square"
+                        shape={swatchShape}
                         size="lg"
                       />
                     </Button>

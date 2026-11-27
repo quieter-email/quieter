@@ -434,12 +434,15 @@ export const connectMailUpdates = (queryClient: QueryClient) => {
             ) {
               return false;
             }
-            if (root === "gmail-labels") {
+            if (root === "messages" && queryKey[4] === "sidebar-count") {
+              return changes.has("*") || types.has("mailbox.changed");
+            }
+            if (root === "gmail-labels" || root === "label-organization") {
               return changes.has("*") || types.has("labels.changed");
             }
             return [
               "messages",
-              "gmail-labels",
+              "label-suggestions",
               "managed-label-counts",
             ].includes(String(root));
           },

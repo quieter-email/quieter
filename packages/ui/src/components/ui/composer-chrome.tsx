@@ -34,7 +34,7 @@ export const ComposerActionBar = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail p-1.5 squircle",
+      "flex min-w-0 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail p-1.5",
       className
     )}
     {...props}
@@ -109,7 +109,7 @@ export const ComposerInputGroup = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail px-2 py-1 squircle focus-within:bg-control-hover has-aria-invalid:border-destructive",
+      "flex min-h-10 min-w-0 flex-1 flex-wrap items-center gap-1 rounded-xl border border-transparent bg-detail px-2 py-1 focus-within:bg-control-hover has-aria-invalid:border-destructive",
       className
     )}
     {...props}
@@ -206,7 +206,7 @@ export const ComposerEditorFrame = ({
 }: ComponentPropsWithoutRef<"div">) => (
   <div
     className={cn(
-      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section inset-ring inset-ring-section-edge/30 squircle",
+      "flex min-h-0 flex-1 flex-col overflow-hidden rounded-section bg-section inset-ring inset-ring-section-edge/30",
       className
     )}
     {...props}
@@ -317,7 +317,7 @@ export const ComposerDictationControl = ({
 }) => (
   <div
     className={cn(
-      "inline-flex h-8 w-36 shrink-0 items-center gap-2 rounded-md bg-detail p-1 squircle",
+      "inline-flex h-8 w-36 shrink-0 items-center gap-2 rounded-md bg-detail p-1",
       entranceMotionVariants({ effect: "pop" })
     )}
   >

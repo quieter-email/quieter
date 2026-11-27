@@ -9,6 +9,7 @@ import { MailboxIdleState } from "@quieter/app/features/mailbox/components/mailb
 import { useMailboxListController } from "@quieter/app/features/mailbox/components/mailbox-workspace/use-mailbox-list-controller";
 import {
   applyMailboxSearchPatch,
+  getLabelSearchPatch,
   useMailboxMessageId,
   useMailboxSearchActions,
   useMailboxThreadId,
@@ -260,6 +261,17 @@ export const MailboxMessagesPanel = ({
     onSearchQueryChange(normalizedQuery);
   };
 
+  const filterByLabel: NonNullable<MessageViewProps["onFilterByLabel"]> = (
+    label
+  ) => {
+    setShouldFocusMessageView(false);
+    onFocusRequestComplete?.();
+    resetListSelection();
+    void setMailboxSearch(
+      getLabelSearchPatch(mailboxId, label.name, activeMailbox)
+    );
+  };
+
   const backToList = () => {
     setShouldFocusMessageView(false);
     onFocusRequestComplete?.();
@@ -325,6 +337,7 @@ export const MailboxMessagesPanel = ({
             messages={listState.messages}
             onActivateMessage={activateMessage}
             onDeactivateActiveMessage={backToList}
+            onFilterByLabel={filterByLabel}
             onLoadMore={loadMoreMessages}
             onKeyboardOpenMessage={() => {
               setShouldFocusMessageView(true);
@@ -388,6 +401,7 @@ export const MailboxMessagesPanel = ({
             pendingActions={pendingActions}
             isPending={messagesPending}
             onBackToList={backToList}
+            onFilterByLabel={filterByLabel}
             onAutoFocusComplete={() => {
               setShouldFocusMessageView(false);
               onFocusRequestComplete?.();

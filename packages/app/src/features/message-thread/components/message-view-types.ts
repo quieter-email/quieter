@@ -8,6 +8,7 @@ import type {
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
 import type { CorrespondentHistoryActionProps } from "@quieter/app/features/message-thread/components/correspondent-history-action";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 
 export type MessageViewProps = {
   activeMailbox: MailboxCategory;
@@ -31,6 +32,8 @@ export type MessageViewProps = {
   }) => void;
   onOpenConversation?: CorrespondentHistoryActionProps["onOpenConversation"];
   onBackToList?: () => void;
+  /** Opens the mailbox list filtered to one label, from a label's menu. */
+  onFilterByLabel?: (label: MailboxLabel) => void;
   onAutoFocusComplete?: () => void;
   onManageSnippets?: () => void;
   pendingActions: MailboxPendingActions;

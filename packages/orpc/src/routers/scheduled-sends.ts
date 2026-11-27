@@ -8,6 +8,7 @@ import {
 
 import {
   cancelScheduledSend,
+  countScheduledSends,
   createScheduledSend,
   getScheduledSendByOperation,
   listScheduledSends,
@@ -22,6 +23,12 @@ export const scheduledSendsRouter = {
     .handler(
       async ({ context, input }) =>
         await cancelScheduledSend({ ...input, userId: context.userId })
+    ),
+  count: protectedProcedure
+    .input(scheduledSendMailboxSchema)
+    .handler(
+      async ({ context, input }) =>
+        await countScheduledSends({ ...input, userId: context.userId })
     ),
   create: protectedProcedure
     .input(createScheduledSendSchema)

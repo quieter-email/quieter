@@ -15,7 +15,6 @@ import { parseSender } from "@quieter/app/lib/gmail/message-utils";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
 import { orpc } from "@quieter/app/lib/orpc";
 import { splitMailAddressList } from "@quieter/mail/compose/schema";
-import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
 import {
   Dialog,
@@ -41,18 +40,8 @@ import { m } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-type ScheduledMessage = Pick<
-  RouterOutputs["scheduledSends"]["list"][number],
-  | "id"
-  | "subject"
-  | "to"
-  | "sendAt"
-  | "timeZone"
-  | "status"
-  | "errorMessage"
-  | "deliveryKind"
-  | "canUndo"
->;
+import { getDemoScheduledMessages } from "../domain/demo-scheduled-messages";
+import type { ScheduledMessage } from "../domain/demo-scheduled-messages";
 
 export type ScheduledSentSource = {
   badge?: ReactNode;
@@ -75,8 +64,6 @@ const scheduledStatusLabels = {
   sent: "Sent",
   uncertain: "Checking delivery",
 } satisfies Record<ScheduledMessage["status"], string>;
-
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 const getScheduledActions = (message: ScheduledMessage) => {
   const undoHeld = message.deliveryKind === "undo";
@@ -196,7 +183,7 @@ const ScheduledSentRow = ({
         <m.span
           animate={{ opacity: hovered ? 0.65 : 0 }}
           aria-hidden
-          className={mailListRowParts.overlay}
+          className={mailListRowParts.listOverlay}
           initial={false}
           transition={{
             duration: appMotionDuration.feedback,
@@ -235,6 +222,7 @@ const ScheduledSentRow = ({
                 </time>
               </>
             }
+            inset="balanced"
             metadata={
               statusLabel === null ? undefined : (
                 <Pill
@@ -264,7 +252,7 @@ export const ScheduledSentRows = ({
 }) => {
   const queryClient = useQueryClient();
   // oxlint-disable-next-line react/hook-use-state -- Preview examples keep their initial send dates.
-  const [demoNow] = useState(() => Date.now());
+  const [demoMessages] = useState(getDemoScheduledMessages);
   const { timeZone: viewerTimeZone } = Intl.DateTimeFormat().resolvedOptions();
   const [selected, setSelected] = useState<{
     id: string;
@@ -292,38 +280,7 @@ export const ScheduledSentRows = ({
   const entries = sources
     .flatMap((source, index): ScheduledEntry[] => {
       if (source.demo) {
-        const tomorrow = new Date(demoNow + DAY_MS);
-        tomorrow.setHours(9, 0, 0, 0);
-        return [
-          {
-            message: {
-              canUndo: false,
-              deliveryKind: "scheduled",
-              errorMessage: null,
-              id: `${source.mailboxId}:demo-scheduled-proposal`,
-              sendAt: tomorrow.toISOString(),
-              status: "scheduled",
-              subject: "A few thoughts on the proposal",
-              timeZone: viewerTimeZone,
-              to: "Alex <alex@example.com>",
-            },
-            source,
-          },
-          {
-            message: {
-              canUndo: false,
-              deliveryKind: "scheduled",
-              errorMessage: null,
-              id: `${source.mailboxId}:demo-scheduled-check-in`,
-              sendAt: new Date(tomorrow.getTime() + 7 * DAY_MS).toISOString(),
-              status: "scheduled",
-              subject: "Checking in next week",
-              timeZone: viewerTimeZone,
-              to: "Sam <sam@example.com>",
-            },
-            source,
-          },
-        ];
+        return demoMessages.map((message) => ({ message, source }));
       }
       return (queries[index]?.data ?? []).map((message) => ({
         message,

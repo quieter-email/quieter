@@ -38,7 +38,7 @@ export const CompositionChart = ({
         </figcaption>
         <div
           aria-hidden="true"
-          className="flex h-2.5 overflow-hidden rounded-full bg-detail not-squircle"
+          className="flex h-2.5 overflow-hidden rounded-full bg-detail"
         >
           {breakdown.map(({ label, style }) => (
             <div

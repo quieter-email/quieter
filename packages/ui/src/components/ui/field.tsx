@@ -13,7 +13,7 @@ import {
 } from "./input-chrome";
 import { entranceMotionVariants } from "./motion";
 
-const fieldControlVariants = cva(`squircle ${inputControlClassName}`, {
+const fieldControlVariants = cva(inputControlClassName, {
   compoundVariants: [
     { chrome: "ghost", className: "px-2.5" },
     { chrome: "composer", className: "h-10 px-3 text-body-sm" },

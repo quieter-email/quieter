@@ -165,6 +165,7 @@ export const orpcActions = {
     ],
     getDraft: ["read", "Read a saved draft and attachment references."],
     getHeldSend: ["read", "Read a send that can still be undone."],
+    getLabelOrganization: "internal",
     getMailCaptureStatus: [
       "read",
       "Check mailbox indexing and capture status.",
@@ -192,7 +193,9 @@ export const orpcActions = {
     ],
     listGmailUnreadCounts: ["read", "Get Gmail unread counts."],
     listGmailUsefulDetails: ["read", "List extracted details from Gmail."],
+    listLabelSuggestions: "internal",
     listLabels: ["read", "List mailbox labels and their IDs."],
+    listMailboxRowIds: "internal",
     listMailboxes: [
       "read",
       "List Gmail, managed, and transactional mailboxes you can access.",
@@ -300,6 +303,7 @@ export const orpcActions = {
       "write",
       "Edit a label's details or automatic labeling settings.",
     ],
+    updateLabelOrganization: "internal",
     updateMailboxSignature: ["write", "Set a mailbox signature."],
     updateMailboxSwitcherOrder: [
       "write",
@@ -434,6 +438,7 @@ export const orpcActions = {
       "write",
       "Cancel a queued send and restore the draft when available.",
     ],
+    count: "internal",
     create: [
       "send",
       "Schedule a full message using a new sendOperationId UUID.",

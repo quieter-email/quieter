@@ -28,7 +28,7 @@ export const AlertDialogTrigger = ({
   ...props
 }: ComponentPropsWithoutRef<typeof AlertDialogPrimitive.Trigger>) => (
   <AlertDialogPrimitive.Trigger
-    className={cn("squircle", className, overlayTriggerClassName)}
+    className={cn(className, overlayTriggerClassName)}
     {...props}
   />
 );
