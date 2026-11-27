@@ -1074,7 +1074,7 @@ export const DesignSystemShowcase = () => {
           description="Stacked rows keep two lines. Adaptive rows place the sender, subject, and metadata on one line when their list container is wide enough."
           title="Mail list rows"
         >
-          <div className="@container">
+          <div className="@container space-y-px">
             <div
               className={mailListRowFrameVariants({
                 accent: "yellow",

@@ -13,7 +13,7 @@ import { Icon } from "./icon";
 import { Pill } from "./pill";
 
 export const mailListRowFrameVariants = cva(
-  "group/row relative flex h-16 items-stretch rounded-xl",
+  "group/row relative flex h-15 items-stretch rounded-xl",
   {
     defaultVariants: {
       layout: "stacked",
@@ -24,7 +24,7 @@ export const mailListRowFrameVariants = cva(
           "after:pointer-events-none after:absolute after:inset-y-0 after:right-2 after:z-0 after:w-1/3 after:rounded-r-lg after:bg-linear-to-l after:from-q-yellow/8 after:via-q-yellow/4 after:to-transparent after:content-['']",
       },
       layout: {
-        adaptive: "@3xl:h-12",
+        adaptive: "@3xl:h-11",
         stacked: "",
       },
     },
@@ -40,7 +40,7 @@ export const mailListRowParts = {
   selectionButton:
     "relative size-9.5 rounded-lg border border-transparent focus-visible:z-20 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden disabled:pointer-events-none",
   selectionCell:
-    "relative z-10 ms-3.25 flex h-full shrink-0 items-center justify-center",
+    "relative z-10 ms-2.75 flex h-full shrink-0 items-center justify-center",
   trigger:
     "absolute inset-0 z-10 rounded-xl border border-transparent text-left focus-visible:ring-1 focus-visible:ring-ring focus-visible:ring-inset focus-visible:outline-hidden",
   unreadIndicator:
@@ -180,7 +180,7 @@ export const MailListRowDetails = ({
       "pointer-events-none relative z-10 flex h-full min-w-0 flex-1 items-center gap-2 @sm:gap-3",
       {
         "ps-3 pe-5 @sm:ps-4 @sm:pe-6": inset === "default",
-        "py-2.5 ps-2.5 pe-4.5": inset === "balanced",
+        "py-2 ps-2 pe-4": inset === "balanced",
       }
     )}
   >

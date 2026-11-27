@@ -34,7 +34,7 @@ import {
   useRef,
 } from "react";
 
-const MESSAGE_ROW_HEIGHT_PX = 64;
+const MESSAGE_ROW_HEIGHT_PX = 60;
 const SELECTION_TRAY_CLEARANCE_PX = 72;
 const MESSAGE_LIST_OVERSCAN = 12;
 const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
@@ -119,12 +119,12 @@ const loadMoreIfNeeded = ({
 };
 
 const MessageListLoadingSkeleton = () => (
-  <div aria-live="polite" className="block">
+  <div aria-live="polite" className="flex flex-col gap-px">
     <span className="sr-only">Loading messages…</span>
     {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
       <div
         aria-hidden="true"
-        className="flex h-16 animate-pulse items-center gap-3 rounded-xl px-4.5"
+        className="flex h-15 animate-pulse items-center gap-3 rounded-xl px-4"
         key={rowId}
       >
         <div className="size-9.5 shrink-0 rounded-lg bg-muted" />
@@ -345,6 +345,7 @@ export const MessageListScrollPane = ({
   const messageVirtualizer = useVirtualizer<HTMLDivElement, HTMLLIElement>({
     count: threadedMessages.length,
     estimateSize: () => rowHeightEstimateRef.current,
+    gap: 1,
     getItemKey: (index) => threadedMessages[index].threadId ?? index,
     getScrollElement: () => selection.scrollRef.current,
     measureElement: (element, entry, instance) => {
