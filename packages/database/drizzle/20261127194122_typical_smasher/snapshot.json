@@ -1,0 +1,440 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "56456cf6-f1bb-4df5-b1cf-6ec3ee2e92b6",
+  "prevIds": [
+    "c9231b01-d953-429d-ab18-2abd716d4251",
+    "56635f2e-66be-449b-b04e-2831b0b97f4c"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "gmailReplayMetadata"],
+      "writes": [
+        "s|tbl|public.gmailReplayMetadata",
+        "n|tbl|public.gmailReplayMetadata",
+        "e|tbl|public.gmailReplayMetadata",
+        "n|rel|public.gmailReplayMetadata",
+        "n|type|public.gmailReplayMetadata",
+        "n|rel|public.gmailReplayMetadata_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "mailCommandReceipt"],
+      "writes": [
+        "s|tbl|public.mailCommandReceipt",
+        "n|tbl|public.mailCommandReceipt",
+        "e|tbl|public.mailCommandReceipt",
+        "n|rel|public.mailCommandReceipt",
+        "n|type|public.mailCommandReceipt",
+        "n|rel|public.mailCommandReceipt_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailCommandReceipt",
+        "mail_command_receipt_mailbox_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_command_receipt_mailbox_idx",
+        "n|idx|public.mail_command_receipt_mailbox_idx",
+        "e|idx|public.mail_command_receipt_mailbox_idx",
+        "n|rel|public.mail_command_receipt_mailbox_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailCommandReceipt",
+        "n|sch|public",
+        "n|col|public.mailCommandReceipt.mailboxId"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "gmailReplayMetadata"],
+      "writes": [
+        "s|fk|public.gmailReplayMetadata.gmailReplayMetadata_mailboxId_mailbox_id_fkey",
+        "n|fk|public.gmailReplayMetadata.gmailReplayMetadata_mailboxId_mailbox_id_fkey",
+        "e|fk|public.gmailReplayMetadata.gmailReplayMetadata_mailboxId_mailbox_id_fkey",
+        "n|con|public.gmailReplayMetadata.gmailReplayMetadata_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.gmailReplayMetadata",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.gmailReplayMetadata.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailCommandReceipt"],
+      "writes": [
+        "s|fk|public.mailCommandReceipt.mailCommandReceipt_actorUserId_user_id_fkey",
+        "n|fk|public.mailCommandReceipt.mailCommandReceipt_actorUserId_user_id_fkey",
+        "e|fk|public.mailCommandReceipt.mailCommandReceipt_actorUserId_user_id_fkey",
+        "n|con|public.mailCommandReceipt.mailCommandReceipt_actorUserId_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailCommandReceipt",
+        "n|sch|public",
+        "n|tbl|public.user",
+        "n|sch|public",
+        "n|col|public.mailCommandReceipt.actorUserId",
+        "n|col|public.user.id",
+        "e|uniqueness|public.user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "mailCommandReceipt"],
+      "writes": [
+        "s|fk|public.mailCommandReceipt.mailCommandReceipt_mailboxId_mailbox_id_fkey",
+        "n|fk|public.mailCommandReceipt.mailCommandReceipt_mailboxId_mailbox_id_fkey",
+        "e|fk|public.mailCommandReceipt.mailCommandReceipt_mailboxId_mailbox_id_fkey",
+        "n|con|public.mailCommandReceipt.mailCommandReceipt_mailboxId_mailbox_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.mailCommandReceipt",
+        "n|sch|public",
+        "n|tbl|public.mailbox",
+        "n|sch|public",
+        "n|col|public.mailCommandReceipt.mailboxId",
+        "n|col|public.mailbox.id",
+        "e|uniqueness|public.mailbox.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "gmailReplayMetadata",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "mailCommandReceipt",
+        "isRlsEnabled": false,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "coverageKey",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "expiresAt",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "headVersion",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "leaseToken",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "mailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "sealedFacts",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "actorUserId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "claimedAt",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mailboxId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "requestHash",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "requestId",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "result",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mail_command_receipt_mailbox_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "mailboxId",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "gmailReplayMetadata_mailboxId_mailbox_id_fkey",
+        "nameExplicit": false,
+        "columns": ["mailboxId"],
+        "schemaTo": "public",
+        "tableTo": "mailbox",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mailCommandReceipt_actorUserId_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["actorUserId"],
+        "schemaTo": "public",
+        "tableTo": "user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mailCommandReceipt_mailboxId_mailbox_id_fkey",
+        "nameExplicit": false,
+        "columns": ["mailboxId"],
+        "schemaTo": "public",
+        "tableTo": "mailbox",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mailCommandReceipt_pkey",
+        "columns": ["actorUserId", "mailboxId", "requestId"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "gmailReplayMetadata_pkey",
+        "columns": ["mailboxId"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "gmail_replay_metadata_payload_size",
+        "value": "octet_length(\"sealedFacts\") <= 524288",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "gmailReplayMetadata",
+        "name": "gmail_replay_metadata_lease_or_payload",
+        "value": "(\"leaseToken\" is null) <> (\"sealedFacts\" is null)",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

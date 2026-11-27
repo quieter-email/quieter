@@ -1,10 +1,19 @@
 import { mailCache } from "@quieter/app/lib/mail-cache";
+import { disposeMailboxMutations } from "@quieter/app/lib/mail-mutations";
 import {
   getThreadQueryKey,
   getThreadWithDetailsOptions,
 } from "@quieter/app/lib/mail/thread-query";
-import { subscribeQuerySessionInvalidation } from "@quieter/app/lib/query-persister";
-import { CancelledError } from "@tanstack/react-query";
+import {
+  getMailboxesQueryKey,
+  subscribeToConfirmedMailboxes,
+} from "@quieter/app/lib/mailboxes-query";
+import { orpc } from "@quieter/app/lib/orpc";
+import {
+  getMailboxCacheRevocations,
+  subscribeQuerySessionInvalidation,
+} from "@quieter/app/lib/query-persister";
+import { CancelledError, partialMatchKey } from "@tanstack/react-query";
 import type { QueryClient } from "@tanstack/react-query";
 import { z } from "zod";
 
@@ -13,6 +22,30 @@ import { canPrefetchInBackground } from "./background-prefetch";
 const threadSchema = z.object({
   messages: z.array(z.object({ id: z.string() })),
 });
+const mailboxAccessSchema = z.object({
+  groups: z.array(
+    z.object({ mailboxes: z.array(z.object({ id: z.string() })) })
+  ),
+});
+const mailboxQueryRoots = new Set([
+  "gmail-labels",
+  "label-organization",
+  "label-suggestions",
+  "managed-label-counts",
+  "messages",
+  "reminders",
+  "verification-codes",
+]);
+const readAccessibleMailboxes = (data: unknown) => {
+  const parsed = mailboxAccessSchema.safeParse(data);
+  return parsed.success
+    ? new Set(
+        parsed.data.groups.flatMap(({ mailboxes }) =>
+          mailboxes.map(({ id }) => id)
+        )
+      )
+    : undefined;
+};
 type MailAccessLoss = { mailboxId: string; threadId?: string };
 const accessLossListeners = new WeakMap<
   QueryClient,
@@ -91,6 +124,41 @@ export const bindMailCache = (client: QueryClient) => {
   let scheduled = false;
   const attempted = new Set<string>();
   const blockedMailboxes = new Set<string>();
+  const revokedMailboxes = getMailboxCacheRevocations(client);
+  const isPreloadBlocked = (mailboxId: string) =>
+    revokedMailboxes.has(mailboxId) || blockedMailboxes.has(mailboxId);
+  let accessibleMailboxes = readAccessibleMailboxes(
+    client.getQueryData(getMailboxesQueryKey())
+  );
+  const removeMailboxAccess = (mailboxId: string) => {
+    revokedMailboxes.add(mailboxId);
+    disposeMailboxMutations(client, mailboxId);
+    for (const [key, candidate] of candidates) {
+      if (candidate.mailboxId === mailboxId) {
+        candidates.delete(key);
+      }
+    }
+    if (intent?.mailboxId === mailboxId) {
+      clearTimeout(intentTimer);
+      intent = null;
+    }
+    for (const listener of accessLossListeners.get(client) ?? []) {
+      listener({ mailboxId });
+    }
+    const scheduledSendsKey = orpc.scheduledSends.list.key({
+      input: { mailboxId },
+    });
+    client.removeQueries({
+      predicate: ({ queryKey }) => {
+        const [root, scope, threadMailbox] = queryKey;
+        return root === "message-thread"
+          ? threadMailbox === mailboxId
+          : (scope === mailboxId && mailboxQueryRoots.has(String(root))) ||
+              partialMatchKey(queryKey, scheduledSendsKey);
+      },
+    });
+    void mailCache.removeMailbox(mailboxId);
+  };
   const pump = async () => {
     scheduled = false;
     if (
@@ -109,12 +177,12 @@ export const bindMailCache = (client: QueryClient) => {
     const intentional = intent;
     intent = null;
     const next =
-      intentional && !blockedMailboxes.has(intentional.mailboxId)
+      intentional && !isPreloadBlocked(intentional.mailboxId)
         ? [intentional]
         : [];
     if (canPrefetchInBackground() && active < 2 && fetching === active) {
       for (const [key, entry] of candidates) {
-        if (!attempted.has(key) && !blockedMailboxes.has(entry.mailboxId)) {
+        if (!attempted.has(key) && !isPreloadBlocked(entry.mailboxId)) {
           next.push(entry);
         }
       }
@@ -198,7 +266,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         clearTimeout(intentTimer);
         intent = null;
-        if (candidate && !blockedMailboxes.has(candidate.mailboxId)) {
+        if (candidate && !isPreloadBlocked(candidate.mailboxId)) {
           intentTimer = setTimeout(() => {
             intent = candidate;
             schedule();
@@ -211,7 +279,7 @@ export const bindMailCache = (client: QueryClient) => {
         }
         candidates = new Map(
           next
-            .filter((entry) => !blockedMailboxes.has(entry.mailboxId))
+            .filter((entry) => !isPreloadBlocked(entry.mailboxId))
             .map((entry) => [
               JSON.stringify([
                 entry.mailboxId,
@@ -250,6 +318,28 @@ export const bindMailCache = (client: QueryClient) => {
       return;
     }
     const key: readonly unknown[] = rawKey;
+    if (
+      key.length === 1 &&
+      key[0] === "mailboxes" &&
+      event.type === "updated" &&
+      event.action.type === "success"
+    ) {
+      const next = readAccessibleMailboxes(event.query.state.data);
+      if (next !== undefined) {
+        const previous = accessibleMailboxes;
+        accessibleMailboxes = next;
+        for (const mailboxId of previous ?? []) {
+          if (!next.has(mailboxId)) {
+            removeMailboxAccess(mailboxId);
+          }
+        }
+        for (const mailboxId of next) {
+          if (previous?.has(mailboxId) !== true) {
+            blockedMailboxes.delete(mailboxId);
+          }
+        }
+      }
+    }
     const mailboxId = key[0] === "message-thread" ? key[2] : key[1];
     if (
       event.type === "updated" &&
@@ -257,7 +347,8 @@ export const bindMailCache = (client: QueryClient) => {
       (key[0] === "message-thread" ||
         key[0] === "messages" ||
         key[0] === "verification-codes" ||
-        key[0] === "gmail-labels") &&
+        key[0] === "gmail-labels" ||
+        key[0] === "label-organization") &&
       typeof mailboxId === "string"
     ) {
       const error: unknown = event.action.error;
@@ -270,18 +361,14 @@ export const bindMailCache = (client: QueryClient) => {
             z.object({ resource: z.literal("mailbox") }).safeParse(error.data)
               .success))
       ) {
-        blockedMailboxes.add(mailboxId);
-        for (const [candidateKey, candidate] of candidates) {
-          if (candidate.mailboxId === mailboxId) {
-            candidates.delete(candidateKey);
+        removeMailboxAccess(mailboxId);
+        void (async () => {
+          const manifest = { exact: true, queryKey: getMailboxesQueryKey() };
+          await client.cancelQueries(manifest);
+          if (!disposed) {
+            await client.invalidateQueries(manifest);
           }
-        }
-        clearTimeout(intentTimer);
-        intent = null;
-        for (const listener of accessLossListeners.get(client) ?? []) {
-          listener({ mailboxId });
-        }
-        void mailCache.removeMailbox(mailboxId);
+        })();
       } else if (
         typeof error === "object" &&
         error !== null &&
@@ -339,6 +426,18 @@ export const bindMailCache = (client: QueryClient) => {
     disposed = true;
     clearTimeout(intentTimer);
   });
+  const unsubscribeManifest = subscribeToConfirmedMailboxes(
+    client,
+    (manifest) => {
+      if (!disposed) {
+        for (const { mailboxes } of manifest.groups) {
+          for (const { id } of mailboxes) {
+            revokedMailboxes.delete(id);
+          }
+        }
+      }
+    }
+  );
   return () => {
     disposed = true;
     candidates.clear();
@@ -351,6 +450,7 @@ export const bindMailCache = (client: QueryClient) => {
       connection.removeEventListener("change", schedule);
     }
     unsubscribe();
+    unsubscribeManifest();
     unsubscribeSession();
     for (const key of pinned) {
       mailCache.protect(key, false);

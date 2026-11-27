@@ -47,6 +47,12 @@ const fixture = await vi.hoisted(async () => {
 });
 
 vi.mock("@quieter/database/client", () => ({ db: fixture.database }));
+vi.mock("../src/mailbox-changes", () => ({
+  appendMailboxChange: vi
+    .fn<() => Promise<{ queued: boolean }>>()
+    .mockResolvedValue({ queued: true }),
+  publishMailboxChange: vi.fn<() => Promise<void>>().mockResolvedValue(),
+}));
 vi.mock("../src/mailbox/service", () => ({
   assertAccessibleMailbox: async () => {
     if (!fixture.state.access) {
@@ -78,7 +84,7 @@ const seedSnooze = async (input: {
 describe.skipIf(!fixture.enabled)("canonical Snooze query membership", () => {
   beforeAll(async () => {
     await fixture.client.unsafe(`
-      create table if not exists mailbox (id text primary key, "contentRevision" bigint not null default 0, "updatedAt" timestamptz not null default now());
+      create table if not exists mailbox (id text primary key, provider text not null default 'managed', "contentRevision" bigint not null default 0, "updatedAt" timestamptz not null default now());
       create table if not exists "mailPlacementOperation" (
         id text primary key, sequence bigserial not null unique, "actorUserId" text not null,
         "mailboxId" text not null references mailbox(id), "requestId" text not null,

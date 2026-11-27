@@ -31,6 +31,8 @@ import {
   appEaseOut,
   appMotionDuration,
 } from "@quieter/app/features/motion/app-motion";
+import { warmSettingsDestination } from "@quieter/app/lib/background-prefetch";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { Button, LinkButton } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import {
@@ -43,7 +45,8 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
-import { Link } from "@tanstack/react-router";
+import { useQueryClient } from "@tanstack/react-query";
+import { Link, useRouter } from "@tanstack/react-router";
 import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
 import type { MotionValue } from "motion/react";
 import { useRef, useState } from "react";
@@ -85,10 +88,12 @@ type MailboxSummaryProps = {
 };
 
 type MailboxSwitcherDropdownProps = {
+  accountLabel?: string;
   allInboxesActive?: boolean;
   onSelectAllInboxes?: () => void;
   embedded?: boolean;
   groups: MailboxSwitcherGroup[];
+  isLoading?: boolean;
   onReorderMailboxSwitcher: (order: MailboxSwitcherOrder) => void;
   onReconnectMailbox: (
     mailbox: Pick<MailboxSwitcherMailbox, "emailAddress" | "id">
@@ -575,10 +580,12 @@ const getFocusedNavigationItem = (
 };
 
 export const MailboxSwitcherDropdown = ({
+  accountLabel,
   allInboxesActive = false,
   onSelectAllInboxes,
   embedded = false,
   groups,
+  isLoading = false,
   onReorderMailboxSwitcher,
   onReconnectMailbox,
   onSelectMailboxId,
@@ -587,10 +594,31 @@ export const MailboxSwitcherDropdown = ({
   side = "right",
   unifiedInboxExcludedIds,
 }: MailboxSwitcherDropdownProps) => {
+  const queryClient = useQueryClient();
+  const router = useRouter();
   const mailboxes = groups.flatMap((group) => group.mailboxes);
   const { primaryLabel, secondaryLabel, selectedMailbox } =
     getMailboxSwitcherSummary(mailboxes, selectedMailboxId);
-  const currentLabel = allInboxesActive ? "All inboxes" : primaryLabel;
+  const loadingEmpty = isLoading && mailboxes.length === 0;
+  const selectionLabel = allInboxesActive ? "All inboxes" : primaryLabel;
+  const selectionDescription = allInboxesActive
+    ? "Your selected inboxes, together"
+    : secondaryLabel;
+  const currentLabel = loadingEmpty
+    ? (accountLabel ?? "Mailboxes")
+    : selectionLabel;
+  const currentSecondaryLabel = loadingEmpty
+    ? "Loading mailboxes…"
+    : selectionDescription;
+  const preview = usePreviewPersona();
+  const warmMailboxSettings = () => {
+    void warmSettingsDestination({
+      isSandboxMode: preview !== null,
+      queryClient,
+      router,
+      tab: "mailboxes",
+    });
+  };
   const hasOtherUnread = mailboxes.some(
     (mailbox) =>
       hasUnreadMail(mailbox) &&
@@ -845,6 +873,7 @@ export const MailboxSwitcherDropdown = ({
     >
       <div className="relative min-w-0 flex-1 rounded-md hover:bg-control-hover">
         <DropdownMenuTrigger
+          disabled={loadingEmpty}
           onKeyDownCapture={handleEscapeCapture}
           aria-label={`Switch mailbox, ${currentLabel}${hasOtherUnread ? ", unread mail in other mailboxes" : ""}`}
           render={<Button size="auto" variant="ghost" />}
@@ -854,7 +883,7 @@ export const MailboxSwitcherDropdown = ({
         >
           <AnimatePresence initial={false} mode="popLayout">
             <m.div
-              key={`${selectedMailbox?.id ?? "empty"}:${primaryLabel}:${secondaryLabel}`}
+              key={`${selectedMailbox?.id ?? (loadingEmpty ? "loading" : "empty")}:${currentLabel}:${currentSecondaryLabel}`}
               animate={{ opacity: 1 }}
               className="min-w-0 flex-1"
               exit={{ opacity: 0 }}
@@ -868,9 +897,7 @@ export const MailboxSwitcherDropdown = ({
                 {currentLabel}
               </p>
               <p className="mt-1 truncate text-caption text-muted-fg">
-                {allInboxesActive
-                  ? "Your selected inboxes, together"
-                  : secondaryLabel}
+                {currentSecondaryLabel}
               </p>
             </m.div>
           </AnimatePresence>
@@ -1065,6 +1092,9 @@ export const MailboxSwitcherDropdown = ({
                   <div>
                     <DropdownMenuSeparator />
                     <DropdownMenuItem
+                      onFocus={warmMailboxSettings}
+                      onMouseEnter={warmMailboxSettings}
+                      onPointerDown={warmMailboxSettings}
                       render={
                         <Link
                           search={{

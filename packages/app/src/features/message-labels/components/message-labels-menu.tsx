@@ -1,6 +1,6 @@
 "use client";
 
-import { Loading03Icon, Tag01Icon } from "@hugeicons/core-free-icons";
+import { Tag01Icon } from "@hugeicons/core-free-icons";
 import type {
   MessageLabelsTarget,
   MessageLabelsUpdate,
@@ -11,7 +11,11 @@ import {
 } from "@quieter/app/features/message-labels/domain/message-label-updates";
 import { getUserLabels } from "@quieter/app/features/message-search/state/message-list-search-state";
 import { toastError } from "@quieter/app/lib/error-toast";
-import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
+import {
+  getLabelsQueryKey,
+  labelsQueryOptions,
+} from "@quieter/app/lib/mail/labels-query";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -21,7 +25,7 @@ import {
   DropdownMenuSubmenuTrigger,
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -29,6 +33,7 @@ import { MailboxLabelSwatch } from "./mailbox-label-swatch";
 
 type MessageLabelsMenuItemsProps = {
   isPending: boolean;
+  labels?: readonly MailboxLabel[];
   mailboxId: string;
   onApply: (updates: MessageLabelsUpdate[]) => void | Promise<void>;
   open: boolean;
@@ -36,17 +41,24 @@ type MessageLabelsMenuItemsProps = {
 };
 
 const MessageLabelsMenuItems = ({
+  labels: providedLabels,
   mailboxId,
   onApply,
   open,
   targets,
 }: MessageLabelsMenuItemsProps) => {
+  const queryClient = useQueryClient();
+  const cachedLabels = queryClient.getQueryData<MailboxLabel[]>(
+    getLabelsQueryKey(mailboxId)
+  );
   const {
-    data: labels,
+    data: queriedLabels,
     error: labelsError,
     isError,
+    isPaused,
     isPending: areLabelsPending,
   } = useQuery(labelsQueryOptions(mailboxId, open));
+  const labels = queriedLabels ?? providedLabels ?? cachedLabels;
 
   const toggleLabel = async (labelId: string, checked: boolean) => {
     const updates = getMessageLabelUpdates(targets, { [labelId]: checked });
@@ -64,19 +76,18 @@ const MessageLabelsMenuItems = ({
     }
   };
 
-  if (areLabelsPending) {
-    return (
-      <div className="flex items-center gap-2 px-2.5 py-2 text-body text-muted-fg">
-        <Icon aria-hidden animation="spin" icon={Loading03Icon} />
-        <span>Loading labels…</span>
-      </div>
-    );
-  }
-
-  if (isError && !labels) {
+  if (labels === undefined && isError) {
     return (
       <p className="px-2.5 py-2 text-body text-destructive">
         {labelsError?.message ?? "Could not load labels."}
+      </p>
+    );
+  }
+
+  if (labels === undefined && areLabelsPending) {
+    return (
+      <p className="px-2.5 py-2 text-body text-muted-fg">
+        {isPaused ? "Waiting for a connection…" : "Loading labels…"}
       </p>
     );
   }
@@ -116,6 +127,7 @@ export const MessageLabelsSubmenu = ({
   disabled = false,
   isPending,
   label,
+  labels,
   mailboxId,
   onApply,
   targets,
@@ -142,6 +154,7 @@ export const MessageLabelsSubmenu = ({
       <DropdownMenuSubmenuContent className="max-h-72">
         <MessageLabelsMenuItems
           isPending={isPending}
+          labels={labels}
           mailboxId={mailboxId}
           onApply={onApply}
           open={open}
@@ -155,6 +168,7 @@ export const MessageLabelsSubmenu = ({
 /** Standalone labels picker for a caller-provided trigger. */
 export const MessageLabelsMenu = ({
   isPending,
+  labels,
   mailboxId,
   onApply,
   onOpenChange,
@@ -176,6 +190,7 @@ export const MessageLabelsMenu = ({
     <DropdownMenuContent align="end" className="max-h-72" side="top">
       <MessageLabelsMenuItems
         isPending={isPending}
+        labels={labels}
         mailboxId={mailboxId}
         onApply={onApply}
         open={open}

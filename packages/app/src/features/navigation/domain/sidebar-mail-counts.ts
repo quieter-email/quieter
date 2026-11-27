@@ -8,6 +8,7 @@ import {
 } from "@quieter/app/lib/mail/inbox-query/keys";
 import { fetchMessagesPage } from "@quieter/app/lib/mail/inbox-query/sync";
 import { orpc, rpc } from "@quieter/app/lib/orpc";
+import { queryPersister } from "@quieter/app/lib/query-persister";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { queryOptions, useQueries } from "@tanstack/react-query";
 
@@ -24,7 +25,10 @@ const mailboxCountOptions = ({
   mailboxId: string;
   userId: string;
 }) =>
-  queryOptions({
+  queryOptions<number | null>({
+    persister: isSandboxMailboxId(mailboxId)
+      ? undefined
+      : queryPersister.persisterFn,
     queryFn: async ({ signal }) => {
       const rows = new Set<string>();
       const seenTokens = new Set<string>();

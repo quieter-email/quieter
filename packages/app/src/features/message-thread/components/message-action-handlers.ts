@@ -109,23 +109,45 @@ export const createMailboxThreadMessageActionHandlers = ({
     : {}),
   ...(supportsFolders
     ? {
-        onDeleteDraft: mailboxActions.deleteDraft,
+        onDeleteDraft: async (message: MessageListItem) => {
+          try {
+            await mailboxActions.deleteDraft(message);
+          } catch (error) {
+            toastError(error, { boundary: "message-actions" });
+          }
+        },
         onMarkAsSpam: async (threadId: string) => {
-          await mailboxActions.markThreadAsSpam(threadId);
-          onBackToList?.();
+          try {
+            await mailboxActions.markThreadAsSpam(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "message-actions" });
+          }
         },
         onMoveToTrash: async (threadId: string) => {
-          await mailboxActions.moveThreadToTrash(threadId);
-          onBackToList?.();
+          try {
+            await mailboxActions.moveThreadToTrash(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "message-actions" });
+          }
         },
         onOpenDraft,
         onUnmarkAsSpam: async (threadId: string) => {
-          await mailboxActions.unmarkThreadAsSpam(threadId);
-          onBackToList?.();
+          try {
+            await mailboxActions.unmarkThreadAsSpam(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "message-actions" });
+          }
         },
         onUntrash: async (threadId: string) => {
-          await mailboxActions.untrashThread(threadId);
-          onBackToList?.();
+          try {
+            await mailboxActions.untrashThread(threadId);
+            onBackToList?.();
+          } catch (error) {
+            toastError(error, { boundary: "message-actions" });
+          }
         },
       }
     : {}),

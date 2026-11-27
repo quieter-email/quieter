@@ -43,10 +43,12 @@ import type { ReminderOpenRequest } from "@quieter/app/features/reminders/remind
 import { userBillingQueryOptions } from "@quieter/app/features/settings/domain/billing";
 import { useMailLayout } from "@quieter/app/features/settings/domain/mail-layout-setting";
 import { authClient } from "@quieter/app/lib/auth";
+import { warmSettingsDestination } from "@quieter/app/lib/background-prefetch";
 import { chatQueryOptions } from "@quieter/app/lib/chat-query";
 import { draftRecoveryJournal } from "@quieter/app/lib/draft-recovery-journal";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { refreshCachedMailboxQueries } from "@quieter/app/lib/mail/inbox-query/index";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { inboxRouteApi } from "@quieter/app/lib/route-apis";
 import { appRuntime } from "@quieter/app/runtime";
 import { Button, LinkButton } from "@quieter/ui/button";
@@ -67,6 +69,7 @@ import {
 } from "@quieter/ui/workspace-section";
 import { captureException } from "@sentry/react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "@tanstack/react-router";
 import { domAnimation, LazyMotion, m } from "motion/react";
 import {
   Activity,
@@ -98,7 +101,9 @@ type MailboxWorkspaceLayoutState = {
 };
 
 type MailboxWorkspaceContentProps = {
+  accountLabel?: string;
   userId: string;
+  sessionId?: string;
   activeMailbox: MailboxCategory | null;
   chatContext?: {
     messageId?: string;
@@ -118,12 +123,15 @@ type MailboxWorkspaceContentProps = {
   isSnippetMailbox: boolean;
   isConnectingGmail: boolean;
   isDemoMode: boolean;
+  isMailboxesError?: boolean;
+  isMailboxesPending?: boolean;
   isManagedDemoMode: boolean;
   layoutState: MailboxWorkspaceLayoutState;
   mailboxGroups: MailboxSidebarGroups;
   onCloseSubview: () => void;
   onComposeSenderSwitch: (mailboxId: string) => Promise<void>;
   onConnectGmail: () => void;
+  onRetryMailboxes?: () => void;
   onComposeDraftRequested: (
     draft: ComposeDraftState,
     mailboxId?: string
@@ -315,6 +323,16 @@ const NoMailboxWorkspace = ({
   onConnectGmail: () => void;
 }) => {
   const [setupMode, setSetupMode] = useState<"choice" | "managed">("choice");
+  const queryClient = useQueryClient();
+  const router = useRouter();
+  const preview = usePreviewPersona();
+  const warmSettings = () => {
+    void warmSettingsDestination({
+      isSandboxMode: preview !== null,
+      queryClient,
+      router,
+    });
+  };
 
   return (
     <LazyMotion features={domAnimation}>
@@ -333,6 +351,9 @@ const NoMailboxWorkspace = ({
           className={cn("group absolute bottom-5 left-5 justify-start", {
             "max-lg:hidden": setupMode === "managed",
           })}
+          onFocus={warmSettings}
+          onMouseEnter={warmSettings}
+          onPointerDown={warmSettings}
           search={{ from: "/" }}
           to="/settings"
           variant="ghost"
@@ -415,7 +436,14 @@ const NoMailboxWorkspace = ({
               </Button>
             </div>
             <div className="mt-4">
-              <LinkButton search={{ from: "/" }} to="/settings" variant="ghost">
+              <LinkButton
+                onFocus={warmSettings}
+                onMouseEnter={warmSettings}
+                onPointerDown={warmSettings}
+                search={{ from: "/" }}
+                to="/settings"
+                variant="ghost"
+              >
                 Open settings
               </LinkButton>
             </div>
@@ -432,7 +460,9 @@ const NoMailboxWorkspace = ({
 };
 
 const MailboxWorkspaceContentInner = ({
+  accountLabel,
   userId,
+  sessionId: initialSessionId,
   activeMailbox,
   chatContext,
   chatId,
@@ -444,12 +474,15 @@ const MailboxWorkspaceContentInner = ({
   isSnippetMailbox,
   isConnectingGmail,
   isDemoMode,
+  isMailboxesError = false,
+  isMailboxesPending = false,
   isManagedDemoMode,
   layoutState,
   mailboxGroups,
   onCloseSubview,
   onComposeSenderSwitch,
   onConnectGmail,
+  onRetryMailboxes,
   onComposeDraftRequested,
   onComposeNewMail,
   onManageSnippets,
@@ -521,7 +554,8 @@ const MailboxWorkspaceContentInner = ({
   const [assistantOpened, setAssistantOpened] = useState(false);
   const [assistantFocusRequest, setAssistantFocusRequest] = useState(0);
   const queryClient = useQueryClient();
-  const sessionId = authClient.useSession().data?.session.id;
+  const sessionId =
+    authClient.useSession().data?.session.id ?? initialSessionId;
   const [interruptedCompose, setInterruptedCompose] = useState<{
     drafts: ComposeDraftState[];
     mailboxId: string;
@@ -784,7 +818,44 @@ const MailboxWorkspaceContentInner = ({
     };
   }, []);
   let mailboxContent: ReactNode;
-  if (!selectedMailboxId) {
+  if (!selectedMailboxId && isMailboxesPending) {
+    mailboxContent = (
+      <WorkspaceSection>
+        <MobileHeader
+          leading="sidebar"
+          onLeadingClick={onOpenSidebar}
+          title="Mail"
+        />
+        <output
+          aria-label="Loading mailboxes"
+          aria-live="polite"
+          className="flex min-h-0 flex-1 items-center justify-center gap-3 px-6 text-body-sm text-muted-fg"
+        >
+          Loading mailboxes…
+        </output>
+      </WorkspaceSection>
+    );
+  } else if (!selectedMailboxId && isMailboxesError) {
+    mailboxContent = (
+      <WorkspaceSection>
+        <MobileHeader
+          leading="sidebar"
+          onLeadingClick={onOpenSidebar}
+          title="Mail"
+        />
+        <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 px-6 text-center">
+          <Text role="alert" tone="muted">
+            Could not load your mailboxes. Please try again.
+          </Text>
+          {onRetryMailboxes ? (
+            <Button onClick={onRetryMailboxes} size="sm" type="button">
+              Try again
+            </Button>
+          ) : null}
+        </div>
+      </WorkspaceSection>
+    );
+  } else if (!selectedMailboxId) {
     mailboxContent = (
       <NoMailboxWorkspace
         connectError={reconnectError}
@@ -1158,11 +1229,13 @@ const MailboxWorkspaceContentInner = ({
         <main className="pt-safe pr-safe pb-safe pl-safe relative isolate flex h-dvh min-h-0 flex-col overflow-hidden text-fg lg:p-0">
           <div className="relative z-10 flex min-h-0 flex-1 overflow-hidden">
             <Activity mode={calendarActive ? "hidden" : "visible"}>
-              {selectedMailboxId ? (
+              {selectedMailboxId || isMailboxesPending || isMailboxesError ? (
                 <MailSidebar
+                  accountLabel={accountLabel}
                   userId={userId}
                   allInboxesActive={allInboxesActive}
                   groups={mailboxGroups}
+                  isLoadingMailboxes={isMailboxesPending}
                   onComposeNewMail={onComposeNewMail}
                   onMobileOpenChange={onMobileOpenChange}
                   onReorderMailboxSwitcher={onReorderMailboxSwitcher}

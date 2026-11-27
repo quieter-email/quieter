@@ -76,6 +76,7 @@ describe("mail automation settings", () => {
       displayName: null,
       emailAddress: "mail@example.com",
       id: input.mailboxId,
+      mailChangeVersion: null,
       organizationId: "organization-1",
       ownerUserId: null,
       provider: "managed",

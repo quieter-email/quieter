@@ -1,5 +1,6 @@
 import { LoadingPage } from "@quieter/app/components/loading-page";
 import { mailboxSearchSchema } from "@quieter/app/route-search";
+import { loadAuthorizedSessionUser } from "@quieter/app/session-user";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 
@@ -11,7 +12,7 @@ export const Route = createFileRoute("/_app/")({
   loaderDeps: ({ search }) => ({ gmail: search.gmail }),
   ssr: "data-only",
   loader: async ({ deps, location }) => {
-    const user = await getSessionUser();
+    const user = await loadAuthorizedSessionUser(getSessionUser);
 
     if (!user) {
       return redirect({

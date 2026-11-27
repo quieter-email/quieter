@@ -2,6 +2,9 @@ import { z } from "zod";
 
 export const mailChangeVersionSchema = z.string().regex(/^\d{1,19}$/u);
 
+export const ACCOUNT_PREFERENCES_UPDATE_SCOPE = "account-preferences";
+export const MAILBOX_ACCESS_UPDATE_SCOPE = "mailbox-access";
+
 export const mailboxChangeSchema = z.discriminatedUnion("kind", [
   z.object({
     kind: z.enum(["message.added", "message.deleted", "message.labels"]),

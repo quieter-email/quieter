@@ -280,25 +280,29 @@ export const UnifiedInboxPanel = ({
         JSON.stringify([mailbox.id, activeMailbox, normalizedSearch])
       ],
   }));
-  const pending = connectedStates.some(
-    ({ state }) => state === undefined || state.isPending
+  const pendingSources = connectedStates.filter(
+    ({ state }) =>
+      state === undefined || (state.isPending && state.messages.length === 0)
   );
-  const successfulSources = connectedStates.filter(
+  const readySources = connectedStates.filter(
     ({ state }) =>
       state !== undefined &&
-      !state.isPending &&
-      (state.messages.length > 0 || state.error === null)
+      (state.messages.length > 0 || (!state.isPending && state.error === null))
   );
   const entries = buildUnifiedInboxEntries(
-    successfulSources.map(({ mailbox, state }) => ({
-      hasNextPage: state?.error === null && (state?.hasNextPage ?? false),
+    readySources.map(({ mailbox, state }) => ({
+      hasNextPage:
+        state !== undefined &&
+        !state.isPending &&
+        state.error === null &&
+        state.hasNextPage,
       mailboxId: mailbox.id,
       messages: state?.messages ?? [],
       paginationMessages: state?.paginationMessages ?? [],
       retainedMessageId: state?.retainedMessageId ?? null,
     }))
   );
-  const visibleEntries = pending ? [] : entries;
+  const visibleEntries = entries;
   const failedSources = connectedStates.filter(
     ({ state }) => state !== undefined && state.error !== null
   );
@@ -306,11 +310,19 @@ export const UnifiedInboxPanel = ({
     ({ state }) =>
       state !== undefined && state.error === null && state.syncError !== null
   );
-  const hasNextPage = connectedStates.some(
-    ({ state }) => state?.hasNextPage && state.error === null
+  const hasNextPage = readySources.some(
+    ({ state }) =>
+      state !== undefined &&
+      !state.isPending &&
+      state.hasNextPage &&
+      state.error === null
   );
   const isFetchingMore = connectedStates.some(
     ({ state }) => state?.isFetchingNextPage
+  );
+  const hasPendingSources = pendingSources.length > 0;
+  const refreshableSources = connectedStates.filter(
+    ({ state }) => state !== undefined && !state.isPending
   );
 
   const updatePreferences = (next: UnifiedInboxPreferences) => {
@@ -340,16 +352,16 @@ export const UnifiedInboxPanel = ({
     });
   };
   const refresh = async () => {
-    if (isRefreshing || connectedStates.length === 0 || pending) {
+    if (isRefreshing || refreshableSources.length === 0) {
       return;
     }
-    for (const { state } of connectedStates) {
+    for (const { state } of refreshableSources) {
       state?.resetSelection();
     }
     setIsRefreshing(true);
     try {
       const results = await Promise.allSettled(
-        connectedStates.map(async ({ state }) => {
+        refreshableSources.map(async ({ state }) => {
           const result = await state?.refetch();
           if (
             result !== undefined &&
@@ -377,9 +389,13 @@ export const UnifiedInboxPanel = ({
     }
   };
   const loadMore = async () => {
-    const sources = connectedStates.filter(
+    const sources = readySources.filter(
       ({ state }) =>
-        state?.hasNextPage && !state.isFetchingNextPage && state.error === null
+        state !== undefined &&
+        !state.isPending &&
+        state.hasNextPage &&
+        !state.isFetchingNextPage &&
+        state.error === null
     );
     const results = await Promise.allSettled(
       sources.map(async ({ state }) => {
@@ -424,7 +440,7 @@ export const UnifiedInboxPanel = ({
   const originalMessageById = new Map<string, MessageListItem>();
   const sourceMailboxByMessageId = new Map<string, string>();
   const syntheticMessages: MessageListItem[] = [];
-  for (const { mailbox, state } of successfulSources) {
+  for (const { mailbox, state } of readySources) {
     if (state === undefined) {
       continue;
     }
@@ -577,6 +593,16 @@ export const UnifiedInboxPanel = ({
           )}
         </div>
       ))}
+      {pendingSources.length > 0 && syntheticMessages.length > 0 && (
+        <p
+          aria-live="polite"
+          className="rounded-md bg-muted px-3 py-2 text-caption text-muted-fg"
+        >
+          {pendingSources.length === 1
+            ? `Loading ${pendingSources[0]?.mailbox.displayName?.trim() || pendingSources[0]?.mailbox.emailAddress}…`
+            : `Loading ${pendingSources.length} more inboxes…`}
+        </p>
+      )}
       {failedSources.map(({ mailbox }) => (
         <div
           className="flex items-center justify-between gap-3 rounded-md bg-muted px-3 py-2 text-body-sm"
@@ -764,11 +790,19 @@ export const UnifiedInboxPanel = ({
             }
             error={listError}
             hasNextPage={hasNextPage}
+            hasPendingSources={hasPendingSources}
             headerAddon={headerAddon}
             isError={listError !== null && listError !== undefined}
             isFetchingNextPage={isFetchingMore}
-            isPending={pending}
+            isPending={hasPendingSources && syntheticMessages.length === 0}
             isRefreshing={isRefreshing}
+            suppressEmptyState={
+              failedSources.length > 0 ||
+              selectedMailboxes.length === 0 ||
+              (reconnectMailboxes.length > 0 &&
+                connectedMailboxes.length === 0) ||
+              hasUnsupportedSearch
+            }
             leadingRows={
               activeMailbox === "sent" && normalizedSearch === "" ? (
                 <Suspense fallback={null}>

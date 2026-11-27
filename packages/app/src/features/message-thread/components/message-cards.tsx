@@ -17,6 +17,7 @@ import type { ComposeDraftState } from "@quieter/app/features/compose/domain/dra
 import { MessageDeliveryStatus } from "@quieter/app/features/message-delivery/components/message-delivery-status";
 import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/domain/message-delivery-support";
 import { MessageBody } from "@quieter/app/features/message-thread/components/message-body";
+import type { MessageBodyLoadState } from "@quieter/app/features/message-thread/components/message-body";
 import { MessageInspectorPanel } from "@quieter/app/features/message-thread/components/message-inspector-panel";
 import {
   getMessageUnsubscribeTarget,
@@ -368,15 +369,17 @@ const MessageHeaderActions = ({
 };
 
 const ThreadMessageBody = ({
+  bodyLoadState,
   expanded,
-  isLoading,
   mailboxId,
   message,
+  onRetry,
 }: {
+  bodyLoadState?: MessageBodyLoadState;
   expanded: boolean;
-  isLoading?: boolean;
   mailboxId: string;
   message: MessageListItem;
+  onRetry?: () => void;
 }) => {
   const [hasExpanded, setHasExpanded] = useState(expanded);
   if (expanded && !hasExpanded) {
@@ -386,6 +389,7 @@ const ThreadMessageBody = ({
   return (
     <div
       aria-hidden={!expanded}
+      inert={!expanded}
       // oxlint-disable-next-line shadcn/no-arbitrary-values -- Grid-rows collapse animation needs the exact property.
       className="grid overflow-hidden transition-[grid-template-rows] duration-(--app-motion-duration-layout) ease-(--app-motion-ease-in-out) motion-reduce:transition-none"
       data-conversation-expansion
@@ -409,9 +413,10 @@ const ThreadMessageBody = ({
         >
           {hasExpanded && (
             <MessageBody
-              isLoading={isLoading}
+              bodyLoadState={bodyLoadState}
               mailboxId={mailboxId}
               message={message}
+              onRetry={onRetry}
             />
           )}
         </div>
@@ -450,26 +455,28 @@ const MessageExpandButton = ({
 );
 
 const ThreadMessageCard = ({
+  bodyLoadState,
   expanded,
-  isLoading,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
   message,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   onToggleExpanded,
   isActionPending,
   verificationCode,
 }: {
+  bodyLoadState?: MessageBodyLoadState;
   expanded: boolean;
-  isLoading?: boolean;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   onToggleExpanded: () => void;
   verificationCode?: string;
@@ -542,10 +549,11 @@ const ThreadMessageCard = ({
             </div>
           )}
           <ThreadMessageBody
+            bodyLoadState={bodyLoadState}
             expanded={expanded}
-            isLoading={isLoading}
             mailboxId={mailboxId}
             message={message}
+            onRetry={onRetry}
           />
         </div>
 
@@ -562,23 +570,25 @@ const ThreadMessageCard = ({
 };
 
 export const SingleMessageCard = ({
-  isLoading,
+  bodyLoadState,
   linkedDraftMessage,
   mailboxId,
   mailboxProvider,
   message,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   isActionPending,
   verificationCode,
 }: {
-  isLoading?: boolean;
+  bodyLoadState?: MessageBodyLoadState;
   isActionPending?: boolean;
   linkedDraftMessage: MessageListItem | null;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   message: MessageListItem;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCode?: string;
 }) => {
@@ -634,9 +644,10 @@ export const SingleMessageCard = ({
           </div>
         )}
         <MessageBody
-          isLoading={isLoading}
+          bodyLoadState={bodyLoadState}
           mailboxId={mailboxId}
           message={message}
+          onRetry={onRetry}
         />
       </div>
 
@@ -653,24 +664,28 @@ export const SingleMessageCard = ({
 
 export const ThreadMessageList = ({
   allThreadMessages,
-  isLoading,
+  bodyLoadState,
+  isMessageActionPending,
   mailboxId,
   mailboxProvider,
   messages,
   navigationScope,
   onComposeDraftRequested,
+  onRetry,
   onUnsubscribe,
   isActionPending,
   verificationCodes,
 }: {
   allThreadMessages: MessageListItem[];
-  isLoading?: boolean;
+  bodyLoadState?: MessageBodyLoadState;
+  isMessageActionPending?: (messageId: string) => boolean;
   isActionPending?: boolean;
   mailboxId: string;
   mailboxProvider: MessageViewProps["mailboxProvider"];
   messages: MessageListItem[];
   navigationScope?: ConversationNavigationScope;
   onComposeDraftRequested?: (draft: ComposeDraftState) => void;
+  onRetry?: () => void;
   onUnsubscribe?: (messageId: string) => Promise<boolean>;
   verificationCodes: RouterOutputs["mail"]["listVerificationCodes"]["items"];
 }) => {
@@ -747,7 +762,7 @@ export const ThreadMessageList = ({
       {navigationScope === undefined ? null : (
         <ConversationNavigator
           aria-label="Messages in this thread"
-          isLayoutPending={isLoading}
+          isLayoutPending={bodyLoadState?.kind === "loading"}
           items={navigationItems}
           prepareItem={prepareMessage}
           scope={navigationScope}
@@ -762,15 +777,20 @@ export const ThreadMessageList = ({
 
         return (
           <ThreadMessageCard
+            bodyLoadState={bodyLoadState}
             expanded={isExpanded}
-            isLoading={isLoading}
-            isActionPending={isActionPending}
+            isActionPending={
+              isMessageActionPending
+                ? isMessageActionPending(threadMessage.id)
+                : isActionPending
+            }
             key={threadMessage.id}
             linkedDraftMessage={linkedDraftMessage}
             mailboxId={mailboxId}
             mailboxProvider={mailboxProvider}
             message={threadMessage}
             onComposeDraftRequested={onComposeDraftRequested}
+            onRetry={onRetry}
             onUnsubscribe={onUnsubscribe}
             onToggleExpanded={() => {
               setMessageExpansion((current) => ({

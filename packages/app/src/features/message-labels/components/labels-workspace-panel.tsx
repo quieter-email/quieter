@@ -238,7 +238,9 @@ export const LabelsWorkspacePanel = ({
   const {
     data: labels,
     isError: areLabelsError,
+    isPaused: areLabelsPaused,
     isPending: areLabelsPending,
+    refetch: refetchLabels,
   } = useQuery(
     labelsQueryOptions(mailboxId ?? "", isNonemptyMailboxId(mailboxId))
   );
@@ -1391,10 +1393,12 @@ export const LabelsWorkspacePanel = ({
   const groupRows = groups.map(renderGroup).filter((row) => row !== null);
   let listStatus: string | null = null;
   if (areLabelsPending) {
-    listStatus = "Loading labels…";
+    listStatus = areLabelsPaused
+      ? "Waiting for a connection…"
+      : "Loading labels…";
   } else if (labelsUnavailable) {
     listStatus = "Could not load labels.";
-  } else if (isOrganizationError) {
+  } else if (isOrganizationError && organizationData === undefined) {
     listStatus = "Could not load groups.";
   } else if (
     ungrouped.length === 0 &&
@@ -1513,10 +1517,22 @@ export const LabelsWorkspacePanel = ({
               </>
             )}
             {listStatus === null ? null : (
-              <div className="py-2 ps-8">
+              <div className="flex flex-wrap items-center gap-3 py-2 ps-8">
                 <Text as="p" size="caption" tone="muted">
                   {listStatus}
                 </Text>
+                {labelsUnavailable && (
+                  <Button
+                    onClick={() => {
+                      void refetchLabels();
+                    }}
+                    size="sm"
+                    type="button"
+                    variant="secondary"
+                  >
+                    Try again
+                  </Button>
+                )}
               </div>
             )}
           </LabelDragProvider>

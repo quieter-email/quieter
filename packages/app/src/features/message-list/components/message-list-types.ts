@@ -40,11 +40,13 @@ export type MessageListProps = {
   mailboxProvider: "api" | "gmail" | "managed";
   error: unknown;
   hasNextPage: boolean;
+  hasPendingSources?: boolean;
   headerAddon?: ReactNode;
   isError: boolean;
   isFetchingNextPage: boolean;
   isPending: boolean;
   isRefreshing: boolean;
+  suppressEmptyState?: boolean;
   mailboxActions: MailboxActions;
   mailboxContextsByThreadId?: ReadonlyMap<string, MessageListMailboxContext>;
   messages: ListMessagesPageResult[];
@@ -72,6 +74,7 @@ export type MessageListProps = {
 
 export type MessageListBulkLabels = {
   isPending: boolean;
+  labels?: readonly MailboxLabel[];
   mailboxId: string;
   onApply: (updates: MessageLabelsUpdate[]) => Promise<void>;
   onOpenChange: (open: boolean) => void;
@@ -81,6 +84,7 @@ export type MessageListBulkLabels = {
 
 export type MessageListBulkAction = {
   destructive?: boolean;
+  disabled?: boolean;
   icon: IconSvgElement;
   id: string;
   label: string;

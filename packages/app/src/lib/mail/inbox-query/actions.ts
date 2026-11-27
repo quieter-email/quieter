@@ -1,3 +1,4 @@
+import { ORPCError } from "@orpc/client";
 import { MAILBOX_LABELS } from "@quieter/app/lib/mail";
 import type {
   MailboxCategory,
@@ -27,7 +28,6 @@ import type {
 import { getMessagesQueryKey } from "@quieter/app/lib/mail/inbox-query/keys";
 import {
   applyMessageToCachedMailboxQueries,
-  applyOptimisticMailboxUpdate,
   applyResolvedThreadMetadataToCaches,
   findMessageInCachedMailboxQueries,
   findMessagesInCachedMailboxQueries,
@@ -37,12 +37,17 @@ import {
 } from "@quieter/app/lib/mail/inbox-query/query-cache";
 import { getThreadQueryKey } from "@quieter/app/lib/mail/thread-query";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
-import { getGmailUnreadCountsQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { rpc } from "@quieter/app/lib/orpc";
-import type { MailCommand, MailMutationTarget } from "@quieter/mail/data-plane";
+import type {
+  MailCommand,
+  MailMutationResult,
+  MailMutationTarget,
+} from "@quieter/mail/data-plane";
+import { isIncomingInboxMessage } from "@quieter/mail/messages";
 import type {
   MailSnoozeApplyInput,
   MailSnoozeCommand,
+  MailSnoozeState,
 } from "@quieter/mail/snooze";
 import type { QueryClient } from "@tanstack/react-query";
 
@@ -63,9 +68,7 @@ export const applySnoozeInMailbox = async (
   requestId: string = crypto.randomUUID()
 ) => {
   let result: Awaited<ReturnType<typeof rpc.mail.applySnooze>> | undefined;
-  // Snoozed conversations leave the Inbox; Later membership needs the
-  // server-assigned schedule, so it is left to the refetch below.
-  const leaveInbox = (threadIds: Set<string>) => {
+  const leaveInbox = (matches: (message: MessageListItem) => boolean) => {
     for (const cachedQuery of getCachedMessagesQueries(
       queryClient,
       mailboxId
@@ -73,55 +76,127 @@ export const applySnoozeInMailbox = async (
       if (cachedQuery.mailbox !== "inbox") {
         continue;
       }
-      const nextData = removeMessagesFromQueryData(
-        cachedQuery.data,
-        (message) => threadIds.has(message.threadId)
-      );
+      const nextData = removeMessagesFromQueryData(cachedQuery.data, matches);
       if (nextData !== cachedQuery.data) {
         queryClient.setQueryData(cachedQuery.queryKey, nextData);
       }
     }
   };
-  try {
-    await runMailMutation(queryClient, {
-      apply:
-        command.kind === "snooze"
-          ? () => {
-              leaveInbox(new Set(targets.map((target) => target.threadId)));
-            }
-          : undefined,
-      execute: async () => {
-        result = await rpc.mail.applySnooze({
-          command,
-          mailboxId,
-          requestId,
-          targets,
-        });
-        const applied = new Set(
-          command.kind === "snooze"
-            ? result.targets
-                .filter((target) => target.status === "applied")
-                .map((target) => target.threadId)
-            : []
-        );
-        return () => {
-          leaveInbox(applied);
-        };
-      },
+  const applySchedule = (
+    threadId: string,
+    update: (state: MailSnoozeState | undefined) => MailSnoozeState | undefined,
+    placeMessage?: (message: MessageListItem) => MessageListItem
+  ) => {
+    const updateMessage = (message: MessageListItem) => {
+      const snooze = update(message.snooze);
+      return snooze === message.snooze
+        ? message
+        : { ...(placeMessage?.(message) ?? message), snooze };
+    };
+    for (const message of findMessagesInCachedMailboxQueries(
+      queryClient,
       mailboxId,
-      targets: targets.map((target) => target.threadId),
-    });
-  } finally {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: ["messages", mailboxId] }),
-      queryClient.invalidateQueries({
-        queryKey: getMailboxThreadQueriesKey(mailboxId),
-      }),
-      queryClient.invalidateQueries({
-        queryKey: getGmailUnreadCountsQueryKey(),
-      }),
-    ]);
-  }
+      (item) => item.threadId === threadId
+    )) {
+      const next = updateMessage(message);
+      if (next !== message) {
+        applyMessageToCachedMailboxQueries(queryClient, mailboxId, next);
+      }
+    }
+    queryClient.setQueryData(
+      getThreadQueryKey(mailboxId, threadId),
+      (current: ThreadMessagesResult | undefined) => {
+        if (!current) {
+          return current;
+        }
+        const snooze = update(current.snooze);
+        const next = updateMessagesInThreadData(
+          current,
+          () => true,
+          updateMessage
+        );
+        return snooze === current.snooze
+          ? next
+          : { ...current, ...next, snooze };
+      }
+    );
+  };
+  const requestedMessageIds = new Set(
+    targets.flatMap((target) => target.messageIds)
+  );
+  const requestedThreadIds = new Set(targets.map((target) => target.threadId));
+  await runMailMutation(queryClient, {
+    apply: () => {
+      if (command.kind === "snooze") {
+        leaveInbox((message) => requestedThreadIds.has(message.threadId));
+      }
+      if (command.kind === "reschedule" || command.kind === "cancel") {
+        for (const target of targets) {
+          applySchedule(target.threadId, (state) => {
+            if (!state || state.version !== target.expectedVersion) {
+              return state;
+            }
+            return command.kind === "reschedule"
+              ? {
+                  ...state,
+                  returnAt: command.returnAt,
+                  timeZone: command.timeZone,
+                }
+              : { ...state, status: "cancelled" };
+          });
+        }
+      }
+    },
+    execute: async () => {
+      const confirmed = await rpc.mail.applySnooze({
+        command,
+        mailboxId,
+        requestId,
+        targets,
+      });
+      result = confirmed;
+      return () => {
+        for (const target of confirmed.targets) {
+          if (target.status !== "applied" || target.replayed === true) {
+            continue;
+          }
+          const { snooze } = target;
+          const messageIds = new Set(target.messageIds);
+          if (snooze !== undefined) {
+            const placement =
+              command.kind === "snooze" || command.kind === "return-now"
+                ? getMailCommandUpdater({
+                    kind: "set-placement",
+                    placement: command.kind === "snooze" ? "done" : "inbox",
+                  })
+                : undefined;
+            applySchedule(
+              target.threadId,
+              (state) =>
+                (state?.version ?? -1) <= snooze.version ? snooze : state,
+              placement &&
+                ((message) =>
+                  messageIds.has(message.id) ? placement(message) : message)
+            );
+          }
+          if (command.kind === "snooze") {
+            leaveInbox(
+              (message) =>
+                message.threadId === target.threadId &&
+                (snooze === undefined
+                  ? message.snooze === undefined
+                  : (message.snooze?.version ?? -1) <= snooze.version) &&
+                (target.messageIds === undefined
+                  ? requestedMessageIds.has(message.id)
+                  : messageIds.has(message.id))
+            );
+          }
+        }
+      };
+    },
+    mailboxId,
+    targets: targets.map((target) => target.threadId),
+  });
   if (!result) {
     throw new Error("The conversation update did not complete.");
   }
@@ -134,26 +209,88 @@ export const applyBulkChangesInMailbox = async (
   targets: MailMutationTarget[],
   command: MailCommand
 ) => {
-  let result: Awaited<ReturnType<typeof rpc.mail.applyChanges>> | undefined;
+  let result: MailMutationResult | undefined;
   const updater = getMailCommandUpdater(command);
   const requestId =
-    command.kind === "set-placement" ? crypto.randomUUID() : undefined;
+    command.kind === "delete-permanently" ? undefined : crypto.randomUUID();
+  const input = { command, mailboxId, requestId, targets };
   const apply = (
     appliedTargets: MailMutationTarget[],
-    confirmed?: NonNullable<typeof result>
+    outcomes?: ReadonlyMap<string, MailMutationResult["targets"][number]>
   ) => {
     for (const target of appliedTargets) {
       const messageIds = new Set(target.messageIds);
       const wholeThread =
         command.kind === "set-importance" && messageIds.size === 0;
-      const summary = confirmed?.targets.find(
-        (item) => item.threadId === target.threadId
-      )?.summary;
+      const outcome = outcomes?.get(target.threadId);
+      const summary = outcome?.summary;
+      const untrashed = new Set(outcome?.untrashedMessageIds);
+      for (const id of outcome?.appliedMessageIds ?? []) {
+        untrashed.delete(id);
+      }
+      const threadKey = getThreadQueryKey(mailboxId, target.threadId);
+      const listMessages = findMessagesInCachedMailboxQueries(
+        queryClient,
+        mailboxId,
+        (candidate) => candidate.threadId === target.threadId
+      );
+      const placementRows =
+        command.kind === "set-placement"
+          ? [
+              ...listMessages,
+              ...(queryClient.getQueryData<ThreadMessagesResult>(threadKey)
+                ?.messages ?? []),
+            ]
+          : [];
+      const inboxIsKnown = placementRows.some(
+        (message) => message.threadInboxIncomingMessageIds !== undefined
+      );
+      const inboxIds = new Set(
+        placementRows.flatMap((message) => [
+          ...(message.threadInboxIncomingMessageIds ?? []),
+          ...(isIncomingInboxMessage(message) ? [message.id] : []),
+        ])
+      );
+      if (command.kind === "set-placement" && inboxIsKnown) {
+        if (command.placement === "done") {
+          for (const messageId of messageIds) {
+            inboxIds.delete(messageId);
+          }
+        } else {
+          for (const message of placementRows) {
+            if (
+              messageIds.has(message.id) &&
+              isIncomingInboxMessage(updater(message))
+            ) {
+              inboxIds.add(message.id);
+            }
+          }
+        }
+      }
+      const includesMessage = (message: MessageListItem) =>
+        command.kind === "set-importance" ||
+        (command.kind === "set-placement" && inboxIsKnown) ||
+        messageIds.has(message.id);
       const update = (message: MessageListItem) => {
-        const next =
-          wholeThread || messageIds.has(message.id)
-            ? updater(message)
-            : message;
+        let next = message;
+        if (untrashed.has(message.id)) {
+          next = applyMessageLabelChangesLocally(message, {
+            removeLabelIds: [MAILBOX_LABELS.trash],
+          });
+        } else if (wholeThread || messageIds.has(message.id)) {
+          next = updater(message);
+        }
+        if (command.kind === "set-placement" && inboxIsKnown) {
+          const threadLabelIds = next.threadLabelIds ?? next.labelIds ?? [];
+          return {
+            ...next,
+            threadInboxIncomingMessageIds: [...inboxIds],
+            threadLabelIds:
+              inboxIds.size === 0
+                ? threadLabelIds.filter((id) => id !== MAILBOX_LABELS.inbox)
+                : [...new Set([...threadLabelIds, MAILBOX_LABELS.inbox])],
+          };
+        }
         if (command.kind !== "set-importance") {
           return next;
         }
@@ -166,13 +303,7 @@ export const applyBulkChangesInMailbox = async (
               : command.important || (message.threadIsImportant ?? false)),
         };
       };
-      for (const message of findMessagesInCachedMailboxQueries(
-        queryClient,
-        mailboxId,
-        (candidate) =>
-          candidate.threadId === target.threadId &&
-          (command.kind === "set-importance" || messageIds.has(candidate.id))
-      )) {
+      for (const message of listMessages.filter(includesMessage)) {
         applyMessageToCachedMailboxQueries(
           queryClient,
           mailboxId,
@@ -180,14 +311,9 @@ export const applyBulkChangesInMailbox = async (
         );
       }
       queryClient.setQueryData(
-        getThreadQueryKey(mailboxId, target.threadId),
+        threadKey,
         (current: ThreadMessagesResult | undefined) =>
-          updateMessagesInThreadData(
-            current,
-            (message) =>
-              command.kind === "set-importance" || messageIds.has(message.id),
-            update
-          )
+          updateMessagesInThreadData(current, includesMessage, update)
       );
     }
   };
@@ -196,32 +322,63 @@ export const applyBulkChangesInMailbox = async (
       apply(targets);
     },
     execute: async () => {
-      result = await rpc.mail.applyChanges({
-        command,
-        mailboxId,
-        requestId,
-        targets,
-      });
-      const confirmed = result;
-      const applied = new Set(
-        confirmed.targets
-          .filter(
-            (target) => target.status === "applied" && target.replayed !== true
-          )
-          .map((target) => target.threadId)
+      let confirmed: MailMutationResult;
+      try {
+        confirmed = await rpc.mail.applyChanges(input);
+      } catch (error) {
+        if (requestId === undefined || !(error instanceof TypeError)) {
+          throw error;
+        }
+        confirmed = await rpc.mail.applyChanges(input);
+      }
+      if (confirmed.receipt?.retryable === true) {
+        try {
+          confirmed = await rpc.mail.applyChanges(input);
+        } catch (error) {
+          if (!(error instanceof TypeError)) {
+            throw error;
+          }
+        }
+      }
+      result = confirmed;
+      const outcomes = new Map(
+        confirmed.targets.map((target) => [target.threadId, target])
       );
       return () => {
+        if (confirmed.receipt?.replayed === true) {
+          return;
+        }
         apply(
-          targets
-            .filter((target) => applied.has(target.threadId))
-            .map((target) => ({
-              ...target,
-              messageIds:
-                confirmed.targets.find(
-                  (item) => item.threadId === target.threadId
-                )?.messageIds ?? target.messageIds,
-            })),
-          confirmed
+          targets.flatMap((target) => {
+            const outcome = outcomes.get(target.threadId);
+            if (!outcome || outcome.replayed === true) {
+              return [];
+            }
+            if (
+              outcome.appliedMessageIds !== undefined ||
+              outcome.untrashedMessageIds !== undefined
+            ) {
+              const messageIds = [
+                ...(outcome.appliedMessageIds ?? []),
+                ...(outcome.untrashedMessageIds ?? []),
+              ];
+              return messageIds.length > 0 ? [{ ...target, messageIds }] : [];
+            }
+            if (
+              outcome.status !== "applied" ||
+              confirmed.receipt?.status === "pending" ||
+              confirmed.receipt?.status === "uncertain"
+            ) {
+              return [];
+            }
+            return [
+              {
+                ...target,
+                messageIds: outcome.messageIds ?? target.messageIds,
+              },
+            ];
+          }),
+          outcomes
         );
       };
     },
@@ -231,21 +388,20 @@ export const applyBulkChangesInMailbox = async (
   if (!result) {
     throw new Error("Mail update did not complete.");
   }
-  await Promise.all([
-    queryClient.invalidateQueries({
-      queryKey:
-        command.kind === "set-importance" || command.kind === "set-placement"
-          ? ["messages", mailboxId]
-          : ["messages", mailboxId, "important"],
-    }),
-    ...(command.kind === "set-read"
-      ? []
-      : [
-          queryClient.invalidateQueries({
-            queryKey: getMailboxThreadQueriesKey(mailboxId),
-          }),
-        ]),
-  ]);
+  const resolvedThreads = new Set(
+    result.targets.map((target) => target.threadId)
+  );
+  if (
+    result.receipt?.status === "pending" ||
+    result.receipt?.status === "uncertain" ||
+    targets.some((target) => !resolvedThreads.has(target.threadId))
+  ) {
+    throw new ORPCError("CONFLICT", {
+      message:
+        result.targets.find((target) => target.status === "failed")?.message ??
+        "This action is still being confirmed. Refresh before trying again.",
+    });
+  }
   return result;
 };
 
@@ -321,34 +477,20 @@ const findMessageForAction = (args: MessageActionArgs) => {
   );
 };
 
-const invalidateMailboxCounts = async (queryClient: QueryClient) => {
-  await queryClient.invalidateQueries({
-    queryKey: getGmailUnreadCountsQueryKey(),
-  });
-};
-
 const applyMessageToCaches = (
   queryClient: QueryClient,
   mailboxId: string,
-  threadQueryKey: ReturnType<typeof getThreadQueryKey> | undefined,
+  threadQueryKey: ReturnType<typeof getThreadQueryKey>,
   nextMessage: MessageListItem
 ) => {
-  const touchedQueryKeys: (readonly unknown[])[] = [
-    ...applyMessageToCachedMailboxQueries(queryClient, mailboxId, nextMessage),
-  ];
-
-  if (threadQueryKey !== undefined) {
-    queryClient.setQueryData(
-      threadQueryKey,
-      (currentData: ThreadMessagesResult | undefined) =>
-        updateMessageInThreadData(currentData, nextMessage.id, (message) =>
-          mergeMessagePreservingLoadedDetails(message, nextMessage)
-        )
-    );
-    touchedQueryKeys.push(threadQueryKey);
-  }
-
-  return touchedQueryKeys;
+  applyMessageToCachedMailboxQueries(queryClient, mailboxId, nextMessage);
+  queryClient.setQueryData(
+    threadQueryKey,
+    (currentData: ThreadMessagesResult | undefined) =>
+      updateMessageInThreadData(currentData, nextMessage.id, (message) =>
+        mergeMessagePreservingLoadedDetails(message, nextMessage)
+      )
+  );
 };
 
 const runOptimisticMessageMetadataMutation = async (
@@ -363,7 +505,7 @@ const runOptimisticMessageMetadataMutation = async (
   const threadKey = getThreadQueryKey(args.mailboxId, threadId);
   await runMailMutation(args.queryClient, {
     apply: () => {
-      const current = findMessageForAction(args) ?? original;
+      const current = findMessageForAction(args);
       if (current) {
         applyMessageToCaches(
           args.queryClient,
@@ -379,7 +521,7 @@ const runOptimisticMessageMetadataMutation = async (
       // Once dispatched, a write finishes even if a newer intent arrives.
       const updated = await args.mutation();
       return () => {
-        const current = findMessageForAction(args) ?? original;
+        const current = findMessageForAction(args);
         if (current) {
           applyMessageToCaches(
             args.queryClient,
@@ -393,10 +535,6 @@ const runOptimisticMessageMetadataMutation = async (
     mailboxId: args.mailboxId,
     targets: [threadId],
   });
-  await persistQueryKeys(args.queryClient, [
-    threadKey,
-    getMessagesQueryKey(args.mailboxId, args.mailbox, args.searchQuery),
-  ]);
 };
 
 const runOptimisticThreadMetadataMutation = async (args: {
@@ -409,7 +547,6 @@ const runOptimisticThreadMetadataMutation = async (args: {
   optimisticUpdater: (message: MessageListItem) => MessageListItem;
 }) => {
   const threadQueryKey = getThreadQueryKey(args.mailboxId, args.threadId);
-  let touchedQueryKeys: (readonly unknown[])[] = [threadQueryKey];
   await runMailMutation(args.queryClient, {
     apply: () => {
       for (const message of findMessagesInCachedMailboxQueries(
@@ -438,7 +575,7 @@ const runOptimisticThreadMetadataMutation = async (args: {
       args.signal?.throwIfAborted();
       const result = await args.mutation();
       return () => {
-        touchedQueryKeys = applyResolvedThreadMetadataToCaches(
+        applyResolvedThreadMetadataToCaches(
           args.queryClient,
           args.mailboxId,
           result
@@ -448,7 +585,6 @@ const runOptimisticThreadMetadataMutation = async (args: {
     mailboxId: args.mailboxId,
     targets: [args.threadId],
   });
-  await persistQueryKeys(args.queryClient, touchedQueryKeys);
 };
 
 const runOptimisticMessageRemoval = async (
@@ -457,45 +593,31 @@ const runOptimisticMessageRemoval = async (
   }
 ) => {
   const messageToRemove = findMessageForAction(args);
-  if (!messageToRemove) {
-    await args.mutation(args.signal);
-    return;
-  }
-
-  const threadQueryKey = messageToRemove.threadId
-    ? getThreadQueryKey(args.mailboxId, messageToRemove.threadId)
-    : undefined;
-  const rollback = await applyOptimisticMailboxUpdate(
-    args.queryClient,
-    args.mailboxId,
-    () => {
-      removeMessagesFromCachedMailboxQueries(
-        args.queryClient,
-        args.mailboxId,
-        (message) => message.id === args.messageId
-      );
-
-      if (threadQueryKey !== undefined) {
-        args.queryClient.setQueryData(
-          threadQueryKey,
-          (currentData: ThreadMessagesResult | undefined) =>
-            removeMessagesFromThreadData(
-              currentData,
-              (message) => message.id === args.messageId
-            )
-        );
-      }
+  const threadId = messageToRemove?.threadId ?? args.messageId;
+  const remove = () => {
+    removeMessagesFromCachedMailboxQueries(
+      args.queryClient,
+      args.mailboxId,
+      (message) => message.id === args.messageId
+    );
+    args.queryClient.setQueryData(
+      getThreadQueryKey(args.mailboxId, threadId),
+      (current: ThreadMessagesResult | undefined) =>
+        removeMessagesFromThreadData(
+          current,
+          (message) => message.id === args.messageId
+        )
+    );
+  };
+  await runMailMutation(args.queryClient, {
+    apply: remove,
+    execute: async () => {
+      await args.mutation(args.signal);
+      return remove;
     },
-    threadQueryKey
-  );
-
-  try {
-    await args.mutation(args.signal);
-    await invalidateMailboxCounts(args.queryClient);
-  } catch (error) {
-    await rollback();
-    throw error;
-  }
+    mailboxId: args.mailboxId,
+    targets: [threadId],
+  });
 };
 
 export const updateMessageInMailbox = async (
@@ -544,20 +666,6 @@ export const updateMessageInMailbox = async (
       return applyMessageLabelChangesLocally(message, changes);
     },
   });
-  if (operation !== "read" && operation !== "unread") {
-    await Promise.all([
-      args.queryClient.invalidateQueries({
-        queryKey: ["messages", args.mailboxId, "important"],
-      }),
-      args.queryClient.invalidateQueries({
-        queryKey: getMailboxThreadQueriesKey(args.mailboxId),
-      }),
-    ]);
-  } else {
-    await args.queryClient.invalidateQueries({
-      queryKey: ["messages", args.mailboxId, "important"],
-    });
-  }
 };
 
 export const updateThreadInMailbox = async (
@@ -611,20 +719,6 @@ export const updateThreadInMailbox = async (
       return applyThreadLabelChangesLocally(message, changes);
     },
   });
-  if (operation !== "read" && operation !== "unread") {
-    await Promise.all([
-      args.queryClient.invalidateQueries({
-        queryKey: ["messages", args.mailboxId, "important"],
-      }),
-      args.queryClient.invalidateQueries({
-        queryKey: getMailboxThreadQueriesKey(args.mailboxId),
-      }),
-    ]);
-  } else {
-    await args.queryClient.invalidateQueries({
-      queryKey: ["messages", args.mailboxId, "important"],
-    });
-  }
 };
 
 export const deleteDraftInMailbox = async (

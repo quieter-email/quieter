@@ -1,0 +1,1 @@
+ALTER TABLE "mailCommandReceipt" ADD COLUMN "executionState" jsonb;

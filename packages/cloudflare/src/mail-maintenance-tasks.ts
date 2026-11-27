@@ -19,6 +19,7 @@ import {
   drainMailAgentRuns,
   reportPendingMailAgentUsage,
 } from "@quieter/orpc/mail-agent";
+import { cleanupMailCommandReceipts } from "@quieter/orpc/mail-command-retention";
 import {
   backfillMissingMailImportanceWork,
   processPendingMailImportance,
@@ -100,6 +101,7 @@ export const runMailMaintenance = async (
   const mailboxLanes = serverEnv.QUIETER_GMAIL_MAILBOX_LANES === true;
   const scope = mailboxLanes ? managed : {};
   const local = serverEnv.QUIETER_DEPLOYMENT_ENV === "local";
+  let commandReceiptWake: number | null = null;
   switch (task) {
     case "scheduled-send":
     case "bootstrap-scheduled-sends": {
@@ -216,7 +218,12 @@ export const runMailMaintenance = async (
       break;
     }
     case "compose-retention": {
-      await cleanupGmailComposeOperations();
+      const [moreReceipts] = await Promise.all([
+        cleanupMailCommandReceipts(),
+        cleanupGmailComposeOperations(),
+      ]);
+      commandReceiptWake =
+        Date.now() + (moreReceipts ? 30_000 : 24 * 60 * 60_000);
       break;
     }
     case "code-retention": {
@@ -299,7 +306,11 @@ export const runMailMaintenance = async (
   const [next] = await db.execute<{ nextWakeAt: number | null }>(
     sql`select mail_maintenance_next_wake(${task}, ${mailboxLanes}) as "nextWakeAt"`
   );
-  const readyAt = next?.nextWakeAt ?? null;
+  const scheduledWake = next?.nextWakeAt ?? null;
+  const readyAt =
+    commandReceiptWake === null
+      ? scheduledWake
+      : Math.min(commandReceiptWake, scheduledWake ?? commandReceiptWake);
   const delay =
     task === "send-recovery" ||
     task === "managed-codes" ||

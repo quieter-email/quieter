@@ -73,7 +73,12 @@ import {
   filterMailSnoozeVisibility,
   listMailSnoozePage,
 } from "../snooze/queries";
+import { reuseGmailReplayMetadata } from "./gmail-replay-metadata";
 import type { MailInputs } from "./inputs";
+import {
+  projectManagedMailboxRows,
+  replayManagedMailbox,
+} from "./managed-replay";
 
 const MAX_VISIBILITY_SCAN_PAGES = 5;
 
@@ -324,6 +329,7 @@ const replayGmailMailbox = async ({
         : [],
     };
   }
+  const startHistoryId = providerCursor?.provider ?? "";
   const delta = await callGmail(
     context,
     input.mailboxId,
@@ -335,8 +341,21 @@ const replayGmailMailbox = async ({
         reconcileProvider:
           input.targetChangeVersion === undefined ||
           BigInt(input.targetChangeVersion) > headVersion,
+        reuseRecordedFacts: async (load) =>
+          await reuseGmailReplayMetadata(
+            {
+              affectedMessageThreads,
+              affectedThreadIds,
+              contentRevision,
+              headVersion,
+              mailboxId: input.mailboxId,
+              signal,
+              startHistoryId,
+            },
+            load
+          ),
         signal,
-        startHistoryId: providerCursor?.provider ?? "",
+        startHistoryId,
       })
   );
   return {
@@ -810,15 +829,23 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     const category = input.scope === "all_mail" ? undefined : input.category;
-    if (category === "later" && !input.query?.trim()) {
-      return await listLaterMessages({
-        ...input,
-        contentRevision: selectedMailbox.contentRevision,
-        context,
-        provider: selectedMailbox.provider === "managed" ? "managed" : "gmail",
-      });
-    }
     if (selectedMailbox.provider === "managed") {
+      const cursor = {
+        changeVersion: String(selectedMailbox.mailChangeVersion ?? 0n),
+        historyId: String(selectedMailbox.contentRevision),
+      };
+      if (category === "later" && !input.query?.trim()) {
+        return {
+          ...(await listLaterMessages({
+            ...input,
+            contentRevision: selectedMailbox.contentRevision,
+            context,
+            provider: "managed",
+          })),
+          ...cursor,
+        };
+      }
+
       let { pageToken } = input;
       let pagesScanned = 0;
       while (true) {
@@ -829,46 +856,33 @@ export const queriesMailOperations = {
           userId: context.userId,
         });
         if (category === undefined) {
-          return page;
+          return { ...page, ...cursor };
         }
-        const messages = await attachMailSnoozeStates({
-          mailboxId: input.mailboxId,
-          messages: page.messages,
-          userId: context.userId,
-        });
-        const visible = await filterMailSnoozeVisibility({
+        const messages = await projectManagedMailboxRows({
           category,
           mailboxId: input.mailboxId,
-          threadIds: messages.map((message) => message.threadId),
+          messages: page.messages,
+          organizationId: selectedMailbox.organizationId,
           userId: context.userId,
         });
-        const filtered = messages.filter((message) =>
-          visible.has(message.threadId)
-        );
         pagesScanned += 1;
         if (
-          filtered.length > 0 ||
+          messages.length > 0 ||
           page.nextPageToken === undefined ||
           pagesScanned >= MAX_VISIBILITY_SCAN_PAGES
         ) {
-          return {
-            ...page,
-            messages:
-              category === "sent" && selectedMailbox.organizationId !== null
-                ? await attachScheduledSendMetadata({
-                    mailboxId: input.mailboxId,
-                    messages: filtered,
-                    source: {
-                      organizationId: selectedMailbox.organizationId,
-                      provider: "managed",
-                    },
-                    userId: context.userId,
-                  })
-                : filtered,
-          };
+          return { ...page, ...cursor, messages };
         }
         pageToken = page.nextPageToken;
       }
+    }
+    if (category === "later" && !input.query?.trim()) {
+      return await listLaterMessages({
+        ...input,
+        contentRevision: selectedMailbox.contentRevision,
+        context,
+        provider: "gmail",
+      });
     }
 
     if (category === "important") {
@@ -1020,16 +1034,13 @@ export const queriesMailOperations = {
       userId: context.userId,
     });
     if (selectedMailbox.provider === "managed") {
-      const historyId = String(selectedMailbox.contentRevision);
-      const hasChanges = historyId !== input.startHistoryId;
-      return {
-        hasChanges,
-        historyId,
-        refreshFirstPage: hasChanges,
-        removedMessageIds: [],
-        requiresFullRefresh: hasChanges,
-        updatedMessages: [],
-      };
+      return await replayManagedMailbox({
+        contentRevision: selectedMailbox.contentRevision,
+        headVersion: selectedMailbox.mailChangeVersion,
+        input,
+        organizationId: selectedMailbox.organizationId,
+        userId: context.userId,
+      });
     }
 
     const token = /^gmail:(?<provider>\d+):(?<revision>\d+)$/u.exec(

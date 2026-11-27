@@ -9,11 +9,7 @@ import {
   Settings02Icon,
 } from "@hugeicons/core-free-icons";
 import { ShortcutHint } from "@quieter/app/features/hotkeys/components/shortcut-hint";
-import {
-  loadCalendarWorkspace,
-  loadComposeWorkspace,
-  loadSnippetWorkspace,
-} from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
+import { loadSnippetWorkspace } from "@quieter/app/features/mailbox/components/mailbox-workspace/workspace-component-loaders";
 import type { MailboxWorkspaceView } from "@quieter/app/features/mailbox/domain/mailbox-workspace-view";
 import { useUnifiedInboxPreferences } from "@quieter/app/features/mailbox/domain/unified-inbox";
 import { MailboxSwitcherDropdown } from "@quieter/app/features/navigation/components/mailbox-switcher";
@@ -25,7 +21,10 @@ import {
 } from "@quieter/app/features/navigation/components/sidebar-mailbox-nav";
 import { SidebarMailboxNavItem } from "@quieter/app/features/navigation/components/sidebar-nav-item";
 import { SidebarEntrance } from "@quieter/app/features/navigation/components/sidebar-surfaces";
-import { calendarAccountsQueryOptions } from "@quieter/app/lib/calendar-query";
+import {
+  warmCalendarDestination,
+  warmComposeDestination,
+} from "@quieter/app/lib/background-prefetch";
 import type { MailboxCategory } from "@quieter/app/lib/mail";
 import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import type { MailboxCapabilities } from "@quieter/mail/data-plane";
@@ -58,9 +57,11 @@ import { SidebarFooterLinks } from "./sidebar-footer-links";
 import { UnifiedSidebarLabelNav } from "./unified-sidebar-label-nav";
 
 type MailSidebarProps = {
+  accountLabel?: string;
   userId: string;
   allInboxesActive?: boolean;
   embedded?: boolean;
+  isLoadingMailboxes?: boolean;
   groups: {
     id: string;
     kind: "division" | "organization" | "unassigned";
@@ -179,12 +180,18 @@ const SidebarInboxSection = ({
   );
   const preview = usePreviewPersona();
   const preloadCalendar = () => {
-    void loadCalendarWorkspace();
-    if (userId !== "preview" && preview === null) {
-      void Promise.allSettled([
-        queryClient.query(calendarAccountsQueryOptions(userId)),
-      ]);
-    }
+    void warmCalendarDestination({
+      isSandboxMode: preview !== null,
+      queryClient,
+      userId,
+    });
+  };
+  const preloadCompose = () => {
+    void warmComposeDestination({
+      isSandboxMode: preview !== null,
+      mailboxId: selectedMailboxId,
+      queryClient,
+    });
   };
   const selectedMailboxGrantRole = groups
     .flatMap((group) => group.mailboxes)
@@ -414,14 +421,14 @@ const SidebarInboxSection = ({
               : selectedMailboxGrantRole === "reader")
           }
           onClick={handleComposeNewMail}
-          onFocus={() => void loadComposeWorkspace()}
-          onMouseEnter={() => void loadComposeWorkspace()}
+          onFocus={preloadCompose}
+          onMouseEnter={preloadCompose}
           onPointerDown={(event) => {
             if (event.button !== 0) {
               event.preventDefault();
               return;
             }
-            void loadComposeWorkspace();
+            preloadCompose();
           }}
           type="button"
         >
@@ -493,11 +500,13 @@ const SidebarFooter = ({
 );
 
 const SidebarContent = ({
+  accountLabel,
   allInboxesActive,
   userId,
   animateEntrance,
   embedded = false,
   groups,
+  isLoadingMailboxes = false,
   onComposeNewMail,
   onManageLabels,
   onReorderMailboxSwitcher,
@@ -540,7 +549,9 @@ const SidebarContent = ({
             className="flex min-w-0 items-start gap-2 rounded-md px-1"
           >
             <MailboxSwitcherDropdown
+              accountLabel={accountLabel}
               allInboxesActive={allInboxesActive}
+              isLoading={isLoadingMailboxes}
               onSelectAllInboxes={
                 embedded
                   ? undefined

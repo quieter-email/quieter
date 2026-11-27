@@ -23,12 +23,18 @@ import type {
 } from "@quieter/app/lib/mail";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
+import {
+  DEMO_MAILBOX_ID,
+  LANDING_DEMO_MAILBOX_ID,
+} from "@quieter/app/lib/sandbox-mailbox";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import type { QueryClient } from "@tanstack/react-query";
 
-export const DEMO_MAILBOX_ID = "demo:mailbox";
-export const LANDING_DEMO_MAILBOX_ID = "landing:mailbox";
+export {
+  DEMO_MAILBOX_ID,
+  LANDING_DEMO_MAILBOX_ID,
+} from "@quieter/app/lib/sandbox-mailbox";
 
 const DEMO_EMAIL_ADDRESS = "inbox@quieter.com";
 

@@ -18,6 +18,14 @@ export const MAILBOX_LABELS = {
 
 export const MAIL_UNREAD_LABEL = MAILBOX_LABELS.unread;
 
+export const isIncomingInboxMessage = ({
+  labelIds,
+}: {
+  labelIds?: readonly string[];
+}): boolean =>
+  labelIds?.includes(MAILBOX_LABELS.inbox) === true &&
+  !labelIds.some((label) => ["SENT", "DRAFT", "SPAM", "TRASH"].includes(label));
+
 export type MessageHeader = { name: string; value: string };
 
 export type MessagePart = {

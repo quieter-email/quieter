@@ -33,6 +33,7 @@ import { openGoogleAccountLink } from "@quieter/app/lib/google-account-link";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
 import { orpc } from "@quieter/app/lib/orpc";
 import { getApiUrl, openExternalUrl } from "@quieter/app/runtime";
+import { purgeAuthorizedSessionUser } from "@quieter/app/session-user";
 import { BILLING_FEATURES } from "@quieter/billing/plans";
 import type { RouterOutputs } from "@quieter/orpc";
 import { Button } from "@quieter/ui/button";
@@ -565,6 +566,7 @@ export const OnboardingScreen = () => {
       });
     },
     onSuccess: async () => {
+      purgeAuthorizedSessionUser();
       queryClient.clear();
       await navigate({ href: returnToRef.current ?? "/" });
     },

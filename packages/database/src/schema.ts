@@ -5,6 +5,7 @@ import type {
   MailCaptureIdPage,
   MailMessageAnalysis,
 } from "@quieter/mail/capture";
+import type { MailMutationResult } from "@quieter/mail/data-plane";
 import type {
   DeliveryEvent,
   DeliveryStatus,
@@ -5733,3 +5734,75 @@ export const authRelations = defineRelations(tables, (r) => ({
     sessions: r.many.session({ from: r.user.id, to: r.session.userId }),
   },
 }));
+
+export type MailCommandSnoozeVersion = {
+  id: string;
+  threadId: string;
+  version: number;
+};
+
+export type MailCommandFollowUp = {
+  result: MailMutationResult;
+  snoozes: MailCommandSnoozeVersion[];
+} & (
+  | { kind: "retire-snoozes" }
+  | {
+      kind: "restore-inbox";
+      messages: { id: string; wasSpam: boolean }[];
+      validTargetIndexes: number[];
+    }
+);
+
+export type MailCommandExecutionState =
+  | { phase: "preparing"; owner: string }
+  | { phase: "dispatched"; owner: string; partial?: MailMutationResult }
+  | { phase: "follow-up"; owner: string | null; work: MailCommandFollowUp };
+
+export const mailCommandReceipt = pgTable(
+  "mailCommandReceipt",
+  {
+    actorUserId: text("actorUserId")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    claimedAt: timestamp("claimedAt", { withTimezone: true }),
+    createdAt: timestamp("createdAt", { withTimezone: true }),
+    executionState: jsonb("executionState").$type<MailCommandExecutionState>(),
+    mailboxId: text("mailboxId")
+      .notNull()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    requestHash: text("requestHash").notNull(),
+    requestId: text("requestId").notNull(),
+    result: jsonb("result").$type<MailMutationResult>(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.actorUserId, table.mailboxId, table.requestId],
+    }),
+    index("mail_command_receipt_mailbox_idx").on(table.mailboxId),
+    index("mail_command_receipt_created_at_idx").on(table.createdAt),
+  ]
+);
+
+export const gmailReplayMetadata = pgTable(
+  "gmailReplayMetadata",
+  {
+    coverageKey: text("coverageKey").notNull(),
+    expiresAt: timestamp("expiresAt", { withTimezone: true }).notNull(),
+    headVersion: bigint("headVersion", { mode: "bigint" }).notNull(),
+    leaseToken: text("leaseToken"),
+    mailboxId: text("mailboxId")
+      .primaryKey()
+      .references(() => mailbox.id, { onDelete: "cascade" }),
+    sealedFacts: text("sealedFacts"),
+  },
+  (table) => [
+    check(
+      "gmail_replay_metadata_payload_size",
+      sql`octet_length(${table.sealedFacts}) <= 524288`
+    ),
+    check(
+      "gmail_replay_metadata_lease_or_payload",
+      sql`(${table.leaseToken} is null) <> (${table.sealedFacts} is null)`
+    ),
+  ]
+);

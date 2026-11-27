@@ -3,7 +3,6 @@ import { createHash, randomUUID } from "node:crypto";
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
 import {
-  mailbox,
   mailMessageImportance,
   managedMailAttachment,
   managedMailLabel,
@@ -47,12 +46,14 @@ import {
 } from "drizzle-orm";
 
 import { hydrateMailImportance } from "../../mail-importance";
+import { publishMailboxChange } from "../../mailbox-changes";
 import { getAuthorizedManagedMailbox } from "../../mailbox/access";
 import {
   getOrganizationMailDelivery,
   groupDeliveryStatusesByMessage,
 } from "../../organization-mail-delivery";
 import { mailSnoozeVisibilityCondition } from "../../snooze/queries";
+import { appendManagedMailboxContentChange } from "../changes";
 import { createManagedSearchCondition } from "../search/compiler";
 import { parseManagedSearchQuery } from "../search/normalization";
 
@@ -758,12 +759,17 @@ const updateManagedMessageState = async (input: {
     requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
-  const { record, customLabels } = await db.transaction(async (tx) => {
+  const {
+    committed: change,
+    record,
+    customLabels,
+  } = await db.transaction(async (tx) => {
     const [lockedRecord] = await tx
       .select({
         direction: managedMailMessage.direction,
         isRead: managedMailMessage.isRead,
         mailboxState: managedMailMessage.mailboxState,
+        threadId: managedMailMessage.threadId,
       })
       .from(managedMailMessage)
       .where(
@@ -786,20 +792,28 @@ const updateManagedMessageState = async (input: {
           eq(managedMailMessage.id, input.messageId)
         )
       );
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: [
+        {
+          kind: "message.labels",
+          messageId: input.messageId,
+          threadId: lockedRecord.threadId,
+        },
+      ],
+      mailboxId: input.mailboxId,
+    });
     const selectedCustomLabels = await tx
       .select({ labelId: managedMailMessageLabel.labelId })
       .from(managedMailMessageLabel)
       .where(eq(managedMailMessageLabel.messageId, input.messageId));
-    return { customLabels: selectedCustomLabels, record: lockedRecord };
+    return {
+      committed,
+      customLabels: selectedCustomLabels,
+      record: lockedRecord,
+    };
   });
 
+  await publishMailboxChange(change);
   const updated = { ...record, ...input.changes };
   return {
     id: input.messageId,
@@ -834,7 +848,7 @@ export const applyManagedMessageChanges = async (input: {
     return { revision: null, targets: [] };
   }
 
-  return await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const records = await tx
       .select({
         id: managedMailMessage.id,
@@ -865,7 +879,7 @@ export const applyManagedMessageChanges = async (input: {
       threadId: target.threadId,
     }));
     if (appliedMessageIds.length === 0) {
-      return { revision: null, targets };
+      return { committed: null, targets };
     }
     const baseCondition = and(
       eq(managedMailMessage.mailboxId, input.mailboxId),
@@ -948,19 +962,24 @@ export const applyManagedMessageChanges = async (input: {
       });
     }
 
-    const [updatedMailbox] = await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId))
-      .returning({ contentRevision: mailbox.contentRevision });
-    return {
-      revision: updatedMailbox?.contentRevision ?? null,
-      targets,
-    };
+    const appliedIds = new Set(appliedMessageIds);
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: records
+        .filter((record) => appliedIds.has(record.id))
+        .map(({ id, threadId }) => ({
+          kind: "message.labels",
+          messageId: id,
+          threadId,
+        })),
+      mailboxId: input.mailboxId,
+    });
+    return { committed, targets };
   });
+  await publishMailboxChange(result.committed);
+  return {
+    revision: result.committed?.contentRevision ?? null,
+    targets: result.targets,
+  };
 };
 
 const updateManagedThreadState = async (input: {
@@ -974,7 +993,11 @@ const updateManagedThreadState = async (input: {
     requiredRoles: ["manager", "responder"],
     userId: input.userId,
   });
-  const { records, customLabels } = await db.transaction(async (tx) => {
+  const {
+    committed: change,
+    records,
+    customLabels,
+  } = await db.transaction(async (tx) => {
     const lockedRecords = await tx
       .select({
         direction: managedMailMessage.direction,
@@ -1008,13 +1031,14 @@ const updateManagedThreadState = async (input: {
           )
         )
       );
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, input.mailboxId));
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: lockedRecords.map(({ id }) => ({
+        kind: "message.labels",
+        messageId: id,
+        threadId: input.threadId,
+      })),
+      mailboxId: input.mailboxId,
+    });
     const selectedCustomLabels = await tx
       .select({
         labelId: managedMailMessageLabel.labelId,
@@ -1027,8 +1051,13 @@ const updateManagedThreadState = async (input: {
           lockedRecords.map((record) => record.id)
         )
       );
-    return { customLabels: selectedCustomLabels, records: lockedRecords };
+    return {
+      committed,
+      customLabels: selectedCustomLabels,
+      records: lockedRecords,
+    };
   });
+  await publishMailboxChange(change);
   const labelIdsByMessageId = new Map<string, string[]>();
   for (const assignment of customLabels) {
     const labelIds = labelIdsByMessageId.get(assignment.messageId) ?? [];

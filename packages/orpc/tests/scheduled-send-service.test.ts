@@ -218,10 +218,10 @@ describe("scheduled send execution", () => {
     expect(row.payloadRetiredAt).toBeNull();
     expect(result.nextWakeAt).toBeNull();
     expect(fixture.send).not.toHaveBeenCalled();
-    expect(fixture.publishMailUpdate).toHaveBeenCalledWith({
-      mailboxId: scope.mailboxId,
-      type: "mailbox.changed",
-    });
+    expect(fixture.publishMailUpdate).toHaveBeenCalledWith(
+      { mailboxId: scope.mailboxId, type: "mailbox.changed" },
+      { recipientUserIds: [scope.userId] }
+    );
   });
 
   test("rejects cancellation once submission can have started", async () => {

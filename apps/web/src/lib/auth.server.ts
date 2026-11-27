@@ -9,7 +9,7 @@ export const getSessionUserForRequest = async (
     new Headers(request.headers)
   );
 
-  if (!session?.user) {
+  if (!session?.user || !session.session?.id) {
     return null;
   }
 
@@ -26,5 +26,6 @@ export const getSessionUserForRequest = async (
       session.user.termsAcceptedAt === undefined ||
       session.user.onboardingCompletedAt === null ||
       session.user.onboardingCompletedAt === undefined,
+    sessionId: session.session.id,
   };
 };

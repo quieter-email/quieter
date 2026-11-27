@@ -24,7 +24,7 @@ import {
   normalizeOrganizationRole,
 } from "@quieter/app/features/settings/components/organization-settings/domain";
 import { OrganizationFormDialog } from "@quieter/app/features/settings/components/organization-settings/organization-form-dialog";
-import { prefetchSettingsTab } from "@quieter/app/features/settings/components/settings-prefetch";
+import { warmSettingsTab } from "@quieter/app/features/settings/components/settings-prefetch";
 import { useSettingsTeam } from "@quieter/app/features/settings/components/use-settings-team";
 import { isDemoModeAvailable } from "@quieter/app/features/settings/domain/demo-mode-setting";
 import {
@@ -34,6 +34,8 @@ import {
 } from "@quieter/app/features/settings/domain/settings-destination";
 import type { SettingsDestination } from "@quieter/app/features/settings/domain/settings-destination";
 import { authClient } from "@quieter/app/lib/auth";
+import { warmInboxDestination } from "@quieter/app/lib/background-prefetch";
+import { usePreviewPersona } from "@quieter/app/lib/preview-personas";
 import { settingsRouteApi } from "@quieter/app/lib/route-apis";
 import { Button } from "@quieter/ui/button";
 import {
@@ -47,7 +49,7 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link } from "@tanstack/react-router";
+import { Link, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -89,11 +91,22 @@ export const SettingsSidebar = ({
   searchResults?: ReactNode;
 }) => {
   const queryClient = useQueryClient();
+  const router = useRouter();
+  const preview = usePreviewPersona();
   const [isCreateTeamOpen, setIsCreateTeamOpen] = useState(false);
   const { tab, from, organizationView, organizationId } =
     settingsRouteApi.useSearch();
   const { organizations, organizationsState, team, teamId } = useSettingsTeam();
   const session = authClient.useSession().data;
+  const warmBackToMail = () => {
+    void warmInboxDestination({
+      from,
+      isSandboxMode: preview !== null,
+      queryClient,
+      router,
+      userId: session?.user.id,
+    });
+  };
   const { data: details } = useQuery({
     ...fullOrganizationQueryOptions(teamId),
     enabled: team !== undefined,
@@ -117,19 +130,13 @@ export const SettingsSidebar = ({
       nativeButton={false}
       onClick={onRequestClose}
       onFocus={() => {
-        if (destination.tab === "billing") {
-          void prefetchSettingsTab(queryClient, "billing");
-        }
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       onMouseEnter={() => {
-        if (destination.tab === "billing") {
-          void prefetchSettingsTab(queryClient, "billing");
-        }
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       onPointerDown={() => {
-        if (destination.tab === "billing") {
-          void prefetchSettingsTab(queryClient, "billing");
-        }
+        void warmSettingsTab(queryClient, destination.tab, preview !== null);
       }}
       // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
       role="link"
@@ -153,6 +160,9 @@ export const SettingsSidebar = ({
       <div className="-mt-px mb-2.75 flex items-center justify-between px-1">
         <SidebarNavItem
           nativeButton={false}
+          onFocus={warmBackToMail}
+          onMouseEnter={warmBackToMail}
+          onPointerDown={warmBackToMail}
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- The shared Button renders an anchor through its render slot.
           role="link"
           render={<Link to={from} />}

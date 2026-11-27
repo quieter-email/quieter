@@ -38,6 +38,7 @@ const actionKeywords: ReadonlyMap<string, string> = new Map([
 export const useMessageListCommands = ({
   actions,
   activeMailbox,
+  areLabelsPending = false,
   canFocusSearch,
   focusedSubject,
   hasActiveMessage,
@@ -46,7 +47,6 @@ export const useMessageListCommands = ({
   hasNextConversation,
   hasPreviousConversation,
   hasUserLabels,
-  isPending,
   isSelecting,
   loadedCount,
   onClearSelection,
@@ -63,6 +63,7 @@ export const useMessageListCommands = ({
 }: {
   actions: readonly MessageListBulkAction[];
   activeMailbox: MailboxCategory;
+  areLabelsPending?: boolean;
   canFocusSearch: boolean;
   focusedSubject: string;
   hasActiveMessage: boolean;
@@ -71,7 +72,7 @@ export const useMessageListCommands = ({
   hasNextConversation: boolean;
   hasPreviousConversation: boolean;
   hasUserLabels: boolean;
-  isPending: boolean;
+  isPending?: boolean;
   isSelecting: boolean;
   loadedCount: number;
   onClearSelection: () => void;
@@ -154,12 +155,10 @@ export const useMessageListCommands = ({
     } else if (hasFocusedThread) {
       contextLabel = normalizedFocusedSubject;
     }
-    let actionReason: string | null = null;
-    if (isPending) {
-      actionReason = "Wait for the current action to finish.";
-    } else if (selectedCount === 0 && !hasFocusedThread) {
-      actionReason = "Select or focus a conversation first.";
-    }
+    const actionReason =
+      selectedCount === 0 && !hasFocusedThread
+        ? "Select or focus a conversation first."
+        : null;
     let toggleSelectionReason: string | null = null;
     if (!supportsSelection) {
       toggleSelectionReason = "This mailbox does not support bulk actions.";
@@ -181,23 +180,30 @@ export const useMessageListCommands = ({
       } else if (!hasLabelTarget) {
         labelsReason =
           "Select conversations from one mailbox to modify labels.";
-      } else if (!hasUserLabels) {
+      } else if (!hasUserLabels && !areLabelsPending) {
         labelsReason = "Create a label first to label conversations.";
       }
     }
     commands.push(
-      ...actions.map((action): AppCommand => ({
-        group: "Conversation actions",
-        icon: action.icon,
-        id: action.id,
-        keywords: actionKeywords.get(action.id),
-        label: action.label,
-        shortcutId: actionShortcuts.get(action.id),
-        tone: action.destructive === true ? "destructive" : undefined,
-        ...(actionReason === null
-          ? { execute: action.onSelect, state: "available" }
-          : { reason: actionReason, state: "unavailable" }),
-      })),
+      ...actions.map((action): AppCommand => {
+        const unavailableReason =
+          actionReason ??
+          (action.disabled === true
+            ? "Wait for the current action to finish."
+            : null);
+        return {
+          group: "Conversation actions",
+          icon: action.icon,
+          id: action.id,
+          keywords: actionKeywords.get(action.id),
+          label: action.label,
+          shortcutId: actionShortcuts.get(action.id),
+          tone: action.destructive === true ? "destructive" : undefined,
+          ...(unavailableReason === null
+            ? { execute: action.onSelect, state: "available" }
+            : { reason: unavailableReason, state: "unavailable" }),
+        };
+      }),
       {
         group: "Conversations",
         icon: MailOpen01Icon,

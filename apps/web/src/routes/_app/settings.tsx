@@ -1,5 +1,6 @@
 import { SettingsLoadingPage } from "@quieter/app/features/settings/components/settings-loading-page";
 import { settingsSearchSchema } from "@quieter/app/route-search";
+import { loadAuthorizedSessionUser } from "@quieter/app/session-user";
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { zodValidator } from "@tanstack/zod-adapter";
 
@@ -16,7 +17,9 @@ export const Route = createFileRoute("/_app/settings")({
   loaderDeps: ({ search }) => ({ gmail: search.gmail }),
   ssr: "data-only",
   loader: async ({ deps }) => {
-    const user = await getSessionUser();
+    const user = await loadAuthorizedSessionUser(getSessionUser, {
+      revalidate: true,
+    });
 
     if (!user) {
       throw redirect({

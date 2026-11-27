@@ -128,15 +128,20 @@ export const MailboxMessagesPanel = ({
     [flattenedMessages]
   );
   const threadLoadFailed =
-    selectedThreadError !== null && selectedMessage === null;
+    selectedMessage === null &&
+    (selectedThreadError !== null || (!messagesPending && listState.isError));
   useEffect(() => {
-    if (isMessageRouteOpen && threadLoadFailed) {
+    if (
+      isMessageRouteOpen &&
+      selectedThreadError !== null &&
+      selectedMessage === null
+    ) {
       toastError(selectedThreadError, {
         boundary: "selected-conversation",
         fallback: "Could not open conversation. Please try again.",
       });
     }
-  }, [isMessageRouteOpen, selectedThreadError, threadLoadFailed]);
+  }, [isMessageRouteOpen, selectedMessage, selectedThreadError]);
 
   useLayoutEffect(() => {
     if (
@@ -371,7 +376,11 @@ export const MailboxMessagesPanel = ({
                 </Button>
                 <Button
                   onClick={() => {
-                    void refreshSelectedThread();
+                    if (selectedThreadError === null) {
+                      void refreshMessages();
+                    } else {
+                      void refreshSelectedThread();
+                    }
                   }}
                 >
                   Try again

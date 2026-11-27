@@ -1,0 +1,85 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "9ff7b9bf-774a-4602-b94e-e4152c1a9e90",
+  "prevIds": ["56456cf6-f1bb-4df5-b1cf-6ec3ee2e92b6"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "mailCommandReceipt",
+        "createdAt"
+      ],
+      "writes": [
+        "s|col|public.mailCommandReceipt.createdAt",
+        "n|col|public.mailCommandReceipt.createdAt",
+        "e|col|public.mailCommandReceipt.createdAt"
+      ],
+      "reads": ["n|tbl|public.mailCommandReceipt", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "mailCommandReceipt",
+        "mail_command_receipt_created_at_idx"
+      ],
+      "writes": [
+        "s|idx|public.mail_command_receipt_created_at_idx",
+        "n|idx|public.mail_command_receipt_created_at_idx",
+        "e|idx|public.mail_command_receipt_created_at_idx",
+        "n|rel|public.mail_command_receipt_created_at_idx"
+      ],
+      "reads": [
+        "n|tbl|public.mailCommandReceipt",
+        "n|sch|public",
+        "n|col|public.mailCommandReceipt.createdAt"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "createdAt",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "mailCommandReceipt",
+        "name": "mail_command_receipt_created_at_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "createdAt",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

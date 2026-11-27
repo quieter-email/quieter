@@ -35,6 +35,7 @@ import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
 import { labelsQueryOptions } from "@quieter/app/lib/mail/labels-query";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import { useElementVisible } from "@quieter/app/lib/use-element-visible";
+import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
 import { isMailSnoozeLiveStatus } from "@quieter/mail/snooze";
 import { toast } from "@quieter/ui/toast";
 import { useHotkeys } from "@tanstack/react-hotkeys";
@@ -102,6 +103,7 @@ type MessageListHotkeyContext = {
   actionHotkeysEnabled: boolean;
   bulkActions: MessageListBulkAction[];
   canMarkRead: boolean;
+  canOpenBulkLabels: boolean;
   activeMailbox: MailboxCategory;
   activeMessageId: string | null | undefined;
   listNavigationHotkeysEnabled: boolean;
@@ -117,7 +119,6 @@ type MessageListHotkeyContext = {
   ) => Promise<void>;
   selection: ReturnType<typeof useMessageListSelection>;
   threadedMessages: ThreadListEntry[];
-  userLabels: { type: string }[];
 };
 
 const buildMessageListHotkeys = (
@@ -287,7 +288,7 @@ const buildMessageListHotkeys = (
     },
     hotkey: "L",
     options: {
-      enabled: context.actionHotkeysEnabled && context.userLabels.length > 0,
+      enabled: context.actionHotkeysEnabled && context.canOpenBulkLabels,
     },
   },
   {
@@ -295,16 +296,20 @@ const buildMessageListHotkeys = (
       if (shouldIgnoreAppShortcut(event)) {
         return;
       }
-      void context.bulkActions
-        .find((action) => DONE_BULK_ACTION_IDS.has(action.id))
-        ?.onSelect();
+      const action = context.bulkActions.find((entry) =>
+        DONE_BULK_ACTION_IDS.has(entry.id)
+      );
+      if (action?.disabled !== true) {
+        void action?.onSelect();
+      }
     },
     hotkey: "E",
     options: {
       enabled:
         context.actionHotkeysEnabled &&
-        context.bulkActions.some((action) =>
-          DONE_BULK_ACTION_IDS.has(action.id)
+        context.bulkActions.some(
+          (action) =>
+            DONE_BULK_ACTION_IDS.has(action.id) && action.disabled !== true
         ),
     },
   },
@@ -352,6 +357,8 @@ const getThreadsSnoozeAction = (
 
 const buildMessageListBulkActions = ({
   activeMailbox,
+  isMessageActionPending,
+  isThreadActionPending,
   mailboxActions,
   mailboxProvider,
   runActionThreads,
@@ -365,6 +372,8 @@ const buildMessageListBulkActions = ({
   actionThreads: ThreadListEntry[];
   canSetImportance: boolean;
   canSetPlacement: boolean;
+  isMessageActionPending: boolean;
+  isThreadActionPending: boolean;
   sharedPlacement: boolean;
   canMarkRead: boolean;
   onSnooze: () => void;
@@ -384,6 +393,7 @@ const buildMessageListBulkActions = ({
     return [
       {
         destructive: true,
+        disabled: isMessageActionPending,
         icon: Delete02Icon,
         id: "delete-drafts",
         label: "Delete drafts",
@@ -418,6 +428,7 @@ const buildMessageListBulkActions = ({
           (thread) => !thread.threadLabelIds.includes("INBOX")
         ));
     actions.push({
+      disabled: isThreadActionPending,
       icon: returnToInbox ? InboxIcon : CheckmarkCircle02Icon,
       id: returnToInbox ? "return-threads-to-inbox" : "mark-threads-done",
       label: `${returnToInbox ? "Return to Inbox" : "Done"}${sharedPlacement ? " for everyone" : ""}`,
@@ -453,6 +464,7 @@ const buildMessageListBulkActions = ({
   const snoozeAction = getThreadsSnoozeAction(actionThreads);
   if (canSnoozeInMailbox && snoozeAction !== null) {
     actions.push({
+      disabled: isThreadActionPending,
       icon: AlarmClockIcon,
       id: "snooze-threads",
       label: `${snoozeAction === "reschedule" ? "Change return time" : "Snooze"}${sharedPlacement ? " for everyone" : ""}`,
@@ -477,6 +489,7 @@ const buildMessageListBulkActions = ({
         )
     );
     actions.push({
+      disabled: isThreadActionPending,
       icon: CancelCircleIcon,
       id: "cancel-thread-snoozes",
       label: `${keepInDone ? "Keep in Done" : "Cancel return"}${sharedPlacement ? " for everyone" : ""}`,
@@ -599,8 +612,10 @@ type MessageListSelection = ReturnType<typeof useMessageListSelection>;
 const useMessageListInteractions = ({
   actionMailboxProvider,
   activeThreadId,
+  areSelectedLabelsPending,
   canFocusSearch,
   isSelecting,
+  labelCatalog,
   labelMailboxActions,
   labelMailboxId,
   onFocusSearch,
@@ -611,15 +626,17 @@ const useMessageListInteractions = ({
 }: {
   actionMailboxProvider: MessageListProps["mailboxProvider"];
   activeThreadId: string | null;
+  areSelectedLabelsPending: boolean;
   canFocusSearch: boolean;
   isSelecting: boolean;
+  labelCatalog: readonly MailboxLabel[] | undefined;
   labelMailboxActions: MessageListProps["mailboxActions"] | null;
   labelMailboxId: string | null;
   onFocusSearch: () => void;
   props: MessageListProps;
   selection: MessageListSelection;
   threadedMessages: ThreadListEntry[];
-  userLabels: { type: string }[];
+  userLabels: readonly MailboxLabel[];
 }) => {
   const [isBulkLabelsOpen, setIsBulkLabelsOpen] = useState(false);
   const [snoozeThreads, setSnoozeThreads] = useState<ThreadListEntry[]>([]);
@@ -627,15 +644,26 @@ const useMessageListInteractions = ({
     selection.selectedThreads,
     selection.focusedThread
   );
-  const isBulkActionPending = actionThreads.some((thread) => {
+  const isBulkThreadActionPending = actionThreads.some((thread) => {
     const pendingActions =
       props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
       props.pendingActions;
-    return (
-      pendingActions.isMessageActionPending(thread.anchorMessage.id) ||
-      pendingActions.isThreadActionPending(thread.threadId)
-    );
+    return pendingActions.isThreadActionPending(thread.threadId);
   });
+  const isBulkMessageActionPending = actionThreads.some((thread) => {
+    const pendingActions =
+      props.mailboxContextsByThreadId?.get(thread.threadId)?.pendingActions ??
+      props.pendingActions;
+    return pendingActions.isMessageActionPending(thread.anchorMessage.id);
+  });
+  const isBulkActionPending =
+    isBulkThreadActionPending || isBulkMessageActionPending;
+  const canOpenBulkLabels =
+    labelMailboxId !== null &&
+    labelMailboxActions !== null &&
+    actionMailboxProvider !== "api" &&
+    props.activeMailbox !== "drafts" &&
+    (labelCatalog === undefined || userLabels.length > 0);
 
   const runActionThreads = async (
     action: (threads: ThreadListEntry[]) => void | Promise<void>,
@@ -661,7 +689,6 @@ const useMessageListInteractions = ({
     try {
       await action(threads);
       toast.success(successMessage(threads));
-      selection.clearSelection();
     } catch (error) {
       toastError(error, {
         boundary: "bulk-actions",
@@ -670,7 +697,7 @@ const useMessageListInteractions = ({
     }
   };
   const openBulkLabels = () => {
-    if (userLabels.length === 0) {
+    if (!canOpenBulkLabels) {
       return;
     }
 
@@ -685,15 +712,12 @@ const useMessageListInteractions = ({
   };
   const markKeyboardOpenedThreadRead = (thread: ThreadListEntry) => {
     const context = props.mailboxContextsByThreadId?.get(thread.threadId);
-    const pendingActions = context?.pendingActions ?? props.pendingActions;
     if (
       selection.selectedThreadIds.size === 0 &&
       thread.unreadCount > 0 &&
       (props.mailboxContextsByThreadId
         ? context?.mailboxActions.canMarkRead === true
-        : props.mailboxActions.canMarkRead) &&
-      !pendingActions.isMessageActionPending(thread.anchorMessage.id) &&
-      !pendingActions.isThreadActionPending(thread.threadId)
+        : props.mailboxActions.canMarkRead)
     ) {
       void (async () => {
         try {
@@ -768,10 +792,12 @@ const useMessageListInteractions = ({
               ?.mailboxActions ?? props.mailboxActions
           ).canSetPlacement
       ) && props.mailboxActions.canSetPlacement,
+    isMessageActionPending: isBulkMessageActionPending,
+    isThreadActionPending: isBulkThreadActionPending,
     mailboxActions: props.mailboxActions,
     mailboxProvider: actionMailboxProvider,
     onSnooze: () => {
-      if (!isBulkActionPending) {
+      if (!isBulkThreadActionPending) {
         setSnoozeThreads(actionThreads);
       }
     },
@@ -793,6 +819,7 @@ const useMessageListInteractions = ({
         activeMessageId: props.activeMessageId,
         bulkActions,
         canMarkRead,
+        canOpenBulkLabels,
         listNavigationHotkeysEnabled,
         mailboxActions: props.mailboxActions,
         mailboxProvider: actionMailboxProvider,
@@ -803,7 +830,6 @@ const useMessageListInteractions = ({
         runActionThreads,
         selection,
         threadedMessages,
-        userLabels,
       })
     ),
     {
@@ -811,35 +837,32 @@ const useMessageListInteractions = ({
     }
   );
 
-  const bulkLabels: MessageListBulkLabels | null =
-    labelMailboxId === null ||
-    labelMailboxActions === null ||
-    actionMailboxProvider === "api" ||
-    props.activeMailbox === "drafts" ||
-    userLabels.length === 0
-      ? null
-      : {
-          isPending: isBulkActionPending,
-          mailboxId: labelMailboxId,
-          onApply: async (updates) => {
-            await labelMailboxActions.updateThreadsLabels(
-              updates.map(({ id, ...changes }) => ({
-                ...changes,
-                threadId: id,
-              }))
-            );
-          },
-          onOpenChange: setIsBulkLabelsOpen,
-          open: isBulkLabelsOpen,
-          targets: selection.selectedThreads.map((thread) => ({
-            id: thread.threadId,
-            labelIds: thread.threadLabelIds,
-          })),
-        };
+  const bulkLabels: MessageListBulkLabels | null = canOpenBulkLabels
+    ? {
+        isPending: false,
+        labels: labelCatalog,
+        mailboxId: labelMailboxId,
+        onApply: async (updates) => {
+          await labelMailboxActions.updateThreadsLabels(
+            updates.map(({ id, ...changes }) => ({
+              ...changes,
+              threadId: id,
+            }))
+          );
+        },
+        onOpenChange: setIsBulkLabelsOpen,
+        open: isBulkLabelsOpen,
+        targets: selection.selectedThreads.map((thread) => ({
+          id: thread.threadId,
+          labelIds: thread.threadLabelIds,
+        })),
+      }
+    : null;
 
   useMessageListCommands({
     actions: bulkActions,
     activeMailbox: props.activeMailbox,
+    areLabelsPending: areSelectedLabelsPending,
     canFocusSearch,
     focusedSubject: selection.focusedThread?.subject ?? "",
     hasActiveMessage,
@@ -896,9 +919,6 @@ const useMessageListInteractions = ({
             ? snoozeThreads[0]?.anchorMessage.snooze
             : undefined
         }
-        onApplied={() => {
-          selection.clearSelection();
-        }}
         onApply={async (command, _expectedVersion, attempt) => {
           await props.mailboxActions.applyThreadsSnooze(
             snoozeThreads,
@@ -943,9 +963,15 @@ export const MessageList = (props: MessageListProps) => {
   const sourceEntries = [...mailboxSources];
   const labelQueries = useQueries({
     queries: sourceEntries.map(([mailboxId, mailboxProvider]) =>
-      labelsQueryOptions(mailboxId, mailboxProvider !== "api")
+      labelsQueryOptions(
+        mailboxId,
+        mailboxProvider !== "api" && mailboxId.trim() !== ""
+      )
     ),
   });
+  const labelQueryByMailboxId = new Map(
+    sourceEntries.map(([mailboxId], index) => [mailboxId, labelQueries[index]])
+  );
   const labelsByMailboxId = new Map(
     sourceEntries.map(([mailboxId], index) => [
       mailboxId,
@@ -973,6 +999,7 @@ export const MessageList = (props: MessageListProps) => {
   const selection = useMessageListSelection({
     activeMailbox: props.activeMailbox,
     activeThreadId,
+    isPending: props.isPending,
     mailboxId: props.mailboxId,
     onActivateMessage: props.onActivateMessage,
     onDeactivateActiveMessage: props.onDeactivateActiveMessage,
@@ -1019,7 +1046,14 @@ export const MessageList = (props: MessageListProps) => {
   const labelMailboxActions = props.mailboxContextsByThreadId
     ? (singleSourceContext?.mailboxActions ?? null)
     : props.mailboxActions;
-  const userLabels = (labelsByMailboxId.get(labelMailboxId ?? "") ?? []).filter(
+  const selectedLabelQuery =
+    labelMailboxId === null
+      ? undefined
+      : labelQueryByMailboxId.get(labelMailboxId);
+  const labelCatalog = selectedLabelQuery?.data;
+  const areSelectedLabelsPending =
+    selectedLabelQuery?.isPending === true && labelCatalog === undefined;
+  const userLabels = (labelCatalog ?? []).filter(
     (label) => label.type === "user"
   );
   const listContainerRef = useRef<HTMLDivElement>(null);
@@ -1039,8 +1073,10 @@ export const MessageList = (props: MessageListProps) => {
   } = useMessageListInteractions({
     actionMailboxProvider,
     activeThreadId,
+    areSelectedLabelsPending,
     canFocusSearch: isListVisible,
     isSelecting,
+    labelCatalog,
     labelMailboxActions,
     labelMailboxId,
     onFocusSearch: () => {
@@ -1107,8 +1143,12 @@ export const MessageList = (props: MessageListProps) => {
         {isSelecting ? (
           <MessageListSelectionToolbar
             actions={bulkActions}
+            areTargetsReady={
+              selection.selectedThreads.length ===
+              selection.selectedThreadIds.size
+            }
             allSelected={selection.allSelected}
-            disabled={props.isPending || isBulkActionPending}
+            disabled={false}
             indeterminate={selection.selectionIndeterminate}
             itemLabelPlural={
               props.activeMailbox === "drafts" ? "drafts" : "conversations"

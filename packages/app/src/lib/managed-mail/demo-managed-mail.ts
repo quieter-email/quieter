@@ -22,6 +22,7 @@ import type {
 } from "@quieter/app/lib/mail";
 import { getMailboxThreadQueriesKey } from "@quieter/app/lib/mail/thread-query-keys";
 import { getMailboxesQueryKey } from "@quieter/app/lib/mailboxes-query";
+import { DEMO_MANAGED_MAILBOX_ID } from "@quieter/app/lib/sandbox-mailbox";
 import { getMailboxCapabilities } from "@quieter/mail/data-plane";
 import type {
   MailboxLabel,
@@ -29,7 +30,7 @@ import type {
 } from "@quieter/mail/mailbox-organization";
 import type { QueryClient } from "@tanstack/react-query";
 
-export const DEMO_MANAGED_MAILBOX_ID = "demo:managed-mailbox";
+export { DEMO_MANAGED_MAILBOX_ID } from "@quieter/app/lib/sandbox-mailbox";
 const DEMO_MANAGED_EMAIL_ADDRESS = "support@quieter.com";
 const DEMO_MANAGED_MAILBOX_NAME = "Managed demo";
 const DEMO_MANAGED_MAIL_STORAGE_KEY = "quieter:managed-demo-mail-state";

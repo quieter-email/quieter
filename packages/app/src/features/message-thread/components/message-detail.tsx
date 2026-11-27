@@ -1,17 +1,14 @@
 "use client";
 
-import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { EmptyMessageState } from "@quieter/app/components/empty-message-state";
 import type {
   MailboxActions,
   MailboxPendingActions,
 } from "@quieter/app/features/mailbox/components/mailbox-action-handlers";
-import { MessageDetailLoadingSkeleton } from "@quieter/app/features/message-thread/components/message-detail-loading";
 import { MessageView } from "@quieter/app/features/message-thread/components/message-view";
 import type { MessageViewProps } from "@quieter/app/features/message-thread/components/message-view-types";
 import type { MailboxCategory, MessageListItem } from "@quieter/app/lib/mail";
-import { Icon } from "@quieter/ui/icon";
-import { Suspense, useLayoutEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import type { ReactNode } from "react";
 
 type MessageDetailProps = {
@@ -83,41 +80,35 @@ export const MessageDetail = ({
     isPending === true &&
     (selectedMessage === null || selectedMessage === undefined)
   ) {
-    messageContent = <MessageDetailLoadingSkeleton />;
+    messageContent = (
+      <EmptyMessageState description={null} title="Loading conversation…" />
+    );
   } else if (selectedMessage !== null && selectedMessage !== undefined) {
     messageContent = (
-      <Suspense
-        fallback={
-          <div className="grid h-full place-items-center text-body text-muted-fg">
-            <Icon animation="spin" tone="muted" icon={Loading03Icon} />
-          </div>
-        }
-      >
-        <MessageView
-          activeMailbox={activeMailbox}
-          detailOnly={detailOnly}
-          showDesktopBack={showDesktopBack}
-          composeDemoMode={composeDemoMode}
-          composeManagedDemoMode={composeManagedDemoMode}
-          composePersistDrafts={composePersistDrafts}
-          composeSenderMailbox={composeSenderMailbox}
-          composeSignature={composeSignature}
-          focusOnOpen={focusOnOpen}
-          currentUserEmail={currentUserEmail}
-          mailboxActions={mailboxActions}
-          mailboxId={mailboxId}
-          mailboxProvider={mailboxProvider}
-          message={selectedMessage}
-          navigationInteractionRef={detailRef}
-          onConversationOpened={onConversationOpened}
-          onOpenConversation={onOpenConversation}
-          onBackToList={onBackToList}
-          onFilterByLabel={onFilterByLabel}
-          onAutoFocusComplete={onAutoFocusComplete}
-          onManageSnippets={onManageSnippets}
-          pendingActions={pendingActions}
-        />
-      </Suspense>
+      <MessageView
+        activeMailbox={activeMailbox}
+        detailOnly={detailOnly}
+        showDesktopBack={showDesktopBack}
+        composeDemoMode={composeDemoMode}
+        composeManagedDemoMode={composeManagedDemoMode}
+        composePersistDrafts={composePersistDrafts}
+        composeSenderMailbox={composeSenderMailbox}
+        composeSignature={composeSignature}
+        focusOnOpen={focusOnOpen}
+        currentUserEmail={currentUserEmail}
+        mailboxActions={mailboxActions}
+        mailboxId={mailboxId}
+        mailboxProvider={mailboxProvider}
+        message={selectedMessage}
+        navigationInteractionRef={detailRef}
+        onConversationOpened={onConversationOpened}
+        onOpenConversation={onOpenConversation}
+        onBackToList={onBackToList}
+        onFilterByLabel={onFilterByLabel}
+        onAutoFocusComplete={onAutoFocusComplete}
+        onManageSnippets={onManageSnippets}
+        pendingActions={pendingActions}
+      />
     );
   } else {
     messageContent = emptyState;

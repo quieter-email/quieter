@@ -82,6 +82,9 @@ export type MailMutationTarget = {
 };
 
 export type MailMutationTargetResult = {
+  appliedMessageIds?: string[];
+  failedMessageIds?: string[];
+  uncertainMessageIds?: string[];
   threadId: string;
   status: "applied" | "failed";
   code?: string;
@@ -89,10 +92,17 @@ export type MailMutationTargetResult = {
   summary?: MailThreadSummary;
   operationId?: string;
   replayed?: boolean;
+  untrashedMessageIds?: string[];
   messageIds?: string[];
 };
 
 export type MailMutationResult = {
+  receipt?: {
+    requestId: string;
+    replayed?: true;
+    retryable?: true;
+    status: "completed" | "pending" | "uncertain";
+  };
   targets: MailMutationTargetResult[];
   syncToken?: MailSyncToken;
   confirmedThreadSummaries?: MailThreadSummary[];

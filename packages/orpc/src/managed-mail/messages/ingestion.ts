@@ -34,7 +34,7 @@ import {
   ensureMailImportanceWork,
   processPendingMailImportance,
 } from "../../mail-importance";
-import { publishMailUpdate } from "../../mail-updates";
+import { publishMailboxChange } from "../../mailbox-changes";
 import { observeReminderMail } from "../../reminders/service";
 import { handleSnoozeInbound } from "../../snooze/service";
 import {
@@ -46,6 +46,7 @@ import {
   loadManagedAutomationMessage,
   processManagedMailAutomation,
 } from "../automation";
+import { appendManagedMailboxContentChange } from "../changes";
 import { inheritManagedThreadLabels } from "../labels/repository";
 import { applyManagedRulesToMessage } from "../rules/evaluator";
 import {
@@ -121,37 +122,29 @@ const runPostIngestionProcessing = async (input: {
   providerMessageId: string;
   threadId: string;
 }) => {
-  try {
-    await inheritManagedThreadLabels({
+  await inheritManagedThreadLabels({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+    threadId: input.threadId,
+  });
+  const rules = await applyManagedRulesToMessage({
+    mailboxId: input.mailboxId,
+    messageId: input.messageId,
+  });
+  if (rules.error !== null) {
+    throw new Error(rules.error);
+  }
+  const results = await Promise.allSettled([
+    processManagedVerificationCode(input),
+    processPendingMailImportance({ limit: 1, mailboxId: input.mailboxId }),
+    processManagedMailAutomation({
       mailboxId: input.mailboxId,
       messageId: input.messageId,
-      threadId: input.threadId,
-    });
-    const rules = await applyManagedRulesToMessage({
-      mailboxId: input.mailboxId,
-      messageId: input.messageId,
-    });
-    if (rules.error !== null) {
-      throw new Error(rules.error);
-    }
-    const results = await Promise.allSettled([
-      processManagedVerificationCode(input),
-      processPendingMailImportance({ limit: 1, mailboxId: input.mailboxId }),
-      processManagedMailAutomation({
-        mailboxId: input.mailboxId,
-        messageId: input.messageId,
-      }),
-    ]);
-    const failed = results.find((result) => result.status === "rejected");
-    if (failed) {
-      throw failed.reason;
-    }
-  } finally {
-    await publishMailUpdate({
-      mailboxId: input.mailboxId,
-      threadIds: [input.threadId],
-      type: "mailbox.changed",
-    });
+    }),
+  ]);
+  const failed = results.find((result) => result.status === "rejected");
+  if (failed) {
+    throw failed.reason;
   }
 };
 
@@ -257,20 +250,13 @@ const finishIngestion = async (input: {
       messageId: input.messageId,
       source: "received",
     }),
-    publishMailUpdate({
-      mailboxId: input.mailboxId,
-      threadIds: [input.threadId],
-      type: "mailbox.changed",
-    }),
   ]);
   for (const [index, result] of results.entries()) {
     if (result.status === "rejected") {
       reportError(result.reason, {
-        operation: [
-          "managed-ingestion-reminders",
-          "managed-ingestion-memory",
-          "managed-ingestion-publish",
-        ][index],
+        operation: ["managed-ingestion-reminders", "managed-ingestion-memory"][
+          index
+        ],
       });
     }
   }
@@ -303,7 +289,7 @@ const ingestManagedMessageForMailbox = async (input: {
   const id = randomUUID();
   const sentAt = input.parsed.date ?? input.receivedAt;
   const canonicalRef = input.parsed.messageHeaderId ?? id;
-  const inserted = await db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const threadId = await resolveManagedThreadId(
       tx,
       input.targetMailboxId,
@@ -400,49 +386,59 @@ const ingestManagedMessageForMailbox = async (input: {
         receivedAt: sentAt,
         threadId: message.threadId,
       });
-      await tx
-        .update(mailbox)
-        .set({
-          contentRevision: sql`${mailbox.contentRevision} + 1`,
-          updatedAt: new Date(),
-        })
-        .where(eq(mailbox.id, input.targetMailboxId));
+      const committed = await appendManagedMailboxContentChange(tx, {
+        changes: [
+          {
+            kind: "message.added",
+            messageId: message.id,
+            threadId: message.threadId,
+          },
+        ],
+        mailboxId: message.mailboxId,
+      });
+      return { committed, message };
     }
 
-    if (message === undefined) {
-      const [existing] = await tx
-        .select({
-          bodyHtml: managedMailMessage.bodyHtml,
-          bodyText: managedMailMessage.bodyText,
-          from: managedMailMessage.from,
-          headers: managedMailMessage.headers,
-          id: managedMailMessage.id,
-          subject: managedMailMessage.subject,
-        })
-        .from(managedMailMessage)
+    const [existing] = await tx
+      .select({
+        bodyHtml: managedMailMessage.bodyHtml,
+        bodyText: managedMailMessage.bodyText,
+        from: managedMailMessage.from,
+        headers: managedMailMessage.headers,
+        id: managedMailMessage.id,
+        subject: managedMailMessage.subject,
+        threadId: managedMailMessage.threadId,
+      })
+      .from(managedMailMessage)
+      .where(
+        and(
+          eq(managedMailMessage.mailboxId, input.targetMailboxId),
+          eq(managedMailMessage.providerMessageId, input.providerMessageId),
+          isNull(managedMailMessage.analysis)
+        )
+      )
+      .for("update");
+    if (existing !== undefined) {
+      await tx
+        .update(managedMailMessage)
+        .set({ analysis: analyzeMailMessage(existing) })
         .where(
           and(
             eq(managedMailMessage.mailboxId, input.targetMailboxId),
-            eq(managedMailMessage.providerMessageId, input.providerMessageId),
-            isNull(managedMailMessage.analysis)
+            eq(managedMailMessage.id, existing.id)
           )
-        )
-        .for("update");
-      if (existing !== undefined) {
-        await tx
-          .update(managedMailMessage)
-          .set({ analysis: analyzeMailMessage(existing) })
-          .where(
-            and(
-              eq(managedMailMessage.mailboxId, input.targetMailboxId),
-              eq(managedMailMessage.id, existing.id)
-            )
-          );
-      }
+        );
+      const committed = await appendManagedMailboxContentChange(tx, {
+        changes: [{ kind: "capture.changed", threadId: existing.threadId }],
+        mailboxId: input.targetMailboxId,
+      });
+      return { committed, message: undefined };
     }
-    return message;
+    return null;
   });
 
+  await publishMailboxChange(result?.committed);
+  const inserted = result?.message;
   if (inserted !== undefined) {
     await finishIngestion({
       mailboxId: inserted.mailboxId,

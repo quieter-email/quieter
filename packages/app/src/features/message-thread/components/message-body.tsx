@@ -28,14 +28,21 @@ import { useQueries } from "@tanstack/react-query";
 import type { UseQueryResult } from "@tanstack/react-query";
 import { useEffect, useEffectEvent, useMemo, useRef, useState } from "react";
 
+export type MessageBodyLoadState =
+  | { kind: "ready" }
+  | { kind: "loading" }
+  | { kind: "paused" }
+  | { kind: "error"; error: unknown };
+
 type MessageBodyProps = {
+  bodyLoadState?: MessageBodyLoadState;
+  loadExternalImages?: boolean;
   mailboxId: string;
   message: Pick<
     MessageListItem,
     "id" | "bodyHtml" | "bodyText" | "inlineImages"
   >;
-  isLoading?: boolean;
-  loadExternalImages?: boolean;
+  onRetry?: () => void;
 };
 
 const REMOTE_IMAGE_REGEX = /^https?:\/\//iu;
@@ -409,17 +416,6 @@ const HtmlMessageBodyContent = ({
   );
 };
 
-const MessageBodyLoadingSkeleton = () => (
-  <output aria-label="Loading message content" className="block space-y-3 py-4">
-    <div aria-hidden="true" className="animate-pulse space-y-3">
-      <div className="h-3.5 w-full rounded-md bg-muted" />
-      <div className="h-3.5 w-11/12 rounded-md bg-muted" />
-      <div className="h-3.5 w-4/5 rounded-md bg-muted" />
-      <div className="h-3.5 w-2/3 rounded-md bg-muted" />
-    </div>
-  </output>
-);
-
 const PlainTextMessageBody = ({ text }: { text: string }) => {
   const { calendarLinks, segments } = useMemo(() => {
     const nextSegments = linkifyText(text);
@@ -459,10 +455,11 @@ const PlainTextMessageBody = ({ text }: { text: string }) => {
 };
 
 export const MessageBody = ({
-  isLoading,
+  bodyLoadState,
   loadExternalImages,
   mailboxId,
   message,
+  onRetry,
 }: MessageBodyProps) => {
   const fallbackText = message.bodyText?.trim();
   const htmlBody = message.bodyHtml?.trim();
@@ -474,8 +471,45 @@ export const MessageBody = ({
     [fallbackText, htmlBody]
   );
 
-  if (!htmlBody && !fallbackText && isLoading === true) {
-    return <MessageBodyLoadingSkeleton />;
+  if (!htmlBody && !fallbackText) {
+    if (bodyLoadState?.kind === "error") {
+      return (
+        <div
+          className="flex flex-wrap items-center justify-between gap-3 py-4 text-body-sm"
+          role="alert"
+        >
+          <p className="text-destructive">
+            {bodyLoadState.error instanceof Error
+              ? bodyLoadState.error.message
+              : "Could not load message content."}
+          </p>
+          {onRetry === undefined ? null : (
+            <Button
+              onClick={onRetry}
+              size="sm"
+              type="button"
+              variant="secondary"
+            >
+              Try again
+            </Button>
+          )}
+        </div>
+      );
+    }
+    if (bodyLoadState?.kind === "paused") {
+      return (
+        <p aria-live="polite" className="py-4 text-body-sm text-muted-fg">
+          Waiting for a connection to load this message…
+        </p>
+      );
+    }
+    if (bodyLoadState?.kind === "loading") {
+      return (
+        <p aria-live="polite" className="py-4 text-body-sm text-muted-fg">
+          Loading message…
+        </p>
+      );
+    }
   }
 
   if (!htmlBody || isTextOnly) {

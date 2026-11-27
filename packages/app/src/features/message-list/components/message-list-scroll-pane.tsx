@@ -1,6 +1,5 @@
 "use client";
 
-import { Loading03Icon } from "@hugeicons/core-free-icons";
 import { getAggregateDeliveryStatusFromStatuses } from "@quieter/app/features/message-delivery/domain/delivery-status";
 import { getMessageListDeliveryOptions } from "@quieter/app/features/message-delivery/domain/message-delivery-query";
 import { supportsMessageDelivery } from "@quieter/app/features/message-delivery/domain/message-delivery-support";
@@ -17,8 +16,8 @@ import {
 import type { ThreadPreloadCandidate } from "@quieter/app/lib/mail-cache-lifecycle";
 import { isSandboxMailboxId } from "@quieter/app/lib/sandbox-mailbox";
 import type { MailboxLabel } from "@quieter/mail/mailbox-organization";
+import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
-import { Icon } from "@quieter/ui/icon";
 import { mailListRowParts } from "@quieter/ui/mail-list-row";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
@@ -39,16 +38,6 @@ const MESSAGE_ROW_HEIGHT_PX = 60;
 const SELECTION_TRAY_CLEARANCE_PX = 72;
 const MESSAGE_LIST_OVERSCAN = 12;
 const MESSAGE_LIST_PREFETCH_VIEWPORTS = 2;
-const MESSAGE_LIST_SKELETON_ROW_IDS = [
-  "message-list-skeleton-1",
-  "message-list-skeleton-2",
-  "message-list-skeleton-3",
-  "message-list-skeleton-4",
-  "message-list-skeleton-5",
-  "message-list-skeleton-6",
-  "message-list-skeleton-7",
-  "message-list-skeleton-8",
-] as const;
 
 type MessageListScrollPaneProps = {
   gmailLabels: MailboxLabel[];
@@ -119,28 +108,6 @@ const loadMoreIfNeeded = ({
     onLoadMore();
   }
 };
-
-const MessageListLoadingSkeleton = () => (
-  <div aria-live="polite" className="flex flex-col gap-px">
-    <span className="sr-only">Loading messages…</span>
-    {MESSAGE_LIST_SKELETON_ROW_IDS.map((rowId) => (
-      <div
-        aria-hidden="true"
-        className="flex h-15 animate-pulse items-center gap-3 rounded-xl px-4"
-        key={rowId}
-      >
-        <div className="size-9.5 shrink-0 rounded-lg bg-muted" />
-        <div className="min-w-0 flex-1 space-y-2">
-          <div className="flex items-center justify-between gap-4">
-            <div className="h-3 w-32 rounded-md bg-muted" />
-            <div className="h-3 w-12 rounded-md bg-muted" />
-          </div>
-          <div className="h-3 w-3/4 rounded-md bg-muted" />
-        </div>
-      </div>
-    ))}
-  </div>
-);
 
 const getEmptyMessageLabel = (
   activeMailbox: MessageListProps["activeMailbox"],
@@ -360,6 +327,18 @@ export const MessageListScrollPane = ({
     threadOrderKey: string;
   } | null>(null);
   const previousActiveMessageIdRef = useRef(list.activeMessageId);
+  const lastFocusedRowRef = useRef<{
+    index: number;
+    threadId: string;
+  } | null>(null);
+  useLayoutEffect(() => {
+    lastFocusedRowRef.current = null;
+  }, [
+    list.selectionScopeKey,
+    list.mailboxId,
+    list.activeMailbox,
+    list.searchQuery,
+  ]);
   const pendingFocusRef = useRef<{
     threadId: string;
     focusVisible: boolean;
@@ -691,35 +670,84 @@ export const MessageListScrollPane = ({
     }
 
     const element = selection.scrollRef.current;
-    if (
-      !element ||
-      element.clientWidth <= 0 ||
-      element.clientHeight <= 0 ||
-      virtualItems.length === 0
-    ) {
+    if (!element || element.clientWidth <= 0 || element.clientHeight <= 0) {
       return;
     }
-    const anchor = pendingAnchorRef.current;
-    pendingAnchorRef.current = null;
-    if (anchor && threadedMessages[anchor.index]?.threadId === anchor.key) {
-      const offset = messageVirtualizer.getOffsetForIndex(
-        anchor.index,
-        "start"
-      );
-      if (offset) {
-        messageVirtualizer.scrollToOffset(
-          offset[0] +
-            Number(getComputedStyle(element).paddingTop.replace("px", "")) +
-            Math.min(anchor.offsetWithinRow, rowHeightEstimateRef.current - 1)
+    if (virtualItems.length > 0) {
+      const anchor = pendingAnchorRef.current;
+      pendingAnchorRef.current = null;
+      if (anchor && threadedMessages[anchor.index]?.threadId === anchor.key) {
+        const offset = messageVirtualizer.getOffsetForIndex(
+          anchor.index,
+          "start"
         );
+        if (offset) {
+          messageVirtualizer.scrollToOffset(
+            offset[0] +
+              Number(getComputedStyle(element).paddingTop.replace("px", "")) +
+              Math.min(anchor.offsetWithinRow, rowHeightEstimateRef.current - 1)
+          );
+        }
       }
     }
 
     if (isViewingMessage) {
       return;
     }
+    const lastFocusedRow = lastFocusedRowRef.current;
+    if (
+      lastFocusedRow !== null &&
+      !threadedMessages.some(
+        (thread) => thread.threadId === lastFocusedRow.threadId
+      )
+    ) {
+      const { activeElement } = document;
+      const focusLostToUnmount =
+        activeElement === null ||
+        activeElement === document.body ||
+        element.contains(activeElement);
+      if (focusLostToUnmount) {
+        const nextThread =
+          threadedMessages[
+            Math.min(lastFocusedRow.index, threadedMessages.length - 1)
+          ];
+        if (nextThread === undefined) {
+          lastFocusedRowRef.current = null;
+          element.focus({ preventScroll: true });
+        } else {
+          lastFocusedRowRef.current = {
+            index: Math.min(lastFocusedRow.index, threadedMessages.length - 1),
+            threadId: nextThread.threadId,
+          };
+          selection.focusThread(nextThread.threadId);
+          if (pendingFocusRef.current?.threadId !== nextThread.threadId) {
+            pendingFocusRef.current = {
+              focusVisible: true,
+              scrollIntoView: false,
+              threadId: nextThread.threadId,
+            };
+          }
+        }
+      } else {
+        lastFocusedRowRef.current = null;
+      }
+    } else {
+      const focusedRow =
+        document.activeElement?.closest<HTMLElement>("li[data-thread-id]");
+      const focusedThreadId = focusedRow?.dataset.threadId;
+      const currentIndex = element.contains(focusedRow ?? null)
+        ? threadedMessages.findIndex(
+            (thread) => thread.threadId === focusedThreadId
+          )
+        : -1;
+      lastFocusedRowRef.current =
+        focusedThreadId !== undefined && currentIndex !== -1
+          ? { index: currentIndex, threadId: focusedThreadId }
+          : null;
+    }
+
     const focus = pendingFocusRef.current;
-    if (!focus) {
+    if (!focus || virtualItems.length === 0) {
       return;
     }
     const focusedIndex = threadedMessages.findIndex(
@@ -745,6 +773,7 @@ export const MessageListScrollPane = ({
 
   const handleThreadFocus = selection.focusThread;
   const handleOpenDraft = list.onOpenDraft;
+  const handleRefresh = list.onRefresh;
 
   const emptyMessageLabel = getEmptyMessageLabel(
     list.activeMailbox,
@@ -796,7 +825,14 @@ export const MessageListScrollPane = ({
     >
       {hasLeadingRows && <div ref={leadingRowsRef}>{list.leadingRows}</div>}
 
-      {isLoadingEmptyMessages && <MessageListLoadingSkeleton />}
+      {isLoadingEmptyMessages && (
+        <p
+          aria-live="polite"
+          className="px-2 py-8 text-center text-body text-muted-fg"
+        >
+          Loading messages…
+        </p>
+      )}
 
       {threadedMessages.length > 0 && (
         <ul
@@ -881,16 +917,51 @@ export const MessageListScrollPane = ({
         </ul>
       )}
 
-      {list.isError && (
-        <p className="px-2 py-8 text-body text-destructive">
-          {list.error instanceof Error
-            ? list.error.message
-            : "Could not load messages."}
-        </p>
+      {list.isError && threadedMessages.length === 0 && (
+        <div
+          className="flex flex-col items-center gap-3 px-4 py-8 text-center"
+          role="alert"
+        >
+          <p className="text-body text-destructive">
+            {list.error instanceof Error
+              ? list.error.message
+              : "Could not load messages."}
+          </p>
+          <Button
+            onClick={handleRefresh}
+            size="sm"
+            type="button"
+            variant="secondary"
+          >
+            Try again
+          </Button>
+        </div>
+      )}
+
+      {list.isError && threadedMessages.length > 0 && (
+        <div
+          className="flex flex-wrap items-center justify-center gap-3 px-4 py-4 text-caption"
+          role="alert"
+        >
+          <span className="text-destructive">
+            {list.error instanceof Error
+              ? list.error.message
+              : "Could not load more messages."}
+          </span>
+          <Button
+            onClick={handleRefresh}
+            size="xs"
+            type="button"
+            variant="secondary"
+          >
+            Try again
+          </Button>
+        </div>
       )}
 
       {!isLoadingEmptyMessages &&
         !list.isError &&
+        list.suppressEmptyState !== true &&
         leadingRowsHeight === 0 &&
         threadedMessages.length === 0 && (
           <p className="px-2 py-8 text-center text-body text-muted-fg">
@@ -898,20 +969,13 @@ export const MessageListScrollPane = ({
           </p>
         )}
 
-      {!list.isError && threadedMessages.length > 0 && (
-        <p className="px-2 py-5 text-center text-caption text-muted-fg">
-          {list.isFetchingNextPage || list.hasNextPage || list.isRefreshing ? (
-            <Icon
-              animation="spin"
-              tone="muted"
-              className="mx-auto"
-              icon={Loading03Icon}
-            />
-          ) : (
-            "You're all caught up."
-          )}
-        </p>
-      )}
+      {!list.isError &&
+        threadedMessages.length > 0 &&
+        list.isFetchingNextPage && (
+          <p aria-live="polite" className="sr-only">
+            Loading more messages…
+          </p>
+        )}
     </div>
   );
 };

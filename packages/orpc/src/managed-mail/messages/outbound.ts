@@ -11,9 +11,10 @@ import { analyzeMailMessage } from "@quieter/mail/capture";
 import { extractMailAddress } from "@quieter/mail/compose/schema";
 import type { SendHeader } from "@quieter/mail/send";
 import { createMailSnippet } from "@quieter/mail/snippet";
-import { and, eq, ne, sql } from "drizzle-orm";
+import { and, eq, ne } from "drizzle-orm";
 
-import { publishMailUpdate } from "../../mail-updates";
+import { publishMailboxChange } from "../../mailbox-changes";
+import { appendManagedMailboxContentChange } from "../changes";
 import {
   createManagedMessageSearchText,
   normalizeManagedSearchValue,
@@ -155,7 +156,7 @@ export const recordOutboundManagedMessageForSender = async (input: {
         .limit(1);
       return existing === undefined
         ? null
-        : { mailboxId: senderMailbox.id, message: existing };
+        : { committed: null, message: existing };
     }
 
     if (input.attachments !== undefined && input.attachments.length > 0) {
@@ -211,21 +212,21 @@ export const recordOutboundManagedMessageForSender = async (input: {
           ],
         });
     }
-    await tx
-      .update(mailbox)
-      .set({
-        contentRevision: sql`${mailbox.contentRevision} + 1`,
-        updatedAt: new Date(),
-      })
-      .where(eq(mailbox.id, senderMailbox.id));
-    return { mailboxId: senderMailbox.id, message: inserted };
+    const committed = await appendManagedMailboxContentChange(tx, {
+      changes: [
+        {
+          kind: "message.added",
+          messageId: inserted.id,
+          threadId: inserted.threadId,
+        },
+      ],
+      mailboxId: senderMailbox.id,
+    });
+    return { committed, message: inserted };
   });
   if (result === null) {
     return null;
   }
-  await publishMailUpdate({
-    mailboxId: result.mailboxId,
-    type: "mailbox.changed",
-  });
+  await publishMailboxChange(result.committed);
   return result.message;
 };

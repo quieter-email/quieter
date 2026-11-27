@@ -1,7 +1,9 @@
 import { user } from "@quieter/database/schema";
+import { ACCOUNT_PREFERENCES_UPDATE_SCOPE } from "@quieter/mail/updates";
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
+import { publishMailUpdate } from "../mail-updates";
 import { protectedProcedure } from "./base";
 
 const preferencesSelection = {
@@ -62,6 +64,18 @@ export const accountPreferencesRouter = {
         .returning(preferencesSelection);
       if (preferences === undefined) {
         throw errors.NOT_FOUND();
+      }
+      const notification = publishMailUpdate(
+        {
+          mailboxId: ACCOUNT_PREFERENCES_UPDATE_SCOPE,
+          type: "details.changed",
+        },
+        { recipientUserIds: [context.userId] }
+      );
+      if (context.scheduleBackgroundTask) {
+        context.scheduleBackgroundTask(notification);
+      } else {
+        await notification;
       }
       return {
         timeFormat: preferences.timeFormat ?? "24h",

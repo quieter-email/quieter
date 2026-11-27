@@ -2,13 +2,19 @@ import { randomUUID } from "node:crypto";
 
 import { ORPCError } from "@orpc/server";
 import { db } from "@quieter/database/client";
-import type { DatabaseExecutor } from "@quieter/database/client";
+import type {
+  DatabaseExecutor,
+  DatabaseTransaction,
+} from "@quieter/database/client";
 import {
   managedMailLabel,
   managedMailMessage,
   managedMailMessageLabel,
 } from "@quieter/database/schema";
 import { and, eq, inArray, ne } from "drizzle-orm";
+
+import { publishMailboxChange } from "../../mailbox-changes";
+import { appendManagedMailboxContentChange } from "../changes";
 
 export const assertManagedLabelsBelongToMailbox = async (
   mailboxId: string,
@@ -46,17 +52,8 @@ export const updateManagedMessageLabelAssignments = async (input: {
   source: "ai_auto_label" | "backfill" | "inherited" | "manual" | "rule";
   ruleId?: string;
   userId?: string;
-  database?: DatabaseExecutor;
-}): Promise<{ id: string; labelIds: string[] }[]> => {
-  if (input.database === undefined) {
-    return await db.transaction(
-      async (transaction) =>
-        await updateManagedMessageLabelAssignments({
-          ...input,
-          database: transaction,
-        })
-    );
-  }
+  database: DatabaseTransaction;
+}) => {
   const addLabelIds =
     input.addLabelIds === undefined ? [] : [...new Set(input.addLabelIds)];
   const removeLabelIds =
@@ -70,8 +67,9 @@ export const updateManagedMessageLabelAssignments = async (input: {
     database
   );
 
+  const changedMessageIds = new Set<string>();
   if (removeLabelIds.length > 0 && input.messageIds.length > 0) {
-    await database
+    const removed = await database
       .delete(managedMailMessageLabel)
       .where(
         and(
@@ -79,11 +77,15 @@ export const updateManagedMessageLabelAssignments = async (input: {
           inArray(managedMailMessageLabel.messageId, input.messageIds),
           inArray(managedMailMessageLabel.labelId, removeLabelIds)
         )
-      );
+      )
+      .returning({ messageId: managedMailMessageLabel.messageId });
+    for (const { messageId } of removed) {
+      changedMessageIds.add(messageId);
+    }
   }
 
   if (addLabelIds.length > 0 && input.messageIds.length > 0) {
-    await database
+    const added = await database
       .insert(managedMailMessageLabel)
       .values(
         input.messageIds.flatMap((messageId) =>
@@ -104,7 +106,11 @@ export const updateManagedMessageLabelAssignments = async (input: {
           managedMailMessageLabel.messageId,
           managedMailMessageLabel.labelId,
         ],
-      });
+      })
+      .returning({ messageId: managedMailMessageLabel.messageId });
+    for (const { messageId } of added) {
+      changedMessageIds.add(messageId);
+    }
   }
 
   const assignments =
@@ -124,10 +130,13 @@ export const updateManagedMessageLabelAssignments = async (input: {
     labelIdsByMessageId.set(assignment.messageId, labelIds);
   }
 
-  return input.messageIds.map((messageId) => ({
-    id: messageId,
-    labelIds: labelIdsByMessageId.get(messageId) ?? [],
-  }));
+  return {
+    assignments: input.messageIds.map((messageId) => ({
+      id: messageId,
+      labelIds: labelIdsByMessageId.get(messageId) ?? [],
+    })),
+    changedMessageIds,
+  };
 };
 
 export const inheritManagedThreadLabels = async (input: {
@@ -153,10 +162,26 @@ export const inheritManagedThreadLabels = async (input: {
     return;
   }
 
-  await updateManagedMessageLabelAssignments({
-    addLabelIds: assignments.map((assignment) => assignment.labelId),
-    mailboxId: input.mailboxId,
-    messageIds: [input.messageId],
-    source: "inherited",
+  const committed = await db.transaction(async (tx) => {
+    const { changedMessageIds } = await updateManagedMessageLabelAssignments({
+      addLabelIds: assignments.map((assignment) => assignment.labelId),
+      database: tx,
+      mailboxId: input.mailboxId,
+      messageIds: [input.messageId],
+      source: "inherited",
+    });
+    return changedMessageIds.size > 0
+      ? await appendManagedMailboxContentChange(tx, {
+          changes: [
+            {
+              kind: "message.labels",
+              messageId: input.messageId,
+              threadId: input.threadId,
+            },
+          ],
+          mailboxId: input.mailboxId,
+        })
+      : null;
   });
+  await publishMailboxChange(committed);
 };

@@ -97,7 +97,6 @@ export const createMailboxActionHandlers = ({
     setPending(id, true);
     try {
       await action();
-      await refreshSearchResultsIfNeeded();
     } finally {
       setPending(id, false);
     }
@@ -189,7 +188,6 @@ export const createMailboxActionHandlers = ({
       },
       operation
     );
-    await refreshSearchResultsIfNeeded();
   };
   const runMailboxThreadAction = async (
     threadId: string,
@@ -199,7 +197,6 @@ export const createMailboxActionHandlers = ({
       { mailboxId, queryClient, threadId },
       operation
     );
-    await refreshSearchResultsIfNeeded();
   };
   const runBulkMailboxCommand = async (
     threads: ThreadListEntry[],
@@ -217,7 +214,6 @@ export const createMailboxActionHandlers = ({
       })),
       command
     );
-    await refreshSearchResultsIfNeeded();
     const failed = result.targets.find((target) => target.status === "failed");
     if (failed) {
       throw new Error("Could not update some messages.");
@@ -265,7 +261,6 @@ export const createMailboxActionHandlers = ({
         })),
         { kind: "set-placement", placement }
       );
-      await refreshSearchResultsIfNeeded();
       const failure = result.targets.find(
         (target) => target.status === "failed"
       );
@@ -394,7 +389,6 @@ export const createMailboxActionHandlers = ({
           }
         }
         pending = remaining;
-        await refreshSearchResultsIfNeeded();
       } finally {
         setThreadActionsPending(threadIds, false);
       }
@@ -423,6 +417,7 @@ export const createMailboxActionHandlers = ({
         draftId,
         message.baseRevision
       );
+      await refreshSearchResultsIfNeeded();
     });
   };
 
