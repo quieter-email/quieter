@@ -1,6 +1,7 @@
 "use client";
 
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers";
+import { Cursor } from "@dnd-kit/dom";
 import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import { Cancel01Icon, GripVerticalIcon } from "@hugeicons/core-free-icons";
@@ -88,7 +89,7 @@ const SidebarSortEntry = ({
           <IconButtonTooltip label={`Reorder ${entry.label}`}>
             <Button
               aria-label={`Reorder ${entry.label}`}
-              className="shrink-0 cursor-grab touch-none active:cursor-grabbing"
+              className="shrink-0 touch-none"
               ref={handleRef}
               size="icon-xs"
               type="button"
@@ -259,6 +260,9 @@ export const SidebarCustomizeDialog = ({
             </SettingsCard>
           )}
           <DragDropProvider<SidebarDragData>
+            plugins={(defaults) =>
+              defaults.filter((plugin) => plugin !== Cursor)
+            }
             onDragStart={() => {
               dragState.current = { active: true };
             }}

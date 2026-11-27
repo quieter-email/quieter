@@ -14,7 +14,11 @@ const switchVariants = cva(
   {
     defaultVariants: { size: "default" },
     variants: {
-      size: { default: "h-6 w-11 p-0.5", sm: "h-5 w-9 p-0.5" },
+      size: {
+        default: "h-6 w-11 p-0.5",
+        sm: "h-5 w-9 p-0.5",
+        xs: "h-4.5 w-8 p-0.5",
+      },
     },
   }
 );
@@ -27,6 +31,7 @@ const switchThumbVariants = cva(
       size: {
         default: "size-4.5",
         sm: "size-3.5",
+        xs: "size-3",
       },
     },
   }

@@ -4,6 +4,7 @@ import { CollisionPriority, CollisionType, Modifier } from "@dnd-kit/abstract";
 import type { CollisionDetector } from "@dnd-kit/abstract";
 import {
   Accessibility,
+  Cursor,
   defaultPreset,
   PointerActivationConstraints,
   PointerSensor,
@@ -892,7 +893,7 @@ export const MailboxSwitcherDropdown = ({
       >
         <DragDropProvider<SwitcherDragData>
           plugins={defaultPreset.plugins.filter(
-            (plugin) => plugin !== Accessibility
+            (plugin) => plugin !== Accessibility && plugin !== Cursor
           )}
           onDragMove={(_event, manager) => {
             updateDragPreview(manager);

@@ -18,6 +18,7 @@ export const createLabelGroupTree = (
     getGroupPath: (groupId: string | null) =>
       groupId === null ? null : (groups.get(groupId)?.name ?? null),
     getLabelGroupId,
+    groupOrder: organization?.groupOrder,
     labelOrder: organization?.labelOrder,
   };
 };

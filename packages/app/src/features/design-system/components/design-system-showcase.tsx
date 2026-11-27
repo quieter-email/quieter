@@ -100,6 +100,7 @@ import {
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { ChevronRightIcon } from "@quieter/ui/icons";
 import { Input } from "@quieter/ui/input";
 import { InputAddon, InputGroup } from "@quieter/ui/input-group";
 import { Kbd } from "@quieter/ui/kbd";
@@ -1283,6 +1284,13 @@ export const DesignSystemShowcase = () => {
               </Button>
             </IconButtonTooltip>
           </Row>
+          <Row label="Icon, dense row">
+            <IconButtonTooltip label="Expand group">
+              <Button aria-label="Expand group" size="icon-2xs" variant="ghost">
+                <ChevronRightIcon viewBox="-4 -4 24 24" />
+              </Button>
+            </IconButtonTooltip>
+          </Row>
           <Row label="Toolbar control">
             <IconButtonTooltip label="Refresh">
               <Button aria-label="Refresh" size="icon" variant="toolbar">
@@ -1677,6 +1685,22 @@ export const DesignSystemShowcase = () => {
               )}
             </div>
           </Row>
+          <Row label="Inline field, resting and editing">
+            <div className="flex w-64 flex-col gap-1">
+              <Button
+                className="w-full"
+                size="inline-field"
+                variant="inline-edit"
+              >
+                <span className="truncate">Project updates</span>
+              </Button>
+              <Input
+                aria-label="Example field name"
+                defaultValue="Project updates"
+                size="sm"
+              />
+            </div>
+          </Row>
           <Row label="Color picker">
             <MailboxColorPicker
               label="Example color"
@@ -1843,6 +1867,15 @@ export const DesignSystemShowcase = () => {
               placeholder="Placeholder"
             />
           </Row>
+          <Row label="Inline textarea">
+            <Textarea
+              aria-label="Inline prompt"
+              className="w-64"
+              placeholder="Describe which emails belong here"
+              rows={1}
+              variant="inline"
+            />
+          </Row>
           <Row label="Growing textarea">
             <Textarea
               aria-label="Example growing prompt"
@@ -1957,6 +1990,11 @@ export const DesignSystemShowcase = () => {
           </Row>
           <Row label="Switch, sm">
             <Switch checked={checked} onCheckedChange={setChecked} size="sm">
+              <SwitchThumb />
+            </Switch>
+          </Row>
+          <Row label="Switch, xs">
+            <Switch checked={checked} onCheckedChange={setChecked} size="xs">
               <SwitchThumb />
             </Switch>
           </Row>
