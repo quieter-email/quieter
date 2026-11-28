@@ -580,7 +580,7 @@ const MailboxTeam = ({
             >
               <m.span
                 animate={{ rotate: closed ? 0 : 90 }}
-                className="flex size-4 shrink-0 items-center text-muted-fg"
+                className="flex size-4 shrink-0 items-center justify-center text-muted-fg"
                 initial={false}
                 transition={{
                   duration: reducedMotion === true ? 0 : 0.2,
@@ -1309,7 +1309,7 @@ export const MailboxSwitcherDropdown = ({
                       aria-hidden
                       className="flex min-h-7 items-center gap-2 px-2.5 py-1 text-caption text-muted-fg"
                     >
-                      <span className="flex size-4 shrink-0 items-center">
+                      <span className="flex size-4 shrink-0 items-center justify-center">
                         <Icon size={12} icon={ArrowRight01Icon} />
                       </span>
                       <span className="min-w-0 truncate">{group?.name}</span>
