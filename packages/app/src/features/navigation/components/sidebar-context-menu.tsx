@@ -3,6 +3,7 @@
 import { Settings02Icon } from "@hugeicons/core-free-icons";
 import {
   ContextMenu,
+  ContextMenuCheckboxItem,
   ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
@@ -14,11 +15,17 @@ import type { ReactNode } from "react";
 
 export const SidebarContextActions = createContext<(() => void) | null>(null);
 
-type SidebarAction = {
-  label: string;
-  onSelect: () => void;
-  tone?: "destructive";
-};
+type SidebarAction =
+  | {
+      label: string;
+      onSelect: () => void;
+      tone?: "destructive";
+    }
+  | {
+      checked: boolean;
+      label: string;
+      onCheckedChange: (checked: boolean) => void;
+    };
 
 const emptyActions: readonly SidebarAction[] = [];
 
@@ -84,17 +91,30 @@ export const SidebarContextMenu = ({
         {children}
       </ContextMenuTrigger>
       <ContextMenuContent align="start">
-        {actions.map((action) => (
-          <ContextMenuItem
-            key={action.label}
-            onSelect={() => {
-              action.onSelect();
-            }}
-            tone={action.tone}
-          >
-            {action.label}
-          </ContextMenuItem>
-        ))}
+        {actions.map((action) =>
+          "checked" in action ? (
+            <ContextMenuCheckboxItem
+              checked={action.checked}
+              closeOnSelect
+              key={action.label}
+              onCheckedChange={(checked) => {
+                action.onCheckedChange(checked);
+              }}
+            >
+              {action.label}
+            </ContextMenuCheckboxItem>
+          ) : (
+            <ContextMenuItem
+              key={action.label}
+              onSelect={() => {
+                action.onSelect();
+              }}
+              tone={action.tone}
+            >
+              {action.label}
+            </ContextMenuItem>
+          )
+        )}
         {actions.length > 0 && <ContextMenuSeparator />}
         <ContextMenuItem
           onSelect={() => {
