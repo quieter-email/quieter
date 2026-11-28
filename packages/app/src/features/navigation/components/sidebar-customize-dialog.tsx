@@ -6,7 +6,6 @@ import { DragDropProvider } from "@dnd-kit/react";
 import { isSortable, useSortable } from "@dnd-kit/react/sortable";
 import { Cancel01Icon, GripVerticalIcon } from "@hugeicons/core-free-icons";
 import { Button } from "@quieter/ui/button";
-import { Checkbox, CheckboxIndicator } from "@quieter/ui/checkbox";
 import { cn } from "@quieter/ui/cn";
 import { ColorSwatch } from "@quieter/ui/color-swatch";
 import {
@@ -19,9 +18,16 @@ import {
 } from "@quieter/ui/dialog";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@quieter/ui/select";
 import { SettingsCard } from "@quieter/ui/settings-layout";
 import { Text } from "@quieter/ui/text";
-import { useId, useRef } from "react";
+import { useRef } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -123,6 +129,54 @@ const SidebarSortEntry = ({
   );
 };
 
+const folderCountOptions = [
+  { label: "Show count", value: "show" },
+  { label: "Hide count", value: "hide" },
+];
+
+const allCountOptions = [
+  { label: "Show all counts", value: "show" },
+  { label: "Hide all counts", value: "hide" },
+];
+
+const SidebarCountSelect = ({
+  label,
+  value,
+  onChange,
+  bulk = false,
+}: {
+  label: string;
+  value: "show" | "hide" | "mixed";
+  onChange: (enabled: boolean) => void;
+  bulk?: boolean;
+}) => {
+  const options = bulk ? allCountOptions : folderCountOptions;
+  return (
+    <Select
+      items={options}
+      onValueChange={(next) => {
+        if (next === "show" || next === "hide") {
+          onChange(next === "show");
+        }
+      }}
+      value={value}
+    >
+      <SelectTrigger aria-label={label} size="sm" variant="ghost">
+        <SelectValue>
+          {value === "mixed" ? "Per folder" : undefined}
+        </SelectValue>
+      </SelectTrigger>
+      <SelectContent align="end" size="compact">
+        {options.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+};
+
 export const SidebarCustomizeDialog = ({
   open,
   onOpenChange,
@@ -140,7 +194,6 @@ export const SidebarCustomizeDialog = ({
   countEntries: readonly string[];
   onSetCounts?: (ids: readonly string[], enabled: boolean) => void;
 }) => {
-  const mailCountsId = useId();
   const dragState = useRef<{ active: boolean; cancelEvent?: Event }>({
     active: false,
   });
@@ -149,6 +202,18 @@ export const SidebarCustomizeDialog = ({
     order[SIDEBAR_SECTIONS]
   );
   const sectionIds = orderedSections.map((section) => section.id);
+  const mailIds =
+    sections
+      .find((section) => section.id === SIDEBAR_MAIL)
+      ?.items?.map((item) => item.id) ?? [];
+  const enabledCount = mailIds.filter((id) => countEntries.includes(id)).length;
+  let mailCounts: "show" | "hide" | "mixed" = "mixed";
+  if (enabledCount === 0) {
+    mailCounts = "hide";
+  } else if (enabledCount === mailIds.length) {
+    mailCounts = "show";
+  }
+
   return (
     <Dialog
       open={open}
@@ -176,7 +241,24 @@ export const SidebarCustomizeDialog = ({
             </IconButtonTooltip>
           </div>
         </DialogHeader>
-        <DialogBody className="mx-1 mb-1 overflow-y-auto">
+        <DialogBody className="mx-1 mb-1 overflow-y-auto" spacing="4">
+          {onSetCounts !== undefined && mailIds.length > 0 && (
+            <SettingsCard>
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
+                <Text size="sm" weight="medium">
+                  Mail counts
+                </Text>
+                <SidebarCountSelect
+                  bulk
+                  label="Mail counts"
+                  onChange={(enabled) => {
+                    onSetCounts(mailIds, enabled);
+                  }}
+                  value={mailCounts}
+                />
+              </div>
+            </SettingsCard>
+          )}
           <DragDropProvider<SidebarDragData>
             plugins={(defaults) =>
               defaults.filter((plugin) => plugin !== Cursor)
@@ -208,11 +290,6 @@ export const SidebarCustomizeDialog = ({
                   orderKey === undefined ? undefined : order[orderKey]
                 );
                 const ids = items.map((item) => item.id);
-                const setCounts =
-                  section.id === SIDEBAR_MAIL ? onSetCounts : undefined;
-                const allCountsEnabled = ids.every((id) =>
-                  countEntries.includes(id)
-                );
                 return (
                   <SidebarSortEntry
                     key={section.id}
@@ -220,33 +297,6 @@ export const SidebarCustomizeDialog = ({
                     group={SIDEBAR_SECTIONS}
                     ids={sectionIds}
                     index={index}
-                    trailing={
-                      setCounts !== undefined &&
-                      ids.length > 0 && (
-                        <label
-                          className="me-2 flex items-center gap-2"
-                          htmlFor={mailCountsId}
-                        >
-                          <Text as="span" size="caption" tone="muted">
-                            Counts
-                          </Text>
-                          <Checkbox
-                            aria-label="Show all mail counts"
-                            checked={allCountsEnabled}
-                            id={mailCountsId}
-                            indeterminate={
-                              !allCountsEnabled &&
-                              ids.some((id) => countEntries.includes(id))
-                            }
-                            onCheckedChange={(checked) => {
-                              setCounts(ids, checked);
-                            }}
-                          >
-                            <CheckboxIndicator />
-                          </Checkbox>
-                        </label>
-                      )
-                    }
                   >
                     {orderKey !== undefined && items.length > 0 && (
                       <SettingsCard>
@@ -258,16 +308,19 @@ export const SidebarCustomizeDialog = ({
                             ids={ids}
                             index={itemIndex}
                             trailing={
-                              setCounts !== undefined && (
-                                <Checkbox
-                                  aria-label={`Show count for ${item.label}`}
-                                  checked={countEntries.includes(item.id)}
-                                  onCheckedChange={(checked) => {
-                                    setCounts([item.id], checked);
+                              section.id === SIDEBAR_MAIL &&
+                              onSetCounts !== undefined && (
+                                <SidebarCountSelect
+                                  label={`Count for ${item.label}`}
+                                  onChange={(enabled) => {
+                                    onSetCounts([item.id], enabled);
                                   }}
-                                >
-                                  <CheckboxIndicator />
-                                </Checkbox>
+                                  value={
+                                    countEntries.includes(item.id)
+                                      ? "show"
+                                      : "hide"
+                                  }
+                                />
                               )
                             }
                           />
