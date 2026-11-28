@@ -724,6 +724,7 @@ export const MailboxSwitcherDropdown = ({
   const [draggingTeam, setDraggingTeam] = useState(false);
   const [dragPanelHeight, setDragPanelHeight] = useState<number>();
   const listRef = useRef<HTMLDivElement>(null);
+  const footerRef = useRef<HTMLDivElement>(null);
   const orderKey = JSON.stringify(getMailboxSwitcherOrder(groups));
   const reorderSnapshotRef = useRef<ReorderSnapshot | null>(null);
   const settle = { orderKey, snapshot: reorderSnapshotRef };
@@ -897,16 +898,18 @@ export const MailboxSwitcherDropdown = ({
       return;
     }
 
-    const items = [
-      ...list.querySelectorAll<HTMLElement>(
-        "[data-mailbox-switcher-navigation-item]"
-      ),
-    ].filter(
-      (item) =>
-        !item.matches(":disabled") &&
-        !item.closest("[inert]") &&
-        item.checkVisibility()
-    );
+    const items = [list, footerRef.current]
+      .flatMap((container) => [
+        ...(container?.querySelectorAll<HTMLElement>(
+          "[data-mailbox-switcher-navigation-item]"
+        ) ?? []),
+      ])
+      .filter(
+        (item) =>
+          !item.matches(":disabled") &&
+          !item.closest("[inert]") &&
+          item.checkVisibility()
+      );
     if (target instanceof HTMLInputElement) {
       event.preventDefault();
       event.stopPropagation();
@@ -1249,30 +1252,6 @@ export const MailboxSwitcherDropdown = ({
                 <output aria-live="polite" className="sr-only">
                   {orderAnnouncement}
                 </output>
-                {!embedded && (
-                  <div>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem
-                      onFocus={warmMailboxSettings}
-                      onMouseEnter={warmMailboxSettings}
-                      onPointerDown={warmMailboxSettings}
-                      render={
-                        <Link
-                          search={{
-                            from: "/",
-                            mailboxId: "",
-                            tab: "mailboxes",
-                          }}
-                          to="/settings"
-                        />
-                      }
-                      data-mailbox-switcher-navigation-item
-                    >
-                      <Icon aria-hidden icon={Settings01Icon} tone="muted" />
-                      <span className="text-muted-fg">Mailbox settings</span>
-                    </DropdownMenuItem>
-                  </div>
-                )}
               </>
             ) : (
               <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
@@ -1280,6 +1259,34 @@ export const MailboxSwitcherDropdown = ({
               </div>
             )}
           </DropdownMenuViewport>
+          {groups.length > 0 && !embedded && (
+            <div
+              className="shrink-0 px-1.5 pb-1.5"
+              onKeyDown={handleArrowNavigation}
+              ref={footerRef}
+            >
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onFocus={warmMailboxSettings}
+                onMouseEnter={warmMailboxSettings}
+                onPointerDown={warmMailboxSettings}
+                render={
+                  <Link
+                    search={{
+                      from: "/",
+                      mailboxId: "",
+                      tab: "mailboxes",
+                    }}
+                    to="/settings"
+                  />
+                }
+                data-mailbox-switcher-navigation-item
+              >
+                <Icon aria-hidden icon={Settings01Icon} tone="muted" />
+                <span className="text-muted-fg">Mailbox settings</span>
+              </DropdownMenuItem>
+            </div>
+          )}
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
