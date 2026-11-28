@@ -54,6 +54,7 @@
     "./pill": "./src/components/ui/pill.tsx",
     "./progress": "./src/components/ui/progress.tsx",
     "./radio-group": "./src/components/ui/radio-group.tsx",
+    "./reorder-motion": "./src/lib/reorder-motion.ts",
     "./scroll-area": "./src/components/ui/scroll-area.tsx",
     "./select": "./src/components/ui/select.tsx",
     "./sender-avatar": "./src/components/ui/sender-avatar.tsx",

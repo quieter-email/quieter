@@ -45,15 +45,25 @@ import {
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import {
+  reorderAnimation,
+  reorderTransition,
+} from "@quieter/ui/reorder-motion";
 import { useQueryClient } from "@tanstack/react-query";
 import { Link, useRouter } from "@tanstack/react-router";
-import { AnimatePresence, m, useReducedMotion, useSpring } from "motion/react";
-import type { MotionValue } from "motion/react";
-import { useRef, useState } from "react";
+import {
+  AnimatePresence,
+  animate,
+  m,
+  useMotionValue,
+  useReducedMotion,
+} from "motion/react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import type {
   KeyboardEvent as ReactKeyboardEvent,
   ReactNode,
   Ref,
+  RefObject,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -154,7 +164,20 @@ type SwitcherDragData = {
   mailboxId?: string;
   index: number;
   label: string;
-  offset: MotionValue<number>;
+  moveOffset: (offset: number | "hold") => void;
+};
+
+type ReorderSnapshot = {
+  nextOrderKey: string;
+  orderKey: string;
+  restore?: () => void;
+  timeout: number;
+  tops: Map<string, number>;
+};
+
+type ReorderSettle = {
+  orderKey: string;
+  snapshot: RefObject<ReorderSnapshot | null>;
 };
 
 const SWITCHER_SENSORS = [
@@ -167,31 +190,65 @@ const SWITCHER_SENSORS = [
 ];
 
 // Read live bounds because team headers move while their mailbox lists collapse.
-const switcherCollision: CollisionDetector = ({ droppable, dragOperation }) => {
+// Clamp the pointer into the visible list so drags past an edge keep the nearest row.
+const getSwitcherCollision = (
+  droppable: Parameters<CollisionDetector>[0]["droppable"],
+  pointerY: number
+) => {
   const element = "element" in droppable ? droppable.element : null;
-  if (!(element instanceof HTMLElement)) {
+  const list =
+    element instanceof HTMLElement
+      ? element.closest("[data-mailbox-switcher-list]")
+      : null;
+  if (!(element instanceof HTMLElement) || !list) {
     return null;
   }
+  const panel = list.getBoundingClientRect();
+  const top = Math.max(
+    panel.top,
+    list
+      .querySelector("[data-mailbox-switcher-search]")
+      ?.getBoundingClientRect().bottom ?? panel.top
+  );
   const rect = element.getBoundingClientRect();
-  const { x, y } = dragOperation.position.current;
-  const panel = element
-    .closest("[data-mailbox-switcher-list]")
-    ?.getBoundingClientRect();
-  if (
-    !panel ||
-    x < panel.left ||
-    x > panel.right ||
-    y < panel.top ||
-    y > panel.bottom
-  ) {
+  if (rect.bottom <= top || rect.top >= panel.bottom) {
     return null;
   }
+  const y = Math.min(Math.max(pointerY, top), panel.bottom);
   return {
     id: droppable.id,
     priority: CollisionPriority.Normal,
     type: CollisionType.Collision,
     value: -Math.abs(y - (rect.top + rect.height / 2)),
   };
+};
+
+const getSwitcherDropTarget = (
+  manager: DragDropManager<SwitcherDragData>,
+  source: Draggable<SwitcherDragData>,
+  event: Event | undefined
+) => {
+  if (!(event instanceof PointerEvent)) {
+    const [collision] = manager.collisionObserver.computeCollisions();
+    return collision === undefined
+      ? undefined
+      : manager.registry.droppables.get(collision.id);
+  }
+
+  // Pointer moves are processed on the next frame, which can be after release.
+  let nearestValue = -Infinity;
+  let target;
+  for (const row of manager.registry.droppables) {
+    if (row.disabled || !row.accepts(source)) {
+      continue;
+    }
+    const collision = getSwitcherCollision(row, event.clientY);
+    if (collision !== null && collision.value > nearestValue) {
+      nearestValue = collision.value;
+      target = row;
+    }
+  }
+  return target;
 };
 
 // Move only the row contents so collision targets stay stable while the preview changes.
@@ -226,7 +283,7 @@ const updateDragPreview = (manager: DragDropManager<SwitcherDragData>) => {
         offset = sourceRect.height + 4;
       }
     }
-    row.data.offset.set(offset);
+    row.data.moveOffset(offset);
   }
 };
 
@@ -278,20 +335,54 @@ const ReorderRow = ({
   children,
   data,
   disabled,
+  settle,
 }: {
   children: (handleRef: Ref<HTMLButtonElement>) => ReactNode;
-  data: Omit<SwitcherDragData, "offset">;
+  data: Omit<SwitcherDragData, "moveOffset">;
   disabled: boolean;
+  settle: ReorderSettle;
 }) => {
   const elementRef = useRef<HTMLDivElement>(null);
   const reducedMotion = useReducedMotion();
-  const offset = useSpring(0, {
-    bounce: 0,
-    duration: reducedMotion === true ? 0 : 0.2,
-  });
-  const dragData = { ...data, offset };
+  const offset = useMotionValue(0);
+  const offsetTarget = useRef(0);
+  const moveOffset = (value: number | "hold") => {
+    if (value === "hold") {
+      offset.stop();
+      offsetTarget.current = offset.get();
+      return;
+    }
+    if (offsetTarget.current === value) {
+      return;
+    }
+    offsetTarget.current = value;
+    if (reducedMotion === true) {
+      offset.jump(value);
+    } else {
+      animate(offset, value, reorderTransition);
+    }
+  };
+  const dragData = { ...data, moveOffset };
   const handleRef = useRef<HTMLButtonElement>(null);
   const id = JSON.stringify([data.groupId, data.mailboxId ?? null]);
+  // Start the committed order from where the row was drawn, then ease it home.
+  useLayoutEffect(() => {
+    const snapshot = settle.snapshot.current;
+    const before = snapshot?.tops.get(id);
+    const element = elementRef.current;
+    if (
+      !snapshot ||
+      snapshot.nextOrderKey !== settle.orderKey ||
+      before === undefined ||
+      !element
+    ) {
+      return;
+    }
+    snapshot.tops.delete(id);
+    offsetTarget.current = before - element.getBoundingClientRect().top;
+    offset.jump(offsetTarget.current);
+    moveOffset(0);
+  });
   const type = data.mailboxId ? `mailboxes:${data.groupId}` : "teams";
   const { isDragSource } = useDraggable<SwitcherDragData>({
     data: dragData,
@@ -305,7 +396,8 @@ const ReorderRow = ({
   });
   useDroppable({
     accept: type,
-    collisionDetector: switcherCollision,
+    collisionDetector: ({ droppable, dragOperation }) =>
+      getSwitcherCollision(droppable, dragOperation.position.current.y),
     data: dragData,
     disabled,
     element: elementRef,
@@ -441,6 +533,7 @@ const MailboxTeam = ({
   embedded,
   group,
   index,
+  settle,
   sortingTeams,
   onToggle,
   onRestored,
@@ -451,6 +544,7 @@ const MailboxTeam = ({
   embedded: boolean;
   group: MailboxSwitcherGroup;
   index: number;
+  settle: ReorderSettle;
   sortingTeams: boolean;
   onToggle: (id: string) => void;
   onRestored: () => void;
@@ -463,6 +557,7 @@ const MailboxTeam = ({
       <ReorderRow
         data={{ groupId: group.id, index, label: group.name }}
         disabled={disabled}
+        settle={settle}
       >
         {(handleRef) => (
           <div className="flex items-center gap-1">
@@ -634,6 +729,61 @@ export const MailboxSwitcherDropdown = ({
   const [draggingTeam, setDraggingTeam] = useState(false);
   const [dragPanelHeight, setDragPanelHeight] = useState<number>();
   const listRef = useRef<HTMLDivElement>(null);
+  const orderKey = JSON.stringify(getMailboxSwitcherOrder(groups));
+  const reorderSnapshotRef = useRef<ReorderSnapshot | null>(null);
+  const settle = { orderKey, snapshot: reorderSnapshotRef };
+  useEffect(
+    () => () => {
+      window.clearTimeout(reorderSnapshotRef.current?.timeout);
+    },
+    []
+  );
+  useLayoutEffect(() => {
+    const snapshot = reorderSnapshotRef.current;
+    if (snapshot && snapshot.orderKey !== orderKey) {
+      window.clearTimeout(snapshot.timeout);
+      reorderSnapshotRef.current = null;
+      if (snapshot.nextOrderKey !== orderKey) {
+        snapshot.restore?.();
+      }
+    }
+  });
+  const reorder = (
+    nextGroups: MailboxSwitcherGroup[],
+    restore?: () => void
+  ) => {
+    const nextOrder = getMailboxSwitcherOrder(nextGroups);
+    const previous = reorderSnapshotRef.current;
+    window.clearTimeout(previous?.timeout);
+    if (restore === undefined) {
+      previous?.restore?.();
+    }
+    const rows =
+      listRef.current?.querySelectorAll<HTMLElement>(
+        "[data-mailbox-switcher-navigation-row]"
+      ) ?? [];
+    reorderSnapshotRef.current = {
+      nextOrderKey: JSON.stringify(nextOrder),
+      orderKey,
+      restore,
+      timeout: window.setTimeout(() => {
+        reorderSnapshotRef.current = null;
+        restore?.();
+      }, reorderAnimation.duration),
+      tops: new Map(
+        [...rows]
+          .filter((row) => !row.closest("[inert]"))
+          .map((row): [string, number] => [
+            JSON.stringify([
+              row.dataset.mailboxSwitcherGroup,
+              row.dataset.mailboxSwitcherMailbox ?? null,
+            ]),
+            (row.firstElementChild ?? row).getBoundingClientRect().top,
+          ])
+      ),
+    };
+    onReorderMailboxSwitcher(nextOrder);
+  };
   const dragManagerRef = useRef<DragDropManager<SwitcherDragData> | null>(null);
   const handleEscapeCapture = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key !== "Escape" || !dragManagerRef.current) {
@@ -698,14 +848,12 @@ export const MailboxSwitcherDropdown = ({
               }
             : candidate
         );
-        onReorderMailboxSwitcher(getMailboxSwitcherOrder(nextGroups));
+        reorder(nextGroups);
         setOrderAnnouncement(
           `Mailbox moved to position ${toIndex + 1} of ${items.length} in ${group.name}.`
         );
       } else {
-        onReorderMailboxSwitcher(
-          getMailboxSwitcherOrder(moveItem(groups, fromIndex, toIndex))
-        );
+        reorder(moveItem(groups, fromIndex, toIndex));
         setOrderAnnouncement(
           `${group.name} moved to position ${toIndex + 1} of ${groups.length}.`
         );
@@ -811,9 +959,6 @@ export const MailboxSwitcherDropdown = ({
     event,
     manager
   ) => {
-    for (const row of manager.registry.droppables) {
-      row.data.offset.jump(0);
-    }
     dragManagerRef.current = null;
     setIsDragging(false);
     setDraggingTeam(false);
@@ -824,11 +969,15 @@ export const MailboxSwitcherDropdown = ({
       setDragPanelHeight(undefined);
     }
     const { source } = event.operation;
-    const [collision] = manager.collisionObserver.computeCollisions();
     const target =
-      collision === undefined
-        ? null
-        : manager.registry.droppables.get(collision.id);
+      !event.canceled && source
+        ? getSwitcherDropTarget(manager, source, event.nativeEvent)
+        : undefined;
+    const restore = () => {
+      for (const row of manager.registry.droppables) {
+        row.data.moveOffset(0);
+      }
+    };
     if (
       event.canceled ||
       !source ||
@@ -836,6 +985,7 @@ export const MailboxSwitcherDropdown = ({
       source.id === target.id ||
       source.type !== target.type
     ) {
+      restore();
       return;
     }
     const from = source.data;
@@ -850,7 +1000,10 @@ export const MailboxSwitcherDropdown = ({
             : group
         )
       : moveItem(groups, from.index, to.index);
-    onReorderMailboxSwitcher(getMailboxSwitcherOrder(nextGroups));
+    for (const row of manager.registry.droppables) {
+      row.data.moveOffset("hold");
+    }
+    reorder(nextGroups, restore);
     setOrderAnnouncement(`${from.label} moved to position ${to.index + 1}.`);
   };
 
@@ -864,6 +1017,8 @@ export const MailboxSwitcherDropdown = ({
         }
         setIsOpen(open);
         if (!open) {
+          window.clearTimeout(reorderSnapshotRef.current?.timeout);
+          reorderSnapshotRef.current = null;
           setDraggingTeam(false);
           setDragPanelHeight(undefined);
           setSearchQuery("");
@@ -930,6 +1085,12 @@ export const MailboxSwitcherDropdown = ({
           }}
           onDragEnd={handleDragEnd}
           onDragStart={(event, manager) => {
+            const previous = reorderSnapshotRef.current;
+            if (previous) {
+              window.clearTimeout(previous.timeout);
+              reorderSnapshotRef.current = null;
+              previous.restore?.();
+            }
             dragManagerRef.current = manager;
             setIsDragging(true);
             setDragPanelHeight(listRef.current?.getBoundingClientRect().height);
@@ -947,7 +1108,10 @@ export const MailboxSwitcherDropdown = ({
             {groups.length > 0 ? (
               <>
                 {(mailboxes.length >= 8 || isFiltering) && (
-                  <div className="sticky top-0 z-10 bg-popover">
+                  <div
+                    className="sticky top-0 z-10 bg-popover"
+                    data-mailbox-switcher-search
+                  >
                     <Input
                       aria-label="Search mailboxes"
                       onChange={(event) => {
@@ -992,6 +1156,7 @@ export const MailboxSwitcherDropdown = ({
                           setDragPanelHeight(undefined);
                         }}
                         onToggle={toggleGroup}
+                        settle={settle}
                         sortingTeams={draggingTeam}
                       >
                         {group.mailboxes.length > 0 ? (
@@ -1019,6 +1184,7 @@ export const MailboxSwitcherDropdown = ({
                                   mailboxId: mailbox.id,
                                 }}
                                 key={mailbox.id}
+                                settle={settle}
                               >
                                 {(handleRef) => (
                                   <MailboxMenuItem

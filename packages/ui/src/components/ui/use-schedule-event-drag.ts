@@ -1,7 +1,14 @@
-import { useCallback, useEffect, useEffectEvent, useRef } from "react";
+import {
+  useCallback,
+  useEffect,
+  useEffectEvent,
+  useLayoutEffect,
+  useRef,
+} from "react";
 import type { KeyboardEvent, PointerEvent, RefObject } from "react";
 
 import { formatTimeMinute } from "../../lib/date-time";
+import { reorderAnimation } from "../../lib/reorder-motion";
 import type { ScheduleItem, ScheduleProps } from "./schedule";
 
 type DropTarget = {
@@ -33,14 +40,47 @@ type EventDrag = {
     }
 );
 
+// A drop settles only once the schedule renders the item at its dropped target,
+// so failed, pending, or declined moves never show a transient success.
+type DropSettle = {
+  frame: number;
+  ghost: DOMRect;
+  item: ScheduleItem;
+  painted: boolean;
+  rangeKey: string;
+  scrollLeft: number;
+  scrollTop: number;
+  segments: string[];
+  source: DOMRect;
+  sticky: boolean;
+  target: Omit<DropTarget, "zone">;
+};
+
+const getEventSegments = (items: ScheduleItem[], item: ScheduleItem) =>
+  items.filter(
+    (segment) =>
+      !segment.preview &&
+      segment.id === item.id &&
+      segment.occurrenceId === item.occurrenceId
+  );
+
+const getSegmentPositions = (segments: ScheduleItem[]) =>
+  segments
+    .map(({ allDay, date, endMinute, startMinute }) =>
+      JSON.stringify([date, allDay, startMinute, endMinute])
+    )
+    .toSorted();
+
 export const useScheduleEventDrag = ({
   hourHeight,
+  items,
   onEventMove,
   rangeKey,
   scrollRef,
   timeFormat,
 }: {
   hourHeight: number;
+  items: ScheduleItem[];
   onEventMove: ScheduleProps["onEventMove"];
   rangeKey: string;
   scrollRef: RefObject<HTMLDivElement | null>;
@@ -48,6 +88,17 @@ export const useScheduleEventDrag = ({
 }) => {
   const dragRef = useRef<EventDrag | null>(null);
   const suppressClickRef = useRef(false);
+  const settleRef = useRef<DropSettle | null>(null);
+  const settleAnimationRef = useRef<Animation | null>(null);
+
+  const clearSettle = useCallback(() => {
+    if (settleRef.current) {
+      window.cancelAnimationFrame(settleRef.current.frame);
+      settleRef.current = null;
+    }
+    settleAnimationRef.current?.cancel();
+    settleAnimationRef.current = null;
+  }, []);
 
   const cleanup = useCallback(() => {
     const drag = dragRef.current;
@@ -184,6 +235,7 @@ export const useScheduleEventDrag = ({
     });
     window.addEventListener("blur", cancel);
     return () => {
+      clearSettle();
       scroller?.removeEventListener("scroll", handleScroll);
       document.removeEventListener(
         "lostpointercapture",
@@ -193,7 +245,81 @@ export const useScheduleEventDrag = ({
       window.removeEventListener("blur", cancel);
       cancel();
     };
-  }, [cancel, rangeKey, scrollRef]);
+  }, [cancel, clearSettle, rangeKey, scrollRef]);
+
+  useLayoutEffect(() => {
+    const settle = settleRef.current;
+    const scroller = scrollRef.current;
+    if (!settle || !scroller) {
+      return;
+    }
+    if (settle.rangeKey !== rangeKey) {
+      clearSettle();
+      return;
+    }
+    const { item, target } = settle;
+    const segments = getEventSegments(items, item);
+    const positions = getSegmentPositions(segments);
+    if (
+      positions.length === settle.segments.length &&
+      positions.every((position, index) => position === settle.segments[index])
+    ) {
+      return;
+    }
+    clearSettle();
+    if (
+      !segments.some(
+        (segment) =>
+          segment.date === target.date &&
+          segment.allDay === target.allDay &&
+          (target.allDay ||
+            segment.startMinute === target.minute ||
+            settle.segments.length > 1)
+      )
+    ) {
+      return;
+    }
+    const card = [
+      ...scroller.querySelectorAll<HTMLElement>(
+        "[data-schedule-event-id]:not([disabled])"
+      ),
+    ].find(
+      (element) =>
+        element.dataset.scheduleEventId === item.id &&
+        element.dataset.scheduleEventDate === target.date &&
+        element.dataset.scheduleEventOccurrence === item.occurrenceId
+    );
+    if (
+      !card ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    // A synchronous commit starts from the released preview; a later confirmation
+    // starts from the card left in place, corrected for scrolling since the drop.
+    const from = settle.painted
+      ? {
+          left: settle.source.left - (scroller.scrollLeft - settle.scrollLeft),
+          top:
+            settle.source.top -
+            (settle.sticky ? 0 : scroller.scrollTop - settle.scrollTop),
+        }
+      : settle.ghost;
+    const bounds = card.getBoundingClientRect();
+    const x = from.left - bounds.left;
+    const y = from.top - bounds.top;
+    if (Math.abs(x) < 1 && Math.abs(y) < 1) {
+      return;
+    }
+    const layer = card.closest("[data-schedule-event-slot]") ?? card;
+    settleAnimationRef.current = layer.animate(
+      [
+        { transform: `translate3d(${x}px,${y}px,0)`, zIndex: 25 },
+        { transform: "translate3d(0,0,0)", zIndex: 25 },
+      ],
+      reorderAnimation
+    );
+  }, [clearSettle, items, rangeKey, scrollRef]);
 
   return {
     activeRef: dragRef,
@@ -226,6 +352,7 @@ export const useScheduleEventDrag = ({
         return;
       }
       cleanup();
+      clearSettle();
       event.preventDefault();
       const source = event.currentTarget;
       const bounds = source.getBoundingClientRect();
@@ -337,13 +464,38 @@ export const useScheduleEventDrag = ({
       const settled = dragRef.current;
       const target = settled?.phase === "dragging" ? settled.target : null;
       suppressClickRef.current = drag.phase === "dragging";
-      cleanup();
-      if (
-        target &&
+      const scroller = scrollRef.current;
+      const moving =
+        target !== null &&
         (target.allDay !== drag.item.allDay ||
           target.date !== drag.item.date ||
-          target.minute !== drag.item.startMinute)
-      ) {
+          target.minute !== drag.item.startMinute);
+      if (target && moving && settled?.phase === "dragging" && scroller) {
+        clearSettle();
+        const settle: DropSettle = {
+          frame: window.requestAnimationFrame(() => {
+            settle.painted = true;
+          }),
+          ghost: settled.ghost.getBoundingClientRect(),
+          item: drag.item,
+          painted: false,
+          rangeKey,
+          scrollLeft: scroller.scrollLeft,
+          scrollTop: scroller.scrollTop,
+          segments: getSegmentPositions(getEventSegments(items, drag.item)),
+          source: drag.source.getBoundingClientRect(),
+          sticky:
+            drag.source.closest("[data-schedule-drop-kind='all-day']") !== null,
+          target: {
+            allDay: target.allDay,
+            date: target.date,
+            minute: target.minute,
+          },
+        };
+        settleRef.current = settle;
+      }
+      cleanup();
+      if (target && moving) {
         onEventMove?.({
           allDay: target.allDay,
           date: target.date,

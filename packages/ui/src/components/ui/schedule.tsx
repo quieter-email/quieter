@@ -229,6 +229,7 @@ export const Schedule = ({
   });
   const eventDrag = useScheduleEventDrag({
     hourHeight,
+    items,
     onEventMove,
     rangeKey: `${view}:${dates.join(",")}`,
     scrollRef,
@@ -593,6 +594,9 @@ export const Schedule = ({
         )}
         data-selected={selectedId === item.id || undefined}
         data-schedule-event=""
+        data-schedule-event-date={item.date}
+        data-schedule-event-id={item.id}
+        data-schedule-event-occurrence={item.occurrenceId}
         disabled={item.preview}
         draggable={false}
         key={`${item.occurrenceId ?? item.id}:${item.date}`}
@@ -1220,6 +1224,7 @@ export const Schedule = ({
                 return (
                   <div
                     className="group/event-slot absolute top-[var(--schedule-top)] left-[var(--schedule-left)] z-10 h-[var(--schedule-height)] w-[var(--schedule-width)] min-w-0 p-0.5"
+                    data-schedule-event-slot=""
                     key={`${item.occurrenceId ?? item.id}:${date}`}
                     style={eventStyle}
                   >

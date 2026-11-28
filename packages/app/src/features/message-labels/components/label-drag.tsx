@@ -1,6 +1,7 @@
 "use client";
 
 import { CollisionPriority, CollisionType, configure } from "@dnd-kit/abstract";
+import type { UniqueIdentifier } from "@dnd-kit/abstract";
 import { RestrictToVerticalAxis } from "@dnd-kit/abstract/modifiers";
 import {
   Accessibility,
@@ -11,23 +12,22 @@ import {
   PointerSensor,
   defaultPreset,
 } from "@dnd-kit/dom";
+import type { Draggable, Droppable } from "@dnd-kit/dom";
 import {
   DragDropProvider,
+  useDragDropManager,
   useDragOperation,
   useDraggable,
   useDroppable,
 } from "@dnd-kit/react";
 import type { DragDropEventHandlers } from "@dnd-kit/react";
 import { GripVerticalIcon } from "@hugeicons/core-free-icons";
-import {
-  appEaseOut,
-  appMotionDuration,
-} from "@quieter/app/features/motion/app-motion";
 import type { MailboxLabelColor } from "@quieter/mail/mailbox-organization";
 import { Button } from "@quieter/ui/button";
 import { cn } from "@quieter/ui/cn";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { reorderLayoutTransition } from "@quieter/ui/reorder-motion";
 import { LayoutGroup, MotionConfig, m } from "motion/react";
 import { useId, useRef } from "react";
 import type { ReactNode, RefObject } from "react";
@@ -44,9 +44,8 @@ type DraggableLabelItem = {
   name: string;
   color: MailboxLabelColor | null;
 };
-type LabelDropZone = LabelDestination & {
-  containsPoint: (x: number, y: number) => boolean;
-};
+type DropSpan = { bottom: number; list: DOMRect; top: number };
+type LabelDropZone = LabelDestination & { measure: () => DropSpan | null };
 type LabelDragData = DraggableLabelItem | LabelDropZone;
 
 const labelSensors = [
@@ -85,8 +84,66 @@ const labelPlugins = [
 ];
 const labelModifiers = [RestrictToVerticalAxis];
 
-const layoutTransition = {
-  layout: { duration: appMotionDuration.feedback, ease: appEaseOut },
+const resolvedDrops = new WeakMap<
+  Draggable<LabelDragData>,
+  { id: UniqueIdentifier | null; y: number }
+>();
+
+const resolveLabelDropZone = (
+  droppables: Iterable<Droppable<LabelDragData>>,
+  source: Draggable<LabelDragData>,
+  y: number
+) => {
+  type VisibleSpan = DropSpan & { id: UniqueIdentifier };
+  const spans: VisibleSpan[] = [];
+  let first: VisibleSpan | undefined;
+  let last: VisibleSpan | undefined;
+  for (const droppable of droppables) {
+    const { data } = droppable;
+    if (
+      droppable.disabled ||
+      !droppable.accepts(source) ||
+      (data.kind !== "destination" && data.kind !== "group-destination")
+    ) {
+      continue;
+    }
+    const span = data.measure();
+    if (span === null) {
+      continue;
+    }
+    const visible = {
+      bottom: Math.min(span.bottom, span.list.bottom),
+      id: droppable.id,
+      list: span.list,
+      top: Math.max(span.top, span.list.top),
+    };
+    if (visible.top < visible.bottom) {
+      spans.push(visible);
+      if (first === undefined || visible.top < first.top) {
+        first = visible;
+      }
+      if (last === undefined || visible.bottom > last.bottom) {
+        last = visible;
+      }
+    }
+  }
+
+  let id: UniqueIdentifier | null = null;
+  if (first !== undefined && last !== undefined) {
+    // Height decides the slot, so lateral exits keep working; past the list,
+    // or past the first or last slot, settle on the nearest visible endpoint.
+    const listY = Math.min(Math.max(y, first.list.top), first.list.bottom - 1);
+    if (listY < first.top) {
+      ({ id } = first);
+    } else if (listY >= last.bottom) {
+      ({ id } = last);
+    } else {
+      id =
+        spans.find((span) => listY >= span.top && listY < span.bottom)?.id ??
+        null;
+    }
+  }
+  return id;
 };
 
 export const LabelDragProvider = ({
@@ -115,14 +172,13 @@ export const LabelDragProvider = ({
     // The pointer sensor can finish before the last queued movement is processed.
     let destination: LabelDragData | undefined;
     if (!event.canceled && nativeEvent instanceof PointerEvent) {
-      destination = [...manager.registry.droppables].find(
-        (dropZone) =>
-          !dropZone.disabled &&
-          dropZone.accepts(source) &&
-          (dropZone.data.kind === "destination" ||
-            dropZone.data.kind === "group-destination") &&
-          dropZone.data.containsPoint(nativeEvent.clientX, nativeEvent.clientY)
-      )?.data;
+      const id = resolveLabelDropZone(
+        manager.registry.droppables,
+        source,
+        nativeEvent.clientY
+      );
+      destination =
+        id === null ? undefined : manager.registry.droppables.get(id)?.data;
     } else if (!event.canceled) {
       const collision = manager.collisionObserver.computeCollisions().at(0);
       destination = collision
@@ -182,53 +238,63 @@ const useLabelDropZone = ({
 }) => {
   const id = useId();
   const previewRef = useRef<HTMLLIElement>(null);
-  const containsPoint = (x: number, y: number) => {
+  const manager = useDragDropManager<LabelDragData>();
+  const measure = () => {
     const row = element.current;
-    const bounds = row?.closest("[data-labels-list]")?.getBoundingClientRect();
-    if (
-      !row ||
-      !bounds ||
-      x < bounds.left ||
-      x >= bounds.right ||
-      y < bounds.top ||
-      y >= bounds.bottom
-    ) {
-      return false;
+    const list = row?.closest("[data-labels-list]")?.getBoundingClientRect();
+    if (!row || !list) {
+      return null;
     }
 
     const rect = row.getBoundingClientRect();
     const midpoint = rect.top + rect.height / 2;
-    const top =
-      splitRow && destination.target?.edge === "after" ? midpoint : rect.top;
     const end =
       destination.kind === "destination" &&
       destination.groupId === null &&
       !splitRow
-        ? bounds.bottom
+        ? list.bottom
         : rect.bottom;
-    const bottom =
-      splitRow && destination.target?.edge === "before" ? midpoint : end;
     // Keep the same destination when reflow moves the preview under the pointer.
     const preview = previewRef.current?.getBoundingClientRect();
-    const withinPreview =
-      preview !== undefined &&
-      x >= preview.left &&
-      x < preview.right &&
-      y >= preview.top &&
-      y < preview.bottom;
-    return (
-      withinPreview ||
-      (x >= rect.left && x < rect.right && y >= top && y < bottom)
-    );
+    return {
+      bottom: Math.max(
+        splitRow && destination.target?.edge === "before" ? midpoint : end,
+        preview?.bottom ?? -Infinity
+      ),
+      list,
+      top: Math.min(
+        splitRow && destination.target?.edge === "after" ? midpoint : rect.top,
+        preview?.top ?? Infinity
+      ),
+    };
   };
   const itemKind = destination.kind === "group-destination" ? "group" : "label";
   const { isDropTarget } = useDroppable<LabelDragData>({
+    // A container target naming the source is its current slot: a no-op
+    // endpoint that keeps the ghost in place instead of a neighboring group.
     accept: (source) =>
       source.data.kind === itemKind &&
-      source.data.id !== destination.target?.id,
-    collisionDetector: ({ dragOperation }) => {
-      const { x, y } = dragOperation.position.current;
-      if (!containsPoint(x, y)) {
+      (!splitRow || source.data.id !== destination.target?.id),
+    collisionDetector: () => {
+      const operation = manager?.dragOperation;
+      const source = operation?.source;
+      if (!manager || !operation || !source) {
+        return null;
+      }
+      const { y } = operation.position.current;
+      let resolved = resolvedDrops.get(source);
+      if (resolved?.y !== y) {
+        // All zones share one measurement per synchronous collision pass.
+        resolved = {
+          id: resolveLabelDropZone(manager.registry.droppables, source, y),
+          y,
+        };
+        resolvedDrops.set(source, resolved);
+        queueMicrotask(() => {
+          resolvedDrops.delete(source);
+        });
+      }
+      if (resolved.id !== id) {
         return null;
       }
 
@@ -239,7 +305,7 @@ const useLabelDropZone = ({
         value: 1,
       };
     },
-    data: { ...destination, containsPoint },
+    data: { ...destination, measure },
     disabled,
     element,
     id,
@@ -249,6 +315,7 @@ const useLabelDropZone = ({
   const dragging = item?.kind === itemKind;
   return {
     dragging,
+    item,
     preview: isDropTarget && dragging ? item : null,
     previewRef,
   };
@@ -386,7 +453,7 @@ export const LabelDragRow = ({
       <m.div
         className={cn(className, { "bg-section shadow-sm": isDragSource })}
         layout={isDragSource ? false : "position"}
-        transition={layoutTransition}
+        transition={reorderLayoutTransition}
       >
         <span className="flex w-4 shrink-0 justify-center">{handle}</span>
         {children}
@@ -422,36 +489,43 @@ export const LabelDropTarget = ({
   className,
   disabled,
   groupId,
+  soleLabelId,
   target,
 }: {
   children: ReactNode;
   className?: string;
   disabled: boolean;
   groupId: string | null;
+  soleLabelId?: string;
   target?: RowEdge;
 }) => {
   const element = useRef<HTMLDivElement>(null);
-  const { dragging, preview, previewRef } = useLabelDropZone({
+  const { dragging, item, preview, previewRef } = useLabelDropZone({
     destination: { groupId, kind: "destination", target },
     disabled,
     element,
   });
 
   if (groupId === null) {
-    if (!dragging) {
+    // With one ungrouped row, the end zone only stands in for that row's
+    // own slot while it is the drag source.
+    const isSoleSource = item?.kind === "label" && item.id === soleLabelId;
+    if (!dragging || (soleLabelId !== undefined && !isSoleSource)) {
       return null;
     }
     return (
       <div className="relative" ref={element}>
         {preview === null ? (
-          <div
-            className={cn(
-              className,
-              "pointer-events-none absolute inset-x-0 top-0"
-            )}
-          >
-            {children}
-          </div>
+          soleLabelId === undefined && (
+            <div
+              className={cn(
+                className,
+                "pointer-events-none absolute inset-x-0 top-0"
+              )}
+            >
+              {children}
+            </div>
+          )
         ) : (
           <ul>
             <LabelDropPreview
@@ -470,8 +544,11 @@ export const LabelDropTarget = ({
       <div ref={element}>
         <m.div
           className={className}
-          layout="position"
-          transition={layoutTransition}
+          // The dragged group header follows the pointer; projecting it would lag.
+          layout={
+            item?.kind === "group" && item.id === groupId ? false : "position"
+          }
+          transition={reorderLayoutTransition}
         >
           {children}
         </m.div>
