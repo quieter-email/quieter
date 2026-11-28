@@ -32,6 +32,7 @@ import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
 import { Input } from "@quieter/ui/input";
+import { reorderLayoutTransition } from "@quieter/ui/reorder-motion";
 import {
   SettingsCard,
   SettingsSectionLayout,
@@ -42,6 +43,7 @@ import { Switch, SwitchThumb } from "@quieter/ui/switch";
 import { Text } from "@quieter/ui/text";
 import { toast } from "@quieter/ui/toast";
 import { Toggle, ToggleGroup } from "@quieter/ui/toggle";
+import { domMax, LazyMotion, m } from "motion/react";
 
 const getPrimaryRuleAction = (actions: readonly ManagedMailboxRuleAction[]) =>
   actions.find((action) => action.kind !== "stop-processing") ?? actions[0];
@@ -489,9 +491,11 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
   } = props;
 
   return (
-    <div
+    <m.div
       className={settingsSurfaceVariants({ variant: "insetStackedRow" })}
       key={rule.id}
+      layout="position"
+      transition={reorderLayoutTransition}
     >
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Icon aria-hidden tone="muted" icon={Tag01Icon} />
@@ -731,7 +735,7 @@ const ManagedRuleRow = (props: ManagedRuleRowProps) => {
           </Button>
         </IconButtonTooltip>
       </div>
-    </div>
+    </m.div>
   );
 };
 
@@ -773,17 +777,19 @@ const ManagedRulesList = (props: MailboxOrganizerContentProps) => {
   }
 
   return (
-    <SettingsCard>
-      {(rulesData ?? []).map((rule, index, rules) => (
-        <ManagedRuleRow
-          {...props}
-          index={index}
-          key={rule.id}
-          rule={rule}
-          rules={rules}
-        />
-      ))}
-    </SettingsCard>
+    <LazyMotion features={domMax}>
+      <SettingsCard>
+        {(rulesData ?? []).map((rule, index, rules) => (
+          <ManagedRuleRow
+            {...props}
+            index={index}
+            key={rule.id}
+            rule={rule}
+            rules={rules}
+          />
+        ))}
+      </SettingsCard>
+    </LazyMotion>
   );
 };
 

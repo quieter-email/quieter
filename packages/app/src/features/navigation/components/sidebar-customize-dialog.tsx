@@ -18,6 +18,7 @@ import {
 } from "@quieter/ui/dialog";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
+import { reorderAnimation } from "@quieter/ui/reorder-motion";
 import {
   Select,
   SelectContent,
@@ -71,6 +72,7 @@ const SidebarSortEntry = ({
     id: JSON.stringify([group, entry.id]),
     index,
     modifiers: verticalAxis,
+    transition: reorderAnimation,
     type: group,
   });
 

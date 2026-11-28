@@ -1499,13 +1499,12 @@ export const LabelsWorkspacePanel = ({
             {areLabelsPending || labelsUnavailable ? null : (
               <>
                 <ul>{groupRows}</ul>
-                {!dragDisabled &&
-                groups.length > 0 &&
-                ungrouped.length === 0 ? (
+                {!dragDisabled && groups.length > 0 && ungrouped.length <= 1 ? (
                   <LabelDropTarget
                     className={rowClassName}
                     disabled={dragDisabled}
                     groupId={null}
+                    soleLabelId={ungrouped[0]?.id}
                   >
                     <span aria-hidden="true" className={gutterCellClassName} />
                     <Text as="span" size="caption" tone="muted">

@@ -145,6 +145,8 @@ Dialog, alert, drawer, and full-page modal shells use `rounded-panel`, 14px in t
 
 `WorkspaceDock` coordinates a fixed-width sidebar sliding from the right with the adjacent content's width transition. On narrow screens the sidebar covers the content. App code supplies the sidebar, open state and background inertness; the shared component owns geometry and motion, including reduced motion. Virtualized content keeps individual row measurements live and defers full-list measurement until the width transition settles, preserving its scroll anchor through reversals.
 
+Use `@quieter/ui/reorder-motion` for items that shift during a reorder or settle after a move. Keep the dragged item attached to the pointer, measure drop targets independently of the animation, and skip the transition when reduced motion is enabled.
+
 The default radius ladder is `xs` 2px, `sm` 4px, `md` 6px, `lg` 8px, and `xl` 10px. The ladder follows the active theme's base radius and uses standard border radii. Controls own their radii. Use `rounded-full` for intentionally round elements such as avatars, switches, and circular markers.
 
 Use `shadow-surface` for the existing workspace treatment and `shadow-elevation` where that elevated treatment is established. Ordinary component shadows are selected inside their implementation.
