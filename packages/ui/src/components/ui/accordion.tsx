@@ -4,6 +4,7 @@ import { Accordion as AccordionPrimitive } from "@base-ui/react/accordion";
 import type { ComponentPropsWithoutRef, ReactNode } from "react";
 
 import { cn } from "../../lib/cn";
+import { measurePressScale, pressScaleClassName } from "../../lib/press-scale";
 import { ChevronDownIcon } from "./icons";
 
 export const Accordion = AccordionPrimitive.Root;
@@ -32,15 +33,30 @@ export const AccordionTrigger = ({
   children,
   className,
   indicator,
+  onKeyDown,
+  onPointerDown,
   ...props
 }: ComponentPropsWithoutRef<typeof AccordionPrimitive.Trigger> & {
   indicator?: ReactNode;
 }) => (
   <AccordionPrimitive.Trigger
     className={cn(
-      "group/accordion-trigger flex w-full items-center justify-between gap-3 rounded-section px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden active:scale-[0.97] motion-reduce:transition-none motion-reduce:active:scale-100",
+      "group/accordion-trigger flex w-full items-center justify-between gap-3 rounded-section px-4 py-3 text-left text-body font-medium text-fg transition-transform duration-100 ease-out hover:bg-muted focus-visible:bg-muted focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden motion-reduce:transition-none",
+      pressScaleClassName,
       className
     )}
+    onKeyDown={(event) => {
+      if (event.key === "Enter" || event.key === " ") {
+        measurePressScale(event.currentTarget);
+      }
+      onKeyDown?.(event);
+    }}
+    onPointerDown={(event) => {
+      if (event.button === 0) {
+        measurePressScale(event.currentTarget);
+      }
+      onPointerDown?.(event);
+    }}
     {...props}
   >
     <span className="min-w-0 flex-1">{children}</span>
