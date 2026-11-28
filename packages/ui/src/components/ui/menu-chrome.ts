@@ -21,4 +21,4 @@ export const menuCompactGroupLabelClassName = "px-2 py-0.5 text-micro";
 
 export const menuEmptyClassName = "px-3 py-4 text-body-sm text-muted-fg";
 
-export const menuSeparatorClassName = "my-1 h-px bg-fg/10";
+export const menuSeparatorClassName = "my-1.5 h-px bg-fg/10";

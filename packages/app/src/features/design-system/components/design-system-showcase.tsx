@@ -14,6 +14,7 @@ import {
   MoreVerticalIcon,
   Refresh01Icon,
   Search01Icon,
+  Settings02Icon,
   Tick01Icon,
   UserSwitchIcon,
 } from "@hugeicons/core-free-icons";
@@ -66,6 +67,14 @@ import {
   PromptComposerFrame,
 } from "@quieter/ui/composer-chrome";
 import { CompositionChart } from "@quieter/ui/composition-chart";
+import {
+  ContextMenu,
+  ContextMenuCheckboxItem,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@quieter/ui/context-menu";
 import { DatePicker } from "@quieter/ui/date-picker";
 import {
   Dialog,
@@ -1427,6 +1436,23 @@ export const DesignSystemShowcase = () => {
                 </DropdownMenuSubmenu>
               </DropdownMenuContent>
             </DropdownMenu>
+          </Row>
+          <Row label="Context menu">
+            <ContextMenu>
+              <ContextMenuTrigger render={<Button variant="outline" />}>
+                Right-click here
+              </ContextMenuTrigger>
+              <ContextMenuContent align="start">
+                <ContextMenuCheckboxItem closeOnSelect defaultChecked>
+                  Show count
+                </ContextMenuCheckboxItem>
+                <ContextMenuSeparator />
+                <ContextMenuItem>
+                  <Icon aria-hidden icon={Settings02Icon} />
+                  Customize sidebar
+                </ContextMenuItem>
+              </ContextMenuContent>
+            </ContextMenu>
           </Row>
           <Row label="Content entrances">
             <Button

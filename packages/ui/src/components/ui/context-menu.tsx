@@ -5,6 +5,7 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import type { ComponentPropsWithoutRef, MouseEvent } from "react";
 
 import { cn } from "../../lib/cn";
+import { CheckIcon } from "./icons";
 import {
   menuItemClassName,
   menuPopupClassName,
@@ -99,6 +100,33 @@ export const ContextMenuItem = ({
     onClick={(event: MouseEvent<HTMLElement>) => onSelect?.(event)}
     {...props}
   />
+);
+
+type ContextMenuCheckboxItemProps = Omit<
+  ComponentPropsWithoutRef<typeof ContextMenuPrimitive.CheckboxItem>,
+  "closeOnClick"
+> & {
+  closeOnSelect?: boolean;
+};
+
+export const ContextMenuCheckboxItem = ({
+  children,
+  className,
+  closeOnSelect = false,
+  ...props
+}: ContextMenuCheckboxItemProps) => (
+  <ContextMenuPrimitive.CheckboxItem
+    className={cn(menuItemClassName, className)}
+    closeOnClick={closeOnSelect}
+    {...props}
+  >
+    <span className="pointer-events-none flex size-4 shrink-0 items-center justify-center text-fg">
+      <ContextMenuPrimitive.CheckboxItemIndicator>
+        <CheckIcon className="size-3.5" />
+      </ContextMenuPrimitive.CheckboxItemIndicator>
+    </span>
+    {children}
+  </ContextMenuPrimitive.CheckboxItem>
 );
 
 export const ContextMenuSeparator = ({

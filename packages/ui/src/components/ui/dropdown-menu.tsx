@@ -298,7 +298,7 @@ export const DropdownMenuSeparator = ({
     <MenuPrimitive.Separator
       className={cn(
         menuSeparatorClassName,
-        { "my-0.5": size === "compact" },
+        { "my-1": size === "compact" },
         className
       )}
       {...props}
