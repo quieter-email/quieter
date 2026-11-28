@@ -41,6 +41,7 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
+  DropdownMenuViewport,
 } from "@quieter/ui/dropdown-menu";
 import { Icon } from "@quieter/ui/icon";
 import { IconButtonTooltip } from "@quieter/ui/icon-button-tooltip";
@@ -204,17 +205,11 @@ const getSwitcherCollision = (
     return null;
   }
   const panel = list.getBoundingClientRect();
-  const top = Math.max(
-    panel.top,
-    list
-      .querySelector("[data-mailbox-switcher-search]")
-      ?.getBoundingClientRect().bottom ?? panel.top
-  );
   const rect = element.getBoundingClientRect();
-  if (rect.bottom <= top || rect.top >= panel.bottom) {
+  if (rect.bottom <= panel.top || rect.top >= panel.bottom) {
     return null;
   }
-  const y = Math.min(Math.max(pointerY, top), panel.bottom);
+  const y = Math.min(Math.max(pointerY, panel.top), panel.bottom);
   return {
     id: droppable.id,
     priority: CollisionPriority.Normal,
@@ -802,8 +797,9 @@ export const MailboxSwitcherDropdown = ({
   const normalizedSearchQuery = searchQuery.trim().toLowerCase();
   const isFiltering = normalizedSearchQuery.length > 0;
   const canReorderGroups = !isFiltering && groups.length > 1;
-  const handleArrowNavigation = (event: ReactKeyboardEvent<HTMLDivElement>) => {
-    if (!(event.target instanceof HTMLElement)) {
+  const handleArrowNavigation = (event: ReactKeyboardEvent<HTMLElement>) => {
+    const list = listRef.current;
+    if (!(event.target instanceof HTMLElement) || list === null) {
       return;
     }
 
@@ -902,7 +898,7 @@ export const MailboxSwitcherDropdown = ({
     }
 
     const items = [
-      ...event.currentTarget.querySelectorAll<HTMLElement>(
+      ...list.querySelectorAll<HTMLElement>(
         "[data-mailbox-switcher-navigation-item]"
       ),
     ].filter(
@@ -1069,8 +1065,9 @@ export const MailboxSwitcherDropdown = ({
       <DropdownMenuContent
         onKeyDownCapture={handleEscapeCapture}
         align="start"
-        // oxlint-disable-next-line shadcn/no-restyle -- Switcher popover keeps its compact panel.
-        className="w-[min(20rem,calc(100vw-2rem))]"
+        // oxlint-disable-next-line shadcn/no-restyle -- Bound the search field and mailbox list together.
+        className="max-h-[min(26rem,calc(100dvh-1rem))] w-[min(20rem,calc(100vw-2rem))]"
+        scroll="viewport"
         side={side}
       >
         <DragDropProvider<SwitcherDragData>
@@ -1097,8 +1094,22 @@ export const MailboxSwitcherDropdown = ({
             setDraggingTeam(event.operation.source?.type === "teams");
           }}
         >
-          <div
-            className="flex max-h-100 flex-col gap-2.5 overflow-y-auto p-0.5"
+          {groups.length > 0 && (mailboxes.length >= 8 || isFiltering) && (
+            <div className="shrink-0 px-1.5 pt-1.5 pb-1">
+              <Input
+                aria-label="Search mailboxes"
+                onChange={(event) => {
+                  setSearchQuery(event.currentTarget.value);
+                }}
+                onKeyDown={handleArrowNavigation}
+                placeholder="Search mailboxes"
+                ref={searchRef}
+                value={searchQuery}
+              />
+            </div>
+          )}
+          <DropdownMenuViewport
+            className="flex flex-col gap-2.5"
             data-mailbox-switcher-list
             onKeyDown={handleArrowNavigation}
             ref={listRef}
@@ -1107,22 +1118,6 @@ export const MailboxSwitcherDropdown = ({
           >
             {groups.length > 0 ? (
               <>
-                {(mailboxes.length >= 8 || isFiltering) && (
-                  <div
-                    className="sticky top-0 z-10 bg-popover"
-                    data-mailbox-switcher-search
-                  >
-                    <Input
-                      aria-label="Search mailboxes"
-                      onChange={(event) => {
-                        setSearchQuery(event.currentTarget.value);
-                      }}
-                      placeholder="Search mailboxes"
-                      ref={searchRef}
-                      value={searchQuery}
-                    />
-                  </div>
-                )}
                 {onSelectAllInboxes &&
                 mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
                   <DropdownMenuItem
@@ -1284,7 +1279,7 @@ export const MailboxSwitcherDropdown = ({
                 No Mailbox
               </div>
             )}
-          </div>
+          </DropdownMenuViewport>
           {isOpen &&
             createPortal(
               <DragOverlay<SwitcherDragData, Draggable<SwitcherDragData>>
