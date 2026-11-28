@@ -5,7 +5,11 @@ import { mergeProps } from "@base-ui/react/merge-props";
 import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { createContext, useContext } from "react";
-import type { ComponentPropsWithoutRef, MouseEvent } from "react";
+import type {
+  ComponentProps,
+  ComponentPropsWithoutRef,
+  MouseEvent,
+} from "react";
 
 import { cn } from "../../lib/cn";
 import { CheckIcon, ChevronRightIcon, MinusIcon } from "./icons";
@@ -13,6 +17,7 @@ import {
   menuCompactItemClassName,
   menuCompactPopupClassName,
   menuItemClassName,
+  menuListPaddingClassName,
   menuPopupClassName,
   menuSeparatorClassName,
 } from "./menu-chrome";
@@ -107,6 +112,7 @@ export const DropdownMenuContent = ({
   alignOffset = 0,
   anchor,
   className,
+  scroll = "popup",
   side = "bottom",
   sideOffset = popupSideOffset,
   size = "default",
@@ -115,7 +121,12 @@ export const DropdownMenuContent = ({
   Pick<
     ComponentPropsWithoutRef<typeof MenuPrimitive.Positioner>,
     "align" | "alignOffset" | "anchor" | "side" | "sideOffset"
-  > & { size?: DropdownMenuDensity }) => (
+  > & {
+    // "viewport" hands scrolling and list padding to a DropdownMenuViewport
+    // child, so its scrollbar sits at the panel edge.
+    scroll?: "popup" | "viewport";
+    size?: DropdownMenuDensity;
+  }) => (
   <DropdownMenuPortal>
     <MenuPrimitive.Positioner
       align={align}
@@ -130,6 +141,7 @@ export const DropdownMenuContent = ({
           className={cn(
             menuPopupClassName,
             { [menuCompactPopupClassName]: size === "compact" },
+            { "flex flex-col overflow-hidden p-0": scroll === "viewport" },
             className
           )}
           {...mergeProps<typeof MenuPrimitive.Popup>(menuFocusProps, props)}
@@ -138,6 +150,24 @@ export const DropdownMenuContent = ({
     </MenuPrimitive.Positioner>
   </DropdownMenuPortal>
 );
+
+export const DropdownMenuViewport = ({
+  className,
+  ...props
+}: ComponentProps<"div">) => {
+  const size = useContext(DropdownMenuDensityContext);
+
+  return (
+    <div
+      className={cn(
+        "min-h-0 overflow-x-hidden overflow-y-auto overscroll-contain",
+        size === "compact" ? "p-1" : menuListPaddingClassName,
+        className
+      )}
+      {...props}
+    />
+  );
+};
 
 export const DropdownMenuSubmenuContent = ({
   align = "start",

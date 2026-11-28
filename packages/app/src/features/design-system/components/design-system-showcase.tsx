@@ -105,6 +105,7 @@ import {
   DropdownMenuSubmenuContent,
   DropdownMenuSubmenuTrigger,
   DropdownMenuTrigger,
+  DropdownMenuViewport,
 } from "@quieter/ui/dropdown-menu";
 import { Field, FieldDescription, FieldLabel } from "@quieter/ui/field";
 import { Icon } from "@quieter/ui/icon";
@@ -1434,6 +1435,30 @@ export const DesignSystemShowcase = () => {
                     <DropdownMenuItem>Spam</DropdownMenuItem>
                   </DropdownMenuSubmenuContent>
                 </DropdownMenuSubmenu>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </Row>
+          <Row label="Scrolling menu">
+            <DropdownMenu>
+              <DropdownMenuTrigger render={<Button variant="outline" />}>
+                Open long menu
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" scroll="viewport">
+                <DropdownMenuViewport className="max-h-48">
+                  {[
+                    "Inbox",
+                    "Starred",
+                    "Snoozed",
+                    "Sent",
+                    "Drafts",
+                    "Scheduled",
+                    "Archive",
+                    "Spam",
+                    "Trash",
+                  ].map((label) => (
+                    <DropdownMenuItem key={label}>{label}</DropdownMenuItem>
+                  ))}
+                </DropdownMenuViewport>
               </DropdownMenuContent>
             </DropdownMenu>
           </Row>
