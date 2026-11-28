@@ -76,12 +76,12 @@ const SidebarSortEntry = ({
 
   return (
     <div
-      className={cn({ "space-y-1": section })}
+      className={cn({ "space-y-1.5": section })}
       ref={enabled ? ref : undefined}
     >
       <div
         className={cn("flex min-w-0 items-center gap-2", {
-          "px-2 py-1": !section,
+          "px-2 py-1.25": !section,
         })}
         ref={enabled && section ? targetRef : undefined}
       >
@@ -129,53 +129,41 @@ const SidebarSortEntry = ({
   );
 };
 
-const folderCountOptions = [
+const countOptions = [
   { label: "Show count", value: "show" },
   { label: "Hide count", value: "hide" },
-];
-
-const allCountOptions = [
-  { label: "Show all counts", value: "show" },
-  { label: "Hide all counts", value: "hide" },
 ];
 
 const SidebarCountSelect = ({
   label,
   value,
   onChange,
-  bulk = false,
 }: {
   label: string;
-  value: "show" | "hide" | "mixed";
+  value: "show" | "hide";
   onChange: (enabled: boolean) => void;
-  bulk?: boolean;
-}) => {
-  const options = bulk ? allCountOptions : folderCountOptions;
-  return (
-    <Select
-      items={options}
-      onValueChange={(next) => {
-        if (next === "show" || next === "hide") {
-          onChange(next === "show");
-        }
-      }}
-      value={value}
-    >
-      <SelectTrigger aria-label={label} size="sm" variant="ghost">
-        <SelectValue>
-          {value === "mixed" ? "Per folder" : undefined}
-        </SelectValue>
-      </SelectTrigger>
-      <SelectContent align="end" size="compact">
-        {options.map((option) => (
-          <SelectItem key={option.value} value={option.value}>
-            {option.label}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
-  );
-};
+}) => (
+  <Select
+    items={countOptions}
+    onValueChange={(next) => {
+      if (next === "show" || next === "hide") {
+        onChange(next === "show");
+      }
+    }}
+    value={value}
+  >
+    <SelectTrigger aria-label={label} size="sm" variant="ghost">
+      <SelectValue />
+    </SelectTrigger>
+    <SelectContent align="end" size="compact">
+      {countOptions.map((option) => (
+        <SelectItem key={option.value} value={option.value}>
+          {option.label}
+        </SelectItem>
+      ))}
+    </SelectContent>
+  </Select>
+);
 
 export const SidebarCustomizeDialog = ({
   open,
@@ -202,17 +190,6 @@ export const SidebarCustomizeDialog = ({
     order[SIDEBAR_SECTIONS]
   );
   const sectionIds = orderedSections.map((section) => section.id);
-  const mailIds =
-    sections
-      .find((section) => section.id === SIDEBAR_MAIL)
-      ?.items?.map((item) => item.id) ?? [];
-  const enabledCount = mailIds.filter((id) => countEntries.includes(id)).length;
-  let mailCounts: "show" | "hide" | "mixed" = "mixed";
-  if (enabledCount === 0) {
-    mailCounts = "hide";
-  } else if (enabledCount === mailIds.length) {
-    mailCounts = "show";
-  }
 
   return (
     <Dialog
@@ -231,7 +208,7 @@ export const SidebarCustomizeDialog = ({
       }}
     >
       <DialogContent className="flex max-h-[85dvh] flex-col">
-        <DialogHeader>
+        <DialogHeader className="mx-1 mt-1">
           <div className="flex items-center justify-between gap-3">
             <DialogTitle>Customize sidebar</DialogTitle>
             <IconButtonTooltip label="Close">
@@ -241,24 +218,7 @@ export const SidebarCustomizeDialog = ({
             </IconButtonTooltip>
           </div>
         </DialogHeader>
-        <DialogBody className="overflow-y-auto" spacing="4">
-          {onSetCounts !== undefined && mailIds.length > 0 && (
-            <SettingsCard>
-              <div className="flex items-center justify-between gap-2 px-3 py-2">
-                <Text size="sm" weight="medium">
-                  Mail counts
-                </Text>
-                <SidebarCountSelect
-                  bulk
-                  label="Mail counts"
-                  onChange={(enabled) => {
-                    onSetCounts(mailIds, enabled);
-                  }}
-                  value={mailCounts}
-                />
-              </div>
-            </SettingsCard>
-          )}
+        <DialogBody className="mx-1 mb-1 overflow-y-auto">
           <DragDropProvider<SidebarDragData>
             plugins={(defaults) =>
               defaults.filter((plugin) => plugin !== Cursor)

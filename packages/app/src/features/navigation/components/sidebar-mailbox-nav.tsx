@@ -192,24 +192,20 @@ export const SidebarMailboxNav = ({
                 variant="ghost"
               >
                 <Icon tone="default" icon={item.icon} />
-                {item.label}
-                {showCount && count !== undefined && (
-                  <span
-                    className="ml-auto text-micro text-muted-fg tabular-nums"
-                    title={`Total in ${item.label}`}
-                  >
-                    {count > 99 ? "99+" : count}
-                  </span>
-                )}
-                {!showCount &&
-                  !embedded &&
-                  mailboxId !== null &&
-                  item.shortcutId && (
-                    <ShortcutHint
-                      className="ml-auto"
-                      shortcutId={item.shortcutId}
-                    />
+                <span className="truncate">{item.label}</span>
+                <span className="ml-auto flex shrink-0 items-center gap-2 empty:hidden">
+                  {showCount && count !== undefined && (
+                    <span
+                      className="text-micro text-muted-fg tabular-nums"
+                      title={`Total in ${item.label}`}
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
                   )}
+                  {!embedded && mailboxId !== null && item.shortcutId && (
+                    <ShortcutHint shortcutId={item.shortcutId} />
+                  )}
+                </span>
               </SidebarMailboxNavItem>
             </SidebarContextMenu>
           </SidebarEntrance>
