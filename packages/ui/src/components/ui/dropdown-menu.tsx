@@ -140,10 +140,8 @@ export const DropdownMenuContent = ({
         <MenuPrimitive.Popup
           className={cn(
             menuPopupClassName,
-            {
-              [menuCompactPopupClassName]: size === "compact",
-              "flex flex-col overflow-hidden p-0": scroll === "viewport",
-            },
+            { [menuCompactPopupClassName]: size === "compact" },
+            { "flex flex-col overflow-hidden p-0": scroll === "viewport" },
             className
           )}
           {...mergeProps<typeof MenuPrimitive.Popup>(menuFocusProps, props)}

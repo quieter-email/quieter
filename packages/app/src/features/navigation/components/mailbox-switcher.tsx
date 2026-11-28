@@ -1112,152 +1112,154 @@ export const MailboxSwitcherDropdown = ({
             </div>
           )}
           <DropdownMenuViewport
-            className="flex flex-col gap-2.5"
             data-mailbox-switcher-list
             onKeyDown={handleArrowNavigation}
             ref={listRef}
             // oxlint-disable-next-line shadcn/no-inline-styles -- Freeze measured panel height while dragging to keep the popover anchored.
             style={{ minHeight: dragPanelHeight }}
           >
-            {groups.length > 0 ? (
-              <>
-                {onSelectAllInboxes &&
-                mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
-                  <DropdownMenuItem
-                    aria-current={allInboxesActive ? "page" : undefined}
-                    data-mailbox-switcher-navigation-item
-                    onSelect={onSelectAllInboxes}
-                  >
-                    <Icon
-                      aria-hidden
-                      icon={allInboxesActive ? Tick01Icon : Mail01Icon}
-                    />
-                    All inboxes
-                  </DropdownMenuItem>
-                ) : null}
-                {(isFiltering ? filteredGroups : groups).map(
-                  (group, groupIndex) => {
-                    const isCollapsed =
-                      !isFiltering && collapsedGroupIds.has(group.id);
-                    const canReorderMailboxes =
-                      !isFiltering && group.mailboxes.length > 1;
+            <div className="flex flex-col gap-2.5">
+              {groups.length > 0 ? (
+                <>
+                  {onSelectAllInboxes &&
+                  mailboxes.some((mailbox) => mailbox.provider !== "api") ? (
+                    <DropdownMenuItem
+                      aria-current={allInboxesActive ? "page" : undefined}
+                      data-mailbox-switcher-navigation-item
+                      onSelect={onSelectAllInboxes}
+                    >
+                      <Icon
+                        aria-hidden
+                        icon={allInboxesActive ? Tick01Icon : Mail01Icon}
+                      />
+                      All inboxes
+                    </DropdownMenuItem>
+                  ) : null}
+                  {(isFiltering ? filteredGroups : groups).map(
+                    (group, groupIndex) => {
+                      const isCollapsed =
+                        !isFiltering && collapsedGroupIds.has(group.id);
+                      const canReorderMailboxes =
+                        !isFiltering && group.mailboxes.length > 1;
 
-                    return (
-                      <MailboxTeam
-                        collapsed={isCollapsed}
-                        disabled={!canReorderGroups}
-                        embedded={embedded}
-                        group={group}
-                        index={groupIndex}
-                        key={group.id}
-                        onRestored={() => {
-                          setDragPanelHeight(undefined);
-                        }}
-                        onToggle={toggleGroup}
-                        settle={settle}
-                        sortingTeams={draggingTeam}
-                      >
-                        {group.mailboxes.length > 0 ? (
-                          group.mailboxes.map((mailbox, mailboxIndex) => {
-                            const isActive =
-                              !allInboxesActive &&
-                              mailbox.id === selectedMailboxId;
-                            const needsReconnect =
-                              mailbox.connectionStatus === "needs_reconnect";
-                            const isReconnecting =
-                              reconnectingMailboxId === mailbox.id;
+                      return (
+                        <MailboxTeam
+                          collapsed={isCollapsed}
+                          disabled={!canReorderGroups}
+                          embedded={embedded}
+                          group={group}
+                          index={groupIndex}
+                          key={group.id}
+                          onRestored={() => {
+                            setDragPanelHeight(undefined);
+                          }}
+                          onToggle={toggleGroup}
+                          settle={settle}
+                          sortingTeams={draggingTeam}
+                        >
+                          {group.mailboxes.length > 0 ? (
+                            group.mailboxes.map((mailbox, mailboxIndex) => {
+                              const isActive =
+                                !allInboxesActive &&
+                                mailbox.id === selectedMailboxId;
+                              const needsReconnect =
+                                mailbox.connectionStatus === "needs_reconnect";
+                              const isReconnecting =
+                                reconnectingMailboxId === mailbox.id;
 
-                            return (
-                              <ReorderRow
-                                disabled={
-                                  !canReorderMailboxes ||
-                                  isCollapsed ||
-                                  draggingTeam
-                                }
-                                data={{
-                                  groupId: group.id,
-                                  index: mailboxIndex,
-                                  label:
-                                    mailbox.displayName ?? mailbox.emailAddress,
-                                  mailboxId: mailbox.id,
-                                }}
-                                key={mailbox.id}
-                                settle={settle}
-                              >
-                                {(handleRef) => (
-                                  <MailboxMenuItem
-                                    handleRef={handleRef}
-                                    action={
-                                      needsReconnect ? (
-                                        <Button
-                                          aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
-                                          data-mailbox-switcher-navigation-action
-                                          disabled={isReconnecting}
-                                          onClick={(event) => {
-                                            event.stopPropagation();
-                                            onReconnectMailbox(mailbox);
-                                          }}
-                                          size="xs"
-                                          variant="destructive"
-                                        >
-                                          <Icon
-                                            aria-hidden
-                                            size={14}
-                                            animation={
-                                              isReconnecting
-                                                ? "spin"
-                                                : undefined
-                                            }
-                                            icon={
-                                              isReconnecting
-                                                ? Loading03Icon
-                                                : Mail01Icon
-                                            }
-                                          />
-                                          Reconnect
-                                        </Button>
-                                      ) : undefined
-                                    }
-                                    isActive={isActive}
-                                    onSelect={() => {
-                                      onSelectMailboxId(mailbox.id);
-                                    }}
-                                  >
-                                    <MailboxSummary
-                                      className="w-full"
-                                      mailbox={mailbox}
-                                    />
-                                  </MailboxMenuItem>
-                                )}
-                              </ReorderRow>
-                            );
-                          })
-                        ) : (
-                          <p className="py-1 ps-8.5 text-caption text-muted-fg">
-                            No Mailbox
-                          </p>
-                        )}
-                      </MailboxTeam>
-                    );
-                  }
-                )}
-                <p className="sr-only" id="mailbox-order-help">
-                  Alt + Up or Down to reorder the focused team or mailbox.
-                </p>
-                {isFiltering && filteredGroups.length === 0 && (
-                  <p className="px-2 py-3 text-body-sm text-muted-fg">
-                    No matching mailboxes
+                              return (
+                                <ReorderRow
+                                  disabled={
+                                    !canReorderMailboxes ||
+                                    isCollapsed ||
+                                    draggingTeam
+                                  }
+                                  data={{
+                                    groupId: group.id,
+                                    index: mailboxIndex,
+                                    label:
+                                      mailbox.displayName ??
+                                      mailbox.emailAddress,
+                                    mailboxId: mailbox.id,
+                                  }}
+                                  key={mailbox.id}
+                                  settle={settle}
+                                >
+                                  {(handleRef) => (
+                                    <MailboxMenuItem
+                                      handleRef={handleRef}
+                                      action={
+                                        needsReconnect ? (
+                                          <Button
+                                            aria-label={`Reconnect ${mailbox.emailAddress} through Google`}
+                                            data-mailbox-switcher-navigation-action
+                                            disabled={isReconnecting}
+                                            onClick={(event) => {
+                                              event.stopPropagation();
+                                              onReconnectMailbox(mailbox);
+                                            }}
+                                            size="xs"
+                                            variant="destructive"
+                                          >
+                                            <Icon
+                                              aria-hidden
+                                              size={14}
+                                              animation={
+                                                isReconnecting
+                                                  ? "spin"
+                                                  : undefined
+                                              }
+                                              icon={
+                                                isReconnecting
+                                                  ? Loading03Icon
+                                                  : Mail01Icon
+                                              }
+                                            />
+                                            Reconnect
+                                          </Button>
+                                        ) : undefined
+                                      }
+                                      isActive={isActive}
+                                      onSelect={() => {
+                                        onSelectMailboxId(mailbox.id);
+                                      }}
+                                    >
+                                      <MailboxSummary
+                                        className="w-full"
+                                        mailbox={mailbox}
+                                      />
+                                    </MailboxMenuItem>
+                                  )}
+                                </ReorderRow>
+                              );
+                            })
+                          ) : (
+                            <p className="py-1 ps-8.5 text-caption text-muted-fg">
+                              No Mailbox
+                            </p>
+                          )}
+                        </MailboxTeam>
+                      );
+                    }
+                  )}
+                  <p className="sr-only" id="mailbox-order-help">
+                    Alt + Up or Down to reorder the focused team or mailbox.
                   </p>
-                )}
-                <output aria-live="polite" className="sr-only">
-                  {orderAnnouncement}
-                </output>
-              </>
-            ) : (
-              <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
-                No Mailbox
-              </div>
-            )}
+                  {isFiltering && filteredGroups.length === 0 && (
+                    <p className="px-2 py-3 text-body-sm text-muted-fg">
+                      No matching mailboxes
+                    </p>
+                  )}
+                  <output aria-live="polite" className="sr-only">
+                    {orderAnnouncement}
+                  </output>
+                </>
+              ) : (
+                <div className="rounded-md px-2.5 py-2 text-body text-muted-fg">
+                  No Mailbox
+                </div>
+              )}
+            </div>
           </DropdownMenuViewport>
           {groups.length > 0 && !embedded && (
             <div
