@@ -158,9 +158,10 @@ export const SidebarMailboxNav = ({
                 countableIds.includes(item.id)
                   ? [
                       {
-                        label: showCount ? "Hide count" : "Show count",
-                        onSelect: () => {
-                          onSetCounts([item.id], !showCount);
+                        checked: showCount,
+                        label: "Show count",
+                        onCheckedChange: (checked: boolean) => {
+                          onSetCounts([item.id], checked);
                         },
                       },
                     ]
