@@ -11,6 +11,7 @@ import { useState } from "react";
 import type { ComponentRef, ReactNode, Ref } from "react";
 
 import { cn } from "../../lib/cn";
+import { measurePressScale, pressScaleClassName } from "../../lib/press-scale";
 import { Icon } from "./icon";
 
 export const buttonVariants = cva(
@@ -32,7 +33,7 @@ export const buttonVariants = cva(
       },
       {
         auxiliaryPress: false,
-        className: "active:scale-[0.97] motion-reduce:active:scale-100",
+        className: pressScaleClassName,
         variant: [
           "card",
           "default",
@@ -261,11 +262,15 @@ export const Button = ({
       onKeyDown={(event) => {
         if (event.key === "Enter" || event.key === " ") {
           setIsAuxiliaryPress(false);
+          measurePressScale(event.currentTarget);
         }
         onKeyDown?.(event);
       }}
       onPointerDown={(event) => {
         setIsAuxiliaryPress(event.button !== 0);
+        if (event.button === 0) {
+          measurePressScale(event.currentTarget);
+        }
         onPointerDown?.(event);
       }}
       ref={ref}
